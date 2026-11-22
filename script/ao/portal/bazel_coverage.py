@@ -23,8 +23,6 @@ from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
-from urllib.parse import unquote, urlparse
-from urllib.request import url2pathname
 
 from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
@@ -246,44 +244,6 @@ def _bep_producer(event: Mapping[str, Any]) -> None:
         raise ValueError(f"unsupported coverage BEP producer version: {version!r}")
 
 
-def _bep_native_path(value: str) -> str:
-    """Invert the pinned producer's UTF-8 bytes stored as Latin-1 characters."""
-    if not isinstance(value, str) or "\x00" in value:
-        raise ValueError("malformed Bazel 9.2 BEP path")
-    try:
-        return value.encode("latin-1").decode("utf-8")
-    except UnicodeError as error:
-        raise ValueError("invalid or lossy Bazel 9.2 BEP path encoding") from error
-
-
-def _artifact(file: Mapping[str, Any], *, root: Path | None = None) -> Path:
-    uri = file.get("uri")
-    if not isinstance(uri, str):
-        raise ValueError("coverage requires current local BEP artifact file URIs")
-    parsed = urlparse(uri)
-    if parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/"):
-        raise ValueError("coverage requires current local BEP artifact file URIs")
-    internal = unquote(parsed.path, errors="strict")
-    # TestAttempt uses FileUriPathConverter on an internal string, unlike
-    # the lossy named-set producer. Match java.net.URI's path quoting exactly.
-    quoted = "".join(
-        char
-        if (char.isascii() and (char.isalnum() or char in "/:@&=+$,;-_.!~*'()")) or 0xA1 <= ord(char) <= 0xFF
-        else "".join(f"%{byte:02X}" for byte in char.encode("utf-8"))
-        for char in internal
-    )
-    if uri != "file://" + quoted:
-        raise ValueError("noncanonical Bazel 9.2 BEP artifact file URI")
-    # Convert the original quoted path to the host spelling, never unquote
-    # the resulting native string again (it may contain a literal '%20').
-    path = Path(_bep_native_path(url2pathname(parsed.path)))
-    if root is not None and (not path.is_relative_to(root) or not path.resolve().is_relative_to(root.resolve())):
-        raise ValueError(f"BEP coverage artifact is outside the owned tree: {path}")
-    if not path.is_file():
-        raise ValueError(f"missing BEP coverage artifact: {path}")
-    return path
-
-
 def _events(path: Path) -> list[dict[str, Any]]:
     result = [json.loads(row) for row in path.read_text(encoding="utf-8").split("\n") if row.strip(" \t\r")]
     if not result or not all(isinstance(item, dict) for item in result) or result[-1].get("lastMessage") is not True:
@@ -351,7 +311,7 @@ def _retain_archives(
                                 continue
                             destination = directory / f"test-output-{archive_index:04d}.zip"
                             archive_index += 1
-                            artifact = _artifact(file, root=tree)
+                            artifact = bazel_attempt.test_output_file(file, root=tree)
                             # Keep failed copies too, without overwriting an
                             # earlier snapshot when a later artifact is invalid.
                             with artifact.open("rb") as incoming, destination.open("xb") as output:
@@ -398,7 +358,7 @@ def _combined_artifact(events: Sequence[dict[str, Any]], diagnostics: Path, tree
     ]
     if len(roots) != 1 or len(started) != 1 or len(finished) != 1 or len(executed) != 1 or executed[0] < 1:
         raise ValueError("BEP does not bind an executed combined coverage report action to this invocation")
-    report = Path(_bep_native_path(roots[0])) / _COMBINED_REPORT
+    report = Path(bazel_attempt.bep_native_path(roots[0])) / _COMBINED_REPORT
     declared = [
         location
         for location, execpath in _REPORT_LOCATION.findall(diagnostics.read_text(encoding="utf-8"))
@@ -451,7 +411,11 @@ def _test_artifacts(
         stock = [file for file in result.get("testActionOutput", []) if file.get("name") == "test.lcov"]
         if len(files) != 1 or len(stock) != 1:
             raise ValueError(f"missing/ambiguous strict archive or stock per-test LCOV artifact: {target}")
-        observed[target] = (_artifact(files[0], root=root), _artifact(stock[0], root=root), strategy)
+        observed[target] = (
+            bazel_attempt.test_output_file(files[0], root=root),
+            bazel_attempt.test_output_file(stock[0], root=root),
+            strategy,
+        )
     if set(observed) != expected:
         raise ValueError("missing selected coverage test artifacts")
     return observed

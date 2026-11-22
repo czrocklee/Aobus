@@ -3,6 +3,7 @@
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load(":testing.bzl", "NativeContextInfo")
 load(":winui_outputs.bzl", "WinuiGeneratedInfo")
 
 def _compile_context_impl(target, ctx):
@@ -59,6 +60,7 @@ ValidationFactsInfo = provider(
     fields = [
         "records",
         "executables",
+        "test_wrappers",
         "closure",
         "kind",
         "compilers",
@@ -162,6 +164,7 @@ def _compile_environment(ctx):
 def _validation_facts_impl(target, ctx):
     dep_records = []
     dep_executables = []
+    dep_test_wrappers = []
     dep_compilers = []
     folded_closures = []
     public_projections = []
@@ -176,6 +179,7 @@ def _validation_facts_impl(target, ctx):
                 info = item[ValidationFactsInfo]
                 dep_records.append(info.records)
                 dep_executables.append(info.executables)
+                dep_test_wrappers.append(info.test_wrappers)
                 dep_compilers.append(info.compilers)
                 if CcInfo in target and CcInfo in item:
                     if name == "deps":
@@ -304,10 +308,16 @@ def _validation_facts_impl(target, ctx):
                 for path in depset(own_sources, transitive = folded_closures).to_list()
             }.keys()),
         })
+
+    # Only the wrapper knows which native owner it substitutes for at execution.
+    test_wrappers = []
+    if main_repo and not is_tool and NativeContextInfo in target:
+        test_wrappers.append((str(target[NativeContextInfo].inner), str(ctx.label)))
     return [ValidationFactsInfo(
         kind = kind,
         records = depset([record] if record else [], transitive = dep_records),
         executables = depset([executable] if executable else [], transitive = dep_executables),
+        test_wrappers = depset(test_wrappers, transitive = dep_test_wrappers),
         closure = depset(own_sources, transitive = folded_closures),
         compilers = depset(compilers, transitive = dep_compilers),
         winui_projections = exported,

@@ -14,12 +14,14 @@ import shutil
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 from ao.core import bazel_native as native
 from ao.core import proc
@@ -27,6 +29,45 @@ from ao.core.paths import PROJECT_ROOT
 from ao.portal import bazel_test_ownership, bazel_workspace
 
 _COMPATIBILITY = 'str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))'
+
+
+def bep_native_path(value: str) -> str:
+    """Invert the pinned producer's UTF-8 bytes stored as Latin-1 characters."""
+    if not isinstance(value, str) or "\x00" in value:
+        raise ValueError("malformed Bazel 9.2 BEP path")
+    try:
+        return value.encode("latin-1").decode("utf-8")
+    except UnicodeError as error:
+        raise ValueError("invalid or lossy Bazel 9.2 BEP path encoding") from error
+
+
+def test_output_file(file: Mapping[str, Any], *, root: Path | None = None) -> Path:
+    """Resolve a locally materialized testActionOutput from the pinned BEP producer."""
+    uri = file.get("uri")
+    if not isinstance(uri, str):
+        raise ValueError("expected a local BEP test output URI")
+    parsed = urlparse(uri)
+    if parsed.scheme != "file" or parsed.netloc or not parsed.path.startswith("/"):
+        raise ValueError("expected a local BEP test output URI")
+    internal = unquote(parsed.path, errors="strict")
+    # TestAttempt uses FileUriPathConverter on an internal string, unlike
+    # the lossy named-set producer. Match java.net.URI's path quoting exactly.
+    quoted = "".join(
+        char
+        if (char.isascii() and (char.isalnum() or char in "/:@&=+$,;-_.!~*'()")) or 0xA1 <= ord(char) <= 0xFF
+        else "".join(f"%{byte:02X}" for byte in char.encode("utf-8"))
+        for char in internal
+    )
+    if uri != "file://" + quoted:
+        raise ValueError("noncanonical Bazel 9.2 BEP artifact file URI")
+    # Convert the original quoted path to the host spelling, never unquote
+    # the resulting native string again (it may contain a literal '%20').
+    path = Path(bep_native_path(url2pathname(parsed.path)))
+    if root is not None and (not path.is_relative_to(root) or not path.resolve().is_relative_to(root.resolve())):
+        raise ValueError(f"BEP test output is outside the owned tree: {path}")
+    if not path.is_file():
+        raise ValueError(f"missing BEP test output: {path}")
+    return path
 
 
 def _timestamp() -> str:

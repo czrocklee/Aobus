@@ -21,6 +21,8 @@ from ao.portal import test_audit
 if TYPE_CHECKING:
     from ao.portal.bazel_lint import QueryGraph
 
+REGISTERED_TEST_LABELS_FILE = "registered-test-labels.json"
+
 _COMPILE_KINDS = {"cc_library", "objc_library", "cc_binary", "cc_test"}
 _EXECUTABLE_KINDS = {"cc_binary", "cc_test"}
 

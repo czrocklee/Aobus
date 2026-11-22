@@ -20,7 +20,9 @@ existing tidy-engine platform policy or by a frontend boundary that every
 supplied fact file disables; compatible orphans always fail. Nothing silently
 claims uncovered ground. The configured authored inventory also runs the
 existing lexical stale-NOLINT oracle, because clang-tidy itself never emits the
-checks a file's mode disables.
+checks a file's mode disables. The first fact file represents the invocation:
+its registered native test owners contribute public execution labels to the
+successful test's undeclared outputs. Later projections are analysis-only.
 
 ``--driver-only`` is the separate Linux wrapper diagnostic: it expands one
 representative checkout source through the SDK compiler the captured command
@@ -47,7 +49,7 @@ from ao.policy.tidy_policy import classify_relative, find_stale_nolint_suppressi
 from ao.portal import bazel_test_ownership, bazel_verify
 from ao.portal.git_files import git_command
 
-_SCHEMA = 1
+_SCHEMA = 2
 _DOCUMENT_KEYS = frozenset(
     {
         "schema",
@@ -59,6 +61,7 @@ _DOCUMENT_KEYS = frozenset(
         "builtin_include_roots",
         "records",
         "executed",
+        "test_wrappers",
         "built",
     }
 )
@@ -199,6 +202,12 @@ def _facts_document(path: Path) -> dict[str, Any]:
                 _executable_entry(entry, item)
             entries.append(entry)
         document[name] = entries
+    wrappers = document["test_wrappers"]
+    if not isinstance(wrappers, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in wrappers):
+        raise ValueError("native policy facts require pairs of native owner and wrapper labels: " + str(path))
+    document["test_wrappers"] = [
+        (bazel_test_ownership._label(owner), bazel_test_ownership._label(wrapper)) for owner, wrapper in wrappers
+    ]
     return document
 
 
@@ -413,39 +422,58 @@ def _deferred_reason(path: str, platform: str, documents: Sequence[dict[str, Any
     return _frontend_deferred(path, documents)
 
 
-def registration_audit(documents: Sequence[dict[str, Any]], root: Path) -> tuple[list[str], dict[str, str]]:
-    """Require a folded executable owner for every discovered registration."""
+def registration_audit(documents: Sequence[dict[str, Any]], root: Path) -> tuple[list[str], dict[str, str], list[str]]:
+    """Require reachable owners and name the tests the invocation must run."""
     platform = _observed_platform(documents)
-    registrations = bazel_test_ownership.discover_registration_sources(root)
-    owners: dict[str, set[str]] = {}
-    kinds: dict[str, str] = {}
-    executed: set[str] = set()
-    built: set[str] = set()
-    for document in documents:
-        for role, reached in (("executed", executed), ("built", built)):
+    registrations = set(bazel_test_ownership.discover_registration_sources(root))
+    owned_sources: set[str] = set()
+    registered_tests: set[str] = set()
+    reached_tests: set[str] = set()
+    invocation_tests: set[str] = set()
+    unavailable: set[str] = set()
+    for index, document in enumerate(documents):
+        for role in ("executed", "built"):
             for entry in document[role]:
+                is_test = entry["kind"] == "cc_test"
+                if is_test and entry["is_tool"]:
+                    continue
+                sources = registrations.intersection(entry["sources"])
+                owned_sources.update(sources)
+                if not is_test:
+                    continue  # A build-only binary needs reachability, not a test result.
                 label = bazel_test_ownership._label(entry["label"])
-                kinds[label] = entry["kind"]
-                reached.add(label)
-                for source in entry["sources"]:
-                    owners.setdefault(source, set()).add(label)
+                if role == "executed":
+                    reached_tests.add(label)
+                if sources:
+                    registered_tests.add(label)
+        if index == 0:
+            # Later projections add sources, but cannot establish an owner is
+            # reachable from the invocation's configured test roots.
+            invocation_tests = registered_tests.copy()
+            unavailable = invocation_tests - reached_tests
+
     errors: list[str] = []
     deferred: dict[str, str] = {}
-    for source in sorted(registrations):
-        if source not in owners:
-            reason = _deferred_reason(source, platform, documents)
-            if reason is None:
-                errors.append(f"{source}: no declared executable owner")
-            else:
-                deferred[source] = reason
-            continue
-        for label in sorted(owners[source]):
-            if kinds[label] == "cc_test":
-                if label not in executed:
-                    errors.append(f"{label}: test is not in the executed test selection")
-            elif label not in built and label not in executed:
-                errors.append(f"{label}: test executable is absent from the completion roots")
-    return errors, deferred
+    for source in sorted(registrations - owned_sources):
+        reason = _deferred_reason(source, platform, documents)
+        if reason is None:
+            errors.append(f"{source}: no declared executable owner")
+        else:
+            deferred[source] = reason
+
+    unavailable.update(registered_tests - reached_tests)
+    errors.extend(f"{label}: test is not in the executed test selection" for label in sorted(unavailable))
+    wrappers: dict[str, set[str]] = {}
+    for owner, wrapper in documents[0]["test_wrappers"]:
+        wrappers.setdefault(owner, set()).add(wrapper)
+    execution_labels: set[str] = set()
+    for label in sorted(invocation_tests - unavailable):
+        candidates = wrappers.get(label, {label})
+        if len(candidates) != 1:
+            errors.append(f"{label}: ambiguous public test wrappers: {', '.join(sorted(candidates))}")
+        else:
+            execution_labels.update(candidates)
+    return errors, deferred, sorted(execution_labels)
 
 
 def _authored_cpp_inventory(manifest: bytes, root: Path) -> list[str]:
@@ -550,7 +578,7 @@ def run(arguments: Sequence[str], environ: Mapping[str, str]) -> int:
                 print(f"Native policy violations ({argument}):", file=sys.stderr)
                 for error in errors:
                     print(f"  {error}", file=sys.stderr)
-        registration_errors, registration_deferred = registration_audit(documents, root)
+        registration_errors, registration_deferred, execution_labels = registration_audit(documents, root)
         manifest = _authored_cpp_manifest(root)
         orphan_errors, orphan_deferred = authored_cpp_audit(documents, manifest)
         stale_errors = stale_suppression_audit(documents, root, manifest)
@@ -572,6 +600,14 @@ def run(arguments: Sequence[str], environ: Mapping[str, str]) -> int:
         _print_deferred(orphan_deferred, "authored C++ sources")
         if any(errors for _argument, errors in violations) or registration_errors or orphan_errors or stale_errors:
             return 1
+        if output_directory := environ.get("TEST_UNDECLARED_OUTPUTS_DIR"):
+            directory = Path(output_directory)
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / bazel_test_ownership.REGISTERED_TEST_LABELS_FILE).write_text(
+                json.dumps(execution_labels) + "\n", encoding="utf-8"
+            )
+        else:
+            print("Test label manifest not written; set TEST_UNDECLARED_OUTPUTS_DIR to retain it.", file=sys.stderr)
         print(
             f"Native policy validation passed: {len(documents)} fact file(s), "
             f"{len(registration_deferred) + len(orphan_deferred)} deferred boundary file(s)."

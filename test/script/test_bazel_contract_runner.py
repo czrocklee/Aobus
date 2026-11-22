@@ -95,7 +95,7 @@ if action == fixture['failed_action']:
                 )
             )
         document = {
-            "schema": 1,
+            "schema": 2,
             "platform": platform,
             "mode": mode,
             "profile": profile,
@@ -104,6 +104,7 @@ if action == fixture['failed_action']:
             "builtin_include_roots": [],
             "records": records,
             "executed": [],
+            "test_wrappers": [],
             "built": [],
         }
         self.facts.write_text(json.dumps(document), encoding="utf-8")

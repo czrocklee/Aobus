@@ -25,8 +25,12 @@ The [ownership audit](../bazel.md#test-ownership) checks that each compatible so
 that registers cases has a declared executable owner reachable from the appropriate
 completion roots. Put `cc_test` owners in the actual completion test selection;
 only building the owner does not exercise its tests. Manually run `cc_binary`
-owners, such as benchmarks, only need to be built. Use test summaries, not the
-ownership audit, for test evidence. Keep throwaway tests outside the checkout.
+owners, such as benchmarks, only need to be built. Full local and CI native
+completion checks public BEP summaries for configured `cc_test` registration
+owners, mapping native context wrappers through the graph. A cached pass is not
+a fresh execution, and a target summary does not prove case-level execution;
+the standalone ownership audit does not verify execution. Keep throwaway tests
+outside the checkout.
 When moving tests between binaries, compare runtime test lists on each affected
 platform.
 
