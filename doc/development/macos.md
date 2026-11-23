@@ -347,30 +347,35 @@ still a real Core Audio route, not the application's null backend. Endpoint
 installation, driver choice and persistent environment settings are operator
 concerns; `ao` does not configure them or change the system default output.
 
-Set `testOutputUid` from native device enumeration. The test override is meant
-to select exactly that disposable device without falling back. For a fresh
-Release run of the ordinary Core Audio backend cases, pass the UID explicitly
-and exclude the hidden hardware probes:
+Verify the intended non-default software output in native device enumeration
+and set `testOutputUid` to its exact UID. The macOS `//test:backend_test` target
+inherits `AOBUS_TEST_COREAUDIO_DEVICE_UID` in both runs below. For a fresh full
+Release gate:
 
 ```bash
-bazel test --config=release --nocache_test_results //test:backend_test \
-  --test_filter='CoreAudioBackend*~[.]' \
-  --test_env=AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid"
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check --config release --fresh
 ```
 
-`--test_env` supplies the request; it is not evidence of an open. For device
-selection evidence, verify that a case that opens AUHAL passed rather than
-skipped. Run `./ao check --config release` separately when completion is
-required. The portal's default Bazel test environment does not forward the
-shell UID override, so a green completion gate alone cannot certify the
-requested disposable device.
+For a focused Release run of the ordinary Core Audio backend cases:
 
-To check recovery from a missing saved output in the AppKit desktop, set the
-UID to an approved silent software output in the smoke launcher's environment:
+```bash
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" \
+  bazel test --config=release --nocache_test_results //test:backend_test \
+  --test_filter='"CoreAudioBackend*"~[.]'
+```
+
+Check the backend test's Catch2 report (`test.xml`) for an AUHAL-open case such as
+`CoreAudioBackend - native AUHAL open confirms the exact lossless client stream`.
+It must pass, not skip. Neither run includes the hidden hardware probes, and
+the focused run does not replace the full gate.
+
+To check AppKit recovery from a missing saved output, pass the approved silent
+output's UID to a disposable desktop smoke run:
 
 ```bash
 smoke_root=$(mktemp -d /tmp/aobus-appkit.XXXXXX) &&
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" \
+  bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
   --state-root "$smoke_root/state" --library "$smoke_root/music"
 ```
 
@@ -394,8 +399,8 @@ skipping or falling back to the default output. Display names, case differences,
 and surrounding whitespace do not match. With the variable unset, there is no
 selection override. The native AUHAL open and run-state cases skip if there is
 no live output; the native fatal reentry probe and the `desktop` and `media`
-smoke scenarios require one. Take the UID from native device enumeration;
-numeric device IDs do not survive a Core Audio reload.
+smoke scenarios require one. Use the UID, not a numeric device ID: numeric IDs
+are not stable across a Core Audio reload.
 
 GUI or service launches that do not inherit the shell environment need the
 setting passed explicitly. To exercise normal output with this test override
