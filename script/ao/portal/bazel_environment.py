@@ -1,8 +1,10 @@
 """Discover an already prepared, mode-neutral repository-rule host environment.
 
-This helper never installs native SDKs, ports or Python tooling. Automatic native
-SDK selection is host state, not a fully watched registry: after changing that
-selection, run ``bazel fetch --force --configure``.
+This helper never installs native SDKs, ports or Python tooling. Native SDK
+selection is host state, not a fully watched registry. After changing that
+selection on Linux or macOS, run bazel fetch --force --configure. Do not
+use that untargeted command for a Windows SDK refresh; see
+doc/development/bazel.md#windows-compiler-configuration.
 """
 
 from __future__ import annotations
