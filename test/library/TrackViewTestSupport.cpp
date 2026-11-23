@@ -41,7 +41,6 @@ namespace ao::library::test
     header.year = 2020;
     header.codec = AudioCodec::Unknown;
     header.bitDepth = BitDepth{16};
-    header.tagLength = 0;
     header.titleLength = 0;
     return header;
   }

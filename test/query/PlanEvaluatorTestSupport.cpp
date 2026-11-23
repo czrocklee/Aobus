@@ -334,7 +334,7 @@ namespace ao::query::test
     header.albumId = albumId;
     header.genreId = genreId;
     header.albumArtistId = albumArtistId;
-    header.tagLength = static_cast<std::uint16_t>(tagIds.size_bytes());
+    header.tagLengthAndFlags = library::packTrackHotTagLengthAndFlags(tagIds.size(), false);
 
     for (auto const tagId : tagIds)
     {

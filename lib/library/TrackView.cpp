@@ -185,9 +185,13 @@ namespace ao::library
   std::string_view TrackView::MetadataProxy::title() const noexcept
   {
     auto const& header = _track.hotHeader();
+    auto const titleOffset = sizeof(TrackHotHeader) + trackHotTagPayloadBytes(header.tagLengthAndFlags);
+    return utility::bytes::stringView(_track._hotData.subspan(titleOffset, header.titleLength));
+  }
 
-    return utility::bytes::stringView(
-      _track._hotData.subspan(sizeof(TrackHotHeader) + header.tagLength, header.titleLength));
+  bool TrackView::MetadataProxy::isTitleExplicitlyCleared() const noexcept
+  {
+    return isTrackHotTitleExplicitlyCleared(_track.hotHeader().tagLengthAndFlags);
   }
 
   std::optional<TrackSegment> TrackView::PropertyProxy::segment() const noexcept
@@ -220,17 +224,17 @@ namespace ao::library
   {
     auto const& header = hotHeader();
 
-    return TagProxy{
-      header.tagBloom,
-      utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), header.tagLength))};
+    auto const tagBytes = _hotData.subspan(sizeof(TrackHotHeader), trackHotTagPayloadBytes(header.tagLengthAndFlags));
+    return TagProxy{header.tagBloom, utility::layout::viewArray<DictionaryId>(tagBytes)};
   }
 
   TrackHotHeader const* TrackView::gateHot(std::span<std::byte const> hotData) noexcept
   {
     auto const* header = utility::bytes::tryLayout<TrackHotHeader>(hotData);
 
-    if (header == nullptr || sizeof(TrackHotHeader) + header->tagLength + header->titleLength > hotData.size() ||
-        header->tagLength % sizeof(DictionaryId) != 0)
+    if (header == nullptr || !isValidTrackHotTagLengthAndFlags(*header) ||
+        sizeof(TrackHotHeader) + trackHotTagPayloadBytes(header->tagLengthAndFlags) + header->titleLength >
+          hotData.size())
     {
       return nullptr;
     }

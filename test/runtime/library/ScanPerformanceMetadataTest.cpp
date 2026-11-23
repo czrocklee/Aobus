@@ -14,6 +14,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/RecordingDate.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -478,6 +479,51 @@ namespace ao::rt::test
     CHECK(changedSpec.duration == std::chrono::seconds{2});
     CHECK(changedSpec.credits.empty());
     CHECK_FALSE(changedSpec.recordingDate.isPresent());
+  }
+
+  TEST_CASE("ScanApplyOperation - refreshing and relinking a whole file preserves the stored title clear state")
+  {
+    for (bool const cleared : {false, true})
+    {
+      CAPTURE(cleared);
+      auto const temp = ao::test::TempDir{};
+      auto const musicRoot = temp.path() / "music";
+      std::filesystem::create_directories(musicRoot);
+      auto const original = musicRoot / "original.flac";
+      writeScanFlacMetadataFixture(original, {"ARTIST=Artist"});
+      auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+      auto const id = importOne(library);
+
+      if (cleared)
+      {
+        library::test::mutateTrack(
+          library, id, [](library::TrackBuilder& track) { track.metadata().clearTitleExplicitly(); });
+      }
+
+      auto const checkStored = [&](std::string_view uri)
+      {
+        auto transaction = library.readTransaction();
+        auto const optTrack = library.tracks().reader(transaction).get(id);
+        REQUIRE(optTrack);
+        CHECK(optTrack->property().uri() == uri);
+        CHECK(optTrack->metadata().title().empty());
+        CHECK(optTrack->metadata().isTitleExplicitlyCleared() == cleared);
+      };
+
+      auto const retagged = temp.path() / "retagged.flac";
+      writeScanFlacMetadataFixture(retagged, {"TITLE=New file title"});
+      replaceFile(original, retagged);
+      auto const refreshRes = ScanApplyOperation{library, LibraryScan{library}.buildPlan().value(), {}, {}}.run();
+      REQUIRE(refreshRes);
+      REQUIRE(refreshRes->mutatedIds == std::vector{id});
+      checkStored("original.flac");
+
+      std::filesystem::rename(original, musicRoot / "renamed.flac");
+      auto const relinkRes = ScanApplyOperation{library, LibraryScan{library}.buildPlan().value(), {}, {}}.run();
+      REQUIRE(relinkRes);
+      REQUIRE(relinkRes->relinkedIds == std::vector{id});
+      checkStored("renamed.flac");
+    }
   }
 
   TEST_CASE("ScanApplyOperation - changed and moved rescans keep curated year apart from the file year")

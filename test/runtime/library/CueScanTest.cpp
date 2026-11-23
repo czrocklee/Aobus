@@ -218,6 +218,60 @@ namespace ao::rt::test
     CHECK(optTrack->property().segment()->frameCount == 44100);
   }
 
+  TEST_CASE("CUE scan - an explicit title clear follows its member identity, not the carrier or ordinal")
+  {
+    auto fixture = CueScanFixture{};
+    auto const audio = fixture.musicRoot / "image.flac";
+    writeScanFlacMetadataFixture(audio, {"ARTIST=Carrier"}, 88200);
+    writeSheet(fixture.musicRoot / "image.cue",
+               "FILE \"image.flac\" WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 03 AUDIO\nINDEX 01 00:01:00\n");
+    auto const members = fixture.scan().insertedIds;
+    REQUIRE(members.size() == 2);
+    auto first = members.front();
+    library::test::mutateTrack(
+      fixture.library, first, [](library::TrackBuilder& builder) { builder.metadata().clearTitleExplicitly(); });
+
+    bool expectClear = true;
+
+    SECTION("refresh reads a newly titled carrier without replacing either stored title")
+    {
+      writeScanFlacMetadataFixture(audio, {"TITLE=New carrier title", "ARTIST=Carrier"}, 88200);
+      auto const refreshed = fixture.scan();
+      REQUIRE(refreshed.failureCount == 0);
+      REQUIRE(refreshed.mutatedIds == members);
+    }
+
+    SECTION("a move relinks both IDs but does not copy the clear to the sibling")
+    {
+      std::filesystem::rename(audio, fixture.musicRoot / "relocated.flac");
+      auto const moved = fixture.scan();
+      REQUIRE(moved.failureCount == 0);
+      REQUIRE(moved.relinkedIds == members);
+    }
+
+    SECTION("a recreated ordinal does not inherit the removed member's clear")
+    {
+      fixture.remove(first);
+      auto const added = fixture.scan();
+      REQUIRE(added.failureCount == 0);
+      REQUIRE(added.insertedIds.size() == 1);
+      REQUIRE(added.insertedIds.front() != first);
+      first = added.insertedIds.front();
+      expectClear = false;
+    }
+
+    auto transaction = fixture.library.readTransaction();
+    auto reader = fixture.library.tracks().reader(transaction);
+    auto const optFirst = reader.get(first);
+    auto const optSibling = reader.get(members.back());
+    REQUIRE(optFirst);
+    REQUIRE(optSibling);
+    CHECK(optFirst->metadata().title().empty());
+    CHECK(optFirst->metadata().isTitleExplicitlyCleared() == expectClear);
+    CHECK(optSibling->metadata().title().empty());
+    CHECK_FALSE(optSibling->metadata().isTitleExplicitlyCleared());
+  }
+
   TEST_CASE("CUE scan - deleting a carrier member after preparation makes its structural evidence stale",
             "[concurrency]")
   {

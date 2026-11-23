@@ -31,7 +31,7 @@ namespace ao::library::test
     // Check 2-byte section starts at offset 28
     CHECK(offsetof(TrackHotHeader, year) == 28);
     CHECK(offsetof(TrackHotHeader, titleLength) == 30);
-    CHECK(offsetof(TrackHotHeader, tagLength) == 32);
+    CHECK(offsetof(TrackHotHeader, tagLengthAndFlags) == 32);
 
     // Check 1-byte section
     CHECK(offsetof(TrackHotHeader, bitDepth) == 34);

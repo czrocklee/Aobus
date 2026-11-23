@@ -19,6 +19,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
@@ -34,6 +35,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/spinbutton.h>
+#include <gtkmm/togglebutton.h>
 #include <gtkmm/window.h>
 #include <sigc++/scoped_connection.h>
 
@@ -266,6 +268,13 @@ namespace ao::gtk::test
       return findWidget<Gtk::Entry>(*label->get_parent());
     }
 
+    std::string clearFieldLabel(i18n::MessageCatalog const& catalog, i18n::MessageId field, std::size_t const count)
+    {
+      return i18n::requiredFormat(catalog,
+                                  i18n::MessageId::TrackClearFieldForTracks,
+                                  {{"field", i18n::requiredText(catalog, field)}, {"count", count}});
+    }
+
     AppDialog* findOtherDialogWithText(Gtk::Window const& owner, std::string const& text)
     {
       for (auto* const topLevel : Gtk::Window::list_toplevels())
@@ -322,7 +331,8 @@ namespace ao::gtk::test
                                                                                   .codec = AudioCodec::Flac});
                         }};
     auto& runtime = fixture.runtime();
-    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
     auto window = Gtk::Window{};
 
     REQUIRE(trackId1 != kInvalidTrackId);
@@ -330,15 +340,11 @@ namespace ao::gtk::test
 
     SECTION("dialog creation and data loading")
     {
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          ao::test::englishMessageCatalog(),
-                                          cache,
-                                          std::array{trackId1}};
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::array{trackId1}};
       drainGtkEvents();
 
+      CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldAlbum, 1)) == nullptr);
       auto const entries = collectAll<Gtk::Entry>(dialog);
       CHECK_FALSE(entries.empty());
 
@@ -417,25 +423,25 @@ namespace ao::gtk::test
       CHECK(save->get_sensitive());
     }
 
-    SECTION("an incomplete selection shows no partial writable baseline")
+    SECTION("an unbound selection shows no partial writable baseline or Title Clear")
     {
-      auto const targetIds = GENERATE_COPY(std::vector{TrackId{999999}}, std::vector{trackId1, TrackId{999999}});
-      auto dialog = TrackPropertiesDialog{window,
-                                          runtime.async(),
-                                          runtime.library(),
-                                          runtime.completion(),
-                                          ao::test::englishMessageCatalog(),
-                                          cache,
-                                          targetIds};
-      CHECK(dialog.get_title() == (targetIds.size() == 1 ? "Properties" : "Properties — 2 tracks selected"));
-      CHECK(findButtonByLabel(dialog, "Clear Title for 2 tracks") == nullptr);
+      auto const targetIds =
+        GENERATE_COPY(std::vector<TrackId>{}, std::vector{TrackId{999999}}, std::vector{trackId1, TrackId{999999}});
+      auto dialog = TrackPropertiesDialog{
+        window, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, targetIds};
+      CHECK(dialog.get_title() == (targetIds.size() > 1 ? "Properties — 2 tracks selected" : "Properties"));
+      CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldTitle, 0)) == nullptr);
+      CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldTitle, 1)) == nullptr);
+      CHECK(findButtonByLabel(dialog, clearFieldLabel(catalog, i18n::MessageId::TrackFieldTitle, 2)) == nullptr);
 
       auto const labels = collectAll<Gtk::Label>(dialog);
       auto const errorLabelIter = std::ranges::find_if(
         labels, [](Gtk::Label const* label) { return label->has_css_class("ao-properties-session-error"); });
       REQUIRE(errorLabelIter != labels.end());
       CHECK((*errorLabelIter)->get_visible());
-      CHECK((*errorLabelIter)->get_text().raw().contains("Track authoring target not found"));
+      auto const expectedError = std::string_view{targetIds.empty() ? "Cannot bind an empty track target set"
+                                                                    : "Track authoring target not found"};
+      CHECK((*errorLabelIter)->get_text().raw().contains(expectedError));
 
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(saveButton != nullptr);
@@ -448,6 +454,82 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("TrackPropertiesDialog - named Title Clear records ordinary blanks only for the saved selection")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto firstId = kInvalidTrackId;
+    auto secondId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      {
+        firstId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "", .album = "First"});
+        secondId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "", .album = "Second"});
+      }};
+    auto const ids = std::vector{firstId, secondId};
+    auto const targetIds = GENERATE_COPY(std::vector{firstId}, std::vector{secondId}, ids);
+    auto& runtime = fixture.runtime();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    using i18n::MessageId;
+    auto const wouldRecordClear = [](TrackId id)
+    {
+      return rt::TrackChangeRecord{.trackId = id,
+                                   .fields = {{.field = "title",
+                                               .oldValue = "",
+                                               .newValue = "",
+                                               .optReason = rt::TrackFieldChangeReason::ExplicitClearRecorded}}};
+    };
+    // Only an ordinary blank still needs an explicit clear; the displayed text cannot distinguish them.
+    auto const checkClearPreview = [&](std::vector<rt::TrackChangeRecord> const& expected)
+    {
+      auto const previewRes =
+        runGtkTask(runtime, runtime.library().commands().previewUpdateMetadataAsync(ids, {.optTitle = ""}));
+      REQUIRE(previewRes);
+      CHECK(previewRes->changes == expected);
+    };
+    auto const ordinaryTitles = std::vector{wouldRecordClear(firstId), wouldRecordClear(secondId)};
+    checkClearPreview(ordinaryTitles);
+
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    auto dialog = TrackPropertiesDialog{
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, targetIds};
+    dialog.present();
+    drainGtkEvents();
+    auto const label = clearFieldLabel(catalog, MessageId::TrackFieldTitle, targetIds.size());
+    auto* const clear = dynamic_cast<Gtk::ToggleButton*>(findButtonByLabel(dialog, label));
+    auto* const save = findButtonByLabel(dialog, std::string{i18n::requiredText(catalog, MessageId::GtkCommonSave)});
+    auto* const title = findEntryForLabel(dialog, std::string{i18n::requiredText(catalog, MessageId::TrackFieldTitle)});
+    REQUIRE(clear != nullptr);
+    REQUIRE(save != nullptr);
+    REQUIRE(title != nullptr);
+    CHECK(hasAccessibleLabel(*clear, label));
+    REQUIRE(clear->is_sensitive());
+    CHECK(title->get_text().empty());
+    CHECK_FALSE(save->is_sensitive());
+
+    emitClicked(*clear);
+    CHECK(save->is_sensitive());
+    emitClicked(*clear);
+    CHECK_FALSE(save->is_sensitive());
+    CHECK(title->get_editable());
+    checkClearPreview(ordinaryTitles);
+
+    emitClicked(*clear);
+    REQUIRE(save->is_sensitive());
+    emitClicked(*save);
+    REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+
+    if (targetIds.size() == 1)
+    {
+      auto const unselectedId = targetIds.front() == firstId ? secondId : firstId;
+      checkClearPreview({wouldRecordClear(unselectedId)});
+    }
+    else
+    {
+      checkClearPreview({});
+    }
+  }
+
   TEST_CASE("TrackPropertiesDialog - batch scalar actions preserve, replace or clear both bound tracks")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -455,9 +537,9 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& storage)
                                      {
                                        ids.push_back(library::test::addTrackWithUniqueFixtureUri(
-                                         storage, {.album = "First", .genre = "Jazz", .year = 1960}));
+                                         storage, {.title = "", .album = "First", .genre = "Jazz", .year = 1960}));
                                        ids.push_back(library::test::addTrackWithUniqueFixtureUri(
-                                         storage, {.album = "Second", .genre = "Jazz", .year = 1970}));
+                                         storage, {.title = "", .album = "Second", .genre = "Jazz", .year = 1970}));
                                      }};
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -469,11 +551,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     using i18n::MessageId;
     auto const fieldLabel = [&](MessageId id) { return std::string{i18n::requiredText(catalog, id)}; };
-    auto const clearLabel = [&](MessageId id)
-    {
-      return i18n::requiredFormat(
-        catalog, MessageId::TrackClearFieldForTracks, {{"field", fieldLabel(id)}, {"count", 2}});
-    };
+    auto const clearLabel = [&](MessageId id) { return clearFieldLabel(catalog, id, 2); };
     auto* const save = findButtonByLabel(dialog, fieldLabel(MessageId::GtkCommonSave));
     auto* const album = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldAlbum));
     auto* const genre = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldGenre));

@@ -200,7 +200,16 @@ namespace ao::library
     builder._baselineKind = BaselineKind::HotOnly;
 
     auto metadata = view.metadata();
-    builder.metadata().title(metadata.title()).year(metadata.year());
+    builder.metadata().year(metadata.year());
+
+    if (metadata.isTitleExplicitlyCleared())
+    {
+      builder.metadata().clearTitleExplicitly();
+    }
+    else
+    {
+      builder.metadata().title(metadata.title());
+    }
 
     auto prop = view.property();
     builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
@@ -357,6 +366,14 @@ namespace ao::library
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view text)
   {
     _title = text;
+    _titleExplicitlyCleared = false;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::clearTitleExplicitly()
+  {
+    _title = {};
+    _titleExplicitlyCleared = true;
     return *this;
   }
 
@@ -947,8 +964,9 @@ namespace ao::library
   TrackBuilder::PreparedHot TrackBuilder::PreparedHot::make(TrackBuilder const* builder, WriteTransaction& transaction)
   {
     auto prepared = PreparedHot{};
+    auto const& metadata = builder->_metadataBuilder;
 
-    auto titleRes = detail::normalizeLibraryText(builder->_metadataBuilder._title, "Track title");
+    auto titleRes = detail::normalizeLibraryText(metadata.title(), "Track title");
 
     if (!titleRes)
     {
@@ -957,6 +975,7 @@ namespace ao::library
 
     prepared._title = std::move(*titleRes);
     prepared._titleLength = checkedUint16(prepared._title.size(), "Hot title length");
+    AO_INVARIANT(!metadata.isTitleExplicitlyCleared() || prepared._titleLength == 0);
 
     // Resolve tag names to DictionaryIds
     prepared._tagIds.reserve(builder->_tagsBuilder._tagNames.size());
@@ -974,7 +993,6 @@ namespace ao::library
     }
 
     // Resolve metadata strings to DictionaryIds for header
-    auto const& metadata = builder->_metadataBuilder;
     prepared._artistId = TrackBuilder::resolveDictionaryId(metadata._artist, transaction);
     prepared._albumId = TrackBuilder::resolveDictionaryId(metadata._album, transaction);
     prepared._genreId = TrackBuilder::resolveDictionaryId(metadata._genre, transaction);
@@ -983,25 +1001,18 @@ namespace ao::library
 
     prepared._bloomFilter = computeBloomFilter(prepared._tagIds);
 
-    // Hot header lengths are uint16_t. Reject anything the header cannot
-    // represent so writeTo's narrowing casts stay lossless and the write
-    // side remains the single validation boundary for readers.
-    auto const titleLength = prepared._title.size();
-    auto const tagLength = prepared._tagIds.size() * sizeof(DictionaryId);
+    auto const tagCount = prepared._tagIds.size();
+    auto const tagBytes = checkedPayloadBytes(tagCount, sizeof(DictionaryId), "Hot tag payload length");
 
     // Snapshot everything writeTo emits so the prepared value stays valid
     // and self-consistent even if the builder is mutated or destroyed later.
-    prepared._tagLength = checkedUint16(tagLength, "Hot tag payload length");
+    prepared._tagLengthAndFlags = packTrackHotTagLengthAndFlags(tagCount, metadata.isTitleExplicitlyCleared());
     prepared._sampleRate = builder->_propertyBuilder._sampleRate;
     prepared._year = builder->_metadataBuilder._year;
     prepared._bitDepth = builder->_propertyBuilder._bitDepth;
     prepared._codec = builder->_propertyBuilder._codec;
 
-    // Compute total hot size: header + tags + title
-    prepared._size = sizeof(TrackHotHeader);
-    prepared._size += tagLength;
-    prepared._size += titleLength;
-    prepared._size = (prepared._size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
+    prepared._size = align4(sizeof(TrackHotHeader) + tagBytes + prepared._titleLength);
     return prepared;
   }
 
@@ -1023,7 +1034,7 @@ namespace ao::library
                .sampleRate = _sampleRate,
                .year = _year,
                .titleLength = _titleLength,
-               .tagLength = _tagLength,
+               .tagLengthAndFlags = _tagLengthAndFlags,
                .bitDepth = _bitDepth,
                .codec = _codec,
              });

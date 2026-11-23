@@ -857,6 +857,34 @@ library:
     CHECK(contains(result.out, "Test Title"));
   }
 
+  TEST_CASE("CLI - lib export --mode delta writes an authored title clear as a map")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+    REQUIRE(fixture.run({"init"}).status == 0);
+    REQUIRE(fixture.run({"track", "update", "1", "--title", ""}).status == 0);
+
+    auto const exportPath = fixture.root() / "library.yaml";
+    auto const result = fixture.run({"lib", "export", exportPath.string(), "--mode", "delta"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+
+    auto const document = parseYaml(ao::test::readFile(exportPath));
+    auto const root = document.rootref();
+    REQUIRE(root.has_child("library"));
+    REQUIRE(root["library"].has_child("tracks"));
+    auto const tracks = root["library"]["tracks"];
+    REQUIRE(tracks.is_seq());
+    REQUIRE(tracks.num_children() == 1);
+    auto const title = yaml::findChild(tracks[0], "title");
+    REQUIRE(title.readable());
+    REQUIRE(title.is_map());
+    REQUIRE(title.num_children() == 1);
+    auto const action = title.first_child();
+    CHECK(yaml::keyView(action) == "clear");
+    CHECK(yaml::scalarView(action) == "true");
+  }
+
   TEST_CASE("CLI - lib export --mode list-only carries the hyphenated mode token through import")
   {
     auto source = CliFixture{};

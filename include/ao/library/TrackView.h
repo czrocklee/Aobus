@@ -216,6 +216,7 @@ namespace ao::library
 
       // From hot
       std::string_view title() const noexcept;
+      bool isTitleExplicitlyCleared() const noexcept;
       DictionaryId artistId() const noexcept { return _track.hotHeader().artistId; }
       DictionaryId albumId() const noexcept { return _track.hotHeader().albumId; }
       DictionaryId genreId() const noexcept { return _track.hotHeader().genreId; }
@@ -276,8 +277,7 @@ namespace ao::library
       {
       }
 
-      // The tag region is bounded by the uint16_t tagLength header field, so
-      // a record can hold at most 16383 tags; uint16_t covers the full range.
+      // The hot header stores a 14-bit count; uint16_t covers the full range.
       std::uint16_t count() const noexcept { return static_cast<std::uint16_t>(_tagIds.size()); }
       std::uint32_t bloom() const noexcept { return _bloom; }
 

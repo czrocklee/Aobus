@@ -102,6 +102,11 @@ Text fields preserve whitespace: a title consisting of spaces is a replacement, 
 
 These rules apply to writable built-in fields in multi-track Properties. For one track, erasing a value clears the field. A valid spelling that decodes to the original value (for example, `02003` for year `2003`) is not an edit and does not enable Save on its own. Staging or withdrawing an edit writes nothing until Save. Inline editors, Credits scopes, and custom metadata have separate rules.
 
+Title baselines aggregate text only, even when some blank titles have a [recorded clear](../../reference/library/model/track.md#curated-metadata) and others do not.
+`clearFieldEdit()` on Title stages an empty title patch even against a common empty baseline. GTK and WinUI offer the named Clear control for Title even with one bound track; other single-track fields keep their ordinary editors.
+Ordinary input supersedes the staged clear; untouched or restored fields emit no title patch.
+At Save, a track that already has the requested title text and clear state needs no title update.
+
 Applying the patch through the retained authoring session updates the complete bound target set or none of it.
 The result is `Applied`, `NoOp`, `Busy`, `Stale`, or `Unavailable`; `Result` errors remain operational or validation failures.
 An empty metadata display value remains hidden by default unless show-empty is active or its editor is open.

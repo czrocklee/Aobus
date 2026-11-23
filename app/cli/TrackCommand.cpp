@@ -41,6 +41,7 @@
 #include <CLI/Error.hpp>
 #include <CLI/Option.hpp>
 #include <CLI/Version.hpp>
+#include <ryml.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -237,6 +238,31 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackCreditRecordDto>
     }
 
     return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectScalarTraits<ao::rt::TrackFieldChangeReason>
+{
+  static void write(ryml::NodeRef node, rt::TrackFieldChangeReason reason)
+  {
+    switch (reason)
+    {
+      case rt::TrackFieldChangeReason::ExplicitClearRecorded:
+        ReflectScalarTraits<std::string_view>::write(node, "explicitClearRecorded");
+        return;
+    }
+
+    AO_FATAL("Unknown track field change reason");
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::rt::TrackFieldChange>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    return memberName == "optReason" ? "reason" : memberName;
   }
 };
 

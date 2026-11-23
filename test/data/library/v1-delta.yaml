@@ -38,7 +38,8 @@ library:
         total-frames: 288000
         sample-rate: 48000
       duration: 2000
-      title: Intro
+      title:
+        clear: true
       artist: Example Quartet
   lists:
     - id: 1

@@ -222,6 +222,107 @@ namespace ao::cli::test
     CHECK(contains(result.out, "updated 0 of 1 matched track(s)"));
   }
 
+  TEST_CASE("CLI - track update reports explicit title clears without exposing the marker to queries")
+  {
+    auto fixture = CliFixture{};
+    auto const blank = fixture.addTrack(library::test::makeEmptyTrackSpec("blank.flac"));
+    auto const titled = fixture.addTrack(library::test::TrackSpec{.title = "Before", .uri = "titled.flac"});
+    auto const blankArg = std::to_string(blank.raw());
+    auto const titledArg = std::to_string(titled.raw());
+    auto const requireMember = [](ryml::ConstNodeRef object, std::string_view key)
+    {
+      REQUIRE(object.is_map());
+      auto const member = yaml::findChild(object, key);
+      REQUIRE(member.readable());
+      return member;
+    };
+    auto const checkReport = [&](CliResult const& result, bool dryRun)
+    {
+      REQUIRE(result.status == 0);
+      CHECK(result.err.empty());
+      auto tree = parseYaml(result.out);
+      auto const root = tree.rootref();
+      CHECK(yaml::scalarView(requireMember(root, "dryRun")) == (dryRun ? "true" : "false"));
+      CHECK(yaml::scalarView(requireMember(root, "matched")) == "2");
+      CHECK(yaml::scalarView(requireMember(root, "updated")) == "2");
+      auto const trackIds = requireMember(root, "trackIds");
+      REQUIRE(trackIds.is_seq());
+      REQUIRE(trackIds.num_children() == 2);
+      CHECK(yaml::scalarView(trackIds[0]) == blankArg);
+      CHECK(yaml::scalarView(trackIds[1]) == titledArg);
+      auto const changes = requireMember(root, "changes");
+      REQUIRE(changes.is_seq());
+      REQUIRE(changes.num_children() == 2);
+      CHECK(yaml::scalarView(requireMember(changes[0], "trackId")) == blankArg);
+      CHECK(yaml::scalarView(requireMember(changes[1], "trackId")) == titledArg);
+      auto const markerFields = requireMember(changes[0], "fields");
+      auto const textFields = requireMember(changes[1], "fields");
+      REQUIRE(markerFields.is_seq());
+      REQUIRE(markerFields.num_children() == 1);
+      REQUIRE(textFields.is_seq());
+      REQUIRE(textFields.num_children() == 1);
+      auto const marker = markerFields[0];
+      auto const oldValue = requireMember(marker, "oldValue");
+      auto const newValue = requireMember(marker, "newValue");
+      CHECK(yaml::scalarView(requireMember(marker, "field")) == "title");
+      REQUIRE(oldValue.has_val());
+      REQUIRE(newValue.has_val());
+      CHECK(yaml::scalarView(oldValue).empty());
+      CHECK(yaml::scalarView(newValue).empty());
+      CHECK(yaml::scalarView(requireMember(marker, "reason")) == "explicitClearRecorded");
+      REQUIRE(textFields[0].is_map());
+      CHECK_FALSE(textFields[0].has_child("reason"));
+
+      if (!dryRun)
+      {
+        auto const tagChanges = requireMember(root, "tagChanges");
+        REQUIRE(tagChanges.is_seq());
+        CHECK(tagChanges.num_children() == 2);
+      }
+    };
+
+    checkReport(
+      fixture.run({"-O", "json", "track", "update", "--dry-run", blankArg, titledArg, blankArg, "--title", ""}), true);
+    auto result = fixture.run({"-O", "yaml", "track", "show", "--filter", "not $title?"});
+    REQUIRE(result.status == 0);
+    {
+      auto tree = parseYaml(result.out);
+      auto const tracks = requireMember(tree.rootref(), "tracks");
+      REQUIRE(tracks.is_seq());
+      REQUIRE(tracks.num_children() == 1);
+      CHECK(yaml::scalarView(requireMember(tracks[0], "id")) == blankArg);
+    }
+
+    checkReport(
+      fixture.run({"-O", "yaml", "track", "update", blankArg, titledArg, blankArg, "--title", "", "--add-tag", "fav"}),
+      false);
+
+    result = fixture.run({"-O", "yaml", "track", "show", "--filter", "not $title?"});
+    REQUIRE(result.status == 0);
+    {
+      auto tree = parseYaml(result.out);
+      auto const tracks = requireMember(tree.rootref(), "tracks");
+      REQUIRE(tracks.is_seq());
+      REQUIRE(tracks.num_children() == 2);
+
+      for (auto const track : tracks.children())
+      {
+        REQUIRE(track.is_map());
+        CHECK_FALSE(track.has_child("title"));
+        CHECK_FALSE(track.has_child("titleExplicitlyCleared"));
+      }
+    }
+
+    result = fixture.run({"-O", "json", "track", "update", blankArg, titledArg, blankArg, "--title", ""});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(requireMember(tree.rootref(), "matched")) == "2");
+    CHECK(yaml::scalarView(requireMember(tree.rootref(), "updated")) == "0");
+    auto const changes = requireMember(tree.rootref(), "changes");
+    REQUIRE(changes.is_seq());
+    CHECK(changes.num_children() == 0);
+  }
+
   TEST_CASE("CLI - track update edits explicit id batches")
   {
     auto fixture = CliFixture{};

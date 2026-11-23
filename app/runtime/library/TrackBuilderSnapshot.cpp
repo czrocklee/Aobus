@@ -45,6 +45,7 @@ namespace ao::rt
     , _codec{source.property().codec()}
     , _channels{source.property().channels()}
     , _bitDepth{source.property().bitDepth()}
+    , _titleExplicitlyCleared{source.metadata().isTitleExplicitlyCleared()}
   {
     _tags.reserve(source.tags().names().size());
 
@@ -122,8 +123,17 @@ namespace ao::rt
   library::TrackBuilder TrackBuilderSnapshot::makeBuilder() const
   {
     auto result = library::TrackBuilder::makeEmpty();
+
+    if (_titleExplicitlyCleared)
+    {
+      result.metadata().clearTitleExplicitly();
+    }
+    else
+    {
+      result.metadata().title(_title);
+    }
+
     result.metadata()
-      .title(_title)
       .artist(_artist)
       .album(_album)
       .albumArtist(_albumArtist)

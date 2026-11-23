@@ -5,6 +5,7 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/RecordingDate.h>
 
@@ -42,15 +43,15 @@ namespace ao::library
    *   │  artistId, albumId,                 │
    *   │  genreId, albumArtistId,            │
    *   │  composerId, year,                  │
-   *   │  titleLength, tagLength,            │
+   *   │  titleLength, tagLengthAndFlags,    │
    *   │  bitDepth, codec                    │
    *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
    *   │  tag ID 1 (4B)                      │
    *   │  tag ID 2 (4B)                      │
-   *   │  ... (tagLength bytes total)        │
-   *   ├─────────────────────────────────────┤  ← title begin = tags begin + tagLength
+   *   │  ...                                │
+   *   ├─────────────────────────────────────┤  ← title begin = tags begin + decoded tag bytes
    *   │  title... (titleLength bytes)       │
-   *   │  '\0'                               │
+   *   │  zero padding to 4-byte alignment   │
    *   └─────────────────────────────────────┘  ← hot data end
    */
   struct TrackHotHeader final
@@ -65,9 +66,9 @@ namespace ao::library
     SampleRate sampleRate{};      // Sample rate in Hz
 
     // 2-byte section
-    std::uint16_t year{};        // Release year
-    std::uint16_t titleLength{}; // Length of title string
-    std::uint16_t tagLength{};   // Length of tags blob in bytes
+    std::uint16_t year{};              // Release year
+    std::uint16_t titleLength{};       // Length of title string
+    std::uint16_t tagLengthAndFlags{}; // Tag count in bits 15:2; bit 1 reserved, bit 0 explicit title clear
 
     // 1-byte section
     BitDepth bitDepth{}; // Bits per sample
@@ -97,12 +98,45 @@ namespace ao::library
   static_assert(offsetof(TrackHotHeader, year) ==
                 offsetof(TrackHotHeader, sampleRate) + sizeof(TrackHotHeader::sampleRate));
   static_assert(offsetof(TrackHotHeader, titleLength) == offsetof(TrackHotHeader, year) + sizeof(TrackHotHeader::year));
-  static_assert(offsetof(TrackHotHeader, tagLength) ==
+  static_assert(offsetof(TrackHotHeader, tagLengthAndFlags) ==
                 offsetof(TrackHotHeader, titleLength) + sizeof(TrackHotHeader::titleLength));
   static_assert(offsetof(TrackHotHeader, bitDepth) ==
-                offsetof(TrackHotHeader, tagLength) + sizeof(TrackHotHeader::tagLength));
+                offsetof(TrackHotHeader, tagLengthAndFlags) + sizeof(TrackHotHeader::tagLengthAndFlags));
   static_assert(offsetof(TrackHotHeader, codec) ==
                 offsetof(TrackHotHeader, bitDepth) + sizeof(TrackHotHeader::bitDepth));
+
+  namespace detail
+  {
+    constexpr unsigned kTrackHotTagCountShift = 2;
+    constexpr unsigned kTrackHotReservedTagBit = 0x0002;
+    constexpr unsigned kTrackHotExplicitTitleClearBit = 0x0001;
+    static_assert(sizeof(DictionaryId) == (1U << kTrackHotTagCountShift));
+  } // namespace detail
+
+  constexpr std::uint16_t packTrackHotTagLengthAndFlags(std::size_t tagCount, bool titleExplicitlyCleared) noexcept
+  {
+    constexpr auto kMaxTagCount = std::numeric_limits<std::uint16_t>::max() / sizeof(DictionaryId);
+    AO_EXPECTS(tagCount <= kMaxTagCount);
+    // With both low bits zero, the word is the same as the original tag byte length.
+    return static_cast<std::uint16_t>((tagCount << detail::kTrackHotTagCountShift) |
+                                      (titleExplicitlyCleared ? detail::kTrackHotExplicitTitleClearBit : 0U));
+  }
+
+  constexpr std::size_t trackHotTagPayloadBytes(std::uint16_t tagLengthAndFlags) noexcept
+  {
+    return (static_cast<std::size_t>(tagLengthAndFlags) >> detail::kTrackHotTagCountShift) * sizeof(DictionaryId);
+  }
+
+  constexpr bool isTrackHotTitleExplicitlyCleared(std::uint16_t tagLengthAndFlags) noexcept
+  {
+    return (tagLengthAndFlags & detail::kTrackHotExplicitTitleClearBit) != 0;
+  }
+
+  constexpr bool isValidTrackHotTagLengthAndFlags(TrackHotHeader const& header) noexcept
+  {
+    return (header.tagLengthAndFlags & detail::kTrackHotReservedTagBit) == 0 &&
+           (!isTrackHotTitleExplicitlyCleared(header.tagLengthAndFlags) || header.titleLength == 0);
+  }
 
   /** Storage representation for one typed cover-art resource reference. */
   struct CoverArtEntry final

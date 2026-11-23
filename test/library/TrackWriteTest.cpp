@@ -25,6 +25,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -149,12 +150,31 @@ namespace ao::library::test
     auto transaction = writeTransaction(fixture.library);
     auto builder = TrackBuilder::makeEmpty();
 
+    auto expectedTitle = std::string_view{};
+    bool explicitClear = false;
+
+    SECTION("Borrowed title text")
+    {
+      expectedTitle = "Snapshot Title";
+    }
+
+    SECTION("Explicit title clear")
+    {
+      explicitClear = true;
+    }
+
     auto const [preparedHot, preparedCold] = [&]
     {
       // Borrowed input strings die before the prepared values are consumed.
-      auto const title = std::string{"Snapshot Title"};
+      auto const title = std::string{expectedTitle};
       auto const uri = std::string{"snapshot.flac"};
       builder.metadata().title(title).trackNumber(3);
+
+      if (explicitClear)
+      {
+        builder.metadata().clearTitleExplicitly();
+      }
+
       builder.property().uri(uri);
       return prepareTrack(builder, transaction, fixture.library.resources());
     }();
@@ -174,7 +194,8 @@ namespace ao::library::test
     CHECK(trackId != kInvalidTrackId);
     CHECK(optView->isHotValid());
     CHECK(optView->isColdValid());
-    CHECK(optView->metadata().title() == "Snapshot Title");
+    CHECK(optView->metadata().title() == expectedTitle);
+    CHECK(optView->metadata().isTitleExplicitlyCleared() == explicitClear);
     CHECK(optView->metadata().trackNumber() == 3);
     CHECK(optView->property().uri() == "snapshot.flac");
     REQUIRE(transaction.commit());

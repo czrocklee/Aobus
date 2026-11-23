@@ -271,6 +271,41 @@ namespace ao::uimodel::test
     CHECK(form.rowView(F::Album).mixed);
   }
 
+  TEST_CASE("TrackPropertiesFormModel - only a named Clear writes a common blank title")
+  {
+    using F = rt::TrackField;
+    auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog(), 1};
+    form.addField(F::Title, true);
+    form.addField(F::Album, true);
+    form.loadFirstTrackField(F::Title, textRaw(""));
+    form.loadFirstTrackField(F::Album, textRaw(""));
+    CHECK_FALSE(form.buildPatch().optTitle);
+
+    form.clearFieldEdit(F::Album);
+    form.setFieldInput(F::Title, textEdit(""));
+    CHECK_FALSE(form.canSave());
+    CHECK_FALSE(form.buildPatch().optTitle);
+
+    form.clearFieldEdit(F::Title);
+    CHECK(form.canSave());
+    auto const patch = form.buildPatch();
+    CHECK(patch.optTitle == "");
+    CHECK_FALSE(patch.optAlbum);
+
+    SECTION("Ordinary input supersedes the Clear of the same text")
+    {
+      form.setFieldInput(F::Title, textEdit(""));
+    }
+
+    SECTION("Restore withdraws the Clear")
+    {
+      form.restoreFieldEdit(F::Title);
+    }
+
+    CHECK_FALSE(form.canSave());
+    CHECK_FALSE(form.buildPatch().optTitle);
+  }
+
   TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};

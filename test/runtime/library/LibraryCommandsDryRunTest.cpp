@@ -15,6 +15,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 
@@ -191,6 +192,80 @@ namespace ao::rt::test
     CHECK(*commitRes == *dryRunRes);
     CHECK(trackTitle(libraryFixture, trackId) == "After");
     CHECK(recorder.tracksMutated == 1);
+  }
+
+  TEST_CASE("LibraryCommands - dry-run and commit agree on explicit title clears in a mixed batch")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const titled = libraryFixture.addTrack("Before");
+    auto const blank = libraryFixture.addTrack("");
+    auto const cleared = libraryFixture.addTrack("");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto const patch = MetadataPatch{.optTitle = ""};
+    REQUIRE(commandsFixture.updateMetadata(std::array{cleared}, patch));
+    auto publications = std::vector<LibraryChangeSet>{};
+    [[maybe_unused]] auto subscription =
+      changes.onChanged([&publications](LibraryChangeSet const& event) noexcept { publications.push_back(event); });
+    auto const selection = std::array{titled, blank, blank, cleared};
+    auto const targets = commandsFixture.bind(selection);
+    auto const revisionBefore = targets.revision();
+    auto const expected = std::vector<TrackChangeRecord>{
+      {.trackId = titled, .fields = {{.field = "title", .oldValue = "Before", .newValue = ""}}},
+      {.trackId = blank,
+       .fields = {{.field = "title",
+                   .oldValue = "",
+                   .newValue = "",
+                   .optReason = TrackFieldChangeReason::ExplicitClearRecorded}}},
+    };
+
+    auto const previewRes = commandsFixture.runTask(
+      commands.previewUpdateMetadataAsync(std::vector<TrackId>{selection.begin(), selection.end()}, patch));
+    REQUIRE(previewRes);
+    CHECK(previewRes->changes == expected);
+    CHECK(publications.empty());
+    CHECK(commandsFixture.bind(selection).revision() == revisionBefore);
+    {
+      auto const transaction = libraryFixture.library().readTransaction();
+      auto const optBlank =
+        libraryFixture.library().tracks().reader(transaction).get(blank, library::TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optBlank);
+      CHECK_FALSE(optBlank->metadata().isTitleExplicitlyCleared());
+    }
+
+    auto const commitRes = commandsFixture.runTask(commands.updateMetadataAsync(targets, patch));
+    REQUIRE(commitRes);
+    CHECK(commitRes->status == AuthoringStatus::Applied);
+    CHECK(commitRes->reply == *previewRes);
+    REQUIRE(commitRes->optNextTargets);
+    CHECK(commitRes->optNextTargets->revision() == revisionBefore + 1);
+    CHECK(std::ranges::equal(commitRes->optNextTargets->trackIds(), selection));
+
+    auto const staleRes =
+      commandsFixture.runTask(commands.updateMetadataAsync(targets, MetadataPatch{.optTitle = "Stale"}));
+    REQUIRE(staleRes);
+    CHECK(staleRes->status == AuthoringStatus::Stale);
+    CHECK(staleRes->reply.changes.empty());
+
+    auto const repeatRes = commandsFixture.runTask(commands.updateMetadataAsync(*commitRes->optNextTargets, patch));
+    REQUIRE(repeatRes);
+    CHECK(repeatRes->status == AuthoringStatus::NoOp);
+    CHECK(repeatRes->reply.changes.empty());
+    CHECK(commandsFixture.bind(selection).revision() == revisionBefore + 1);
+    REQUIRE(publications.size() == 1);
+    CHECK(publications[0].tracksMutated == std::vector<TrackId>{titled, blank});
+    CHECK(publications[0].libraryRevision == revisionBefore + 1);
+    auto const transaction = libraryFixture.library().readTransaction();
+    auto const reader = libraryFixture.library().tracks().reader(transaction);
+
+    for (auto const trackId : std::array{titled, blank, cleared})
+    {
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optView);
+      CHECK(optView->metadata().title().empty());
+      CHECK(optView->metadata().isTitleExplicitlyCleared());
+    }
   }
 
   TEST_CASE("LibraryCommands - metadata preview does not publish dictionary symbols")

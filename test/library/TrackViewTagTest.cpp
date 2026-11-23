@@ -66,7 +66,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLength = 8; // 2 tags * 4 bytes
+    h.tagLengthAndFlags = packTrackHotTagLengthAndFlags(2, false);
 
     auto const title = std::string{"Test Title"};
     h.titleLength = static_cast<std::uint16_t>(title.size());
@@ -89,7 +89,7 @@ namespace ao::library::test
     constexpr std::uint16_t kTagCount = 300;
 
     auto h = TrackHotHeader{};
-    h.tagLength = static_cast<std::uint16_t>(kTagCount * sizeof(DictionaryId));
+    h.tagLengthAndFlags = packTrackHotTagLengthAndFlags(kTagCount, false);
 
     auto data = serializeHeader(h);
 
@@ -118,7 +118,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLength = 8; // 2 tags * 4 bytes
+    h.tagLengthAndFlags = packTrackHotTagLengthAndFlags(2, false);
 
     auto const title = std::string{"Test Title"};
     h.titleLength = static_cast<std::uint16_t>(title.size());
@@ -152,7 +152,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLength = 8;
+    h.tagLengthAndFlags = packTrackHotTagLengthAndFlags(2, false);
 
     auto data = serializeHeader(h);
     std::uint32_t const tag1 = 10;
@@ -179,7 +179,7 @@ namespace ao::library::test
     h.year = 2020;
     h.codec = AudioCodec::Unknown;
     h.bitDepth = BitDepth{16};
-    h.tagLength = 8;
+    h.tagLengthAndFlags = packTrackHotTagLengthAndFlags(2, false);
 
     auto data = serializeHeader(h);
     std::uint32_t const tag1 = 10;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/TrackRecordValidation.h"
 #include "test/library/TrackBuilderTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -92,6 +93,7 @@ namespace ao::library::test
     REQUIRE(view.isColdValid());
     CHECK(view.property().uri() == "track.flac");
     CHECK(view.metadata().title().empty());
+    CHECK_FALSE(view.metadata().isTitleExplicitlyCleared());
     CHECK(view.metadata().artistId() == kInvalidDictionaryId);
     CHECK(view.metadata().albumId() == kInvalidDictionaryId);
     CHECK(view.metadata().genreId() == kInvalidDictionaryId);
@@ -186,6 +188,61 @@ namespace ao::library::test
 
     auto const* payloadStart = reinterpret_cast<char const*>(hotData.data()) + sizeof(TrackHotHeader);
     CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
+  }
+
+  TEST_CASE("TrackBuilder - an explicit title clear changes only bit zero of the tag length word")
+  {
+    auto context = TrackSerializationFixture{};
+
+    for (auto const legacyTagBytes : std::to_array<std::uint16_t>({0, 8}))
+    {
+      auto builder = TrackBuilder::makeEmpty();
+
+      if (legacyTagBytes != 0)
+      {
+        builder.tags().add("first").add("second");
+      }
+
+      auto const unmarkedRes = context.trySerializeHot(builder);
+      REQUIRE(unmarkedRes);
+      auto expectedMarked = *unmarkedRes;
+      auto* header = utility::layout::viewMutable<TrackHotHeader>(expectedMarked);
+      REQUIRE(header);
+      CHECK(header->tagLengthAndFlags == legacyTagBytes);
+      header->tagLengthAndFlags = static_cast<std::uint16_t>(legacyTagBytes + 1);
+
+      builder.metadata().title("Old").clearTitleExplicitly();
+      CHECK(builder.metadata().title().empty());
+      CHECK(builder.metadata().isTitleExplicitlyCleared());
+      auto const markedRes = context.trySerializeHot(builder);
+      REQUIRE(markedRes);
+      CHECK(*markedRes == expectedMarked);
+      REQUIRE(validateSerializedHotTrack(*markedRes));
+
+      auto const view = TrackView{*markedRes, {}};
+      REQUIRE(view.isHotValid());
+      CHECK(view.metadata().title().empty());
+      CHECK(view.metadata().isTitleExplicitlyCleared());
+      CHECK(view.tags().count() == legacyTagBytes / 4);
+    }
+  }
+
+  TEST_CASE("TrackBuilder - ordinary title assignment removes an explicit title clear")
+  {
+    auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+
+    for (auto const title : std::array{std::string_view{""}, std::string_view{" "}})
+    {
+      builder.metadata().clearTitleExplicitly().title(title);
+      CHECK_FALSE(builder.metadata().isTitleExplicitlyCleared());
+      auto const hotRes = context.trySerializeHot(builder);
+      REQUIRE(hotRes);
+      auto const view = TrackView{*hotRes, {}};
+      REQUIRE(view.isHotValid());
+      CHECK(view.metadata().title() == title);
+      CHECK_FALSE(view.metadata().isTitleExplicitlyCleared());
+    }
   }
 
   TEST_CASE("TrackBuilder - serialize writes hot header fields")
