@@ -728,10 +728,9 @@ namespace ao::rt
 
     std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
 
-    // Written whole or not at all. A user exports over the backup they already
-    // have, so a truncating stream would spend the old document before knowing
-    // it could produce the new one, and a cancellation, a full disk, or a crash
-    // would leave neither.
+    // Observe stop before handing off to the non-cancellable atomic writer,
+    // which preserves the old backup until it can install the complete document.
+    async::throwIfStopRequested(stopToken);
     return utility::writeAtomically(path, yaml);
   }
 

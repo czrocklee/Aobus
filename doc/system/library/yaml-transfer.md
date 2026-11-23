@@ -114,14 +114,12 @@ The caller supplies an existing destination directory; if it is missing, export 
 A failure before replacement leaves the previous destination intact, or absent if it did not exist.
 Replacement installs a complete document without exposing a partial write.
 
-A cancelled export is intended to leave the destination unchanged, preserving any backup at that path.
-The exporter checks for caller stop at record boundaries, including while collecting cover descriptors for `full`.
-A stop observed there throws `OperationCancelled` before replacement, leaving the previous file intact or the destination absent.
-YAML serialization and atomic replacement do not check the token.
+The exporter checks the caller token at record boundaries, including while collecting cover descriptors for `full`, and one last time after YAML serialization, immediately before starting the atomic write.
+A stop observed at a checkpoint throws `OperationCancelled` without changing the destination, preserving any backup at that path.
+Neither YAML serialization nor the atomic write polls the token while running.
 
-**Known limitation:** If the exporter returns a result, `LibraryJobs` checks the caller token again on the callback executor after emitting the progress-finished pulse and before returning that result.
-This final check can report `OperationCancelled` after replacement has succeeded; the complete new document remains installed.
-Cancellation alone therefore does not establish that the previous backup is still at that path.
+After the worker phase, `LibraryJobs` returns to the callback executor and emits the progress-finished pulse without checking the caller token again.
+It then returns the export result or rethrows the deferred exception. A stop requested during the atomic write or callback cleanup cannot replace success or an export error with `OperationCancelled`.
 
 For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values. For a segment Track, the baseline is the carrier audio file, not the external CUE sheet.
 An unsafe or otherwise unresolvable URI fails export; an error checking whether the resolved path exists fails with `IoError`.
@@ -363,7 +361,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`CueYamlBaselineTest.cpp`](../../../test/runtime/CueYamlBaselineTest.cpp) checks the file facts Restore seeds and when Merge preserves or invalidates the fingerprint of a whole file or CUE carrier.
 - [`CueYamlPreparationTest.cpp`](../../../test/runtime/CueYamlPreparationTest.cpp) checks prepared-import staleness and preservation of intervening writes.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
-  It also checks preservation of the destination when export observes an already-requested stop, complete replacement on success, and rejection of a missing destination directory without creating it.
+  It also checks preservation of the destination under an already-requested stop, both with a track record and with an empty library, plus complete replacement on success and rejection of a missing destination directory without creating it.
 - [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves title-action, recording-date, and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.

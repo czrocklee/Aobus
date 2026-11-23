@@ -50,24 +50,37 @@ namespace ao::rt::test
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Exported"));
-
     auto const yamlPath = std::filesystem::path{temp.path()} / "backup.yaml";
     auto const previous = std::string{"# the backup the user already has\n"};
     {
       auto ofs = std::ofstream{yamlPath, std::ios::binary};
       ofs << previous;
     }
+    REQUIRE(readAll(yamlPath) == previous);
 
     auto stopSource = std::stop_source{};
-    stopSource.request_stop();
-
-    // A pre-cancelled export must preserve the destination byte-for-byte.
+    REQUIRE(stopSource.request_stop());
     auto exporter = LibraryYamlExporter{ml};
-    CHECK_THROWS_AS(
-      exporter.exportToYaml(yamlPath, ExportMode::Full, stopSource.get_token()), async::OperationCancelled);
+    auto const checkCancelledExport = [&]
+    {
+      CHECK_THROWS_AS(
+        exporter.exportToYaml(yamlPath, ExportMode::Full, stopSource.get_token()), async::OperationCancelled);
+      CHECK(readAll(yamlPath) == previous);
+    };
 
-    CHECK(readAll(yamlPath) == previous);
+    SECTION("with a track record")
+    {
+      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Exported"));
+      checkCancelledExport();
+    }
+
+    SECTION("with no records")
+    {
+      // No record checkpoint runs; the final pre-write check must observe stop.
+      checkCancelledExport();
+      REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
+      CHECK(readAll(yamlPath).contains("export-mode: full"));
+    }
   }
 
   TEST_CASE("LibraryYaml - an export replaces its target with the complete new document")

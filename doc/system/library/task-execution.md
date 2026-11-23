@@ -91,7 +91,7 @@ Tasks check caller cancellation at admission and at cancellable executor hops. B
 | ----------------- | -------------------------------------------------------------------------------------------------------------------- |
 | YAML preview      | No check during synchronous work; checks again after cleanup, before returning its result.                           |
 | YAML apply        | Last check on worker resume, before binding revalidation or lane entry.                                              |
-| YAML export       | Cooperative at [record checkpoints](yaml-transfer.md#export-modes); checks again after callback-owner cleanup.       |
+| YAML export       | Checks per record and [after serialization](yaml-transfer.md#export-modes), before writing; no cleanup check.        |
 | Scan plan build   | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
 | Scan plan apply   | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction.                          |
 | Identity backfill | Cooperative between hash chunks; completed hash candidates in the current batch are submitted for revalidation.      |
@@ -131,6 +131,7 @@ If one throws, required cleanup completes before that exception propagates and r
 ## Test map
 
 - [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+  It also checks that caller stop requested by the export progress-finished observer preserves both successful replacement and `IoError` outcomes.
 - [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
 - [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
 - [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting, worker capacity reserved for unrelated work, single-worker service between files, and bounded write-back behavior.

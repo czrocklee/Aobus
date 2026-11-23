@@ -842,20 +842,14 @@ namespace ao::rt
       deferredFailure = std::current_exception();
     }
 
-    // Resumed without the token so that a cancelled export still hands its
-    // continuation back on the callback executor rather than throwing here, on a
-    // worker.
+    // Finish the conversation on the callback executor before propagating the
+    // worker outcome. Caller stop here cannot change the exporter's result.
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
     _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
     {
       async::rethrowException(deferredFailure);
-    }
-
-    if (stopToken.stop_requested())
-    {
-      async::throwOperationCancelled();
     }
 
     co_return res;
