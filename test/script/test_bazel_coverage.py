@@ -2,10 +2,12 @@
 
 import contextlib
 import gzip
+import hashlib
 import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -13,6 +15,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+from ao.__main__ import main
 from ao.core.bazel_native import BazelWorkspaceError
 from ao.core.paths import PROJECT_ROOT
 from ao.portal import bazel_attempt, bazel_coverage, bazel_test_ownership, build_env
@@ -53,6 +56,7 @@ class CollectionFixture:
             "TEST_TARGET": "//test:fixture",
         }
         self.notes = []
+        self.line_hits = 3
 
     def add(self, name, *, data=True):
         relative = Path("bazel-out/dbg/bin/test/_objs/fixture") / (name + ".gcno")
@@ -73,7 +77,11 @@ class CollectionFixture:
         pair = Path(kwargs["cwd"])
         if argv != [str(self.tool), "gcov", "-i", "-o", str(pair), str(pair / "object.gcda")]:
             raise AssertionError(f"unexpected gcov command: {argv}")
-        _file(pair, "Value.cpp.gcov", "file:app/runtime/Value.cpp\nfunction:1,2,value\nlcount:1,0\nlcount:2,3\n")
+        _file(
+            pair,
+            "Value.cpp.gcov",
+            f"file:app/runtime/Value.cpp\nfunction:1,2,value\nlcount:1,0\nlcount:2,{self.line_hits}\n",
+        )
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     def collect(self, reader=None):
@@ -392,6 +400,288 @@ class CoverageAdmissionTests(unittest.TestCase):
             ):
                 attempt.bazel("coverage", Path("bazel"), root, "coverage", [])
             process.assert_not_called()
+
+
+class CoverageCommandTests(unittest.TestCase):
+    label = "//test:fixture"
+    configuration = "a" * 64
+    suite = "//:coverage_core_tests"
+
+    def setUp(self):
+        temporary = self.enterContext(tempfile.TemporaryDirectory(prefix="aobus-coverage-cli-"))
+        # Keep the build tree and its sibling lock file inside the temporary directory.
+        self.tree = Path(temporary).resolve() / "tree"
+        self.output_archive = self.tree / "testlogs/outputs.zip"
+        execution = self.tree / "execution"
+        execution.mkdir(parents=True)
+        self.fixture = CollectionFixture(execution)
+        java = self.tree / "jdk"
+        _file(java, "bin/java", "fixture JVM")
+        _file(java, "lib/jrt-fs.jar", "fixture runtime")
+        prepared = self.tree / "prepared"
+        _file(prepared, "request.json", "{}")
+        _file(prepared, "aobus.bazelrc", "")
+        self.executable = self.tree / "bazel"
+        reader = self.fixture.tool
+        reader_identity = {"path": str(reader), "sha256": hashlib.sha256(reader.read_bytes()).hexdigest()}
+        self.enterContext(mock.patch.object(bazel_coverage, "PROJECT_ROOT", self.fixture.root))
+        self.enterContext(mock.patch.object(bazel_coverage.native, "native_platform", return_value="linux"))
+        workspace = bazel_coverage.bazel_workspace
+        self.enterContext(mock.patch.object(workspace, "_linux_server_javabase", return_value=java))
+        self.enterContext(mock.patch.object(workspace, "prepare_workspace", return_value=prepared))
+        self.enterContext(mock.patch.object(workspace, "bazel_executable", return_value=self.executable))
+        compiler_identity = {"files": [reader_identity]}
+        self.enterContext(mock.patch.object(bazel_coverage, "_compiler_identity", return_value=compiler_identity))
+        self.enterContext(
+            mock.patch.object(bazel_coverage, "nix_cc_wrapper", return_value={"tools": {"gcov": str(reader)}})
+        )
+        self.fixture.add("linked")
+
+    def _bazel(self, argv, *, stdout, stderr, **kwargs):
+        self.assertEqual(argv[0], str(self.executable))
+        # The launcher emits startup options as --flag or --flag=value, never
+        # a separate value token, so the first non-option is the subcommand.
+        command, *arguments = argv[next(i for i, arg in enumerate(argv[1:], 1) if not arg.startswith("--")) :]
+        operands = [arg for arg in arguments if not arg.startswith("--")]
+        selection = f"set({self.label})"
+        if command == "query" and operands == [f"tests({self.suite})"] and "--output=label" in arguments:
+            stdout.write((self.label + "\n").encode())
+        elif command == "cquery" and operands == [selection] and "--output=jsonproto" in arguments:
+            target = {"type": "RULE", "rule": {"name": self.label, "ruleClass": "cc_test"}}
+            stdout.write(
+                json.dumps(
+                    {
+                        "results": [{"target": target, "configurationId": 1}],
+                        "configurations": [{"id": 1, "checksum": self.configuration}],
+                    }
+                ).encode()
+            )
+        elif command == "aquery" and operands == [f"deps({selection})"] and "--output=jsonproto" in arguments:
+            action = {"targetId": 1, "configurationId": 1}
+            compile_args = ["clang++", "-fprofile-arcs", "-ftest-coverage", "-fprofile-update=atomic"]
+            stdout.write(
+                json.dumps(
+                    {
+                        "targets": [{"id": 1, "label": self.label}],
+                        "configuration": [{"id": 1}],
+                        "actions": [
+                            action | {"mnemonic": "CppCompile", "arguments": compile_args},
+                            action | {"mnemonic": "CppLink", "arguments": ["clang++", "--coverage"]},
+                        ],
+                    }
+                ).encode()
+            )
+        elif command == "coverage" and operands == [self.suite] and "--compiler=clang" in arguments:
+            (bep,) = [Path(arg.split("=", 1)[1]) for arg in arguments if arg.startswith("--build_event_json_file=")]
+            self._write_coverage(bep, stderr)
+            if self.interrupt_wait:
+                raise KeyboardInterrupt
+            return subprocess.CompletedProcess(argv, self.child_exit)
+        else:
+            self.fail(f"unexpected Bazel invocation: {argv}")
+        return subprocess.CompletedProcess(argv, 0)
+
+    def _write_coverage(self, bep, stderr):
+        self.fixture.environment["AOBUS_COVERAGE_ATTEMPT"] = bep.parent.name
+        self.fixture.output = self.tree / "outputs" / bep.parent.name / "aobus-coverage"
+        self.fixture.output.mkdir(parents=True)
+        hits = 7 if self.child_exit else 3
+        self.fixture.line_hits = hits
+        self.fixture.collect()
+        self.fixture.archive(self.output_archive)
+        report = f"SF:app/runtime/Value.cpp\nDA:1,0\nDA:2,{hits}\nend_of_record\n"
+        stock = _file(self.tree, "testlogs/test.lcov", report)
+        relative = "bazel-out/_coverage/_coverage_report.dat"
+        combined = _file(self.fixture.root, relative, report)
+        timestamp = str(combined.stat().st_mtime_ns // 1_000_000)
+        stderr.write(f"INFO: LCOV coverage report is located at {combined}\n and execpath is {relative}\n".encode())
+        if self.child_exit:
+            # Even usable test artifacts cannot make a nonzero Bazel exit pass.
+            stderr.write(b"Bazel fixture failed after writing coverage data\n")
+        identity = {"label": self.label, "configuration": {"id": self.configuration}}
+        finished = {"finishTimeMillis": timestamp, "exitCode": {"code": self.bep_exit}}
+        action_summary = {"actionData": [{"mnemonic": "CoverageReport", "actionsExecuted": 1}]}
+        events = [
+            {"id": {"started": {}}, "started": {"buildToolVersion": "9.2.0", "startTimeMillis": timestamp}},
+            {"id": {"workspace": {}}, "workspaceInfo": {"localExecRoot": str(self.fixture.root)}},
+            {
+                "id": {"testResult": identity | {"run": 1, "shard": 1, "attempt": 1}},
+                "testResult": {
+                    "status": "PASSED",
+                    "testActionOutput": [
+                        {"name": path.name, "uri": path.as_uri()} for path in (self.output_archive, stock)
+                    ],
+                },
+            },
+            {"id": {"testSummary": identity}, "testSummary": {"overallStatus": "PASSED", "totalRunCount": 1}},
+            {"id": {"buildFinished": {}}, "finished": finished},
+            {"id": {"buildMetrics": {}}, "buildMetrics": {"actionSummary": action_summary}, "lastMessage": True},
+        ]
+        if self.missing_last_message:
+            del events[-1]["lastMessage"]
+        rows = [json.dumps(event) for event in events]
+        if self.truncated:
+            rows[-1] = '{"id":'
+        bep.write_text("\n".join(rows), encoding="utf-8")
+
+    def _measure(self, *, child_exit=0, bep_exit=0, truncated=False, missing_last_message=False, interrupt_wait=False):
+        self.child_exit = child_exit
+        self.bep_exit = bep_exit
+        self.truncated = truncated
+        self.missing_last_message = missing_last_message
+        self.interrupt_wait = interrupt_wait
+        return self._run("measure", "coverage")
+
+    def _run(self, *command):
+        coverage = self.tree / "coverage"
+        previous = set(coverage.glob("run-*/receipt.json"))
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            mock.patch.dict(os.environ, clear=True),
+            mock.patch.object(bazel_coverage.subprocess, "run", side_effect=self._bazel),
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            status = main([*command, "--path", str(self.tree), "--suite", "core", "--compiler", "clang"])
+        (receipt,) = set(coverage.glob("run-*/receipt.json")) - previous
+        return status, stdout.getvalue(), stderr.getvalue(), receipt
+
+    @staticmethod
+    def _path_markers(output, marker):
+        return [Path(path) for path in re.findall(rf"(?:^|; ){marker}: (.+)$", output, re.MULTILINE)]
+
+    @staticmethod
+    def _coverage_phase(receipt):
+        (phase,) = [phase for phase in receipt["phases"] if phase["name"] == "coverage"]
+        return phase
+
+    def _assert_no_published_report(self, stdout, receipt):
+        self.assertEqual(self._path_markers(stdout, "report"), [])
+        self.assertNotIn("report", receipt)
+        self.assertNotIn("report_sha256", receipt)
+
+    def _assert_diagnostic_archive_retained(self, receipt, receipt_path):
+        retention = receipt["artifact_retention"]
+        self.assertEqual(retention["status"], "diagnostic-only")
+        (archive,) = retention["archives"]
+        self.assertTrue(archive["diagnostic_only"])
+        retained = Path(archive["retained"])
+        self.assertEqual(retained.parent, receipt_path.parent)
+        self.assertEqual(retained.read_bytes(), self.output_archive.read_bytes())
+
+    def test_failed_retries_retain_diagnostics_without_publishing_a_successful_report(self):
+        status, stdout, stderr, successful_receipt = self._measure()
+        self.assertEqual(status, 0, stderr)
+        saved_receipt = successful_receipt.read_bytes()
+        success = json.loads(saved_receipt)
+        self.assertEqual((success["status"], success["exit"], success["bazel_exit"]), ("passed", 0, 0))
+        report = Path(success["report"])
+        self.assertEqual(report.parent, successful_receipt.parent)
+        saved_report = report.read_bytes()
+        self.assertEqual(bazel_coverage.parse_lcov(saved_report.decode()), {"app/runtime/Value.cpp": {1: 0, 2: 3}})
+        self.assertEqual(self._path_markers(stdout, "report"), [report])
+
+        # The complete BEP reports success; its verdict cannot override the process exit.
+        for truncated, bep_exit in ((False, 0), (True, 23)):
+            with self.subTest(truncated_bep=truncated):
+                status, stdout, stderr, receipt_path = self._measure(
+                    child_exit=23, bep_exit=bep_exit, truncated=truncated
+                )
+                self.assertNotEqual(status, 0)
+                failure = json.loads(receipt_path.read_bytes())
+                self._assert_no_published_report(stdout, failure)
+                self.assertEqual(
+                    (failure["status"], failure["exit"], failure.get("bazel_exit")), ("failed", status, 23), stderr
+                )
+                phase = self._coverage_phase(failure)
+                self.assertEqual(phase["exit"], 23)
+                phase_stderr = Path(phase["stderr"])
+                self.assertEqual(phase_stderr.parent, receipt_path.parent)
+                self.assertIn("Bazel fixture failed", phase_stderr.read_text(encoding="utf-8"))
+                self.assertEqual(self._path_markers(stderr, "receipt"), [receipt_path])
+                self._assert_diagnostic_archive_retained(failure, receipt_path)
+                self.assertEqual(report.read_bytes(), saved_report)
+                self.assertEqual(successful_receipt.read_bytes(), saved_receipt)
+
+    def test_truncated_bep_after_zero_bazel_exit_retains_diagnostics_without_a_report(self):
+        status, stdout, stderr, receipt_path = self._measure(truncated=True)
+
+        self.assertNotEqual(status, 0)
+        receipt = json.loads(receipt_path.read_bytes())
+        self.assertEqual((receipt["status"], receipt["exit"], receipt["bazel_exit"]), ("failed", status, 0), stderr)
+        self.assertEqual(self._coverage_phase(receipt)["exit"], 0)
+        self.assertIn("bep_error", receipt)
+        self.assertEqual(self._path_markers(stderr, "receipt"), [receipt_path])
+        self._assert_diagnostic_archive_retained(receipt, receipt_path)
+        self._assert_no_published_report(stdout, receipt)
+        self.assertFalse(receipt_path.with_name("coverage.lcov").exists())
+
+    def test_successful_child_without_a_terminal_bep_marker_does_not_publish_a_report(self):
+        status, stdout, stderr, receipt_path = self._measure(missing_last_message=True)
+
+        self.assertNotEqual(status, 0)
+        receipt = json.loads(receipt_path.read_bytes())
+        self.assertEqual((receipt["status"], receipt["exit"], receipt["bazel_exit"]), ("failed", status, 0), stderr)
+        self.assertIn("bep_error", receipt)
+        self.assertEqual(self._path_markers(stderr, "receipt"), [receipt_path])
+        self._assert_no_published_report(stdout, receipt)
+        self.assertFalse(receipt_path.with_name("coverage.lcov").exists())
+
+    def test_sources_write_failure_leaves_lcov_without_passing_the_attempt(self):
+        coverage = self.tree / "coverage"
+        write_json = bazel_coverage.native.write_json
+        error = "fixture could not write sources.json"
+
+        def fail_sources_write(path, value):
+            if path.name == "sources.json" and path.parent.parent == coverage:
+                self.assertTrue(path.with_name("coverage.lcov").is_file())
+                raise OSError(error)
+            write_json(path, value)
+
+        with mock.patch.object(bazel_coverage.native, "write_json", side_effect=fail_sources_write):
+            status, stdout, stderr, receipt_path = self._measure()
+
+        self.assertNotEqual(status, 0)
+        receipt = json.loads(receipt_path.read_bytes())
+        self.assertEqual((receipt["status"], receipt["exit"], receipt["bazel_exit"]), ("failed", status, 0), stderr)
+        self.assertIn(error, receipt["error"])
+        self.assertEqual(self._path_markers(stderr, "receipt"), [receipt_path])
+        report = receipt_path.with_name("coverage.lcov")
+        self.assertEqual(
+            bazel_coverage.parse_lcov(report.read_text(encoding="utf-8")), {"app/runtime/Value.cpp": {1: 0, 2: 3}}
+        )
+        self._assert_no_published_report(stdout, receipt)
+
+    def test_interrupted_wait_does_not_snapshot_or_publish_usable_coverage_outputs(self):
+        status, stdout, stderr, receipt_path = self._measure(interrupt_wait=True)
+
+        self.assertEqual(status, 130, stderr)
+        bep = receipt_path.with_name("coverage.bep.json")
+        self.assertTrue(json.loads(bep.read_text(encoding="utf-8").splitlines()[-1])["lastMessage"])
+        self.assertTrue(zipfile.is_zipfile(self.output_archive))
+        receipt = json.loads(receipt_path.read_bytes())
+        self.assertEqual((receipt["status"], receipt["exit"]), ("interrupted", 130))
+        self.assertNotIn("bazel_exit", receipt)
+        self.assertIsNone(self._coverage_phase(receipt)["exit"])
+        self.assertEqual(receipt["writer_state"], "unknown")
+        self.assertEqual(receipt["artifact_retention"]["status"], "not-attempted")
+        self.assertNotIn("test_output_archives", receipt)
+        self.assertEqual(list(receipt_path.parent.rglob("*.zip")), [])
+        self._assert_no_published_report(stdout, receipt)
+        self.assertFalse(receipt_path.with_name("coverage.lcov").exists())
+
+    def test_instrumentation_check_records_analysis_passed_without_a_report(self):
+        # Stub the analysis proof; this case checks the command's receipt, not the action graph.
+        with mock.patch.object(bazel_coverage, "_analyze") as analyze:
+            status, stdout, stderr, receipt_path = self._run("check", "instrumentation")
+
+        self.assertEqual(status, 0, stderr)
+        analyze.assert_called_once()
+        receipt = json.loads(receipt_path.read_bytes())
+        self.assertEqual((receipt["status"], receipt["exit"], receipt["mode"]), ("analysis-passed", 0, "analysis-only"))
+        self.assertEqual(self._path_markers(stdout, "receipt"), [receipt_path])
+        self._assert_no_published_report(stdout, receipt)
+        self.assertFalse(receipt_path.with_name("coverage.lcov").exists())
 
 
 class CurrentArtifactTests(unittest.TestCase):

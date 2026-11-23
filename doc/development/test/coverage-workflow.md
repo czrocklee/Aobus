@@ -93,19 +93,39 @@ Measurement contracts:
 - Windows and macOS are rejected before tree or SDK work; there is no SDK
   install fallback, and `--vcpkg-prefix` is not accepted.
 
-The command may still print a partial report after a test failure, but it
-returns the first failing suite's non-zero status. A partial report is never a
-green coverage result. Failed extraction, missing executable project data, or
-any explicitly requested scope without measurable lines also fails the
-command. An unavailable measurement is never reported as 100% coverage.
+`./ao measure coverage` runs one `bazel coverage` process for the entire
+selection after configured analysis succeeds. The command exits nonzero if a
+selected test fails, if Bazel exits nonzero even with usable outputs, or if
+measurement otherwise fails. Failed extraction, missing executable project data,
+and an explicitly requested scope without measurable lines are all measurement
+failures. An unavailable measurement is never reported as 100% coverage.
+
+Use the path printed by the command to identify the attempt. On success, stdout
+shows `report: <path>` for `coverage.lcov`, with `receipt.json` beside it. On
+failure, look for `receipt: <path>` on stderr, when present. A failure before the
+attempt starts or an interruption may leave no printed path. Each attempt has
+its own `<tree>/coverage/run-*/` directory, but the names are random, not
+chronological. `./ao check instrumentation` also writes receipts there with
+`analysis-passed` as the status on success, without producing a coverage report.
+
+When inspecting a measurement attempt's receipt, `status == passed` is the
+success criterion. After a zero exit, the receipt has `status` set to `passed`
+and its `report` field matches the printed path. Neither an LCOV file nor a
+`report` field alone establishes success. A later failed attempt does not change an
+earlier passed attempt's receipt or report.
+
+For diagnostics, look for phase logs alongside the receipt. The command's exit
+code does not identify a failing suite and need not match Bazel's exit code.
+For Bazel's exit code, see `bazel_exit` or the `exit` of the `phases` entry named
+`coverage`, if recorded.
 
 For instrumentation analysis without measurement, use `./ao check instrumentation`
 with canonical `--suite` selection, not report-only `--scope`. It performs no compilation, test execution,
 or coverage collection; it cannot establish runtime acceptance or measured percentages.
 
 The measurement route reports line coverage only, applies no percentage threshold,
-and claims no function or branch metrics. Attempt receipts and the LCOV report live
-under `<tree>/coverage/run-*/`. [Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation)
+and claims no function or branch metrics.
+[Bazel development](../bazel.md#sanitizer-and-coverage-instrumentation)
 records the command surface and profile boundaries.
 
 GCC canonicalizes authored coverage filenames back to their manifest-relative
