@@ -36,6 +36,7 @@ namespace ao::systemmedia
       return false;
     }
 
+    // The reply acknowledges a recognized method, even if Play is already satisfied or has no target.
     _actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
     return true;
   }

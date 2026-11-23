@@ -266,6 +266,7 @@ namespace ao::uimodel::test
     REQUIRE(playback.snapshot().transport.elapsed == offset);
 
     REQUIRE(playback.snapshot().transport.hasDeferredResume);
+    CHECK(actions.isCapable(PlaybackCommand::Play));
     auto const origin = GENERATE(PlaybackActionOrigin::Primary, PlaybackActionOrigin::SystemMedia);
     CAPTURE(origin);
 
@@ -291,6 +292,7 @@ namespace ao::uimodel::test
       REQUIRE(held.transport == audio::Transport::Idle);
       REQUIRE(held.hasDeferredResume);
       REQUIRE(held.output.optPendingOutputSelection);
+      CHECK_FALSE(actions.isCapable(PlaybackCommand::Play));
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, origin));
       CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause, origin));
       CHECK(playback.snapshot().transport == held);
@@ -307,14 +309,17 @@ namespace ao::uimodel::test
     CHECK(playback.snapshot().transport.elapsed == offset);
   }
 
-  TEST_CASE("PlaybackActions - only system media may use the host fallback without a selected row")
+  TEST_CASE("PlaybackActions - system media dispatch follows live custom host admission")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
+    auto const command = GENERATE(PlaybackCommand::Play, PlaybackCommand::PlayPause);
+    CAPTURE(playbackCommandId(command));
+    auto const origin = PlaybackActionOrigin::SystemMedia;
     std::int32_t selectedStarts = 0;
     std::int32_t remoteStarts = 0;
     bool remoteAvailable = false;
-    bool remoteStarted = true;
+    bool remoteStarted = false;
     auto actions = PlaybackActions{fixture.runtime().playback(),
                                    [&] { ++selectedStarts; },
                                    SystemMediaPlayHandler{
@@ -326,85 +331,84 @@ namespace ao::uimodel::test
                                        return remoteStarted;
                                      },
                                    }};
+    actions.setSelectionAvailable(true);
 
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(actions.isEnabled(command));
+    CHECK_FALSE(actions.isCapable(PlaybackCommand::Play));
+    CHECK_FALSE(actions.isEnabled(command, origin));
+    CHECK_FALSE(actions.tryExecute(command, origin));
     CHECK(selectedStarts == 0);
     CHECK(remoteStarts == 0);
-    REQUIRE(actions.isCapable(PlaybackCommand::Play));
-    auto selectedOnly = PlaybackActions{fixture.runtime().playback(), [&] { ++selectedStarts; }};
-    CHECK_FALSE(selectedOnly.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(selectedStarts == 0);
 
     remoteAvailable = true;
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
-    remoteStarted = false;
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(actions.isCapable(PlaybackCommand::Play));
+    CHECK(actions.isEnabled(command, origin));
+    CHECK_FALSE(actions.tryExecute(command, origin));
     CHECK(remoteStarts == 1);
     remoteStarted = true;
-    REQUIRE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(actions.tryExecute(command, origin));
     CHECK(remoteStarts == 2);
     CHECK(selectedStarts == 0);
-    actions.setSelectionAvailable(true);
-    REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
-    CHECK(remoteStarts == 2);
+    CHECK(actions.tryExecute(command));
     CHECK(selectedStarts == 1);
+    CHECK(remoteStarts == 2);
+
+    // Dispatch must recheck the host even when its last published availability was true.
+    actions.setSelectionAvailable(true);
+    remoteAvailable = false;
+    CHECK_FALSE(actions.isCapable(PlaybackCommand::Play));
+    CHECK_FALSE(actions.isEnabled(command, origin));
+    CHECK_FALSE(actions.tryExecute(command, origin));
+    CHECK(selectedStarts == 1);
+    CHECK(remoteStarts == 2);
   }
 
-  TEST_CASE("PlaybackActions - focused selection publishes system media availability changes without a selection")
+  TEST_CASE("PlaybackActions - focused selection refresh publishes custom system media availability")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    auto const trackId = fixture.addPlayableTrack("Projected Track");
+    auto const hostTrack = fixture.addPlayableTrack("Host Track");
+    auto const otherTrack = fixture.addPlayableTrack("Other Track");
+    fixture.executor->drain();
     auto& runtime = fixture.runtime();
-    auto const canStartRemote = [&runtime]
-    {
-      auto const viewId = runtime.workspace().snapshot().activeViewId;
-      auto& views = runtime.views();
-
-      if (!views.selectedTrackIds(viewId).empty())
-      {
-        return views.firstVisibleSelectedTrack(viewId) != kInvalidTrackId;
-      }
-
-      auto const projectionRes = views.findTrackListProjection(viewId);
-      return projectionRes && (*projectionRes)->size() > 0;
-    };
+    auto& views = runtime.views();
+    auto const viewId = fixture.viewId;
+    REQUIRE(views.setSelection(viewId, {otherTrack}));
+    auto const canStartRemote = [&views, viewId, hostTrack]
+    { return views.firstVisibleSelectedTrack(viewId) == hostTrack; };
     auto actions = PlaybackActions{runtime.playback(),
                                    [] {},
                                    SystemMediaPlayHandler{
                                      .canPlay = canStartRemote,
-                                     .play = canStartRemote,
+                                     .play = [] { return true; },
                                    }};
-    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
+    actions.bindFocusedSelection(runtime.workspace(), views);
     auto availability = AvailabilityLog{actions};
+    auto const origin = PlaybackActionOrigin::SystemMedia;
 
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    REQUIRE(actions.isEnabled(PlaybackCommand::Play));
+    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, origin));
+
+    // The other track keeps primary Play available throughout these remote-only changes.
+    REQUIRE(views.setSelection(viewId, {hostTrack, otherTrack}));
+    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
+    CHECK(availability.aggregateCount == 1);
+    CHECK(actions.isEnabled(PlaybackCommand::Play, origin));
 
     availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Missing")"));
+    REQUIRE(views.setFilter(viewId, R"($title = "Other Track")"));
     fixture.executor->drain();
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(availability.aggregateCount == 1);
+    CHECK(actions.isEnabled(PlaybackCommand::Play));
+    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, origin));
 
     availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, ""));
+    REQUIRE(views.setFilter(viewId, ""));
     fixture.executor->drain();
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(runtime.views().firstVisibleSelectedTrack(fixture.viewId) == kInvalidTrackId);
-
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {trackId}));
-    availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Missing")"));
-    fixture.executor->drain();
-    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(availability.aggregateCount == 1);
+    CHECK(actions.isEnabled(PlaybackCommand::Play, origin));
   }
 
   TEST_CASE("PlaybackActions - manual play resumes the interrupted track when its output appears")
@@ -564,10 +568,10 @@ namespace ao::uimodel::test
 
       checkCommandPolicy(actions,
                          CommandPolicy{false, false, false, false, false, false, true, true},
-                         CommandPolicy{true, false, true, false, false, false, true, true});
+                         CommandPolicy{false, false, true, false, false, false, true, true});
     }
 
-    SECTION("current track keeps protocol controls capable while output is pending")
+    SECTION("an active track is playable but a pending output blocks Play and not Pause capability")
     {
       fixture.makePlaybackReady();
       auto const firstTrack = fixture.addPlayableTrack("Capability First");
@@ -585,7 +589,7 @@ namespace ao::uimodel::test
 
       checkCommandPolicy(actions,
                          CommandPolicy{false, false, false, true, false, false, false, false},
-                         CommandPolicy{true, true, false, true, false, false, false, false});
+                         CommandPolicy{false, true, false, true, false, false, false, false});
     }
 
     SECTION("restored idle track is playable and pause-capable without being pause-enabled")

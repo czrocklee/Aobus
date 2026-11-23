@@ -9,6 +9,8 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -30,6 +32,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 
 namespace ao::systemmedia::test
@@ -270,30 +273,94 @@ namespace ao::systemmedia::test
     CHECK(systemMediaOnOwner);
   }
 
-  TEST_CASE("MprisBridge private bus - idle Play without a selection or fallback replies without starting")
+  TEST_CASE("MprisBridge private bus - Play targets the visible selection or retained playback")
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    auto& playback = fixture.runtime().playback();
+    auto const other = fixture.addPlayableTrack("Another row");
+    auto const selected = fixture.addPlayableTrack("Selected row");
+    auto& runtime = fixture.runtime();
+    auto& playback = runtime.playback();
     std::int32_t selectionStartCount = 0;
-    auto actions = uimodel::PlaybackActions{playback, [&selectionStartCount] { ++selectionStartCount; }};
+    auto actions = uimodel::PlaybackActions{playback,
+                                            [&]
+                                            {
+                                              ++selectionStartCount;
+                                              std::ignore = runtime.playSelectionInFocusedView();
+                                            }};
+    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus)};
     startAndAwait(bridge, *fixture.executor);
     auto const destination = std::string{bridge.busName()};
     auto client = BusClient{bus.address()};
+    auto const canPlay = [&]
+    {
+      auto call = getProperty(client, destination, kPlayerInterface, "CanPlay");
+      auto const valuePtr = getReplyValue(awaitCall(call, *fixture.executor));
+      REQUIRE(::g_variant_is_of_type(valuePtr.get(), G_VARIANT_TYPE_BOOLEAN) == TRUE);
+      return ::g_variant_get_boolean(valuePtr.get()) != FALSE;
+    };
+    auto const runMethod = [&](char const* method)
+    {
+      auto call = client.callAsync(destination, kPlayerInterface, method, ::g_variant_new("()"), G_VARIANT_TYPE("()"));
+      requireUnitReply(awaitCall(call, *fixture.executor));
+    };
 
-    auto canPlayCall = getProperty(client, destination, kPlayerInterface, "CanPlay");
-    auto const canPlayPtr = getReplyValue(awaitCall(canPlayCall, *fixture.executor));
-    REQUIRE(::g_variant_is_of_type(canPlayPtr.get(), G_VARIANT_TYPE_BOOLEAN) == TRUE);
-    CHECK(::g_variant_get_boolean(canPlayPtr.get()) == TRUE);
-
-    auto const* const method = GENERATE("Play", "PlayPause");
-    auto call = client.callAsync(destination, kPlayerInterface, method, ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    requireUnitReply(awaitCall(call, *fixture.executor));
+    CHECK_FALSE(canPlay());
+    runMethod("Play");
+    runMethod("PlayPause");
     CHECK(selectionStartCount == 0);
     CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+
+    REQUIRE(runtime.views().setSelection(fixture.viewId, {selected}));
+    CHECK(canPlay());
+    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Another row")"));
+    fixture.executor->drain();
+    CHECK_FALSE(canPlay());
+    runMethod("Play");
+    CHECK(selectionStartCount == 0);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+
+    REQUIRE(runtime.views().setFilter(fixture.viewId, ""));
+    fixture.executor->drain();
+    CHECK(canPlay());
+    runMethod("Play");
+    REQUIRE(fixture.tryWaitForPlayback(selected));
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(selectionStartCount == 1);
+
+    REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+    auto const beforeRepeat = playback.snapshot().transport;
+    CHECK(canPlay());
+    runMethod("Play");
+    CHECK(selectionStartCount == 1);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.occurrenceId == beforeRepeat.occurrenceId);
+    CHECK(playback.snapshot().transport.positionRevision == beforeRepeat.positionRevision);
+
+    auto const offset = std::chrono::milliseconds{250};
+    playback.commands().seek(offset);
+    fixture.executor->drain();
+    REQUIRE(playback.snapshot().transport.elapsed == offset);
+    REQUIRE(runtime.savePlaybackSession());
+    playback.commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    playback.commands().clearSequence();
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
+    REQUIRE(playback.snapshot().transport.hasDeferredResume);
+    REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
+    CHECK(canPlay());
+    REQUIRE(runtime.views().setSelection(fixture.viewId, {other}));
+    runMethod("Play");
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    CHECK(selectionStartCount == 1);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == selected);
+    CHECK(playback.snapshot().transport.elapsed == offset);
   }
 
   TEST_CASE("MprisBridge private bus - DesktopEntry is available only when configured")

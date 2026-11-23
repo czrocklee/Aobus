@@ -60,8 +60,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 Its List navigation pane consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `KeymapPlan` is a replaceable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
 `EventController` translates terminal events from that plan or from fixed scoped protocol into runtime/UIModel commands.
-On supported Linux builds, `App` composes the shared [`ao::systemmedia` MPRIS adapter](mpris.md) after `EventController` so external commands borrow the same selection-aware `PlaybackActions` and callback executor.
-The adapter lives under `app/systemmedia/linux/`; it adds no GTK dependency to the TUI and no native dependency to runtime, Core, or UIModel.
+On supported Linux builds, `App` gives the shared [MPRIS adapter](mpris.md) the callback executor and `EventController`'s `PlaybackActions`, so a system Play uses the same cursor target as local Play. The adapter has no GTK dependency.
 `--system-media=off` skips construction of its bridge, private thread, and artwork interests, while `auto` degrades to inert when support or a usable session bus is absent.
 `CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 

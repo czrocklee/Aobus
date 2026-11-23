@@ -56,6 +56,7 @@ namespace ao::winui
     struct State;
 
     static void retireNativeSession(State& state) noexcept;
+    static void updateCommandAvailability(State const& state);
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void updateArtwork(ResourceId resourceId);
     static async::Task<void> prepareAndWriteArtworkAsync(std::weak_ptr<State> statePtr,
@@ -68,6 +69,7 @@ namespace ao::winui
     std::shared_ptr<State> _statePtr;
     rt::ResourceByteMemoryCache& _resourceBytes;
     async::Runtime& _asyncRuntime;
+    async::Subscription _availabilitySub;
     async::Subscription _snapshotSub;
     utility::ScopedRegistration _artworkRequest;
     async::TaskHandle _artworkTask;

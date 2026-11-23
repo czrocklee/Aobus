@@ -304,7 +304,9 @@ namespace ao::uimodel
   {
     switch (auto const& transport = _playback.snapshot().transport; command)
     {
-      case PlaybackCommand::Play: return transport.nowPlaying.trackId != kInvalidTrackId || transport.ready;
+      case PlaybackCommand::Play:
+        // A repeated Play is already satisfied while active; otherwise it needs an actionable system-media target.
+        return isActivePlayback(transport.transport) || isEnabled(command, PlaybackActionOrigin::SystemMedia);
       case PlaybackCommand::Pause: return transport.nowPlaying.trackId != kInvalidTrackId;
       case PlaybackCommand::PlayPause:
         return isActivePlayback(transport.transport) || playIntent(transport) != PlayIntent::None;

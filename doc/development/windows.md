@@ -668,19 +668,31 @@ probes are separate manual desktop checks.
 
 ### Output selection probe
 
+Run the options below separately from the naming gate. Use a private, idle
+active console and run as the signed-in test user without elevation. For a
+scheduled launch, use an interactive token with run level `Limited`.
+
 The default automation run restores a saved request for a missing WASAPI
 endpoint. The Modern output button's tooltip explains the unavailable request;
 the flyout shows a disabled advisory, leaves alternate devices unchecked, and
-accepts an explicit choice of the discard-only endpoint. To check the same
-choice from Classic's Soul button, run this on a private interactive console:
+accepts an explicit choice of the discard-only endpoint. The probe refuses the
+choice if a platform endpoint shares the discard device's name. To check the
+same choice from Classic's Soul button, run without a media fixture:
 
 ```bat
 bazel run //app/windows-winui:ao_winui_automation_probe -- --classic-output
 ```
 
-Classic activates the frame's playback adapters, including SMTC; the default
-run does not. The ordinary audit writes a silent WAV to exercise Rescan;
-neither mode issues Play or changes the Windows default device.
+Classic activates the frame's playback adapters, including SMTC, only while
+idle with no playback subject and the missing request still pending. After
+confirming the ready discard route by backend, device, and profile, the probe
+reads the window's SMTC Play flag on selection, clearing, and reselection.
+It checks that the disabled controls' Play flag stays unchanged on a selection
+change after retirement. This is property readback, not OS media-button
+delivery or a test of callbacks queued at retirement.
+
+The default run does not activate those adapters; it writes a silent WAV for
+Rescan. Neither mode issues Play or changes the Windows default device.
 
 ### Primary Play probe
 

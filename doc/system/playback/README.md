@@ -105,7 +105,7 @@ Frontend composition obtains the platform provider set from Core audio and trans
 
 ### Primary Play
 
-UIModel gives a track held by the transport priority over a new start from the browsed selection. See [primary Play](application-commit.md#primary-play) for command admission and the distinction from row activation and system media commands.
+UIModel gives a track held by the transport priority over a new start for both local and system-media Play. See the [shared Play target policy](application-commit.md#primary-play) for selection, delayed delivery, and the distinction from explicit row activation.
 
 ### Explicit start
 

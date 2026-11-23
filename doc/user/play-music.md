@@ -18,7 +18,8 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 1. Open a list or library view and select the track where playback should begin.
 2. Press Enter or activate the row to start a sequence from that view.
 3. Use the transport controls for play/pause, previous, next, shuffle, and repeat.
-   Play in the window or from system media controls continues a paused or restored track even if you have selected another row. With no track to resume, Play starts the first selected track that matches the current filter; it does not choose an unselected row.
+   Play in the window or from system media controls resumes a paused or restored track, even if another row is selected.
+   When stopped with nothing to resume, Play starts the first selected track still visible in the current view, provided the output is available.
    The default application shortcuts include Ctrl+P for play/pause, Ctrl+Left and Ctrl+Right for previous and next, Ctrl+U for shuffle, and Ctrl+R for repeat.
 4. Drag or click the seek control to change position.
 5. Use the volume button for precision control, scroll over it for two-percentage-point changes, or middle-click it to toggle mute.

@@ -183,16 +183,11 @@ device names are not persisted.
 
 ### How SMTC availability follows playback
 
-The native SMTC session starts disabled.
-It subscribes to playback and attempts to apply the initial snapshot before enabling the session.
-Failure of an optional availability or status/metadata update does not prevent enablement.
-Each later snapshot advertises Play and Pause from `PlaybackActions::isCapable()` because those buttons describe protocol support; invoking either repeatedly may validly leave transport unchanged.
-Stop, Next, and Previous instead use `isEnabled()` because their availability depends on current playback state.
-Buttons outside this supported command set are ignored.
+The SMTC bridge attempts the initial button and metadata updates before enabling the native session. The availability subscription updates buttons, including Play on selection-only changes. Playback snapshots update transport status, title, artist, and album; when the cover changes, the bridge requests replacement artwork asynchronously. The two updates have independent optional-WinRT boundaries: failure of either does not suppress the other or prevent initial enablement.
 
-The dispatcher delivers a button press to `PlaybackActions` with the system-media origin. It rechecks the live state on that turn. Like the window's Play control, system Play resumes a held track first; with no held track it starts the first selected track still in the focused projection, or does nothing if there is none.
-Availability and playback-status/metadata updates use independent optional-WinRT boundaries: failure to update one does not suppress the other.
-Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
+SMTC advertises Play during active playback or when the [shared Play target policy](../playback/application-commit.md#primary-play) allows resume or start. Pause is advertised when there is a current track; Stop, Next, and Previous follow `PlaybackActions::isEnabled()`. Other buttons are ignored.
+
+The native press handler queues delivery without retaining the window's controls. On the dispatcher, a still-live bridge invokes `PlaybackActions` with the system-media origin against the current transport and focused selection. A press has no playback-result reply; repeated Play during active playback and repeated Pause while paused leave transport unchanged.
 
 ## Failure and cancellation
 

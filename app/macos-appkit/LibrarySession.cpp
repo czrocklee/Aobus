@@ -762,21 +762,8 @@ namespace ao::appkit
 
   TrackId LibrarySession::remotePlayTarget(rt::ViewId const viewId) const
   {
-    auto& views = runtime().views();
-
-    // Remote Play alone supplies a default row, and only for an empty selection.
     // Read the current view, not the browser binding, whose updates may still be queued.
-    if (!views.selectedTrackIds(viewId).empty())
-    {
-      return views.firstVisibleSelectedTrack(viewId);
-    }
-
-    if (auto const projectionRes = views.findTrackListProjection(viewId); projectionRes && (*projectionRes)->size() > 0)
-    {
-      return (*projectionRes)->trackIdAt(0);
-    }
-
-    return kInvalidTrackId;
+    return runtime().views().firstVisibleSelectedTrack(viewId);
   }
 
   bool LibrarySession::canPlayFromRemoteCommand() const

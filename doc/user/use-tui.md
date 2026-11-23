@@ -28,7 +28,8 @@ aobus -C /music init
    ```
 
 2. Move through tracks with Up/Down, PageUp/PageDown, Home, and End. The shipped `j`/`k` shortcuts also move one row.
-3. Press Enter to start playback from the focused track. Space pauses or resumes the current track even if you move the cursor. With nothing to resume, Space starts a sequence from the cursor only if it is on a track.
+3. Press Enter to start playback from the focused track. Space pauses or resumes the current track, even if you move the cursor.
+   With nothing to resume, Space starts playback only when the cursor is on a track, regardless of which rows are marked. [Linux system Play](#use-linux-system-media-controls) uses the same rule to resume or start a track.
    Use `s` to stop, `[`/`]` to seek, `-`/`+` to change volume, and `<`/`>` for the previous or next playback track.
 4. Press `l` to focus pinned Lists or open the List chooser. Press uppercase `L` to pin or unpin the Lists pane. Use `p` for presentations.
 5. Press `?` or F1 for the effective shortcut list. Shortcuts can be changed, so Help is the authority for the current session.

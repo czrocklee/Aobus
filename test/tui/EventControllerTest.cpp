@@ -70,6 +70,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
@@ -1944,8 +1945,18 @@ namespace ao::tui::test
 
     REQUIRE(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
     enterCommand(controller, "toggle");
-    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
-    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
+    auto const paused = currentPlayback(fixture).transport;
+    CHECK(paused.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    REQUIRE(paused.transport == audio::Transport::Paused);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const cursorTrack = library.selectedTrackView().track->id;
+    REQUIRE(cursorTrack != paused.nowPlaying.trackId);
+    fixture.observedPositionRevision = paused.positionRevision;
+    enterCommand(controller, "play");
+    REQUIRE(fixture.tryWaitForPlayback(cursorTrack));
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
 
     enterCommand(controller, "stop");
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
@@ -2336,6 +2347,16 @@ namespace ao::tui::test
     REQUIRE(library.tracks().empty());
     CHECK_FALSE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
     CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play));
+    auto const notificationsBeforePlay = notificationCount(fixture);
+    CHECK_FALSE(actions.isCapable(uimodel::PlaybackCommand::Play));
+    CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(notificationCount(fixture) == notificationsBeforePlay);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(notificationCount(fixture) == notificationsBeforePlay + 1);
+    CHECK(lastNotification(fixture) == "Playback control unavailable");
 
     library.clearFilterDraft();
     REQUIRE(library.applyFilter());
@@ -2343,6 +2364,45 @@ namespace ao::tui::test
     REQUIRE(library.selectedTrackView().track != nullptr);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
     REQUIRE(fixture.tryWaitForPlayback(library.selectedTrackView().track->id));
+  }
+
+  TEST_CASE("EventController - transport starts the track cursor rather than marks or a group boundary")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.sections().size() == 2);
+    auto const pairIt = std::ranges::find(library.sections(), std::size_t{2}, &TrackSection::rowCount);
+    REQUIRE(pairIt != library.sections().end());
+    library.setSelectedTrackIndex(static_cast<std::int32_t>(pairIt->rowBegin));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const markedTrack = library.selectedTrackView().track->id;
+    library.toggleFocusedMark();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const cursorTrack = library.selectedTrackView().track->id;
+    REQUIRE(cursorTrack != markedTrack);
+    REQUIRE(cursorTrack != library.tracks().front().id);
+    REQUIRE(library.selectedTrackIds() == std::vector{markedTrack});
+
+    SECTION("Space starts the cursor")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    }
+
+    SECTION("System Play starts the same cursor")
+    {
+      auto& actions = controller.playbackActions();
+      REQUIRE(actions.isCapable(uimodel::PlaybackCommand::Play));
+      REQUIRE(actions.tryExecute(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia));
+    }
+
+    REQUIRE(fixture.tryWaitForPlayback(cursorTrack));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.sourceListId == library.currentListId());
   }
 
   TEST_CASE("EventController - primary play resumes its subject and offset while browsing another list")

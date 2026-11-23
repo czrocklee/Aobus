@@ -61,6 +61,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -74,6 +75,7 @@
 #include <UIAutomationCoreApi.h>
 #include <commctrl.h>
 #include <microsoft.ui.xaml.window.h>
+#include <systemmediatransportcontrolsinterop.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -131,6 +133,17 @@ namespace
   using Controls::Primitives::FlyoutBase;
   using Controls::Primitives::Popup;
   using Controls::Primitives::Thumb;
+
+  winrt::Windows::Media::SystemMediaTransportControls transportControlsForWindow(Window const& window)
+  {
+    using TransportControls = winrt::Windows::Media::SystemMediaTransportControls;
+    ::HWND handle = nullptr;
+    winrt::check_hresult(window.as<::IWindowNative>()->get_WindowHandle(&handle));
+    auto const interop = winrt::get_activation_factory<TransportControls, ::ISystemMediaTransportControlsInterop>();
+    auto controls = TransportControls{nullptr};
+    winrt::check_hresult(interop->GetForWindow(handle, winrt::guid_of<TransportControls>(), winrt::put_abi(controls)));
+    return controls;
+  }
 
   ao::audio::OutputDeviceSelection missingOutput()
   {
@@ -727,9 +740,13 @@ namespace
       // Its private library has no audio files; that mode never issues a playback command.
       if (_classicOutput)
       {
-        if (_sessionPtr->runtime().playback().snapshot().transport.output.optPendingOutputSelection != missingOutput())
+        auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+
+        if (transport.output.optPendingOutputSelection != missingOutput() ||
+            transport.transport != ao::audio::Transport::Idle || transport.nowPlaying.trackId != ao::kInvalidTrackId ||
+            transport.occurrenceId.value != 0 || transport.hasDeferredResume)
         {
-          fail("refusing native adapter activation without the held output request");
+          fail("refusing native adapter activation without an idle, empty subject and held output request");
           finish();
           return;
         }
@@ -1388,8 +1405,11 @@ namespace
         check(tooltip == pendingOutputStatus(), "output button tooltip did not explain the unavailable request");
       }
 
-      invoke(picker);
-      afterFrame(&WinUiAutomationProbe::chooseSilentOutput);
+      if (tryCheckDiscardChoiceIdentity())
+      {
+        invoke(picker);
+        afterFrame(&WinUiAutomationProbe::chooseSilentOutput);
+      }
     }
 
     winrt::hstring pendingOutputStatus() const
@@ -1398,8 +1418,34 @@ namespace
         ao::i18n::requiredText(_sessionPtr->textCatalog(), ao::i18n::MessageId::OutputDevicePendingStatus));
     }
 
+    bool tryCheckDiscardChoiceIdentity()
+    {
+      auto const silent = ao::winui::test::silentAudioDevice();
+      auto const& output = _sessionPtr->runtime().playback().snapshot().transport.output;
+
+      // The native menu is addressed by its UIA name. Check both before it
+      // snapshots its rows and before invocation, never guessing by label.
+      for (auto const& backend : output.availableBackends)
+      {
+        if (backend.id != silent.backendId &&
+            std::ranges::contains(backend.devices, silent.displayName, &ao::rt::OutputDeviceSnapshot::displayName))
+        {
+          fail("refusing the output picker: a platform endpoint shares the discard output's name");
+          finish();
+          return false;
+        }
+      }
+
+      return true;
+    }
+
     void chooseSilentOutput()
     {
+      if (!tryCheckDiscardChoiceIdentity())
+      {
+        return;
+      }
+
       auto const silent = ao::winui::test::silentAudioDevice();
 
       for (auto const& popup : Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(_root.XamlRoot()))
@@ -1438,24 +1484,73 @@ namespace
 
       if (_classicOutput)
       {
-        auto& views = _sessionPtr->runtime().views();
-        check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.front()})),
-              "could not select a Classic track");
-        auto const play = findVisualById<Button>(_root, L"classic-play-pause");
-        auto const menu =
-          findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_playback"));
-        auto const playItem = menu ? findMenuItem(menu.Items(), L"winui_shell_play_pause") : nullptr;
-        check(play && play.IsEnabled() && playItem && playItem.IsEnabled(),
-              "Classic primary Play must accept the selected row");
-        check(static_cast<bool>(views.setSelection(_allTracksViewId, {})), "could not clear the Classic selection");
-        check(play && !play.IsEnabled() && playItem && !playItem.IsEnabled(),
-              "Classic primary Play must disable when the selection clears");
-        finish();
+        auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+
+        if (tryCheckDiscardRoute() &&
+            tryCheckPrimary(transport.transport == ao::audio::Transport::Idle &&
+                              transport.nowPlaying.trackId == ao::kInvalidTrackId &&
+                              transport.occurrenceId.value == 0 && !transport.hasDeferredResume,
+                            "SMTC selection readback requires an idle session without a playback subject"))
+        {
+          checkClassicPlayAvailability();
+          finish();
+        }
       }
       else
       {
         modern();
       }
+    }
+
+    void checkClassicPlayAvailability()
+    {
+      _stage = "Classic Play and SMTC selection-only availability";
+      // Read the shipping bridge on this HWND only; do not send media commands.
+      auto const controls = transportControlsForWindow(_window);
+      auto& runtime = _sessionPtr->runtime();
+      auto& views = runtime.views();
+      auto const status = controls.PlaybackStatus();
+      auto const title = controls.DisplayUpdater().MusicProperties().Title();
+      std::size_t snapshotCount = 0;
+      auto const snapshotSub =
+        runtime.playback().events().onSnapshot([&snapshotCount](auto const&) { ++snapshotCount; });
+
+      check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.front()})),
+            "could not select a Classic track");
+      auto const play = findVisualById<Button>(_root, L"classic-play-pause");
+      auto const menu =
+        findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_playback"));
+      auto const playItem = menu ? findMenuItem(menu.Items(), L"winui_shell_play_pause") : nullptr;
+      check(play && play.IsEnabled() && playItem && playItem.IsEnabled(),
+            "Classic primary Play must accept the selected row");
+      check(controls.IsEnabled() && controls.IsPlayEnabled(), "SMTC must offer Play for the selected row");
+
+      check(static_cast<bool>(views.setSelection(_allTracksViewId, {})), "could not clear the Classic selection");
+      check(play && !play.IsEnabled() && playItem && !playItem.IsEnabled(),
+            "Classic primary Play must disable when the selection clears");
+      check(!controls.IsPlayEnabled(), "SMTC must withdraw Play when only the selection clears");
+
+      check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.front()})),
+            "could not restore the Classic selection");
+      check(controls.IsPlayEnabled(), "SMTC must restore Play after reselecting a row");
+      check(snapshotCount == 0 && controls.PlaybackStatus() == status &&
+              controls.DisplayUpdater().MusicProperties().Title() == title,
+            "selection-only capability changes must not change playback status or metadata");
+
+      implementation()->retire();
+      auto const playEnabledAtRetirement = controls.IsPlayEnabled();
+      // Flip the live availability after retirement, even if the platform
+      // changed the flag when the session was disabled.
+      if (!playEnabledAtRetirement)
+      {
+        check(static_cast<bool>(views.setSelection(_allTracksViewId, {})), "could not clear retired selection");
+      }
+
+      auto const selection =
+        playEnabledAtRetirement ? std::vector<ao::TrackId>{} : std::vector{_seed.summaryTracks.front()};
+      check(static_cast<bool>(views.setSelection(_allTracksViewId, selection)), "could not change retired selection");
+      check(!controls.IsEnabled() && controls.IsPlayEnabled() == playEnabledAtRetirement,
+            "retired SMTC controls must not react to later selection changes");
     }
 
     void modern()

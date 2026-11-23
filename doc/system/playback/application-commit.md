@@ -141,13 +141,15 @@ boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 ### Primary Play
 
-[`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local transport controls and system media commands the same resume priority:
+[`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local and system-media commands the same Play target policy:
 
-- Play/Pause pauses active playback.
-- Play or Play/Pause resumes a paused track or a track held for deferred resume. Clearing succession does not discard the transport's deferred subject or offset. If its requested output is pending, Play is unavailable; it does not start the browsed track instead.
-- With no subject to resume, Idle or Error can start a selection only when the output is ready. The local controls in GTK, WinUI and AppKit use the first selected track present in the focused view's projection. The TUI uses the track under its cursor, not its marks. With no such track, local Play is disabled; it does not choose the first row.
+- During active playback (Opening, Buffering, Playing, or Seeking), Play/Pause pauses; a repeated Play does not restart the track.
+- Play or the start side of Play/Pause resumes a paused or deferred track first. Clearing succession does not discard a deferred subject or its offset. A pending output request blocks resume without falling back to another track.
+- With no subject to resume, Idle or Error can start a track only when the output is ready. GTK, WinUI, and AppKit use the first selected track still present in the focused view's live projection. The TUI uses the track under its cursor, not its marks. A missing or filtered-out target does not fall back to the first row.
 
-When neither origin has a subject to resume, the host may provide a separate system-media start handler and availability predicate. GTK and WinUI use the same projected selection for both origins; a selected track hidden by the filter is not eligible. On AppKit, system Play and the start side of system Play/Pause can use the first projected row if nothing is selected, and become unavailable when the projection is empty or every selected track is filtered out; the local control never falls back to an unselected row. MPRIS still acknowledges a recognized transport method even when `tryExecute` declines it. Explicit row activation requests a start from that row rather than resuming a different track.
+System controls may offer Play during active playback, when the command is a no-op. Otherwise Play is available only if it can resume or start a track. The host can supply its own system-media start handler and availability predicate. A selection change alone can enable or disable Play without a playback publication. When a delayed command reaches the frontend executor, it checks the current transport and target again: advertising Play does not reserve a track.
+
+Activating a row explicitly requests playback from that row rather than resuming a different track.
 
 ### Admission and execution
 
