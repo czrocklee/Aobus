@@ -198,6 +198,7 @@ namespace ao::rt
     _items.clear();
     _spellingEvidencePtr.reset();
     _executable = false;
+    // Keep the snapshot shortlist for the selected destination, but never transfer alias authorization.
     return ScanPlan{libraryId, libraryRevision, std::move(items), std::move(_knownSpellingPeers), nullptr};
   }
 } // namespace ao::rt

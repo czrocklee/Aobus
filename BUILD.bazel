@@ -97,6 +97,7 @@ test_suite(
         "//test:native_process_tests",
         "//test:query_test",
         "//test:runtime_test",
+        "//test:scan_directory_spelling_fallback_test",
         "//test:systemmedia_test",
         "//test:tui_test",
         "//test:uimodel_test",
@@ -358,6 +359,7 @@ filegroup(
             "//bazel/header_share:sparse_headers_test",
             "//test:dictionary_publication_test",
             "//test:library_import_apply_cancellation_test",
+            "//test:scan_directory_spelling_fallback_test",
         ],
         "//conditions:default": [],
     }) + select({

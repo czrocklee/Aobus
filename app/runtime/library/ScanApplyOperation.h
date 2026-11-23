@@ -76,6 +76,7 @@ namespace ao::rt
   private:
     struct PreparedScanItem;
     struct InspectionPhase;
+    struct SpellingAdmissions;
 
     enum class State : std::uint8_t
     {
@@ -94,20 +95,26 @@ namespace ao::rt
                                    PreparedScanItem& prepared);
     Result<> validatePlan() const;
     void admitItemsAgainstDatabase(library::TrackWriter const& trackWriter, std::stop_token stopToken);
+    SpellingAdmissions collectSpellingAdmissions(std::stop_token stopToken);
     void admitSpellingGroups(library::LibraryWrite const& write, std::stop_token stopToken);
+    std::string_view directoryPeerEndpoint(ScanItem const& item, std::string_view peerUri) const;
+    void rejectLateDirectoryPeer(std::string_view uri,
+                                 std::span<std::size_t const> candidates,
+                                 std::stop_token stopToken);
     void rejectLateSpellingPeer(std::span<std::size_t const> destinations, std::stop_token stopToken);
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
     bool tryValidatePathProvenance(std::size_t itemIndex,
                                    std::filesystem::path const& fullPath,
                                    InspectionPhase& phase);
     void revalidatePreparedItem(std::size_t itemIndex, InspectionPhase& phase);
+    void revalidateKnownDirectoryPeers(InspectionPhase& phase);
     void revalidatePreparedCueSheets(std::size_t itemIndex,
                                      std::filesystem::path const& fullPath,
                                      InspectionPhase& phase);
     bool needsSpellingProof(ScanItem const& item) const;
     bool tryValidateSpelling(ScanItem const& item, InspectionPhase& phase);
     void revalidatePreparedRegularFile(std::size_t itemIndex, std::filesystem::path const& fullPath);
-    void revalidateMissingPath(std::size_t itemIndex);
+    void revalidateMissingPath(std::size_t itemIndex, std::stop_token stopToken);
     void revalidateMovedFile(std::size_t itemIndex, std::filesystem::path const& fullPath, std::stop_token stopToken);
 
     Result<> applyScanItem(std::size_t itemIndex,
@@ -197,6 +204,7 @@ namespace ao::rt
     State _state = State::Created;
     bool _cancelled = false;
     bool _abortTransaction = false;
+    bool _hasUnconfirmedDirectoryPeers = false;
     bool _manifestMutated = false;
   };
 } // namespace ao::rt
