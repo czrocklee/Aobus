@@ -125,6 +125,7 @@ For local initialization:
 - For string constants, import the standard literal namespace and prefer `"text"s` or `"text"sv` to explicit construction.
 - Treat enums and `std::byte` as non-primitive types and use `auto value = T{...};`.
 - Use class template argument deduction only when every template argument is non-primitive; spell the arguments when any is primitive, as in `auto count = std::atomic<std::size_t>{0};`.
+  Keep explicit arguments when deduction would change the type: write `std::atomic<T*>{nullptr}`, not a cast just to enable deduction.
   For an `std::array` of primitive elements, use `std::to_array<T>({...})` so the size stays deduced.
 - Use an explicit type when a C API requires a pointer to that exact C type.
 - Initialize a null pointer as `T* pointer = nullptr;`.

@@ -454,7 +454,8 @@ namespace clang::tidy::readability
         }
 
         if (auto const* sourceExpr = sourceArgument->IgnoreImplicit();
-            sourceExpr == nullptr || !hasSameUnqualifiedCanonicalType(sourceExpr->getType(), targetType))
+            sourceExpr == nullptr || isa<InitListExpr>(sourceExpr) ||
+            !hasSameUnqualifiedCanonicalType(sourceExpr->getType(), targetType))
         {
           return true;
         }
@@ -706,38 +707,127 @@ namespace clang::tidy::readability
       return ctor;
     }
 
-    bool isPackDeducibleViaConstructor(CXXConstructorDecl const* primaryCtor)
+    // Only tuple's element-wise guide is modeled. A forwarding constructor does not prove
+    // how a custom guide maps its pack, so keep explicit packs even when such a guide would work.
+    bool canDeduceTuplePack(CXXConstructExpr const* construct, ClassTemplateSpecializationDecl const* spec)
     {
-      if (auto const* ctorTemplate = primaryCtor->getDescribedTemplate(); ctorTemplate != nullptr)
+      if (!spec->isInStdNamespace() || spec->getName() != "tuple")
       {
-        auto const* ctorParameters = ctorTemplate->getTemplateParameters();
+        return false;
+      }
 
-        if (ctorParameters != nullptr)
+      auto const& arguments = spec->getTemplateArgs();
+
+      if (arguments.size() != 1 || arguments[0].getKind() != TemplateArgument::Pack)
+      {
+        return false;
+      }
+
+      auto const elements = arguments[0].getPackAsArray();
+
+      if (elements.size() != construct->getNumArgs())
+      {
+        return false;
+      }
+
+      for (std::uint32_t i = 0; i < elements.size(); ++i)
+      {
+        auto const* source = construct->getArg(i)->IgnoreImplicitAsWritten();
+
+        if (isa<InitListExpr, CXXDefaultArgExpr>(source) || source->getType().isNull())
         {
-          return std::ranges::any_of(*ctorParameters,
-                                     [](NamedDecl const* ctorParameter)
-                                     {
-                                       auto const* ctorTypeParm = dyn_cast<TemplateTypeParmDecl>(ctorParameter);
-                                       return ctorTypeParm != nullptr && ctorTypeParm->isParameterPack();
-                                     });
+          return false;
+        }
+
+        QualType const type = source->getType().getCanonicalType().getUnqualifiedType();
+
+        if (elements[i].getKind() != TemplateArgument::Type || elements[i].getAsType().getCanonicalType() != type)
+        {
+          return false;
+        }
+
+        // An allocator tag or a single pair/tuple can select a different guide.
+        if (auto const* record = type->getAsCXXRecordDecl();
+            i == 0 && record != nullptr && record->isInStdNamespace() &&
+            (record->getName() == "allocator_arg_t" ||
+             (elements.size() == 1 && (record->getName() == "pair" || record->getName() == "tuple"))))
+        {
+          return false;
         }
       }
 
-      return false;
+      return true;
     }
 
-    bool isTypeParameterDeducibleFromConstructor(CXXConstructorDecl const* primaryCtor,
-                                                 TemplateTypeParmDecl const* typeParm)
+    bool isNullPointerConversion(Expr const* arg, ASTContext& context)
     {
-      for (std::uint32_t i = 0; i < primaryCtor->getNumParams(); ++i)
+      return (arg->getType()->isPointerType() || arg->getType()->isMemberPointerType()) &&
+             arg->IgnoreImplicit()->isNullPointerConstant(context, Expr::NPC_ValueDependentIsNotNull) !=
+               Expr::NPCK_NotNull;
+    }
+
+    bool canOmitTypeParameter(CXXConstructExpr const* construct,
+                              CXXConstructorDecl const* primaryCtor,
+                              TemplateTypeParmDecl const* typeParm,
+                              bool hasDefault)
+    {
+      bool canOmit = hasDefault;
+      auto const count = std::min(construct->getNumArgs(), primaryCtor->getNumParams());
+
+      for (std::uint32_t i = 0; i < count; ++i)
       {
-        if (hasTemplateParameterReference(primaryCtor->getParamDecl(i)->getType(), typeParm))
+        auto const* arg = construct->getArg(i);
+        auto const pattern = primaryCtor->getParamDecl(i)->getType().getNonReferenceType();
+
+        if (arg->isDefaultArgument() || !hasTemplateParameterReference(pattern, typeParm))
         {
-          return true;
+          continue;
+        }
+
+        auto inputs = llvm::ArrayRef{&arg, 1U};
+
+        if (auto const* list = dyn_cast<CXXStdInitializerListExpr>(arg->IgnoreImplicit()); list != nullptr)
+        {
+          // A raw list cannot deduce T merely because T was instantiated as initializer_list.
+          // Only an initializer_list parameter pattern deduces from its elements.
+          auto const* specialization = pattern.getCanonicalType()->getAs<TemplateSpecializationType>();
+          auto const* tmpl =
+            specialization != nullptr ? specialization->getTemplateName().getAsTemplateDecl() : nullptr;
+
+          if (tmpl == nullptr || !tmpl->isInStdNamespace() || tmpl->getName() != "initializer_list")
+          {
+            continue;
+          }
+
+          auto const* inits = dyn_cast<InitListExpr>(list->getSubExpr()->IgnoreImplicit());
+
+          if (inits == nullptr)
+          {
+            return false;
+          }
+
+          inputs = inits->inits();
+        }
+
+        for (auto const* input : inputs)
+        {
+          // A braced scalar gets its type from the parameter. Another argument or the
+          // default can still supply the type; a bare nullptr instead conflicts with it.
+          if (input->getType()->isScalarType() && isa<InitListExpr>(input->IgnoreImplicit()))
+          {
+            continue;
+          }
+
+          if (isNullPointerConversion(input, primaryCtor->getASTContext()))
+          {
+            return false;
+          }
+
+          canOmit = true;
         }
       }
 
-      return false;
+      return canOmit;
     }
 
     // Check whether an explicitly-written class template argument is not deducible from the
@@ -797,21 +887,18 @@ namespace clang::tidy::readability
         {
           auto const* typeParm = dyn_cast<TemplateTypeParmDecl>(namedDecl);
 
-          if (typeParm == nullptr || !isExplicitNonDefaultTemplateArgument(spec, typeParm, explicitTemplateArgCount))
+          if (typeParm == nullptr)
           {
             return false;
           }
 
-          // For parameter packs, assume they are deducible when the constructor is itself a
-          // member template with a parameter pack (e.g. std::tuple's converting constructor).
-          // Otherwise, check whether the class template pack is referenced in the constructor
-          // parameter types.
-          if (typeParm->isParameterPack() && isPackDeducibleViaConstructor(primaryCtor))
+          if (typeParm->isParameterPack())
           {
-            return false;
+            return typeParm->getIndex() < explicitTemplateArgCount && !canDeduceTuplePack(construct, spec);
           }
 
-          return !isTypeParameterDeducibleFromConstructor(primaryCtor, typeParm);
+          bool const hasDefault = !isExplicitNonDefaultTemplateArgument(spec, typeParm, explicitTemplateArgCount);
+          return !canOmitTypeParameter(construct, primaryCtor, typeParm, hasDefault);
         });
     }
 
