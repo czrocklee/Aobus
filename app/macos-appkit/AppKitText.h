@@ -14,9 +14,11 @@
 namespace ao::appkit
 {
   NSString* nativeText(std::string_view text);
+  // Stops at the first NUL and returns an empty string on conversion failure.
+  // Do not use for lossless round trips or exact comparisons of editor text.
   std::string utf8(NSString* text);
   NSString* catalogText(i18n::MessageCatalog const& catalog, i18n::MessageId message);
   NSString* catalogFormat(i18n::MessageCatalog const& catalog,
                           i18n::MessageId message,
                           std::initializer_list<i18n::MessageArgument> arguments);
-}
+} // namespace ao::appkit

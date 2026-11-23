@@ -45,6 +45,20 @@ namespace
            command == @selector(moveToEndOfParagraphAndModifySelection:) || command == @selector(selectAll:);
   }
 
+  // Completion needs all UTF-8 bytes, including NUL. An unpaired surrogate has
+  // no UTF-8 representation, so it can neither produce nor match an offer.
+  std::optional<std::string> completionSource(NSString* text)
+  {
+    NSData* const data = [text dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:NO];
+
+    if (data == nil)
+    {
+      return std::nullopt;
+    }
+
+    return std::string{static_cast<char const*>(data.bytes), data.length};
+  }
+
   // Byte replacement spans map exactly to UTF-16 field-editor ranges through
   // lossless Foundation substrings; a boundary that would split a surrogate
   // pair or a UTF-8 scalar is rejected instead of mapped approximately.
@@ -310,26 +324,16 @@ namespace ao::appkit
       return;
     }
 
-    // Foundation reports a failed conversion as zero bytes; canBeConvertedToEncoding:
-    // still accepts a lone surrogate.
-    if (text.length != 0 && [text lengthOfBytesUsingEncoding:NSUTF8StringEncoding] == 0)
-    {
-      // A lone surrogate has no UTF-8 byte offset, so no provider span can map back.
-      dismiss();
-      return;
-    }
-
+    auto optSource = completionSource(text);
     auto const optCursorBytes = utf16IndexToByteOffset(text, selected.location);
 
-    if (!optCursorBytes)
+    if (!optSource || !optCursorBytes)
     {
       dismiss();
       return;
     }
 
-    auto const utf8Text = utf8(text);
-
-    if (_hasSuppression && utf8Text == _suppressedText)
+    if (_hasSuppression && *optSource == _suppressedText)
     {
       // The acceptance's own text-change notification must not reopen the
       // popover for the state it just produced; any different text clears the
@@ -339,18 +343,18 @@ namespace ao::appkit
     }
 
     _hasSuppression = false;
-    auto optResult = _provider(utf8Text, *optCursorBytes);
+    auto optResult = _provider(*optSource, *optCursorBytes);
 
     if (!optResult || optResult->items.empty() || optResult->replaceBegin > optResult->replaceEnd ||
-        optResult->replaceEnd > utf8Text.size())
+        optResult->replaceEnd > optSource->size())
     {
       dismiss();
       return;
     }
 
     // The advertised byte span must map exactly onto UTF-16 field-editor units.
-    auto const optBeginUtf16 = byteOffsetToUtf16Index(utf8Text, optResult->replaceBegin);
-    auto const optEndUtf16 = byteOffsetToUtf16Index(utf8Text, optResult->replaceEnd);
+    auto const optBeginUtf16 = byteOffsetToUtf16Index(*optSource, optResult->replaceBegin);
+    auto const optEndUtf16 = byteOffsetToUtf16Index(*optSource, optResult->replaceEnd);
 
     if (!optBeginUtf16 || !optEndUtf16)
     {
@@ -358,7 +362,7 @@ namespace ao::appkit
       return;
     }
 
-    _sourceText = utf8Text;
+    _sourceText = std::move(*optSource);
     _sourceCursorUtf16 = selected.location;
     _replaceBegin = optResult->replaceBegin;
     _replaceEnd = optResult->replaceEnd;
@@ -421,8 +425,7 @@ namespace ao::appkit
       return false;
     }
 
-    if (auto const currentText = utf8([editor string]);
-        currentText != _sourceText || selected.location != _sourceCursorUtf16)
+    if (selected.location != _sourceCursorUtf16 || completionSource(editor.string) != _sourceText)
     {
       // The source moved under the popover; never apply a stale span.
       dismiss();
@@ -561,7 +564,7 @@ namespace ao::appkit
     }
 
     // Typing moves the caret too; the host's text-change path refreshes that state.
-    if (utf8([editor string]) != _sourceText)
+    if (completionSource(editor.string) != _sourceText)
     {
       return;
     }

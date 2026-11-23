@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <variant>
@@ -1920,6 +1921,79 @@ namespace ao::appkit::test
       return nil;
     }
 
+    void verifyCompletionSourceChanges(EditorFixture& fixture, NSTextField* field, NSTextView* editor)
+    {
+      auto optQueriedText = std::optional<std::string>{};
+      auto completion = EntryCompletionAdapter{
+        field,
+        fixture.session().catalog(),
+        [&](std::string_view text, std::size_t cursor) -> std::optional<rt::CompletionResult>
+        {
+          optQueriedText = text;
+          return rt::CompletionResult{.replaceBegin = cursor,
+                                      .replaceEnd = text.size(),
+                                      .items = {{.displayText = "Title", .insertText = "$title"}}};
+        }};
+      auto const offer = [&](NSString* source, NSUInteger caret)
+      {
+        editor.string = source;
+        editor.selectedRange = NSMakeRange(caret, 0);
+        completion.update();
+        AO_INVARIANT(findShownCompletionTable() != nil, "The source must have a pending completion");
+      };
+      auto const rejectsStaleTab = [&](NSString* expected)
+      {
+        AO_INVARIANT(field.currentEditor == editor && [editor.string isEqualToString:expected] != NO &&
+                       NSEqualRanges(editor.selectedRange, NSMakeRange(0, 0)) && findShownCompletionTable() != nil,
+                     "The changed source must reach Tab with the original caret and offer");
+        auto const handled = completion.tryHandleCommand(@selector(insertTab:));
+        return !handled && [editor.string isEqualToString:expected] != NO && findShownCompletionTable() == nil;
+      };
+
+      offer(@"a\0x", 0);
+      [editor.textStorage replaceCharactersInRange:NSMakeRange(2, 1) withString:@"y"];
+      AO_INVARIANT(rejectsStaleTab(@"a\0y"), "Changing text after NUL must invalidate the offer");
+
+      offer(@"", 0);
+      unichar const loneSurrogate = 0xD83D;
+      NSString* const invalid = [NSString stringWithCharacters:&loneSurrogate length:1];
+      // Typing into an empty field moves the caret. Swap the storage to change only the source.
+      auto* const original = editor.textStorage;
+      __attribute__((objc_precise_lifetime)) NSTextStorage* const changed =
+        [[NSTextStorage alloc] initWithString:invalid];
+      [editor.layoutManager replaceTextStorage:changed];
+      AO_INVARIANT(editor.string.length == 1 && [editor.string characterAtIndex:0] == loneSurrogate,
+                   "The field editor must retain the unpaired surrogate before Tab");
+      AO_INVARIANT(rejectsStaleTab(invalid), "Invalid UTF-16 must not match the empty source");
+      [editor.layoutManager replaceTextStorage:original];
+
+      offer(@"a\0😀x", 4);
+      auto const expectedBytes = std::string_view{"a\0😀x", 7};
+      AO_INVARIANT(optQueriedText == expectedBytes && completion.tryHandleCommand(@selector(insertTab:)) &&
+                     [editor.string isEqualToString:@"a\0😀$title"] != NO &&
+                     NSEqualRanges(editor.selectedRange, NSMakeRange(10, 0)),
+                   "An unchanged source must preserve NUL and map the non-BMP prefix exactly");
+
+      optQueriedText.reset();
+      completion.update();
+      AO_INVARIANT(!optQueriedText && findShownCompletionTable() == nil,
+                   "The accepted text must not query the provider or reopen the offer");
+      [editor.textStorage replaceCharactersInRange:NSMakeRange(5, 1) withString:@"T"];
+      completion.update();
+      auto const editedBytes = std::string_view{"a\0😀$Title", 12};
+      auto* const table = findShownCompletionTable();
+      AO_INVARIANT(optQueriedText == editedBytes && table != nil,
+                   "An edit after NUL must query the provider again with the changed source");
+
+      auto const caret = editor.selectedRange;
+      [editor.textStorage replaceCharactersInRange:NSMakeRange(5, 1) withString:@"t"];
+      AO_INVARIANT(NSEqualRanges(editor.selectedRange, caret) && findShownCompletionTable() == table,
+                   "The double-click action must reach the stale offer");
+      AO_INVARIANT([table sendAction:table.doubleAction to:table.target] != NO);
+      AO_INVARIANT([editor.string isEqualToString:@"a\0😀$title"] != NO && findShownCompletionTable() == nil,
+                   "Double-clicking a stale candidate must dismiss without inserting");
+    }
+
     void verifyCompletionRanges(EditorFixture& fixture)
     {
       auto* const field = [NSTextField textFieldWithString:@"😀$ti tail"];
@@ -1945,7 +2019,8 @@ namespace ao::appkit::test
             .replaceEnd = 7,
             .items = {{.displayText = "Title field", .insertText = "$title"}},
           };
-        }};
+        },
+        EntryCompletionOptions{.acceptOnReturn = true}};
       completion.update();
       AO_INVARIANT(providerCalls == 1 && observedCursor == 7 && findShownCompletionTable() != nil,
                    "A non-BMP prefix must map the native caret to its exact UTF-8 byte offset");
@@ -1972,11 +2047,12 @@ namespace ao::appkit::test
       completion.update();
       AO_INVARIANT(providerCalls == 4 && findShownCompletionTable() != nil);
       // Text the host has not forwarded yet leaves the popover to the next update.
-      [editor insertText:@"x" replacementRange:NSMakeRange(editor.string.length, 0)];
-      AO_INVARIANT(findShownCompletionTable() != nil, "A text edit must not dismiss through the caret observer");
-      AO_INVARIANT(!completion.tryHandleCommand(@selector(insertTab:)) && findShownCompletionTable() == nil &&
+      [editor.textStorage replaceCharactersInRange:NSMakeRange(editor.string.length, 0) withString:@"x"];
+      AO_INVARIANT(NSEqualRanges(editor.selectedRange, NSMakeRange(5, 0)) && findShownCompletionTable() != nil,
+                   "Return must reach the stale offer at its original caret");
+      AO_INVARIANT(!completion.tryHandleCommand(@selector(insertNewline:)) && findShownCompletionTable() == nil &&
                      [editor.string isEqual:@"😀$ti tailx"] != NO,
-                   "A stale source must dismiss without consuming Tab or replacing text");
+                   "A stale source must dismiss without consuming Return or replacing text");
       [editor insertText:@"😀$ti tail" replacementRange:NSMakeRange(0, editor.string.length)];
       editor.selectedRange = NSMakeRange(5, 0);
       completion.update();
@@ -2001,6 +2077,7 @@ namespace ao::appkit::test
       completion.update();
       AO_INVARIANT(providerCalls == 6 && !completion.tryHandleCommand(@selector(insertTab:)),
                    "Detached completion must not query providers or consume commands");
+      verifyCompletionSourceChanges(fixture, field, editor);
       [fixture.window() makeFirstResponder:nil];
       [field removeFromSuperview];
     }
