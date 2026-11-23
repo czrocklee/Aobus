@@ -41,9 +41,10 @@ native build, sanitizer, or SDK switches to unrelated checks or measurements.
 
 Install the pinned Bazel version with a JVM and Nix with `nix-shell` on `PATH`.
 Bare Bazel needs no pre-entered shell or generated launch rc: its environment
-repository prepares the pinned Nix SDK itself. Tests that start private audio
-services, including members of `//:tests`, still need the fixture tools
-described in the [Linux test limitation](bazel.md#direct-bazel-without-the-portal).
+repository prepares the pinned Nix SDK itself. Tests that need a private session
+bus, audio server or display start it with tools from that SDK. Those tools need
+not be on your `PATH`; see [direct Bazel](bazel.md#direct-bazel-without-the-portal)
+for prerequisites.
 
 ```bash
 bazel build //app/cli:aobus //app/tui:aobus-tui

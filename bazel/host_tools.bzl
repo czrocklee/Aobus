@@ -24,6 +24,8 @@ def host_tools(data):
         native.alias(name = "glib_compile_resources", actual = data["resource_executable"])
     native.filegroup(name = "glib_compile_resources_runtime", srcs = data["resource_inputs"])
     native.filegroup(name = "dbus_daemon", srcs = data["dbus_inputs"])
+    native.filegroup(name = "pipewire_tools", srcs = data["pipewire_inputs"])
+    native.filegroup(name = "xvfb", srcs = data["xvfb_inputs"])
     native.filegroup(name = "python_action_tools", srcs = data["python_inputs"])
     native.filegroup(name = "catalog_tools", srcs = [":python_action_tools"] + data["catalog_inputs"])
 

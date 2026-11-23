@@ -15,7 +15,7 @@
 
 ## Guidance and authorization
 
-- [Native setup](doc/development/bazel.md#direct-bazel-without-the-portal): platform prerequisites and Linux fixture tools from the pinned `nix-shell`.
+- [Native setup](doc/development/bazel.md#direct-bazel-without-the-portal): platform prerequisites and Linux private test fixtures.
 - [Development guide](doc/development/README.md): task-specific contributor policy.
 - [System guide](doc/system/README.md): product contracts and subsystem code.
 

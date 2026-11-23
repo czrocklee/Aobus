@@ -13,6 +13,7 @@
 #include <charconv>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -28,9 +29,6 @@
 #include <thread>
 #include <tuple>
 #include <utility>
-#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
-#include <cstdlib>
-#endif
 
 namespace ao::systemmedia::test
 {
@@ -145,17 +143,22 @@ namespace ao::systemmedia::test
 
       auto const configOption = "--config-file=" + configPath.string();
       auto const addressOption = "--address=" + listenAddress;
-      ::GError* error = nullptr;
-      auto const* daemon = "dbus-daemon";
-#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
-      daemon = std::getenv("AOBUS_TEST_DBUS_DAEMON");
+      auto const* daemon = std::getenv("AOBUS_TEST_DBUS_DAEMON");
 
-      if (daemon == nullptr || !std::filesystem::path{daemon}.is_absolute() ||
-          !std::filesystem::is_regular_file(daemon))
+      if (daemon == nullptr)
       {
-        throw std::runtime_error{"Bazel TUI process tests require a declared D-Bus daemon"};
-      }
+#ifdef AOBUS_BAZEL_TUI_EXECUTABLE
+        throw std::runtime_error{"Bazel MPRIS tests require AOBUS_TEST_DBUS_DAEMON"};
+#else
+        daemon = "dbus-daemon";
 #endif
+      }
+      else if (!std::filesystem::path{daemon}.is_absolute() || !std::filesystem::is_regular_file(daemon))
+      {
+        throw std::runtime_error{"Invalid AOBUS_TEST_DBUS_DAEMON for MPRIS tests"};
+      }
+
+      ::GError* error = nullptr;
       // Inherit stderr so a startup failure retains the daemon's diagnostic in test output.
       _process = ::g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,
                                     &error,

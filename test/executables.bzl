@@ -11,8 +11,10 @@ Bazel's scheduling and injects the private-fixture context. Targets without a
 context stay ordinary ``cc_test`` declarations.
 """
 
+load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
+load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
 load("@rules_cc//cc:defs.bzl", _cc_binary = "cc_binary", _cc_test = "cc_test")
-load("//bazel:testing.bzl", "context_environment", "native_context_test")
+load("//bazel:testing.bzl", "CONTEXT_ENV", "context_environment", "native_context_test")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 
 _INNER_SUFFIX = ".native"
@@ -38,6 +40,67 @@ def cc_binary(name, additional_linker_inputs = [], linkopts = [], **kwargs):
         **kwargs
     )
 
+def _fixture_runfiles_impl(ctx):
+    # Bazel resolves configurable env_inherit here. Either a wrapper env entry
+    # or an inherited name could otherwise override the declared executable.
+    if CONTEXT_ENV in ctx.attr.env_inherit:
+        fail("%s cannot be inherited: it selects the test's declared fixture inputs" % CONTEXT_ENV)
+    for key in ctx.attr.env_keys + ctx.attr.env_inherit:
+        if key in ctx.attr.owned_keys:
+            fail("%s is owned by the Linux test fixture; do not set or inherit it" % key)
+    files = depset(transitive = [target[DefaultInfo].files for target in ctx.attr.srcs])
+    return [DefaultInfo(files = files, runfiles = ctx.runfiles(transitive_files = files))]
+
+_fixture_runfiles = rule(
+    implementation = _fixture_runfiles_impl,
+    attrs = {
+        "srcs": attr.label_list(),
+        "owned_keys": attr.string_list(),
+        "env_keys": attr.string_list(),
+        "env_inherit": attr.string_list(),
+    },
+)
+
+def _add_linux_fixture_inputs(name, context_markers, attrs):
+    if "@platforms//os:linux" not in HOST_CONSTRAINTS:
+        return
+    context = [marker.strip() for marker in context_markers.split(",")]
+    display = "gtk" in context
+    audio = display or "audio" in context
+    if not (audio or "dbus" in context):
+        return
+
+    # The public wrapper inherits both the inner test's runfiles and its env.
+    # MPRIS cases also launch the declared D-Bus daemon inside the native test.
+    inputs = ["@aobus_native_tools//:dbus_daemon"]
+    tools = ["dbus_daemon"]
+    if audio:
+        inputs.append("@aobus_native_tools//:pipewire_tools")
+        tools.extend(["pipewire", "wireplumber", "pw_cli"])
+    if display:
+        inputs.append("@aobus_native_tools//:xvfb")
+        tools.append("xvfb")
+
+    fixture_env = {"AOBUS_TEST_" + tool.upper(): TEST_TOOLS[tool] for tool in tools}
+    group = name + ".linux_fixture_inputs"
+    env = attrs["env"] or {}
+    _fixture_runfiles(
+        name = group,
+        srcs = inputs,
+        owned_keys = fixture_env.keys(),
+        env_keys = env.keys(),
+        env_inherit = attrs.get("env_inherit", []),
+        tags = ["manual"],
+        target_compatible_with = attrs.get("target_compatible_with", []),
+        testonly = True,
+        visibility = ["//visibility:private"],
+    )
+    attrs["data"] = attrs["data"] + select({"@platforms//os:linux": [":" + group], "//conditions:default": []})
+    attrs["env"] = select({
+        "@platforms//os:linux": env | fixture_env,
+        "//conditions:default": env,
+    })
+
 def cc_test(
         name,
         additional_linker_inputs = [],
@@ -53,7 +116,8 @@ def cc_test(
         additional_linker_inputs: Caller-owned inputs appended to the manifest input.
         linkopts: Caller-owned options appended to the manifest link options.
         context: Owned private-fixture markers consumed by the test runner.
-        env: Caller-owned test environment; a dict is merged with context.
+        env: Caller-owned environment dict. A selected Linux fixture reserves
+            its tool variables in both env and env_inherit.
         args: Test arguments; the wrapper forwards them to the wrapped test.
         **kwargs: All other native cc_test attributes, forwarded unchanged.
     """
@@ -80,9 +144,10 @@ def cc_test(
     inner_attributes = dict(kwargs)
     inner_attributes.update(shared)
     inner_attributes["args"] = args
-    inner_attributes["env"] = env
     inner_attributes["data"] = data
+    inner_attributes["env"] = env
     inner_attributes["tags"] = (shared.get("tags") or []) + ["manual"]
+    _add_linux_fixture_inputs(name, environment[CONTEXT_ENV], inner_attributes)
     _cc_test(
         name = inner,
         additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS + additional_linker_inputs,

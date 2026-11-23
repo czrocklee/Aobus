@@ -119,10 +119,9 @@ bazel test //test:query_test --test_filter='Component - behavior'
 bazel test //test:uimodel_test --test_filter='Component - behavior'
 ```
 
-Filter the executable that owns the case. On Linux, the wrapper starts only the
-private fixtures declared by the selected test. Before running an explicit GTK or backend test, check the
-[Linux fixture prerequisites](../bazel.md#direct-bazel-without-the-portal);
-do not start the services yourself.
+Filter the executable that owns the case. Even for a filtered run, the Linux
+test wrapper starts only the [private fixtures](../bazel.md#direct-bazel-without-the-portal)
+declared by the selected target. Do not start the services yourself.
 A focused test or narrower CI job does not replace a required full gate.
 Reuse a passing result while its source, tests, dependencies, configuration, platform, and scope remain unchanged.
 After a correction, rerun affected checks; broaden the scope only if another boundary is involved.

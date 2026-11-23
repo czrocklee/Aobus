@@ -167,8 +167,8 @@ activation, and private audio services. GTK shards get separate displays and
 buses, so they neither touch the desktop session nor compete for MPRIS names.
 The wrapper sets `AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps
 the marked services alive until the process exits. The backend target requests
-audio and a private bus, not a display. Both targets need the [Linux fixture
-tools](../bazel.md#direct-bazel-without-the-portal).
+audio and a private bus, not a display. Both targets use the declared [Linux fixture
+tools](../bazel.md#direct-bazel-without-the-portal) from the pinned SDK.
 
 - Native-input tests skip unless the display marker is present. Never set it for
   an inherited desktop display.

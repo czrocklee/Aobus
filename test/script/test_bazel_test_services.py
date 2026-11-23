@@ -29,6 +29,11 @@ class PrivatePipeWireTests(unittest.TestCase):
         self.runtime = self.root / "pipewire"
         self.logs = self.root / "logs"
         self.session = {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/tmp/owned-bus/socket"}
+        self.tools = services.PipeWireTools(
+            pipewire=str(self.root / "pipewire"),
+            wireplumber=str(self.root / "wireplumber"),
+            pw_cli=str(self.root / "pw-cli"),
+        )
         self.clock = 0.0
         self.children = {}
         self.connect = [(0, "")]
@@ -41,7 +46,6 @@ class PrivatePipeWireTests(unittest.TestCase):
                 return str(self.runtime)
 
             self.enterContext(mock.patch.object(services.tempfile, "mkdtemp", side_effect=make_runtime))
-        self.enterContext(mock.patch.object(services.native, "executable", side_effect=lambda name, **_: name))
         self.enterContext(mock.patch.object(services.subprocess, "Popen", side_effect=self._spawn))
         self.enterContext(mock.patch.object(services.time, "monotonic", side_effect=lambda: self.clock))
         self.enterContext(mock.patch.object(services.time, "sleep", side_effect=self._advance))
@@ -53,10 +57,10 @@ class PrivatePipeWireTests(unittest.TestCase):
 
     def _spawn(self, argv, *, stdout, **kwargs):
         roles = {
-            ("pipewire",): "pipewire",
-            ("wireplumber", "--profile=policy"): "wireplumber",
-            ("pw-cli", "info", "0"): "connect",
-            ("pw-cli", "ls", "Metadata"): "policy",
+            (self.tools.pipewire,): "pipewire",
+            (self.tools.wireplumber, "--profile=policy"): "wireplumber",
+            (self.tools.pw_cli, "info", "0"): "connect",
+            (self.tools.pw_cli, "ls", "Metadata"): "policy",
         }
         role = roles[tuple(argv)]
         results = {"connect": self.connect, "policy": self.policy}.get(role)
@@ -75,7 +79,7 @@ class PrivatePipeWireTests(unittest.TestCase):
 
     def _open(self):
         return services.private_pipewire(
-            self.logs, self.session, runtime_root=self.runtime if os.name != "nt" else None
+            self.logs, self.session, tools=self.tools, runtime_root=self.runtime if os.name != "nt" else None
         )
 
     def _assert_stopped(self, name):
@@ -209,9 +213,10 @@ class PrivatePipeWireProcessTests(unittest.TestCase):
         self.session = {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/tmp/owned-fixture-bus/socket"}
         for name in ("pipewire", "wireplumber", "pw-cli"):
             self._write_tool(name)
-        # Only tool lookup is fake. The actual supervisor owns signals, waits and readiness.
-        self.enterContext(
-            mock.patch.object(services.native, "executable", side_effect=lambda name, *, nix: str(self.root / name))
+        self.tools = services.PipeWireTools(
+            pipewire=str(self.root / "pipewire"),
+            wireplumber=str(self.root / "wireplumber"),
+            pw_cli=str(self.root / "pw-cli"),
         )
         self.addCleanup(self._retire_remaining_fixture_children)
 
@@ -297,7 +302,10 @@ class PrivatePipeWireProcessTests(unittest.TestCase):
             "WIREPLUMBER_CONFIG_DIR": "/personal/wireplumber",
             "DBUS_SESSION_BUS_ADDRESS": "unix:path=/personal/bus",
         }
-        with mock.patch.dict(os.environ, personal), services.private_pipewire(self.logs, self.session) as environment:
+        with (
+            mock.patch.dict(os.environ, personal),
+            services.private_pipewire(self.logs, self.session, tools=self.tools) as environment,
+        ):
             runtime = Path(environment["XDG_RUNTIME_DIR"])
             self.assertEqual(runtime.parent, Path("/tmp"))
             self.assertEqual(runtime.stat().st_mode & 0o777, 0o700)
@@ -321,7 +329,7 @@ class PrivatePipeWireProcessTests(unittest.TestCase):
         runtime = self.root / "disposable-runtime"
         with (
             self.assertRaisesRegex(BazelWorkspaceError, "pipewire exited 27"),
-            services.private_pipewire(self.logs, self.session, runtime_root=runtime),
+            services.private_pipewire(self.logs, self.session, tools=self.tools, runtime_root=runtime),
         ):
             self.fail("dead daemon was admitted")
         self._assert_joined("pipewire")
@@ -339,6 +347,7 @@ class PrivateSessionBusTests(unittest.TestCase):
         self.enterContext(contextlib.redirect_stdout(io.StringIO()))
         self.enterContext(contextlib.redirect_stderr(io.StringIO()))
         self.config = None
+        self.executable = str(Path.cwd() / "declared-dbus-daemon")
         self.bus = mock.Mock(stdout=io.StringIO())
         self.bus.poll.return_value = None
         self.bus.wait.return_value = 0
@@ -355,14 +364,14 @@ class PrivateSessionBusTests(unittest.TestCase):
     def test_fixed_socket_ignores_the_daemon_guid_and_retires_its_root(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "session bus"
-            with services.private_session_bus(ipc_root=root) as environment:
+            with services.private_session_bus(ipc_root=root, dbus_daemon=self.executable) as environment:
                 address = f"unix:path={quote(Path(temporary).as_posix(), safe='/')}/session%20bus/bus-0"
                 self.assertEqual(environment, {"DBUS_SESSION_BUS_ADDRESS": address, "AOBUS_OWNED_GTK_BUS": address})
             self.assertFalse(root.exists())
 
     def test_cleanup_failure_does_not_replace_a_body_failure_or_leave_the_config(self):
         original = RuntimeError("body failed")
-        with self.assertRaises(RuntimeError) as raised, services.private_session_bus():
+        with self.assertRaises(RuntimeError) as raised, services.private_session_bus(dbus_daemon=self.executable):
             self.bus.terminate.side_effect = OSError("cannot terminate fixture")
             raise original
         self.assertIs(raised.exception, original)

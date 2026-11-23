@@ -1,10 +1,10 @@
-load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("//bazel:compiler_policy.bzl", "GTK_HEADER_SSE_COPTS", "PIPEWIRE_SPA_COPTS", "UNIX_TEST_COPTS")
 load("//bazel:testing.bzl", "native_test")
 load("//bazel:windows_utf8_manifest.bzl", "windows_utf8_manifest_checks")
 load(":executables.bzl", "cc_binary", "cc_test")
 load(":input_files.bzl", "test_input_manifest")
+load(":linux_fixture_env_test.bzl", "LINUX", "linux_fixture_env_test")
 load(":windows_native_context_runfiles.bzl", "WINDOWS", "windows_native_context_runfiles_test")
 
 package(
@@ -129,13 +129,6 @@ windows_utf8_manifest_checks(
     ],
     target_compatible_with = ["@platforms//os:windows"],
 )
-
-# Linux's fixture runner searches the pinned Nix shell for PipeWire,
-# WirePlumber and (for GTK) Xvfb. Native audio on other hosts does not use it.
-LINUX_TEST_SERVICE_ENV = select({
-    "@platforms//os:linux": ["PATH"],
-    "//conditions:default": [],
-})
 
 # Native process smokes reuse the shipping TUI and the existing WinUI probes.
 # The wrappers add execution only; they do not compile product sources twice.
@@ -914,7 +907,6 @@ cc_test(
         ":ao_audio_fatal_probe",
         "//test/data/audio:audio_fixtures",
     ],
-    env_inherit = LINUX_TEST_SERVICE_ENV,
     tags = ["external"],
     deps = [
         ":async_test_support",
@@ -1027,7 +1019,6 @@ cc_test(
         "@platforms//os:macos": [":ao_coreaudio_output_probe"],
         "//conditions:default": [],
     }),
-    env_inherit = LINUX_TEST_SERVICE_ENV,
     tags = ["external"],
     deps = [
         ":audio_platform_test_support",
@@ -1056,6 +1047,34 @@ windows_native_context_runfiles_test(
     exec_compatible_with = WINDOWS,
     target_compatible_with = WINDOWS,
     wrapper = ":audio_platform_test",
+)
+
+config_setting(
+    name = "linux_fixture_env_negative_analysis",
+    constraint_values = LINUX,
+    values = {"allow_analysis_failures": "true"},
+    visibility = ["//visibility:private"],
+)
+
+# The public wrapper used to pass the caller's path instead of the pinned tool.
+# Wildcard cquery includes manual targets; only the analysis test enables this probe.
+cc_test(
+    name = "linux_fixture_env_collision_probe",
+    context = ["audio"],
+    env = {"AOBUS_TEST_PIPEWIRE": "/caller/pipewire"},
+    tags = ["manual"],
+    target_compatible_with = select({
+        ":linux_fixture_env_negative_analysis": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//visibility:private"],
+)
+
+linux_fixture_env_test(
+    name = "linux_fixture_env_collision_test",
+    size = "small",
+    target_compatible_with = LINUX,
+    wrapper = ":linux_fixture_env_collision_probe",
 )
 
 # Library/runtime integration cases stay distinct from pure encoded-media tests.
@@ -1324,10 +1343,7 @@ cc_test(
     data = [
         "//app/tui:aobus-tui",
         "//test/data/audio:audio_fixtures",
-        "@aobus_native_tools//:dbus_daemon",
     ],
-    env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
-    env_inherit = LINUX_TEST_SERVICE_ENV,
     local_defines = ["AOBUS_BAZEL_TUI_EXECUTABLE"],
     tags = ["external"],
     target_compatible_with = select({
@@ -1601,10 +1617,7 @@ cc_test(
     data = [
         ":ao_gapplication_probe",
         "//test/data/audio:audio_fixtures",
-        "@aobus_native_tools//:dbus_daemon",
     ],
-    env = {"AOBUS_TEST_DBUS_DAEMON": TEST_TOOLS.get("dbus_daemon", "")},
-    env_inherit = LINUX_TEST_SERVICE_ENV,
     local = True,
     local_defines = select({
         "//bazel:linux_system_media_enabled": ["AOBUS_HAS_SYSTEM_MEDIA=1"],
@@ -1667,7 +1680,6 @@ cc_test(
         ":ao_audio_fatal_probe",
         "//test/data/audio:audio_fixtures",
     ],
-    env_inherit = LINUX_TEST_SERVICE_ENV,
     linkopts = select({
         "@platforms//os:linux": [
             "-Wl,--wrap=pw_stream_add_listener",

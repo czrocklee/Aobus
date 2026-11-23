@@ -191,17 +191,22 @@ toolchains, host toolchain selection and repository-channel clearing, and the
 entering `nix-shell --pure` itself. Ordinary Linux `bazel build`, `bazel test`,
 and `bazel run` must not require the caller to enter a Nix shell first.
 
-**Linux test limitation:** SDK resolution does not populate the test `PATH`
-with host fixture tools. On Linux the native audio and GTK test targets inherit
-`PATH`. Their private audio fixture requires `pipewire`, `wireplumber`, and
-`pw-cli` from the Nix store, not arbitrary host installations. The `//:tests` members
-`//test:audio_test` and `//test:audio_platform_test` also look up `dbus-daemon`
-on `PATH`, as does `//test:backend_test`. `//test:systemmedia_test` and
-`//test:gtk_test` instead declare the governed D-Bus daemon. Only the GTK
-fixture needs `Xvfb` on `PATH`; ordinary `//:tests` does not select it.
-If tools are missing, run the affected target from the pinned shell, for
-example `nix-shell --run 'bazel test //:tests'`. Let the wrapper start the
-fixtures; do not substitute personal services.
+On Linux, resolving `@aobus_native_tools` checks all private fixture tools in
+the pinned Nix SDK, even for a build-only consumer or with GTK disabled. Each
+test declares only what it uses. The audio fixture starts a private
+`dbus-daemon`, `pipewire` and `wireplumber`, using `pw-cli` to check readiness.
+GTK adds `Xvfb`. Let the wrapper start these services per test; do not
+substitute a personal session bus, display or audio server.
+
+The fixture tools need not be on `PATH`. The rules_python launcher starts via
+`#!/usr/bin/env python3`. The Bazel package in the pinned Nixpkgs provides
+`python3` on its default test `PATH`, even on NixOS without `/usr/bin/python3`.
+With a separately installed Bazel or an explicit `--test_env=PATH=…`, make sure
+`python3` is on the **test process's** `PATH`, not just the caller's.
+
+Declaring the fixture executables as runfiles does not package their full
+runtime. Plugins, configuration and shared libraries are loaded from the
+installed Nix store; using a remote cache does not change that requirement.
 
 ```bash
 bazel build --jobs=8 //app/cli:aobus //app/tui:aobus-tui
@@ -507,7 +512,7 @@ On Linux an explicit `bazel test //test:gtk_test` or
 that target's context. Both get a private no-activation D-Bus session and
 private audio services. Only GTK gets an owned Xvfb display and a headless
 child profile set before GTK selects its accessibility and input-method
-backends. Supply the [native SDK and fixture tools](#direct-bazel-without-the-portal),
+backends. Use the [native prerequisites](#direct-bazel-without-the-portal),
 not hand-started services. GTK never adopts personal desktop endpoints or
 the caller's bus; separate GTK shards need separate displays and buses to avoid
 popup round-trip races and canonical MPRIS name contention.
@@ -738,7 +743,7 @@ The governed repositories provide:
   GTKmm, and host-selected Boost.Process/Boost.Filesystem interfaces;
 - `@aobus_test_deps`: static Catch2/Catch2Main and reviewed FakeIt Catch integration;
 - `@aobus_native_tools`: governed gperf, catalog ICU/Python SDK, Linux resource
-  compiler and test daemon, and Windows manifest tools; catalog compiler ICU
+  compiler and private test fixture tools, and Windows manifest tools; catalog compiler ICU
   imports cover Debug/Release
   independently of the target provider mode;
 - `@aobus_toolchain`: the governed Unix compiler identities — both pinned Nix
@@ -2080,9 +2085,9 @@ test ran on this host or its result came from a [trusted cache](#native-hosts-an
 Another checkout can reuse the result, not just the executable, when Bazel's
 declared inputs, options and relevant environment match. The repository rc does
 not forward the caller's `PATH`, `AOBUS_STATE_ROOT`, `LOCALAPPDATA` or `CI` to
-every test. Targets opt in to what they use: Linux private-service tests inherit
-`PATH` for fixture tools; Windows tests that locate managed tools can inherit
-`AOBUS_STATE_ROOT` and `LOCALAPPDATA`.
+every test. Linux private-context tests declare their pinned fixture inputs;
+Windows tests that locate managed tools can inherit `AOBUS_STATE_ROOT` and
+`LOCALAPPDATA`.
 
 A cached pass is not a new execution on this host. It samples no new random
 schedule or interleaving. Use `--fresh` when investigating intermittent failures.

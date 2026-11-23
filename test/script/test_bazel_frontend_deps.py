@@ -987,7 +987,7 @@ class CatalogSdkTest(unittest.TestCase):
             provider = root / "dbus"
             daemon = provider / "bin/dbus-daemon"
             daemon.parent.mkdir(parents=True)
-            daemon.write_bytes(b"private bus SDK fixture")
+            daemon.touch(mode=0o755)
             report = root / "report.json"
             native.write_json(
                 report,
@@ -1004,6 +1004,10 @@ class CatalogSdkTest(unittest.TestCase):
                 patch.object(providers, "nix_root", return_value=provider),
             ):
                 identity, executable, runtime, evidence = host_tools._linux_dbus()
+                if os.name != "nt":  # Windows does not implement POSIX execute bits.
+                    daemon.chmod(0o644)
+                    with self.assertRaisesRegex(native.BazelWorkspaceError, "not executable: .*dbus-daemon"):
+                        host_tools._linux_dbus()
             self.assertEqual(selected.call_args.args[1], "dbus")
             self.assertEqual(executable, daemon)
             self.assertEqual(identity["outputs"], [str(provider)])
