@@ -121,7 +121,7 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      auto pathRes = uriRes->resolveUnder(musicRoot);
+      auto pathRes = uriRes->resolveFileUnder(musicRoot);
 
       if (!pathRes)
       {

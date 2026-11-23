@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/String.h>
 
@@ -121,7 +122,14 @@ namespace ao::rt
     Result<DirectEntry> probeDirectEntry(Path const& path)
     {
 #ifdef _WIN32
-      auto* const raw = ::CreateFileW(path.c_str(),
+      auto accessRes = utility::fileAccessPath(path);
+
+      if (!accessRes)
+      {
+        return std::unexpected{accessRes.error()};
+      }
+
+      auto* const raw = ::CreateFileW(accessRes->c_str(),
                                       FILE_READ_ATTRIBUTES,
                                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                       nullptr,
@@ -310,7 +318,15 @@ namespace ao::rt
       {
         // Absent old lookup is nonalias evidence, provided the destination
         // still exists. No ID is required on a case-sensitive filesystem.
-        if (auto ec = std::error_code{}; !std::filesystem::exists(std::filesystem::symlink_status(newPath, ec)) || ec)
+        auto accessRes = utility::fileAccessPath(newPath);
+
+        if (!accessRes)
+        {
+          return std::unexpected{accessRes.error()};
+        }
+
+        if (auto ec = std::error_code{};
+            !std::filesystem::exists(std::filesystem::symlink_status(*accessRes, ec)) || ec)
         {
           return makeError(Error::Code::Conflict, "Cannot confirm scan spelling destination is present");
         }
@@ -359,7 +375,14 @@ namespace ao::rt
       auto ec = std::error_code{};
       auto const name = path.filename();
 
-      for (auto iter = std::filesystem::directory_iterator{path.parent_path(), ec};
+      auto parentRes = utility::fileAccessPath(path.parent_path());
+
+      if (!parentRes)
+      {
+        return false;
+      }
+
+      for (auto iter = std::filesystem::directory_iterator{*parentRes, ec};
            !ec && iter != std::filesystem::directory_iterator{};
            iter.increment(ec))
       {
@@ -430,7 +453,14 @@ namespace ao::rt
       auto names = detail::ScanSpellingDirectory{};
       auto ec = std::error_code{};
 
-      for (auto iter = std::filesystem::directory_iterator{directory, ec};
+      auto accessRes = utility::fileAccessPath(directory);
+
+      if (!accessRes)
+      {
+        return std::unexpected{accessRes.error()};
+      }
+
+      for (auto iter = std::filesystem::directory_iterator{*accessRes, ec};
            !ec && iter != std::filesystem::directory_iterator{};
            iter.increment(ec))
       {
@@ -725,33 +755,36 @@ namespace ao::rt
       return name;
     }
 
-#ifdef _WIN32
-    bool hasAmbiguousWindowsComponent(Path const& relative)
+    Result<Path> canonicalScanRoot(Path const& root)
     {
-      // Win32 normalization can strip dots/spaces or treat a colon as a stream or drive.
-      return std::ranges::any_of(relative,
-                                 [](Path const& component)
-                                 {
-                                   auto const& value = component.native();
-                                   return value.ends_with(L'.') || value.ends_with(L' ') || value.contains(L':');
-                                 });
-    }
-#endif
+      auto accessRes = utility::fileAccessPath(root);
 
-    Result<Path> resolveParent(Path const& root, std::string_view parentUri)
-    {
+      if (!accessRes)
+      {
+        return std::unexpected{accessRes.error()};
+      }
+
       auto ec = std::error_code{};
-      auto resolvedRoot = std::filesystem::canonical(root, ec);
+      auto resolvedRoot = std::filesystem::canonical(*accessRes, ec);
 
       if (ec)
       {
         return makeError(Error::Code::IoError, ec.message());
       }
 
-      if (parentUri.empty())
+      return utility::ordinaryFilePath(resolvedRoot);
+    }
+
+    Result<Path> resolveParent(Path const& root, std::string_view parentUri)
+    {
+      auto rootRes = canonicalScanRoot(root);
+
+      if (!rootRes || parentUri.empty())
       {
-        return resolvedRoot;
+        return rootRes;
       }
+
+      auto const& resolvedRoot = *rootRes;
 
       auto const parsedRes = library::LibraryUri::parse(parentUri);
 
@@ -763,7 +796,14 @@ namespace ao::rt
 #ifdef _WIN32
       // Not all reparse points change the canonical path. Reject provider-
       // mediated parents too, checking each component below the resolved root.
-      auto current = resolvedRoot;
+      auto currentRes = utility::fileAccessPath(resolvedRoot);
+
+      if (!currentRes)
+      {
+        return std::unexpected{currentRes.error()};
+      }
+
+      auto& current = *currentRes;
 
       for (auto const& component : utility::pathFromUtf8(parentUri))
       {
@@ -897,20 +937,13 @@ namespace ao::rt
     auto const relative = utility::pathFromUtf8(uri);
 
 #ifdef _WIN32
-    if (hasAmbiguousWindowsComponent(relative))
+    if (!utility::checkedFileSpelling(relative))
     {
       return false;
     }
 #endif
-    auto ec = std::error_code{};
-    auto const resolvedRoot = std::filesystem::canonical(root, ec);
-
-    if (ec)
-    {
-      return false;
-    }
-
-    return hasExactRegularAncestor(resolvedRoot, {}, relative, stopToken);
+    auto const rootRes = canonicalScanRoot(root);
+    return rootRes && hasExactRegularAncestor(*rootRes, {}, relative, stopToken);
   }
 
   ScanSpellingInspection::ScanSpellingInspection(Path root, std::stop_token stopToken)
@@ -935,9 +968,9 @@ namespace ao::rt
       }
 
 #ifdef _WIN32
-      if (hasAmbiguousWindowsComponent(utility::pathFromUtf8(newUri)))
+      if (auto spellingRes = utility::checkedFileSpelling(utility::pathFromUtf8(newUri)); !spellingRes)
       {
-        return makeError(Error::Code::InvalidInput, "Ambiguous Windows scan spelling path component");
+        return std::unexpected{spellingRes.error()};
       }
 #endif
       auto const directoryRes = resolveParent(_root, newUri.substr(0, nameStart == 0 ? 0 : nameStart - 1));
@@ -987,18 +1020,19 @@ namespace ao::rt
       }
 
 #ifdef _WIN32
-      if (hasAmbiguousWindowsComponent(utility::pathFromUtf8(newUri)))
+      if (auto spellingRes = utility::checkedFileSpelling(utility::pathFromUtf8(newUri)); !spellingRes)
       {
-        return makeError(Error::Code::InvalidInput, "Ambiguous Windows scan spelling path component");
+        return std::unexpected{spellingRes.error()};
       }
 #endif
-      auto ec = std::error_code{};
-      auto const root = std::filesystem::canonical(_root, ec);
+      auto const rootRes = canonicalScanRoot(_root);
 
-      if (ec)
+      if (!rootRes)
       {
-        return makeError(Error::Code::IoError, ec.message());
+        return std::unexpected{rootRes.error()};
       }
+
+      auto const& root = *rootRes;
 
       auto const start = *optDifference;
       auto const end = newUri.find('/', start);

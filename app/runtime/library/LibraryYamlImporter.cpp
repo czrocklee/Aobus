@@ -40,6 +40,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/utility/String.h>
@@ -764,6 +765,52 @@ namespace ao::rt
       return std::optional<FileTimestamp>{mtime};
     }
 
+    Result<std::optional<std::filesystem::path>> resolvePresentMediaPath(std::string_view uri,
+                                                                         std::filesystem::path const& root)
+    {
+      auto uriRes = library::LibraryUri::parse(uri);
+
+      if (!uriRes)
+      {
+        return makeError(Error::Code::FormatRejected, uriRes.error().message);
+      }
+
+      auto optFullPathRes = uriRes->resolveOptionalFileUnder(root);
+
+      if (!optFullPathRes)
+      {
+        auto const& error = optFullPathRes.error();
+        auto const code = error.code == Error::Code::InvalidInput ? Error::Code::FormatRejected : error.code;
+        return makeError(code, error.message);
+      }
+
+      auto const& optFullPath = *optFullPathRes;
+
+      if (!optFullPath)
+      {
+        return std::nullopt;
+      }
+
+      auto fileEc = std::error_code{};
+      auto const& fullPath = *optFullPath;
+      auto const exists = std::filesystem::exists(fullPath, fileEc);
+
+      if (fileEc)
+      {
+        return makeError(Error::Code::IoError,
+                         std::format("Failed to inspect file '{}': {}",
+                                     utility::pathToUtf8(utility::ordinaryFilePath(fullPath)),
+                                     fileEc.message()));
+      }
+
+      if (!exists)
+      {
+        return std::nullopt;
+      }
+
+      return optFullPathRes;
+    }
+
     /**
      * @brief Seeds manifest facts from an existing file.
      *
@@ -782,9 +829,10 @@ namespace ao::rt
 
         if (fileEc)
         {
-          return makeError(
-            Error::Code::IoError,
-            std::format("Failed to read file size for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to read file size for '{}': {}",
+                                       utility::pathToUtf8(utility::ordinaryFilePath(fullPath)),
+                                       fileEc.message()));
         }
 
         manifestBuilder.fileSize(fileSize);
@@ -801,7 +849,7 @@ namespace ao::rt
         {
           return makeError(Error::Code::IoError,
                            std::format("Failed to read modification time for '{}': {}",
-                                       utility::pathToUtf8(fullPath),
+                                       utility::pathToUtf8(utility::ordinaryFilePath(fullPath)),
                                        mtimeRes.error().message));
         }
 
@@ -2603,43 +2651,25 @@ namespace ao::rt
     {
       manifestBuilder = library::FileManifestBuilder::fromView(*optManifest);
     }
-    else
+    // Without omitted facts this is a database-only restore. Its validated
+    // portable URI need not be an accessible filename on this host.
+    else if (!fileSizeNode.readable() || !mtimeNode.readable())
     {
-      auto fileEc = std::error_code{};
-      auto uriRes = library::LibraryUri::parse(uriStr);
+      auto optFullPathRes = resolvePresentMediaPath(uriStr, ml.rootPath());
 
-      if (!uriRes)
+      if (!optFullPathRes)
       {
-        return makeError(Error::Code::FormatRejected, uriRes.error().message);
+        return std::unexpected{optFullPathRes.error()};
       }
 
-      auto fullPathRes = uriRes->resolveUnder(ml.rootPath());
-
-      if (!fullPathRes)
+      if (auto const& optFullPath = *optFullPathRes; optFullPath)
       {
-        auto const code = fullPathRes.error().code == Error::Code::InvalidInput ? Error::Code::FormatRejected
-                                                                                : fullPathRes.error().code;
-        return makeError(code, fullPathRes.error().message);
-      }
-
-      auto const& fullPath = *fullPathRes;
-      auto const seedFileSize = !fileSizeNode.readable();
-
-      // A record that supplies both facts never inspects the file, so even an
-      // uninspectable path cannot fail its import.
-      if (auto const seedMtime = !mtimeNode.readable();
-          (seedFileSize || seedMtime) && std::filesystem::exists(fullPath, fileEc) && !fileEc)
-      {
-        if (auto seedRes = seedOmittedFileFacts(fullPath, seedFileSize, seedMtime, manifestBuilder); !seedRes)
+        if (auto seedRes =
+              seedOmittedFileFacts(*optFullPath, !fileSizeNode.readable(), !mtimeNode.readable(), manifestBuilder);
+            !seedRes)
         {
           return seedRes;
         }
-      }
-      else if (fileEc)
-      {
-        return makeError(
-          Error::Code::IoError,
-          std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
       }
     }
 
@@ -2716,38 +2746,21 @@ namespace ao::rt
                                                        std::optional<library::TrackBuilder>& optBuilder,
                                                        std::optional<MediaTrack>& optMediaTrack) const
   {
-    auto fileEc = std::error_code{};
-    auto uriRes = library::LibraryUri::parse(uriStr);
+    auto optFullPathRes = resolvePresentMediaPath(uriStr, ml.rootPath());
 
-    if (!uriRes)
+    if (!optFullPathRes)
     {
-      return makeError(Error::Code::FormatRejected, uriRes.error().message);
+      return std::unexpected{optFullPathRes.error()};
     }
 
-    auto fullPathRes = uriRes->resolveUnder(ml.rootPath());
+    auto const& optFullPath = *optFullPathRes;
 
-    if (!fullPathRes)
-    {
-      auto const code =
-        fullPathRes.error().code == Error::Code::InvalidInput ? Error::Code::FormatRejected : fullPathRes.error().code;
-      return makeError(code, fullPathRes.error().message);
-    }
-
-    auto const& fullPath = *fullPathRes;
-    auto const fileExists = std::filesystem::exists(fullPath, fileEc);
-
-    if (fileEc)
-    {
-      return makeError(Error::Code::IoError,
-                       std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
-    }
-
-    if (!fileExists)
+    if (!optFullPath)
     {
       return {};
     }
 
-    auto mediaTrackRes = readMediaTrack(fullPath);
+    auto mediaTrackRes = readMediaTrack(*optFullPath);
 
     if (!mediaTrackRes)
     {

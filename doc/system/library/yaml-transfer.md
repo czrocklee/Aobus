@@ -94,6 +94,13 @@ The synchronous offline methods prepare the import before acquiring their own wr
 
 ## Commands and transitions
 
+### Media baseline availability
+
+When transfer looks up media on Windows, an otherwise valid URI supplies no file baseline or filesystem facts if a component is a reserved device name or ends in a dot or space.
+Windows filename metacharacters, including the colon used for alternate data streams, still reject the lookup anywhere in the URI, even after such a component.
+The music root and reachable path prefix must pass the same checks as any other media lookup; escaping or unresolved redirects and inspection errors still reject the operation.
+Transfer keeps the URI unchanged; this exception does not make it playable.
+
 ### Export modes
 
 | Payload mode | Ordinary metadata                                                               | Custom metadata              | Tags                              | Covers                                                                   | Technical and manifest facts     | Lists                                                                  |
@@ -121,8 +128,9 @@ Neither YAML serialization nor the atomic write polls the token while running.
 After the worker phase, `LibraryJobs` returns to the callback executor and emits the progress-finished pulse without checking the caller token again.
 It then returns the export result or rethrows the deferred exception. A stop requested during the atomic write or callback cleanup cannot replace success or an export error with `OperationCancelled`.
 
-For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values. For a segment Track, the baseline is the carrier audio file, not the external CUE sheet.
-An unsafe or otherwise unresolvable URI fails export; an error checking whether the resolved path exists fails with `IoError`.
+For `delta`, a missing, unsupported, or unreadable audio file, or a [locally unrepresentable URI](#media-baseline-availability), means no baseline and causes emission of all applicable current values.
+For a segment Track, the baseline is the carrier audio file, not the external CUE sheet.
+An unsafe URI or any other resolution failure fails export; an error checking whether the resolved path exists fails with `IoError`.
 
 Every track-bearing mode emits `title: {clear: true}` for a stored [explicit title clear](../../reference/library/model/track.md#curated-metadata), regardless of the file baseline.
 For an ordinary blank title, `delta` emits an empty scalar only if a readable file baseline has a nonempty title. `metadata` and `full` omit ordinary blank titles.
@@ -140,7 +148,7 @@ Restore chooses a track baseline by payload mode:
 - `full` starts from an empty track, applies payload values, and opens no audio file;
 - `delta` starts from a readable file baseline when available;
 - `metadata` may retain file technical properties and the file's current cover references, but clears file-derived curated metadata, tags, and custom metadata before applying the payload;
-- when an optional file baseline cannot be opened or parsed, restore starts from an empty track.
+- when an optional file baseline cannot be opened or parsed, or the URI is [locally unrepresentable](#media-baseline-availability), restore starts from an empty track.
 
 Restore preparation does not take file size, modification time, audio identity, or status from the target manifest it later clears. [Track overlays](#track-overlays) own that facts baseline.
 
@@ -187,7 +195,11 @@ Manifest file facts follow the import mode, not a single old-target baseline.
 When the canonical URI matches, Merge overlays the payload's file facts on the target row and keeps the target's last observed file status. Merge does not mark a missing file as available.
 The fingerprint belongs to the physical audio file, whether it represents one Track or a carrier shared by several CUE segments. Merge keeps that fingerprint if the recorded size and optional modification time are unchanged. If either changes, Merge clears both the audio payload length and the signature, leaving the identity pending. A one-nanosecond difference counts, as does a change between absent and present time.
 Equal facts preserve existing evidence; they do not establish that the file contents match. Merge does not compute a fingerprint.
-Restore does not consult the target row it clears. It starts from the no-row baseline: a present `file-size` or `mtime` wins; an omitted permitted fact is seeded from the filesystem when that path is present; absent media leaves an omitted fact as a zero file size and no stored modification time. An unmatched URI uses that same no-row baseline in either mode.
+Restore does not consult the target row it clears. It starts from the no-row baseline: a present `file-size` or `mtime` wins; an omitted permitted fact is seeded from the filesystem when that path is present.
+A `full` record that supplies both facts, including an explicit null `mtime`, does not resolve its media URI on disk or inspect the media file.
+Import still reads and validates the YAML document itself, including the URI syntax.
+Absent media or a [locally unrepresentable URI](#media-baseline-availability) leaves an omitted file size at zero and an omitted modification time absent.
+An unmatched URI uses that same no-row baseline in either mode.
 Restore does not inherit audio identity or status from the old target, including a carrier, and it does not fingerprint the file. Identity stays pending: zero payload length and an all-zero signature. Status stays the builder default `Available`, which is not a claim that an absent file is physically available.
 A present `file-size` field overrides the selected baseline.
 A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the selected baseline.

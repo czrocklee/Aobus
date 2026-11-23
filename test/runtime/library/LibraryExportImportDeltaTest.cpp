@@ -43,6 +43,7 @@
 #include <c4/yml/tree.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
@@ -57,6 +58,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -427,6 +429,74 @@ namespace ao::rt::test
     }
   }
 
+#ifdef _WIN32
+  TEST_CASE("LibraryYaml - relays portable Windows records through delta and metadata without a disk baseline")
+  {
+    constexpr auto kUri = "albums/CON.flac";
+    auto const temp = ao::test::TempDir{};
+    auto const sourceRoot = temp.path() / "source-music";
+    REQUIRE(std::filesystem::create_directory(sourceRoot));
+    auto const fullPath = temp.path() / "full.yaml";
+    {
+      auto output = std::ofstream{fullPath};
+      output << R"(version: 1
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: albums/CON.flac
+      title: Portable title
+      year: 1984
+      sample-rate: 96000
+      file-size: 345
+      mtime: null
+  lists: []
+)";
+      output.close();
+      REQUIRE(output);
+    }
+
+    auto source = library::test::makeTestMusicLibrary(sourceRoot, temp.path() / "source-db");
+    REQUIRE(LibraryYamlImporter{source}.importFromYamlOffline(fullPath, ImportMode::Restore));
+    auto const exportPath = temp.path() / "relay.yaml";
+
+    for (auto const mode : std::array{ExportMode::Delta, ExportMode::Metadata})
+    {
+      CAPTURE(mode);
+      auto const exportRes = LibraryYamlExporter{source}.exportToYaml(exportPath, mode);
+      INFO((exportRes ? "portable record exported" : exportRes.error().message));
+      REQUIRE(exportRes);
+      auto buffer = std::vector<char>{};
+      auto const tree = loadTree(exportPath, buffer);
+      checkTitleScalar(findExportedTitle(tree, kUri), "Portable title");
+
+      auto const recipientTemp = ao::test::TempDir{};
+      auto const targetRoot = recipientTemp.path() / "music";
+      REQUIRE(std::filesystem::create_directory(targetRoot));
+      auto target = library::test::makeTestMusicLibrary(targetRoot, recipientTemp.path() / "db");
+      auto const importRes = LibraryYamlImporter{target}.importFromYamlOffline(exportPath, ImportMode::Restore);
+      INFO((importRes ? "portable record restored" : importRes.error().message));
+      REQUIRE(importRes);
+      CHECK(importRes->payloadMode == mode);
+      CHECK(importRes->tracksCreated == 1);
+      CHECK(std::filesystem::is_empty(targetRoot));
+
+      auto transaction = target.readTransaction();
+      auto const optEntry = target.manifest().reader(transaction).get(kUri);
+      REQUIRE(optEntry);
+      CHECK(optEntry->fileSize() == 0);
+      CHECK_FALSE(optEntry->mtime());
+      auto const optTrack =
+        target.tracks().reader(transaction).get(optEntry->trackId(), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optTrack);
+      CHECK(optTrack->property().uri() == kUri);
+      CHECK(optTrack->property().sampleRate() == SampleRate{});
+      CHECK(optTrack->metadata().title() == "Portable title");
+      CHECK(optTrack->metadata().year() == 1984);
+    }
+  }
+#endif
+
   TEST_CASE("LibraryYaml - runtime merge of full and metadata backups clears only the explicitly named title")
   {
     for (auto const mode : std::array{ExportMode::Full, ExportMode::Metadata})
@@ -564,8 +634,10 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors")
+  TEST_CASE("LibraryYaml - delta and metadata import report filesystem inspection errors")
   {
+    auto const mode = GENERATE(ExportMode::Delta, ExportMode::Metadata);
+    CAPTURE(mode);
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
@@ -577,13 +649,13 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n"
-           << "export-mode: delta\n"
-           << "library:\n"
+      yaml << "version: 1\nexport-mode: " << exportModeName(mode) << "\nlibrary:\n"
            << "  tracks:\n"
            << "    - uri: \"blocked/song.flac\"\n"
            << "      title: Cannot inspect baseline\n"
            << "  lists: []\n";
+      yaml.close();
+      REQUIRE(yaml);
     }
 
     auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
@@ -597,6 +669,102 @@ namespace ao::rt::test
 
     REQUIRE(!res);
     CHECK(res.error().code == Error::Code::IoError);
+    auto transaction = ml.readTransaction();
+    CHECK_FALSE(ml.manifest().reader(transaction).get("blocked/song.flac"));
+  }
+
+  TEST_CASE("LibraryYaml - full restore skips media lookup with both file facts present")
+  {
+    constexpr auto kUri = "blocked/song.flac";
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    auto const blockedDir = root / "blocked";
+    auto const blockedFile = blockedDir / "song.flac";
+    REQUIRE(std::filesystem::create_directories(blockedDir));
+    REQUIRE(std::ofstream{blockedFile}.good());
+    auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
+
+    if (!denied.isEffective())
+    {
+      SKIP("The current process bypasses directory read restrictions");
+    }
+
+    auto ec = std::error_code{};
+    REQUIRE_FALSE(std::filesystem::is_regular_file(blockedFile, ec));
+    REQUIRE(ec == std::errc::permission_denied);
+
+    bool hasFileSize = true;
+    bool hasMtime = true;
+
+    SECTION("file size and explicit null modification time")
+    {
+    }
+
+    SECTION("file size omitted")
+    {
+      hasFileSize = false;
+    }
+
+    SECTION("modification time omitted")
+    {
+      hasMtime = false;
+    }
+
+    auto const documentPath = temp.path() / "full.yaml";
+    {
+      auto yaml = std::ofstream{documentPath};
+      yaml << "version: 1\nexport-mode: full\nlibrary:\n  resources: []\n  tracks:\n"
+           << "    - uri: " << kUri << "\n      title: Restored\n";
+
+      if (hasFileSize)
+      {
+        yaml << "      file-size: 345\n";
+      }
+
+      if (hasMtime)
+      {
+        yaml << "      mtime: null\n";
+      }
+
+      yaml << "  lists: []\n";
+      yaml.close();
+      REQUIRE(yaml);
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(root, temp.path() / "db");
+    auto const keptId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("kept.flac"));
+    auto const revisionBefore = [&ml]
+    {
+      auto transaction = ml.readTransaction();
+      return ml.libraryRevision(transaction);
+    }();
+    auto const res = LibraryYamlImporter{ml}.importFromYamlOffline(documentPath, ImportMode::Restore);
+    auto transaction = ml.readTransaction();
+    auto const tracks = ml.tracks().reader(transaction);
+    auto const manifest = ml.manifest().reader(transaction);
+    auto const optRestored = manifest.get(kUri);
+    CHECK(tracks.entryCount() == 1);
+
+    if (!hasFileSize || !hasMtime)
+    {
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+      CHECK(ml.libraryRevision(transaction) == revisionBefore);
+      CHECK(tracks.get(keptId));
+      CHECK_FALSE(optRestored);
+      return;
+    }
+
+    REQUIRE(res);
+    CHECK(res->tracksCreated == 1);
+    CHECK_FALSE(tracks.get(keptId));
+    REQUIRE(optRestored);
+    CHECK(optRestored->fileSize() == 345);
+    CHECK_FALSE(optRestored->mtime());
+    auto const optTrack = tracks.get(optRestored->trackId());
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == kUri);
+    CHECK(optTrack->metadata().title() == "Restored");
   }
 
   TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids")

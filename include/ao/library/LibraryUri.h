@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +27,10 @@ namespace ao::library
 
     static Result<LibraryUri> parse(std::string_view text);
 
+    // Derive the canonical URI of a disk input (absolute or root-relative).
+    // Once its spelling enters root, no later component may redirect outside.
+    static Result<LibraryUri> fromFilePath(std::filesystem::path const& root, std::filesystem::path const& input);
+
     std::string_view value() const noexcept { return _value; }
 
     /**
@@ -34,6 +39,14 @@ namespace ao::library
      * outside root or an unresolved symlink is rejected.
      */
     Result<std::filesystem::path> resolveUnder(std::filesystem::path const& root) const;
+
+    // Same physical admission, returning the native spelling for disk I/O.
+    Result<std::filesystem::path> resolveFileUnder(std::filesystem::path const& root) const;
+
+    // For optional media baselines only. A host-unrepresentable URI filename
+    // has no baseline, but only after admitting the root and reachable parent
+    // directories. Resolution and inspection failures remain errors.
+    Result<std::optional<std::filesystem::path>> resolveOptionalFileUnder(std::filesystem::path const& root) const;
 
     bool operator==(LibraryUri const&) const = default;
 

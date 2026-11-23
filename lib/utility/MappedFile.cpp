@@ -4,11 +4,13 @@
 #include <ao/utility/MappedFile.h>
 
 #include <ao/Error.h>
+#include <ao/utility/FileAccessPath.h>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
 #include <cstddef>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -45,7 +47,14 @@ namespace ao::utility
 
     try
     {
-      _implPtr->fileMapping = boost::interprocess::file_mapping{filePath.c_str(), boost::interprocess::read_only};
+      auto accessRes = fileAccessPath(filePath);
+
+      if (!accessRes)
+      {
+        return std::unexpected{accessRes.error()};
+      }
+
+      _implPtr->fileMapping = boost::interprocess::file_mapping{accessRes->c_str(), boost::interprocess::read_only};
       _implPtr->mappedRegion =
         boost::interprocess::mapped_region{_implPtr->fileMapping, boost::interprocess::read_only};
       _implPtr->isMapped = true;

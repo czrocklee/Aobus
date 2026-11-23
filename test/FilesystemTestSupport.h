@@ -60,6 +60,24 @@ namespace ao::test
     bool _created = false;
   };
 
+#ifdef _WIN32
+  /** Owns a local NTFS directory junction without requiring symlink privileges. */
+  class [[nodiscard]] JunctionFixture final
+  {
+  public:
+    JunctionFixture(std::filesystem::path const& target, std::filesystem::path link);
+    ~JunctionFixture() noexcept;
+
+    JunctionFixture(JunctionFixture const&) = delete;
+    JunctionFixture& operator=(JunctionFixture const&) = delete;
+    JunctionFixture(JunctionFixture&&) = delete;
+    JunctionFixture& operator=(JunctionFixture&&) = delete;
+
+  private:
+    std::filesystem::path _link;
+  };
+#endif
+
   /**
    * Temporarily denies one kind of access to a test directory and restores the
    * original platform permissions on destruction.

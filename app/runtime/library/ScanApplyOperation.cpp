@@ -29,6 +29,7 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 
 #include <algorithm>
@@ -463,7 +464,7 @@ namespace ao::rt
       return {};
     }
 
-    auto const& sheetsRes = phase.sheetsFor(fullPathRes->parent_path());
+    auto const& sheetsRes = phase.sheetsFor(utility::ordinaryFilePath(*fullPathRes).parent_path());
 
     if (!sheetsRes)
     {
@@ -634,7 +635,7 @@ namespace ao::rt
       return std::unexpected{uriRes.error()};
     }
 
-    return uriRes->resolveUnder(_ml.rootPath());
+    return uriRes->resolveFileUnder(_ml.rootPath());
   }
 
   bool ScanApplyOperation::tryValidatePathProvenance(std::size_t const itemIndex,
@@ -643,7 +644,7 @@ namespace ao::rt
   {
     auto const& item = _plan.items()[itemIndex];
 
-    if (fullPath == item.fullPath)
+    if (utility::ordinaryFilePath(fullPath) == item.fullPath)
     {
       return tryValidateSpelling(item, phase);
     }
@@ -907,7 +908,7 @@ namespace ao::rt
                                                        InspectionPhase& phase)
   {
     auto const& item = _plan.items()[itemIndex];
-    auto const& sheetsRes = phase.sheetsFor(fullPath.parent_path());
+    auto const& sheetsRes = phase.sheetsFor(utility::ordinaryFilePath(fullPath).parent_path());
 
     if (!sheetsRes)
     {

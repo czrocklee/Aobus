@@ -710,21 +710,11 @@ namespace ao::cli
 
     std::string normalizeRelinkUri(library::MusicLibrary const& ml, std::string const& input)
     {
-      auto path = utility::pathFromUtf8(input);
-
-      if (path.is_absolute())
-      {
-        auto ec = std::error_code{};
-        path = std::filesystem::relative(path, ml.rootPath(), ec);
-
-        if (ec)
-        {
-          throwCommandError(Error::Code::InvalidInput, "failed to make path root-relative: {}", ec.message());
-        }
-      }
-
-      path = path.lexically_normal();
-      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(path));
+      auto const path = utility::pathFromUtf8(input);
+      // Relative operands name manifest URIs (the old file may be absent).
+      // Absolute operands are disk paths and must pass full path admission.
+      auto uriRes =
+        path.is_absolute() ? library::LibraryUri::fromFilePath(ml.rootPath(), path) : library::LibraryUri::parse(input);
 
       if (!uriRes)
       {

@@ -23,6 +23,7 @@
 #include <ao/media/cue/Sheet.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
 
@@ -176,8 +177,10 @@ namespace ao::rt
       if (entryEc)
       {
         seenUris.insert(uri);
-        auto item = ScanItem{
-          .uri = uri, .fullPath = path, .classification = ScanClassification::Error, .errorMessage = entryEc.message()};
+        auto item = ScanItem{.uri = uri,
+                             .fullPath = utility::ordinaryFilePath(path),
+                             .classification = ScanClassification::Error,
+                             .errorMessage = entryEc.message()};
         items.push_back(std::move(item));
         return {};
       }
@@ -200,7 +203,8 @@ namespace ao::rt
         return {};
       }
 
-      auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
+      auto item =
+        ScanItem{.uri = uri, .fullPath = utility::ordinaryFilePath(path), .classification = ScanClassification::Error};
 
       item.fileSize = std::filesystem::file_size(path, entryEc);
 
@@ -265,8 +269,8 @@ namespace ao::rt
     // an unsupported format needs no URI and is ignored, as scanEntry()
     // ignores it. An entry that resolves or inspects unsafely becomes an
     // Error-classified item whose URI prefix is blocked from Missing
-    // classification. Either way the result reports false so the walk does
-    // not descend into the entry; a true result allows descent.
+    // classification. A false result skips descent, including through a
+    // successfully resolved directory alias; a true result allows descent.
     Result<bool> classifyWalkEntry(std::filesystem::directory_entry const& entry,
                                    std::filesystem::path const& root,
                                    std::filesystem::path const& resolvedRoot,
@@ -276,7 +280,7 @@ namespace ao::rt
                                    std::vector<std::string>& unrepresentedNames,
                                    std::vector<ScanItem>& items)
     {
-      auto const& entryPath = entry.path();
+      auto const entryPath = utility::ordinaryFilePath(entry.path());
       auto const relativePath = utility::pathToGenericUtf8(entryPath.lexically_relative(root));
       auto uriRes = library::LibraryUri::parse(relativePath);
 
@@ -309,7 +313,7 @@ namespace ao::rt
         return false;
       }
 
-      auto resolvedPathRes = uriRes->resolveUnder(root);
+      auto resolvedPathRes = uriRes->resolveFileUnder(root);
 
       if (!resolvedPathRes)
       {
@@ -322,14 +326,15 @@ namespace ao::rt
         return false;
       }
 
+      auto const resolvedPath = utility::ordinaryFilePath(*resolvedPathRes);
       auto canonicalUriRes =
-        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPathRes->lexically_relative(resolvedRoot)));
+        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPath.lexically_relative(resolvedRoot)));
 
       if (!canonicalUriRes)
       {
         blockedUriPrefixes.insert(std::string{uriRes->value()});
         auto item = ScanItem{.uri = std::string{uriRes->value()},
-                             .fullPath = *resolvedPathRes,
+                             .fullPath = resolvedPath,
                              .classification = ScanClassification::Error,
                              .errorMessage = canonicalUriRes.error().message};
         items.push_back(std::move(item));
@@ -348,7 +353,7 @@ namespace ao::rt
         {
           blockedUriPrefixes.insert(std::string{canonicalUriRes->value()});
           auto item = ScanItem{.uri = std::string{canonicalUriRes->value()},
-                               .fullPath = *resolvedPathRes,
+                               .fullPath = resolvedPath,
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};
           items.push_back(std::move(item));
@@ -370,7 +375,9 @@ namespace ao::rt
         unrepresentedNames.push_back(relativePath);
       }
 
-      return true;
+      // A resolved directory redirect can name an ancestor (including a
+      // Windows junction). Walk its real entry, never recurse via the alias.
+      return relativePath == canonicalUriRes->value();
     }
 
     // Advances the walk to the next entry. The entry path is taken by value
@@ -385,9 +392,9 @@ namespace ao::rt
 
       if (ec)
       {
-        return makeError(
-          Error::Code::IoError,
-          "Failed to continue filesystem walk at " + utility::pathToUtf8(entryPath) + ": " + ec.message());
+        return makeError(Error::Code::IoError,
+                         "Failed to continue filesystem walk at " +
+                           utility::pathToUtf8(utility::ordinaryFilePath(entryPath)) + ": " + ec.message());
       }
 
       return {};
@@ -1313,9 +1320,16 @@ namespace ao::rt
   Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress, std::stop_token const stopToken)
   {
     async::throwIfStopRequested(stopToken);
-    auto const root = _library.rootPath();
+    auto rootRes = utility::fileAccessPath(_library.rootPath());
 
-    if (auto rootEc = std::error_code{}; !std::filesystem::exists(root, rootEc))
+    if (!rootRes)
+    {
+      return std::unexpected{rootRes.error()};
+    }
+
+    auto const root = utility::ordinaryFilePath(*rootRes);
+
+    if (auto rootEc = std::error_code{}; !std::filesystem::exists(*rootRes, rootEc))
     {
       if (rootEc)
       {
@@ -1327,7 +1341,7 @@ namespace ao::rt
     }
 
     auto rootEc = std::error_code{};
-    auto const resolvedRoot = std::filesystem::weakly_canonical(root, rootEc);
+    auto const resolvedRoot = utility::ordinaryFilePath(std::filesystem::weakly_canonical(*rootRes, rootEc));
 
     if (rootEc)
     {
@@ -1350,7 +1364,7 @@ namespace ao::rt
 
     // 1. Walk Filesystem
     auto ec = std::error_code{};
-    auto it = std::filesystem::recursive_directory_iterator{root, ec};
+    auto it = std::filesystem::recursive_directory_iterator{*rootRes, ec};
 
     if (ec)
     {
@@ -1367,22 +1381,21 @@ namespace ao::rt
       {
         // A directory that cannot be resolved loses only its unmatched-sheet
         // reports; its media items resolve their own parents.
-        auto directoryEc = std::error_code{};
+        auto const parent = utility::ordinaryFilePath(entry.path()).parent_path();
 
-        if (auto directory = std::filesystem::weakly_canonical(entry.path().parent_path(), directoryEc); !directoryEc)
+        if (auto directoryRes = utility::weaklyCanonicalFilePath(parent); directoryRes)
         {
-          sheetDirectories.insert(std::move(directory));
+          sheetDirectories.insert(std::move(*directoryRes));
         }
       }
 
       if (progress)
       {
-        progress(entry.path());
+        progress(utility::ordinaryFilePath(entry.path()));
         async::throwIfStopRequested(stopToken);
       }
 
-      // The returned bool is the descent permission: false means the entry
-      // was classified as unsafe, so the walk must not descend into it.
+      // A false result skips descent; it need not represent an error.
       auto const canDescendRes = classifyWalkEntry(
         entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, unrepresentedNames, items);
 

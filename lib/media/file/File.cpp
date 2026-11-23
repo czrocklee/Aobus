@@ -12,6 +12,7 @@
 #include <ao/Error.h>
 #include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/MappedFile.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/String.h>
@@ -95,7 +96,8 @@ namespace ao::media::file
     if (auto const mappedRes = implPtr->mappedFile.map(path); !mappedRes)
     {
       auto error = mappedRes.error();
-      error.message = std::format("Failed to open media file '{}': {}", utility::pathToUtf8(path), error.message);
+      error.message = std::format(
+        "Failed to open media file '{}': {}", utility::pathToUtf8(utility::ordinaryFilePath(path)), error.message);
       return std::unexpected{std::move(error)};
     }
 

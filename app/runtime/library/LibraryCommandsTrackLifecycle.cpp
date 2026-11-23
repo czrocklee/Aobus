@@ -21,6 +21,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 
 #include <algorithm>
@@ -47,93 +48,31 @@ namespace ao::rt
 
     Result<ImportTarget> importTargetForPath(library::MusicLibrary const& library, std::filesystem::path const& path)
     {
-      auto ec = std::error_code{};
-      auto const root = std::filesystem::weakly_canonical(library.rootPath(), ec);
-
-      if (ec)
-      {
-        return makeError(
-          Error::Code::IoError,
-          std::format("failed to resolve music root '{}': {}", utility::pathToUtf8(library.rootPath()), ec.message()));
-      }
-
-      auto const pathText = utility::pathToUtf8(path);
-      auto const outsideRoot = [&pathText]
-      { return makeError(Error::Code::InvalidInput, std::format("track file is outside music root: {}", pathText)); };
-      auto const notFound = [&pathText]
-      { return makeError(Error::Code::NotFound, std::format("track file not found under music root: {}", pathText)); };
-      auto const escapesRoot = [](std::filesystem::path const& rel) { return rel.empty() || *rel.begin() == ".."; };
-
-      auto const candidate = path.is_absolute() ? path : root / path;
-      auto resolveEc = std::error_code{};
-      auto const fullPath = std::filesystem::weakly_canonical(candidate, resolveEc);
-      auto const tooLongToResolve = resolveEc == std::errc::filename_too_long;
-
-      if (resolveEc && !tooLongToResolve)
-      {
-        return notFound();
-      }
-
-      auto rel = std::filesystem::path{};
-
-      if (tooLongToResolve)
-      {
-        // A path too long for the platform to resolve is still measured
-        // against the URI limit in its lexical form. Without resolution only
-        // spellings compare, so it is also measured against the configured
-        // root, which may reach the resolved root through a symlink.
-        auto const lexical = candidate.lexically_normal();
-        rel = lexical.lexically_relative(root);
-
-        if (escapesRoot(rel))
-        {
-          rel = lexical.lexically_relative(library.rootPath().lexically_normal());
-        }
-      }
-      else
-      {
-        rel = fullPath.lexically_relative(root);
-      }
-
-      if (escapesRoot(rel))
-      {
-        return outsideRoot();
-      }
-
-      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(rel));
+      auto uriRes = library::LibraryUri::fromFilePath(library.rootPath(), path);
 
       if (!uriRes)
       {
-        if (uriRes.error().code == Error::Code::ValueTooLarge)
-        {
-          return makeError(
-            Error::Code::ValueTooLarge,
-            std::format("track file path is too long for the library: {}: {}", pathText, uriRes.error().message));
-        }
-
-        return makeError(
-          Error::Code::InvalidInput,
-          std::format("track file path does not form a library URI: {}: {}", pathText, uriRes.error().message));
+        return std::unexpected{uriRes.error()};
       }
 
-      // The URI fits, but its full path exceeds what the platform can open.
-      if (tooLongToResolve)
-      {
-        return makeError(
-          Error::Code::IoError,
-          std::format("track file path is too long for the platform: {}: {}", pathText, resolveEc.message()));
-      }
-
-      auto resolvedPathRes = uriRes->resolveUnder(root);
+      auto resolvedPathRes = uriRes->resolveFileUnder(library.rootPath());
 
       if (!resolvedPathRes)
       {
-        return outsideRoot();
+        return std::unexpected{resolvedPathRes.error()};
       }
 
-      if (!std::filesystem::is_regular_file(*resolvedPathRes, ec) || ec)
+      if (auto ec = std::error_code{}; !std::filesystem::is_regular_file(*resolvedPathRes, ec))
       {
-        return notFound();
+        if (ec && ec != std::errc::no_such_file_or_directory)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to inspect track file '{}': {}", utility::pathToUtf8(path), ec.message()));
+        }
+
+        return makeError(
+          Error::Code::NotFound, std::format("track file not found under music root: {}", utility::pathToUtf8(path)));
       }
 
       return ImportTarget{.fullPath = std::move(*resolvedPathRes), .uri = std::string{uriRes->value()}};
@@ -165,7 +104,8 @@ namespace ao::rt
         return std::unexpected{mediaTrackRes.error()};
       }
 
-      auto sheetsRes = readCueDirectory(library.rootPath(), targetRes->fullPath.parent_path());
+      auto sheetsRes =
+        readCueDirectory(library.rootPath(), utility::ordinaryFilePath(targetRes->fullPath).parent_path());
 
       if (!sheetsRes)
       {
@@ -239,7 +179,8 @@ namespace ao::rt
 
       // Re-read both candidate sets, including absence and sheet byte digests,
       // on the same admitted physical path used for the file proof.
-      auto sheetsRes = readCueDirectory(library.rootPath(), targetRes->fullPath.parent_path());
+      auto sheetsRes =
+        readCueDirectory(library.rootPath(), utility::ordinaryFilePath(targetRes->fullPath).parent_path());
 
       if (!sheetsRes)
       {

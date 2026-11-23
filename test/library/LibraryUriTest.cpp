@@ -14,8 +14,10 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace ao::library::test
@@ -169,6 +171,7 @@ namespace ao::library::test
                              std::string_view{"folder/../../song.flac"},
                              std::string_view{"C:/music/song.flac"},
                              std::string_view{"C:music/song.flac"},
+                             std::string_view{"album/../C:music/song.flac"},
                              std::string_view{"//server/share/song.flac"}})
     {
       CAPTURE(input);
@@ -192,6 +195,105 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("LibraryUri - fromFilePath allows folding within the root but rejects leaving and re-entering")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    REQUIRE(std::filesystem::create_directories(root / "album"));
+    REQUIRE(std::ofstream{root / "song.flac"}.good());
+
+    auto const foldedRes = LibraryUri::fromFilePath(root, "album/../song.flac");
+    REQUIRE(foldedRes);
+    CHECK(foldedRes->value() == "song.flac");
+
+    auto const escapingRes = LibraryUri::fromFilePath(root, "../music/song.flac");
+    REQUIRE_FALSE(escapingRes);
+    CHECK(escapingRes.error().code == Error::Code::InvalidInput);
+  }
+
+  TEST_CASE("LibraryUri - fromFilePath checks the traversal after entering through an alias")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    auto const outside = temp.path() / "outside";
+    auto const alias = temp.path() / "alias";
+    REQUIRE(std::filesystem::create_directory(root));
+    REQUIRE(std::filesystem::create_directory(outside));
+    REQUIRE(std::ofstream{root / "song.flac"}.good());
+#ifdef _WIN32
+    auto const entry = ao::test::JunctionFixture{root, alias};
+    auto const escape = ao::test::JunctionFixture{outside, root / "escape"};
+    auto const back = ao::test::JunctionFixture{root, outside / "back"};
+#else
+    auto const entry = ao::test::SymlinkFixture{root, alias, ao::test::SymlinkType::Directory};
+    auto const escape = ao::test::SymlinkFixture{outside, root / "escape", ao::test::SymlinkType::Directory};
+    auto const back = ao::test::SymlinkFixture{root, outside / "back", ao::test::SymlinkType::Directory};
+#endif
+
+    auto const admittedRes = LibraryUri::fromFilePath(root, alias / "song.flac");
+    REQUIRE(admittedRes);
+    CHECK(admittedRes->value() == "song.flac");
+
+    auto const escapedRes = LibraryUri::fromFilePath(root, alias / "escape" / "back" / "song.flac");
+    REQUIRE_FALSE(escapedRes);
+    CHECK(escapedRes.error().code == Error::Code::InvalidInput);
+  }
+
+  TEST_CASE("LibraryUri - fromFilePath reports denied filesystem access as IoError")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const blocked = temp.path() / "blocked";
+    REQUIRE(std::filesystem::create_directory(blocked));
+    auto const track = blocked / "song.flac";
+    REQUIRE(std::ofstream{track}.good());
+    auto const denied = ao::test::ScopedDirectoryAccessGuard{blocked, ao::test::DeniedDirectoryAccess::Read};
+
+    if (!denied.isEffective())
+    {
+      SKIP("The current process bypasses the private fixture's read restriction");
+    }
+
+    auto ec = std::error_code{};
+    CHECK_FALSE(std::filesystem::is_regular_file(track, ec));
+    REQUIRE(ec == std::errc::permission_denied);
+    auto const res = LibraryUri::fromFilePath(temp.path(), track);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+  }
+
+#ifdef _WIN32
+  TEST_CASE("LibraryUri - fromFilePath uses a drive root without accepting partial roots")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const driveRoot = temp.path().root_path();
+    auto const drive = temp.path().root_name().native();
+
+    if (drive.size() != 2 || drive.back() != L':')
+    {
+      SKIP("A local drive root is required for this test");
+    }
+
+    // Only the fixture directory is created, never a file at the drive root.
+    auto const track = temp.path() / "future.flac";
+    auto const relative = track.lexically_relative(driveRoot);
+    auto const uriRes = LibraryUri::fromFilePath(driveRoot, track);
+    REQUIRE(uriRes);
+    CHECK(uriRes->value() == utility::pathToGenericUtf8(relative));
+    auto const resolvedRes = uriRes->resolveUnder(driveRoot);
+    REQUIRE(resolvedRes);
+    CHECK(*resolvedRes == track);
+
+    for (auto const& input :
+         {std::filesystem::path{drive + relative.native()}, std::filesystem::path{L"\\" + relative.native()}})
+    {
+      CAPTURE(input);
+      auto const partialRes = LibraryUri::fromFilePath(driveRoot, input);
+      REQUIRE_FALSE(partialRes);
+      CHECK(partialRes.error().code == Error::Code::InvalidInput);
+    }
+  }
+#endif
+
   TEST_CASE("LibraryUri - resolution accepts missing roots and ordinary missing suffixes")
   {
     auto const temp = ao::test::TempDir{};
@@ -210,6 +312,75 @@ namespace ao::library::test
     REQUIRE(directRes);
     CHECK(*directRes == root / "upcoming" / "song.flac");
   }
+
+  TEST_CASE("LibraryUri - optional media distinguishes Windows separators from unrepresentable names")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    // Only resolve the spelling. No native file with any of these names is created or opened.
+    for (auto const text : {std::string_view{"album/part:edition/song.flac"},
+                            std::string_view{"CON/part:edition/song.flac"},
+                            std::string_view{"album/song:edition.flac"},
+                            std::string_view{"CON/song:edition.flac"}})
+    {
+      CAPTURE(text);
+      auto const uriRes = LibraryUri::parse(text);
+      REQUIRE(uriRes);
+      CHECK(uriRes->value() == text);
+      auto const mediaRes = uriRes->resolveOptionalFileUnder(temp.path());
+#ifdef _WIN32
+      CHECK_FALSE(mediaRes);
+
+      if (!mediaRes)
+      {
+        CHECK(mediaRes.error().code == Error::Code::InvalidInput);
+      }
+#else
+      REQUIRE(mediaRes);
+      REQUIRE(*mediaRes);
+      CHECK(utility::pathToGenericUtf8((*mediaRes)->lexically_relative(temp.path())) == text);
+#endif
+    }
+
+    auto const uriRes = LibraryUri::parse("album/CON.flac");
+    REQUIRE(uriRes);
+    auto const mediaRes = uriRes->resolveOptionalFileUnder(temp.path());
+    REQUIRE(mediaRes);
+#ifdef _WIN32
+    CHECK_FALSE(*mediaRes);
+#else
+    REQUIRE(*mediaRes);
+    CHECK(utility::pathToGenericUtf8((*mediaRes)->lexically_relative(temp.path())) == "album/CON.flac");
+#endif
+  }
+
+#ifdef _WIN32
+  TEST_CASE("LibraryUri - an unrepresentable optional filename does not hide a non-directory root or prefix")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const notDirectory = temp.path() / "not-a-directory";
+    REQUIRE(std::ofstream{notDirectory}.good());
+    auto root = temp.path();
+    auto text = std::string_view{};
+
+    SECTION("root is a regular file")
+    {
+      root = notDirectory;
+      text = "CON.flac";
+    }
+
+    SECTION("reachable parent is a regular file")
+    {
+      text = "not-a-directory/CON.flac";
+    }
+
+    auto const uriRes = LibraryUri::parse(text);
+    REQUIRE(uriRes);
+    auto const mediaRes = uriRes->resolveOptionalFileUnder(root);
+    REQUIRE_FALSE(mediaRes);
+    CHECK(mediaRes.error().code == Error::Code::IoError);
+  }
+#endif
 
   TEST_CASE("LibraryUri - resolution accepts in-root symlinks")
   {
@@ -257,8 +428,53 @@ namespace ao::library::test
     auto const resolvedRes = uriRes->resolveUnder(root);
     REQUIRE_FALSE(resolvedRes);
     CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
-    CHECK(resolvedRes.error().message.contains("unresolved symlink"));
+    CHECK(resolvedRes.error().message.contains("Failed to resolve library path component"));
   }
+
+#ifdef _WIN32
+  TEST_CASE("LibraryUri - rejects out-of-root and dangling Windows junctions")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    auto target = std::filesystem::path{};
+    bool removeTarget = false;
+
+    SECTION("a junction to an existing directory outside the root")
+    {
+      target = temp.path() / "outside";
+    }
+
+    SECTION("an in-root junction with a removed target")
+    {
+      target = root / "album";
+      removeTarget = true;
+    }
+
+    std::filesystem::create_directories(root);
+    std::filesystem::create_directories(target);
+    auto const alias = root / "alias";
+    auto const junction = ao::test::JunctionFixture{target, alias};
+    REQUIRE(std::filesystem::equivalent(alias, target));
+
+    if (removeTarget)
+    {
+      REQUIRE(std::filesystem::remove(target));
+    }
+
+    auto const uriRes = LibraryUri::parse("alias/song.flac");
+    REQUIRE(uriRes);
+    auto const resolvedRes = uriRes->resolveFileUnder(root);
+    REQUIRE_FALSE(resolvedRes);
+    CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
+
+    // An unavailable filename must not turn an error at the junction into an absent baseline.
+    auto const optionalUriRes = LibraryUri::parse("alias/CON.flac");
+    REQUIRE(optionalUriRes);
+    auto const optionalRes = optionalUriRes->resolveOptionalFileUnder(root);
+    REQUIRE_FALSE(optionalRes);
+    CHECK(optionalRes.error().code == resolvedRes.error().code);
+  }
+#endif
 
   TEST_CASE("LibraryUri - resolution requires an item below the root")
   {

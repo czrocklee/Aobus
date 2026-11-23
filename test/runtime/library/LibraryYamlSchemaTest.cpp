@@ -346,6 +346,73 @@ library:
     CHECK(res.error().message.contains("resolves outside the library root"));
   }
 
+#ifdef _WIN32
+  TEST_CASE("LibraryYaml - full restore keeps recorded facts without a usable Windows file spelling")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    REQUIRE(std::filesystem::create_directory(root));
+    auto library = library::test::makeTestMusicLibrary(root, temp.path() / "db");
+    auto const yamlPath = temp.path() / "full.yaml";
+    auto const hasFileSize = GENERATE(false, true);
+    auto const hasMtime = GENERATE(false, true);
+    CAPTURE(hasFileSize, hasMtime);
+
+    {
+      // CON.flac has a valid portable URI but is not a Windows disk filename.
+      auto output = std::ofstream{yamlPath, std::ios::binary};
+      output << R"(version: 1
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: albums/CON.flac
+      title: Portable track
+)";
+
+      if (hasFileSize)
+      {
+        output << "      file-size: 345\n";
+      }
+
+      if (hasMtime)
+      {
+        output << "      mtime: {seconds: 1700000000, nanoseconds: 25}\n";
+      }
+
+      output << "  lists: []\n";
+      REQUIRE(output.good());
+    }
+
+    auto const res = LibraryYamlImporter{library}.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    auto transaction = library.readTransaction();
+    auto const manifest = library.manifest().reader(transaction);
+    auto const optEntry = manifest.get("albums/CON.flac");
+
+    INFO((res ? "full restore succeeded" : res.error().message));
+    REQUIRE(res);
+    CHECK(res->tracksCreated == 1);
+    REQUIRE(optEntry);
+    CHECK(optEntry->fileSize() == (hasFileSize ? 345U : 0U));
+
+    if (hasMtime)
+    {
+      CHECK(optEntry->mtime() == FileTimestamp{.seconds = 1700000000, .nanoseconds = 25});
+    }
+    else
+    {
+      CHECK_FALSE(optEntry->mtime());
+    }
+
+    auto const optTrack =
+      library.tracks().reader(transaction).get(optEntry->trackId(), TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == "albums/CON.flac");
+    CHECK(optTrack->metadata().title() == "Portable track");
+    CHECK(std::filesystem::is_empty(root));
+  }
+#endif
+
   TEST_CASE("LibraryYaml - import rejects a track URI that is not a supported audio file")
   {
     auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);

@@ -6,7 +6,9 @@
 #include <aclapi.h>
 #include <catch2/catch_test_macros.hpp>
 #include <windows.h>
+#include <winioctl.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -73,7 +75,7 @@ namespace ao::test
       return std::system_error{static_cast<std::int32_t>(code), std::system_category(), operation};
     }
 
-    bool isSymlinkCreationUnavailable(std::error_code const& ec) noexcept
+    bool isLinkCreationUnavailable(std::error_code const& ec) noexcept
     {
       if (ec.category() != std::system_category())
       {
@@ -83,6 +85,82 @@ namespace ao::test
       auto const error = static_cast<DWORD>(ec.value());
       return error == ERROR_PRIVILEGE_NOT_HELD || error == ERROR_ACCESS_DENIED || error == ERROR_NOT_SUPPORTED ||
              error == ERROR_INVALID_FUNCTION;
+    }
+
+    std::filesystem::path junctionLinkIoPath(std::filesystem::path link)
+    {
+      REQUIRE(link.is_absolute());
+      auto const& native = link.make_preferred().native();
+
+      if (native.starts_with(L"\\\\"))
+      {
+        return std::filesystem::path{L"\\\\?\\UNC\\" + native.substr(2)};
+      }
+
+      return std::filesystem::path{L"\\\\?\\" + native};
+    }
+
+    std::error_code setJunctionTarget(std::filesystem::path const& link, std::filesystem::path const& target)
+    {
+      constexpr std::size_t kFixtureTargetUnits = 512;
+      // NTFS mount-point reparse data uses byte lengths and offsets into two
+      // adjacent NUL-terminated strings. Unlike a symlink, this can be set by
+      // an ordinary user who owns the empty directory.
+      struct MountPointData final
+      {
+        DWORD tag = IO_REPARSE_TAG_MOUNT_POINT;
+        WORD dataLength = 0;
+        WORD reserved = 0;
+        WORD substituteNameOffset = 0;
+        WORD substituteNameLength = 0;
+        WORD printNameOffset = 0;
+        WORD printNameLength = 0;
+        std::array<wchar_t, (kFixtureTargetUnits * 2) + 6> names{};
+      };
+
+      auto data = MountPointData{};
+      auto const printName = std::filesystem::path{target}.make_preferred().native();
+      auto const substituteName = LR"(\??\)" + printName;
+      auto const printOffset = substituteName.size() + 1;
+      auto const nameUnits = printOffset + printName.size() + 1;
+      REQUIRE(nameUnits <= data.names.size());
+      std::ranges::copy(substituteName, data.names.begin());
+      std::ranges::copy(printName, data.names.begin() + static_cast<std::ptrdiff_t>(printOffset));
+      data.substituteNameLength = static_cast<WORD>(substituteName.size() * sizeof(wchar_t));
+      data.printNameOffset = static_cast<WORD>(printOffset * sizeof(wchar_t));
+      data.printNameLength = static_cast<WORD>(printName.size() * sizeof(wchar_t));
+      auto const bytes = offsetof(MountPointData, names) + (nameUnits * sizeof(wchar_t));
+      data.dataLength = static_cast<WORD>(bytes - offsetof(MountPointData, substituteNameOffset));
+
+      auto handle = Handle{};
+      auto* const nativeHandle = ::CreateFileW(link.c_str(),
+                                               GENERIC_WRITE,
+                                               0,
+                                               nullptr,
+                                               OPEN_EXISTING,
+                                               FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                                               nullptr);
+
+      if (nativeHandle == INVALID_HANDLE_VALUE)
+      {
+        return {static_cast<std::int32_t>(::GetLastError()), std::system_category()};
+      }
+
+      handle.value = nativeHandle;
+
+      if (DWORD returnedBytes = 0; ::DeviceIoControl(handle.value,
+                                                     FSCTL_SET_REPARSE_POINT,
+                                                     &data,
+                                                     static_cast<DWORD>(bytes),
+                                                     nullptr,
+                                                     0,
+                                                     &returnedBytes,
+                                                     nullptr) == FALSE)
+      {
+        return {static_cast<std::int32_t>(::GetLastError()), std::system_category()};
+      }
+
+      return {};
     }
 
     std::vector<std::byte> currentUserToken()
@@ -281,7 +359,7 @@ namespace ao::test
       return;
     }
 
-    if (isSymlinkCreationUnavailable(ec))
+    if (isLinkCreationUnavailable(ec))
     {
       SKIP("symlink fixture is unavailable: " << ec.message());
     }
@@ -303,6 +381,40 @@ namespace ao::test
     {
       // NOLINTNEXTLINE(modernize-use-std-print): C I/O cannot throw from this noexcept cleanup path.
       std::fprintf(stderr, "Aobus test symlink cleanup failed (error %d)\n", ec.value());
+    }
+  }
+
+  JunctionFixture::JunctionFixture(std::filesystem::path const& target, std::filesystem::path link)
+    : _link{junctionLinkIoPath(std::move(link))}
+  {
+    if (!target.is_absolute() || target.root_name().native().size() != 2)
+    {
+      SKIP("Junction fixture requires a temporary directory on a local drive");
+    }
+
+    REQUIRE(std::filesystem::create_directory(_link));
+
+    if (auto const ec = setJunctionTarget(_link, target); ec)
+    {
+      REQUIRE(std::filesystem::remove(_link));
+
+      if (isLinkCreationUnavailable(ec))
+      {
+        SKIP("Junction fixture is unavailable: " << ec.message());
+      }
+
+      throw std::system_error{ec, "failed to set the directory junction target"};
+    }
+  }
+
+  JunctionFixture::~JunctionFixture() noexcept
+  {
+    // Remove the link itself, never its target (which may already be absent).
+    if (::RemoveDirectoryW(_link.c_str()) == FALSE)
+    {
+      auto const error = ::GetLastError();
+      // NOLINTNEXTLINE(modernize-use-std-print): C I/O cannot throw from this noexcept cleanup path.
+      std::fprintf(stderr, "Aobus test junction cleanup failed (Win32 error %lu)\n", error);
     }
   }
 
