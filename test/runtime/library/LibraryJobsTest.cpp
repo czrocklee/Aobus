@@ -658,6 +658,53 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
+  TEST_CASE("LibraryJobs - caller stop before worker admission leaves the prepared restore unapplied", "[concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const existingTrackId =
+      libraryFixture.addTrack(library::test::TrackSpec{.title = "Existing", .uri = "existing.flac"});
+    auto& storage = libraryFixture.library();
+    auto executor = QueuedExecutor{};
+    auto stopSource = std::stop_source{};
+    auto changes = makeLibraryChanges(executor, storage);
+    auto runtimeFixture = LibraryCommandsFixture{storage, changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+    auto& jobs = library.jobs();
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Restored");
+    auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    REQUIRE(planRes);
+    auto const initialRevision = storage.libraryRevision(storage.readTransaction());
+
+    auto publishedRevisions = std::vector<std::uint64_t>{};
+    auto changeSub = changes.onChanged([&publishedRevisions](LibraryChangeSet const& change)
+                                       { publishedRevisions.push_back(change.libraryRevision); });
+    auto availabilitySub = library.onAuthoringAvailabilityChanged(
+      [&stopSource](LibraryAuthoringAvailability const& availability)
+      {
+        if (availability.state == LibraryAuthoringState::Maintenance)
+        {
+          std::ignore = stopSource.request_stop();
+        }
+      });
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future =
+      spawnFuture(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes), stopSource.get_token()), completedPtr);
+
+    REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
+    CHECK(stopSource.stop_requested());
+    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+    CHECK(library.authoringAvailability().state == LibraryAuthoringState::Available);
+    CHECK(publishedRevisions.empty());
+    auto const read = storage.readTransaction();
+    CHECK(storage.libraryRevision(read) == initialRevision);
+    CHECK_FALSE(storage.manifest().reader(read).get("imported.flac"));
+    auto const optExisting = storage.tracks().reader(read).get(existingTrackId);
+    REQUIRE(optExisting);
+    CHECK(optExisting->metadata().title() == "Existing");
+  }
+
   TEST_CASE("LibraryJobs - cancellation after import commit preserves mandatory completion", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};

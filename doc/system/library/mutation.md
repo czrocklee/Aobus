@@ -259,7 +259,8 @@ Input, validation, serialization, and pre-commit storage failures remain `Result
 After durable commit, a revision invariant or mandatory-publication admission/delivery failure in a live runtime terminates the process; it is never reported as an ordinary pre-commit error or exposed as a public authoring outcome.
 Caller cancellation cannot reinterpret a durable commit before its internal terminal is `Published` or `RetiredByClosing`.
 The latter is a Closing-only internal terminal; a still-live waiter observes the existing `OperationCancelled` control-flow channel without any claim that the commit rolled back.
-Coordinated Closing privately seals later mutation admission, retires queued commands, requests stop from active pre-transaction work, and waits for lane quiescence before callback work stops.
+Coordinated Closing privately seals later mutation admission, retires queued commands, requests stop from active pre-transaction or transaction work, and waits for lane quiescence before callback work stops.
+The stop request does not guarantee rollback: whether active work stops depends on its checkpoints. The current [YAML apply kernel](yaml-transfer.md#failure-and-cancellation) does not poll for Closing once its transaction starts.
 
 ## Persistence and versioning
 

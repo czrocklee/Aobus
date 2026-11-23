@@ -1412,6 +1412,31 @@ cc_binary(
     deps = ["//bazel:compile_contract"],
 )
 
+# Keep native LMDB interposition out of the ordinary runtime and product binaries.
+cc_test(
+    name = "library_import_apply_cancellation_test",
+    size = "small",
+    srcs = ["linux/runtime/LibraryImportApplyCancellationTest.cpp"],
+    # The callers are in the //lib/lmdb static archive linked into this executable.
+    # --wrap redirects those references at this link; the native LMDB provider may be shared.
+    linkopts = [
+        "-Wl,--wrap=mdb_drop",
+        "-Wl,--wrap=mdb_txn_begin",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":async_test_support",
+        ":library_test_support",
+        ":runtime_test_support",
+        "//app/runtime",
+        "//lib/async",
+        "//lib/library",
+        "//lib/utility",
+        "@aobus_native_deps//:lmdb",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
 # Shared application-runtime contracts retain ApplicationTestMain's fatal self-reentry.
 cc_test(
     name = "runtime_test",

@@ -90,6 +90,7 @@ test_suite(
         "//test:desktop_test",
         "//test:dictionary_publication_test",
         "//test:i18n_test",
+        "//test:library_import_apply_cancellation_test",
         "//test:library_test",
         "//test:media_fixture_test",
         "//test:media_test",
@@ -127,7 +128,7 @@ test_suite(
 )
 
 test_suite(
-    name = "application_tests",
+    name = "portable_application_tests",
     tests = [
         "//test:desktop_test",
         "//test:i18n_test",
@@ -135,6 +136,14 @@ test_suite(
         "//test:runtime_test",
         "//test:uimodel_test",
         "//test:winui_test",
+    ],
+)
+
+test_suite(
+    name = "application_tests",
+    tests = [
+        ":portable_application_tests",
+        "//test:library_import_apply_cancellation_test",
     ],
 )
 
@@ -337,7 +346,7 @@ filegroup(
     name = "check_cpp_tests",
     testonly = True,
     srcs = [
-        ":application_tests",
+        ":portable_application_tests",
         ":portable_core_tests",
         "//test:backend_test",
         "//test:cli_test",
@@ -348,6 +357,7 @@ filegroup(
         "@platforms//os:linux": [
             "//bazel/header_share:sparse_headers_test",
             "//test:dictionary_publication_test",
+            "//test:library_import_apply_cancellation_test",
         ],
         "//conditions:default": [],
     }) + select({
