@@ -1321,9 +1321,11 @@ standalone verification. It also runs the lexical Catch2 registration detector,
 the authored-C++ orphan audit over
 the tracked and untracked non-ignored Git manifest
 ([test ownership](#test-ownership)), and the stale-`NOLINT` check. The test does
-not invoke Bazel or run queries against the graph. All three native
-hosts run the ambient policy; Linux additionally folds one Debug projection of
-the same producer into that test.
+not invoke Bazel or run queries against the graph. On success it publishes
+`registered-test-labels.json`, listing the public test labels for registered
+`cc_test` owners in the invocation's configuration. The [completion gate](#completion-gate)
+checks their summaries in that same configuration. On Linux the test also audits
+a Debug projection of the graph; that projection adds no execution requirements.
 
 The Linux-only `//:native_driver_policy` `py_test` consumes the same fastbuild
 and Debug fact files plus the `native_policy_compilers` output group, which names
@@ -2059,7 +2061,17 @@ check must have one passing configured test summary. Removing the backend or an 
 test from its suite cannot silently drop it; WinUI automation is required on
 Windows under `--ci`. Missing or skipped required checks fail, and a Bazel
 `SKIPPED` abort reports the skipped configuration. No second query or test
-invocation is needed.
+invocation is needed. Full local and CI native checks require the
+[ownership audit's label list](#in-graph-native-policy) to be nonempty, with
+one passing BEP summary per label in the audited configuration. For a wrapped
+`cc_test` owner, the graph supplies its public wrapper label; `cc_binary` owners
+need only be built. These summaries establish target-level passes, not that
+every registered case executed.
+
+`//:native_policy` runs locally. Native completion sets `--nozip_undeclared_test_outputs`
+so its label list is a file in the selected build tree. The audit must produce
+exactly one passing `testResult`; completion does not choose between manifests
+from retries, repeated runs, or shards.
 
 ### Test-result cache admission
 
@@ -2110,7 +2122,7 @@ not test execution. For completion, include a `cc_test` owner in the test
 selection as well, through its public wrapper if it has one. Adding an owner
 only to an analysis or build root does not schedule it. The
 [completion gate](#completion-gate) separately checks passing summaries for its
-required tests.
+required tests and configured Catch registration owners.
 
 Tests link the ordinary product libraries where they exercise production
 implementations. For example, `//test:utility_test` links the utility and

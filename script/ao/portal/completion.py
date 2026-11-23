@@ -12,7 +12,14 @@ from typing import Any, NamedTuple
 
 from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
-from ao.portal import bazel_ci_summary, bazel_sanitizers, bazel_workflows, bazel_workspace
+from ao.portal import (
+    bazel_attempt,
+    bazel_ci_summary,
+    bazel_sanitizers,
+    bazel_test_ownership,
+    bazel_workflows,
+    bazel_workspace,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +42,7 @@ def validate(request: Request) -> str:
 _CI_REPOSITORY_SUITE = "//test/script:ci_repository_checks"
 _COMMON_CHECKS = {"//test/script:" + name for name in ("docs", "format_docs", "ruff", "name_audit", "test_audit")}
 _WORKFLOWS = "//test/script:workflows"
+_NATIVE_POLICY = "//:native_policy"
 
 
 class _CheckSelection(NamedTuple):
@@ -69,7 +77,7 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         "//test/script:native_repository_checks" if request.ci else "//test/script:repository_checks",
     }
     required = {
-        "//:native_policy",
+        _NATIVE_POLICY,
         "//test/lint:production_lint",
         "//test/lint:lint_test",
         "//test:backend_test",
@@ -130,9 +138,37 @@ def _main_label(label: str) -> str:
     return label.lstrip("@") if label.startswith(("@@//", "@//")) else label
 
 
-def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bool) -> None:
+def _registered_test_labels(results: list[dict[str, Any]], tree: Path) -> tuple[str, set[str]]:
+    """Read the ownership audit's output from this invocation, under its tree lock."""
+    if len(results) != 1:
+        raise ValueError(f"expected one {_NATIVE_POLICY} testResult, got {len(results)}")
+    event = results[0]
+    result = event.get("testResult")
+    if not isinstance(result, dict) or result.get("status") != "PASSED":
+        raise ValueError(f"expected a passing {_NATIVE_POLICY} testResult")
+    # The caller selected this event by its id.testResult.label.
+    configuration = event["id"]["testResult"].get("configuration")
+    config_id = configuration.get("id") if isinstance(configuration, dict) else None
+    if not isinstance(config_id, str) or not config_id:
+        raise ValueError(f"missing configuration id on {_NATIVE_POLICY} testResult")
+    outputs = result.get("testActionOutput")
+    if not isinstance(outputs, list) or not all(isinstance(out, dict) and out.get("name") for out in outputs):
+        raise ValueError(f"expected named testActionOutput entries from {_NATIVE_POLICY}")
+    name = "test.outputs/" + bazel_test_ownership.REGISTERED_TEST_LABELS_FILE
+    files = [out for out in outputs if out["name"] == name]
+    if len(files) != 1:
+        raise ValueError(f"expected one {name} output from {_NATIVE_POLICY}")
+    manifest = bazel_attempt.test_output_file(files[0], root=tree)
+    labels = json.loads(manifest.read_text(encoding="utf-8"))
+    if not isinstance(labels, list) or not labels:
+        raise ValueError(f"expected a nonempty list of public execution labels in {manifest}")
+    return config_id, {bazel_test_ownership._label(label) for label in labels}
+
+
+def _verify_required_checks(path: Path, selection: _CheckSelection, *, tree: Path, fresh: bool) -> None:
     required = selection.required.copy()
     summaries: dict[str, list[dict[str, Any]]] = {}
+    policy_results: list[dict[str, Any]] = []
     skipped: dict[str, set[str]] = {}
     expanded: set[str] = set()
     finished = last = False
@@ -155,6 +191,8 @@ def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bo
                             raise ValueError(f"empty or ambiguous test suite expansion: {name}")
                         expanded.add(name)
                         required.update(map(_main_label, suite["testLabels"]))
+                if "testResult" in identity and _main_label(identity["testResult"]["label"]) == _NATIVE_POLICY:
+                    policy_results.append(event)
                 if "testSummary" in identity:
                     label = _main_label(identity["testSummary"]["label"])
                     summaries.setdefault(label, []).append(event)
@@ -177,6 +215,13 @@ def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bo
         if missing_suites := selection.suites - expanded:
             raise ValueError("missing required test suites: " + ", ".join(sorted(missing_suites)))
         required -= selection.optional
+        registered: set[str] = set()
+        policy_config = None
+        if _NATIVE_POLICY in required and _NATIVE_POLICY in summaries:
+            policy_config, registered = _registered_test_labels(policy_results, tree)
+            # These owners are compatible in the actual graph, even if an optional
+            # suite member or a separately maintained requirement says otherwise.
+            required.update(registered)
         unsummarized = required - summaries.keys()
         skipped_labels = unsummarized & skipped.keys()
         missing = unsummarized - skipped_labels
@@ -192,6 +237,9 @@ def _verify_required_checks(path: Path, selection: _CheckSelection, *, fresh: bo
             events = summaries[label]
             if len(events) != 1 or not events[0]["id"]["testSummary"].get("configuration", {}).get("id"):
                 raise ValueError(f"ambiguous configured test summary: {label}")
+            if label == _NATIVE_POLICY or label in registered:
+                if events[0]["id"]["testSummary"]["configuration"]["id"] != policy_config:
+                    raise ValueError(f"required check did not run in the audited configuration: {label}")
             summary = events[0]["testSummary"]
             if summary.get("overallStatus") != "PASSED":
                 raise ValueError(f"required check did not pass: {label}")
@@ -234,6 +282,8 @@ def _test_graph(request: Request, tree: Path, config: str, selection: _CheckSele
         f"--profile={attempt / 'profile.json.gz'}",
         *selection.options,
     ]
+    if _NATIVE_POLICY in selection.required:
+        options.append("--nozip_undeclared_test_outputs")
     if request.fresh:
         options.append("--nocache_test_results")
     print(f"Bazel test graph ({config}); evidence: {attempt}", flush=True)
@@ -256,7 +306,7 @@ def _test_graph(request: Request, tree: Path, config: str, selection: _CheckSele
         if native.native_platform() == "windows":
             _report_wasapi(bep, tree)
         if status == 0:
-            _verify_required_checks(bep, selection, fresh=request.fresh)
+            _verify_required_checks(bep, selection, tree=tree, fresh=request.fresh)
         return status
     finally:
         if log.is_file():

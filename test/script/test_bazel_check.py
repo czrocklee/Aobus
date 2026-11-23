@@ -121,7 +121,13 @@ class CheckInvocationTest(unittest.TestCase):
         self.assertIn("--nohome_rc", test[:command])
         self.assertEqual(test[separator:], ["--", "//...", "-" + REPOSITORY_SUITE])
         self.assertLessEqual(
-            {"--config=ci", "--jobs=3", "--remote_cache=https://cache.invalid", "--nocache_test_results"},
+            {
+                "--config=ci",
+                "--jobs=3",
+                "--remote_cache=https://cache.invalid",
+                "--nocache_test_results",
+                "--nozip_undeclared_test_outputs",
+            },
             set(test[command + 1 : separator]),
         )
 
@@ -240,7 +246,8 @@ class CompletionEvidenceTest(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.path = Path(temp.name) / "tests.bep.json"
+        self.tree = Path(temp.name).resolve()
+        self.path = self.tree / "tests.bep.json"
         self.scope = completion._CheckSelection(suites={"//:suite"}, required={"//:gate"}, optional={"//test:foreign"})
         self.expansion = {
             "id": {"pattern": {"pattern": ["//..."]}},
@@ -253,7 +260,84 @@ class CompletionEvidenceTest(unittest.TestCase):
 
     def verify(self, events, *, fresh=False):
         self.path.write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
-        completion._verify_required_checks(self.path, self.scope, fresh=fresh)
+        completion._verify_required_checks(self.path, self.scope, tree=self.tree, fresh=fresh)
+
+    def policy_result(self, labels, *, directory=None, status="PASSED", config=CHECKSUM):
+        manifest = (directory or self.tree) / "registered-test-labels.json"
+        manifest.write_text(json.dumps(labels), encoding="utf-8")
+        return {
+            "id": {"testResult": {"label": "//:native_policy", "configuration": {"id": config}}},
+            "testResult": {
+                "status": status,
+                "testActionOutput": [{"name": "test.outputs/registered-test-labels.json", "uri": manifest.as_uri()}],
+            },
+        }
+
+    def test_registered_owner_requires_its_public_pass_even_when_not_selected_by_a_suite(self):
+        public = "//test:fixture_wrapper"
+        self.scope = completion._CheckSelection({"//:suite"}, {"//:native_policy"}, {public, "//test:foreign"})
+        base = [self.expansion, _summary(), self.policy_result([public]), _summary("//:native_policy")]
+        # Even a passing inner test is not a run of the wrapper and its fixtures.
+        for evidence in ([], [_summary("//test:inner.native")]):
+            with self.subTest(evidence=evidence), self.assertRaises(bazel_native.BazelWorkspaceError):
+                self.verify([*base, *evidence, self.finish, self.last])
+        events = [*base, _summary(public, cached=1), self.finish, self.last]
+        self.verify(events)
+        with self.assertRaises(bazel_native.BazelWorkspaceError):
+            self.verify(events, fresh=True)
+        self.verify([*base, _summary(public), self.finish, self.last], fresh=True)
+
+    def test_owner_and_audit_summaries_must_match_the_audit_results_configuration(self):
+        self.scope = completion._CheckSelection(set(), {"//:native_policy"}, set())
+        result = self.policy_result([UNIT_TEST])
+        for other in (UNIT_TEST, "//:native_policy"):
+            summaries = [
+                _summary(label, config="other" if label == other else CHECKSUM)
+                for label in (UNIT_TEST, "//:native_policy")
+            ]
+            with self.subTest(label=other), self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+                self.verify([result, *summaries, self.finish, self.last])
+            self.assertIn(other, str(caught.exception))
+
+    def test_native_completion_requires_one_passing_ownership_result_with_its_output(self):
+        self.scope = completion._CheckSelection(set(), {"//:native_policy"}, set())
+        valid = self.policy_result([UNIT_TEST])
+        missing_output = self.policy_result([UNIT_TEST])
+        missing_output["testResult"]["testActionOutput"] = []
+        summaries = [_summary("//:native_policy"), _summary()]
+        self.verify([valid, *summaries, self.finish, self.last])
+        for reason, evidence in (
+            ("no result", []),
+            ("no output", [missing_output]),
+            ("failed result", [self.policy_result([UNIT_TEST], status="FAILED")]),
+            ("ambiguous results", [valid, self.policy_result([UNIT_TEST], config="other")]),
+        ):
+            with self.subTest(reason=reason), self.assertRaises(bazel_native.BazelWorkspaceError):
+                self.verify([*evidence, *summaries, self.finish, self.last])
+
+    def test_incomplete_audit_evidence_identifies_the_missing_field(self):
+        self.scope = completion._CheckSelection(set(), {"//:native_policy"}, set())
+        for field, diagnostic in (("configuration", "configuration id"), ("testActionOutput", "testActionOutput")):
+            result = self.policy_result([UNIT_TEST])
+            section = result["id"]["testResult"] if field == "configuration" else result["testResult"]
+            del section[field]
+            with self.subTest(field=field), self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+                self.verify([result, _summary("//:native_policy"), _summary(), self.finish, self.last])
+            self.assertIn("//:native_policy", str(caught.exception))
+            self.assertIn(diagnostic, str(caught.exception))
+
+    def test_native_completion_requires_a_nonempty_list_of_labels_from_the_owned_tree(self):
+        self.scope = completion._CheckSelection(set(), {"//:native_policy"}, set())
+        outside = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        summaries = [_summary("//:native_policy"), _summary()]
+        for reason, labels, directory in (
+            ("empty list", [], self.tree),
+            ("object instead of list", {UNIT_TEST: True}, self.tree),
+            ("valid list from another tree", [UNIT_TEST], outside),
+        ):
+            result = self.policy_result(labels, directory=directory)
+            with self.subTest(reason=reason), self.assertRaises(bazel_native.BazelWorkspaceError):
+                self.verify([result, *summaries, self.finish, self.last])
 
     def test_cached_pass_counts_unless_a_fresh_execution_was_requested(self):
         events = [self.expansion, _summary(cached=1), _summary("//:gate"), self.finish, self.last]
@@ -327,7 +411,12 @@ class CompletionEvidenceTest(unittest.TestCase):
         self.scope = completion._selection("linux", completion.Request())
         for discovered in ((), (label,)):
             expansions = self.expanded_check_suites(*discovered)
-            events = [expansions, _summary(), *(_summary(item) for item in self.scope.required - {label})]
+            events = [
+                expansions,
+                self.policy_result([UNIT_TEST]),
+                _summary(),
+                *(_summary(item) for item in self.scope.required - {label}),
+            ]
             for evidence in ([], [_skipped(label, "skip-cfg")], [_summary(label, status="FAILED")]):
                 with (
                     self.subTest(discovered=discovered, evidence=evidence),
@@ -341,7 +430,12 @@ class CompletionEvidenceTest(unittest.TestCase):
         for platform in ("macos", "windows"):
             with self.subTest(platform=platform):
                 self.scope = completion._selection(platform, completion.Request())
-                base = [self.expanded_check_suites(label), _summary(), _skipped(label, "skip-cfg")]
+                base = [
+                    self.expanded_check_suites(label),
+                    self.policy_result([UNIT_TEST]),
+                    _summary(),
+                    _skipped(label, "skip-cfg"),
+                ]
                 for gate in ("//:native_policy", "//test/lint:production_lint"):
                     others = [_summary(item) for item in self.scope.required - {gate}]
                     for evidence in ([], [_skipped(gate, "skip-cfg")]):

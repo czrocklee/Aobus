@@ -65,11 +65,13 @@ def _native_policy_facts_impl(ctx):
 
     records = []
     executed = []
+    test_wrappers = []
     built = []
     compilers = []
     for dep in ctx.attr.test_roots:
         records.append(dep[ValidationFactsInfo].records)
         executed.append(dep[ValidationFactsInfo].executables)
+        test_wrappers.append(dep[ValidationFactsInfo].test_wrappers)
         compilers.append(dep[ValidationFactsInfo].compilers)
     for dep in ctx.attr.product_roots:
         records.append(dep[ValidationFactsInfo].records)
@@ -81,7 +83,7 @@ def _native_policy_facts_impl(ctx):
 
     output = ctx.actions.declare_file(ctx.label.name + ".aobus-native-policy.json")
     ctx.actions.write(output, json.encode({
-        "schema": 1,
+        "schema": 2,
         "platform": platform,
         "mode": mode,
         "profile": profile,
@@ -90,6 +92,7 @@ def _native_policy_facts_impl(ctx):
         "builtin_include_roots": builtin,
         "records": sorted(depset(transitive = records).to_list()),
         "executed": sorted(depset(transitive = executed).to_list()),
+        "test_wrappers": sorted(depset(transitive = test_wrappers).to_list()),
         "built": sorted(depset(transitive = built).to_list()),
     }))
     return [
@@ -169,6 +172,7 @@ def native_validation_tests(
     )
     py_test(
         name = name,
+        # Only the first fact file describes the invocation's required tests.
         args = ["$(rlocationpath :" + inputs + ")"] + select({
             "@platforms//os:linux": ["$(rlocationpath :" + debug_inputs + ")"],
             "//conditions:default": [],

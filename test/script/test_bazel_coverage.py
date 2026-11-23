@@ -15,7 +15,7 @@ from unittest import mock
 
 from ao.core.bazel_native import BazelWorkspaceError
 from ao.core.paths import PROJECT_ROOT
-from ao.portal import bazel_coverage, bazel_test_ownership, build_env
+from ao.portal import bazel_attempt, bazel_coverage, bazel_test_ownership, build_env
 from ao.portal.measurements import CoverageRequest
 
 _SPEC = importlib.util.spec_from_file_location("aobus_coverage_collector", PROJECT_ROOT / "bazel/coverage/collect.py")
@@ -395,6 +395,24 @@ class CoverageAdmissionTests(unittest.TestCase):
 
 
 class CurrentArtifactTests(unittest.TestCase):
+    def test_artifact_uri_must_be_canonical_and_stay_inside_the_selected_tree(self):
+        with tempfile.TemporaryDirectory(prefix="aobus-coverage-") as temporary:
+            parent = Path(temporary).resolve()
+            root = parent / "owned"
+            inside = _file(root, "artifact.txt", "inside")
+            outside = _file(parent, "outside.txt", "outside")
+            self.assertEqual(bazel_attempt.test_output_file({"uri": inside.as_uri()}, root=root), inside)
+            self.assertEqual(bazel_attempt.test_output_file({"uri": outside.as_uri()}), outside)
+            with self.assertRaisesRegex(ValueError, "outside the owned tree"):
+                bazel_attempt.test_output_file({"uri": outside.as_uri()}, root=root)
+            with self.assertRaisesRegex(ValueError, "noncanonical"):
+                bazel_attempt.test_output_file(
+                    {"uri": inside.as_uri().replace("artifact.txt", "%61rtifact.txt")}, root=root
+                )
+            traversal = root.as_uri() + "/../outside.txt"
+            with self.assertRaisesRegex(ValueError, "outside the owned tree"):
+                bazel_attempt.test_output_file({"uri": traversal}, root=root)
+
     def test_missing_second_configuration_is_not_covered_by_first_result(self):
         with tempfile.TemporaryDirectory(prefix="aobus-coverage-") as temporary:
             root = Path(temporary).resolve()
@@ -454,7 +472,7 @@ class CurrentArtifactTests(unittest.TestCase):
             path = _file(root, "coverage-覆盖-Résumé %20/outputs.zip", "current archive")
             # Bazel 9.2's captured wire mixes raw Latin-1 with escapes for C1 bytes.
             wire = root.as_uri() + "/coverage-è¦%C2%86ç%C2%9B%C2%96-RÃ©sumÃ©%20%2520/outputs.zip"
-            self.assertEqual(bazel_coverage._artifact({"uri": wire}, root=root), path)
+            self.assertEqual(bazel_attempt.test_output_file({"uri": wire}, root=root), path)
 
     def test_partial_bep_retains_completed_archive_without_proving_success(self):
         with tempfile.TemporaryDirectory(prefix="aobus-coverage-") as temporary:

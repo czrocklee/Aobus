@@ -3,6 +3,8 @@
 import contextlib
 import io
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +13,7 @@ from unittest import mock
 from ao.portal import bazel_validation as validation
 
 
-def _document(*, platform="linux", declared=(), executed=(), built=(), gtk=True, system_media=True):
+def _document(*, platform="linux", declared=(), executed=(), built=(), wrappers=(), gtk=True, system_media=True):
     return {
         "platform": platform,
         "gtk_enabled": gtk,
@@ -19,11 +21,12 @@ def _document(*, platform="linux", declared=(), executed=(), built=(), gtk=True,
         "records": [{"declared": list(declared)}],
         "executed": list(executed),
         "built": list(built),
+        "test_wrappers": list(wrappers),
     }
 
 
-def _executable(label, kind, source):
-    return {"label": label, "kind": kind, "is_tool": False, "sources": [source]}
+def _executable(label, kind, source, *, is_tool=False):
+    return {"label": label, "kind": kind, "is_tool": is_tool, "sources": [source]}
 
 
 class NativeSourceAuditTest(unittest.TestCase):
@@ -42,6 +45,19 @@ class NativeSourceAuditTest(unittest.TestCase):
         self.write(path, 'TEST_CASE("Example - exercises the owner") {}\n')
         return path
 
+    def facts(self, name, *, mode="fastbuild", **fields):
+        document = {
+            **_document(**fields),
+            "schema": 2,
+            "mode": mode,
+            "profile": None,
+            "builtin_include_roots": [],
+            "records": [],
+        }
+        for role in ("executed", "built"):
+            document[role] = [json.dumps(entry) for entry in document[role]]
+        return self.write(name, json.dumps(document))
+
     def test_building_a_cc_test_does_not_execute_its_registration(self):
         test = self.registration("test/unit/EngineTest.cpp")
         bench = self.registration("test/unit/EngineBenchmark.cpp")
@@ -49,27 +65,51 @@ class NativeSourceAuditTest(unittest.TestCase):
         test_owner = _executable("//test:engine_test", "cc_test", test)
         bench_owner = _executable("//test:engine_bench", "cc_binary", bench)
         document = _document(built=[test_owner, bench_owner])
-        errors, deferred = validation.registration_audit([document], self.root)
+        errors, deferred, required = validation.registration_audit([document], self.root)
         self.assertEqual(len(errors), 2, errors)
         self.assertTrue(any("//test:engine_test" in error and "executed" in error for error in errors), errors)
         self.assertTrue(any(orphan in error for error in errors), errors)
-        self.assertFalse(deferred)
+        self.assertFalse(deferred or required)
 
         # A test can also supply build evidence for a binary it requires.
         (self.root / orphan).unlink()
-        document = _document(executed=[test_owner, bench_owner])
-        self.assertEqual(validation.registration_audit([document], self.root), ([], {}))
+        reached = _document(executed=[test_owner, bench_owner])
+        self.assertEqual(validation.registration_audit([reached], self.root), ([], {}, ["//test:engine_test"]))
+        errors, _, required = validation.registration_audit([document, reached], self.root)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("//test:engine_test", errors[0])
+        self.assertFalse(required)
+
+    def test_a_tool_configuration_test_does_not_own_a_target_registration(self):
+        source = self.registration("test/unit/EngineTest.cpp")
+        tool = _executable("//test:engine_test", "cc_test", source, is_tool=True)
+        errors, deferred, required = validation.registration_audit([_document(executed=[tool])], self.root)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn(source, errors[0])
+        self.assertFalse(deferred or required)
+
+    def test_conflicting_public_wrappers_fail_the_registration_audit(self):
+        source = self.registration("test/unit/EngineTest.cpp")
+        owner = _executable("//test:engine_impl", "cc_test", source)
+        document = _document(
+            executed=[owner],
+            wrappers=[("//test:engine_impl", "//test:engine_one"), ("//test:engine_impl", "//test:engine_two")],
+        )
+        errors, deferred, required = validation.registration_audit([document], self.root)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn(owner["label"], errors[0])
+        self.assertFalse(deferred or required)
 
     def test_a_frontend_disabled_in_only_one_configuration_cannot_excuse_a_missing_registration(self):
         gtk = self.registration("test/linux-gtk/WindowTest.cpp")
         media = self.registration("test/systemmedia/linux/BackendTest.cpp")
         disabled = _document(gtk=False, system_media=False)
-        errors, deferred = validation.registration_audit([disabled], self.root)
+        errors, deferred, _ = validation.registration_audit([disabled], self.root)
         self.assertFalse(errors)
         self.assertEqual(set(deferred), {gtk, media})
 
         gtk_enabled = _document(system_media=False)
-        errors, deferred = validation.registration_audit([disabled, gtk_enabled], self.root)
+        errors, deferred, _ = validation.registration_audit([disabled, gtk_enabled], self.root)
         self.assertEqual(len(errors), 1, errors)
         self.assertIn(gtk, errors[0])
         self.assertEqual(set(deferred), {media})
@@ -79,7 +119,8 @@ class NativeSourceAuditTest(unittest.TestCase):
         for platform in ("linux", "macos", "windows"):
             with self.subTest(platform=platform):
                 document = _document(platform=platform, gtk=False, system_media=False)
-                errors, deferred = validation.registration_audit([document], self.root)
+                errors, deferred, required = validation.registration_audit([document], self.root)
+                self.assertFalse(required)
                 orphans, skipped = validation.authored_cpp_audit([document], [source])
                 if platform == "linux":
                     self.assertEqual(len(errors), 1, errors)
@@ -125,34 +166,70 @@ class NativeSourceAuditTest(unittest.TestCase):
             [f"{source}:2: {check}"],
         )
 
-    def test_an_orphan_in_the_checkout_fails_the_gate_even_with_passing_action_policy(self):
+    def test_an_untracked_orphan_fails_the_gate_without_publishing_test_labels(self):
+        # The fixture owns its repository even when the caller selected a different worktree.
+        self.enterContext(mock.patch.dict(os.environ))
+        for name in tuple(os.environ):
+            if name.startswith(("GIT_", "AOBUS_GIT_")):
+                del os.environ[name]
+        os.environ.update(HOME=str(self.root), XDG_CONFIG_HOME=str(self.root), GIT_CONFIG_NOSYSTEM="1")
+        subprocess.run(["git", "init", "--quiet"], cwd=self.root, check=True)
         orphan = "app/core/Orphan.cpp"
         self.write(orphan, "int orphan;\n")
-        document = {
-            **_document(),
-            "schema": 1,
-            "mode": "dbg",
-            "profile": None,
-            "builtin_include_roots": [],
-            "records": [],
-        }
-        facts = self.write("facts.json", json.dumps(document))
-
-        def list_untracked(command, *, cwd, **options):
-            self.assertTrue(Path(command[0]).stem.startswith("git"), command)
-            self.assertIn("ls-files", command)
-            self.assertIn("-z", command)
-            self.assertEqual(cwd, self.root)
-            return mock.Mock(stdout=f"{orphan}\0".encode() if "--others" in command else b"")
+        facts = self.facts("facts.json")
+        outputs = self.root / "outputs"
 
         with (
             mock.patch.object(validation, "project_root", return_value=self.root),
             mock.patch.object(validation, "validate_native_policy", return_value=[]),
-            mock.patch.object(validation.subprocess, "run", side_effect=list_untracked),
             contextlib.redirect_stderr(io.StringIO()) as diagnostics,
         ):
-            self.assertEqual(validation.run([str(facts)], {}), 1)
+            self.assertEqual(validation.run([str(facts)], {"TEST_UNDECLARED_OUTPUTS_DIR": str(outputs)}), 1)
         self.assertIn(orphan, diagnostics.getvalue())
+        self.assertFalse((outputs / "registered-test-labels.json").exists())
+
+    def test_success_reports_only_the_invocations_public_registered_tests(self):
+        direct = self.registration("test/unit/DirectTest.cpp")
+        wrapped = self.registration("test/unit/WrappedTest.cpp")
+        debug = self.registration("test/unit/DebugTest.cpp")
+        bench = self.registration("test/unit/EngineBenchmark.cpp")
+        unregistered = "test/unit/Probe.cpp"
+        self.write(unregistered, "int main() {}\n")
+        owner = _executable("@@//test:fixture_impl", "cc_test", wrapped)
+        owner["sources"].append(self.registration("test/unit/AlsoWrappedTest.cpp"))
+        facts = self.facts(
+            "primary.json",
+            executed=[
+                _executable("//test:z_direct.native", "cc_test", direct),
+                owner,
+                _executable("//test:probe", "cc_test", unregistered),
+            ],
+            built=[_executable("//test:benchmark", "cc_binary", bench)],
+            wrappers=[("@@//test:fixture_impl", "@@//test:a_wrapper")],
+        )
+        debug_facts = self.facts(
+            "debug.json", mode="dbg", executed=[_executable("//test:debug_test", "cc_test", debug)]
+        )
+        outputs = self.root / "outputs"
+        arguments = [str(facts), str(debug_facts)]
+        with (
+            mock.patch.object(validation, "project_root", return_value=self.root),
+            mock.patch.object(validation, "validate_native_policy", return_value=[]),
+            mock.patch.object(validation, "_authored_cpp_manifest", return_value=[]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                self.assertEqual(validation.run(arguments, {}), 0)
+            self.assertIn("TEST_UNDECLARED_OUTPUTS_DIR", diagnostics.getvalue())
+            self.assertIn("manifest not written", diagnostics.getvalue())
+            self.assertFalse(outputs.exists())
+            with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                self.assertEqual(validation.run(arguments, {"TEST_UNDECLARED_OUTPUTS_DIR": str(outputs)}), 0)
+            self.assertNotIn("manifest not written", diagnostics.getvalue())
+        self.assertEqual(
+            json.loads((outputs / "registered-test-labels.json").read_text(encoding="utf-8")),
+            ["//test:a_wrapper", "//test:z_direct.native"],
+        )
 
 
 class FoldedActionSelectionTest(unittest.TestCase):
