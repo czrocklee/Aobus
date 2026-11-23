@@ -32,6 +32,9 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 Press Ctrl+L to select the playing track in the List where playback started, even if the track also appears in the List you're browsing. If a quick filter hides it there, Aobus shows an unfiltered view without clearing your filter. If the source List was deleted or no longer contains the track, Aobus looks in **All Tracks** instead.
 If reveal changes views, press the mouse Back button once to return to the view and filter you left.
 
+When a library reopens with a track to resume, Now Playing shows that track's cover if available. Selecting another row doesn't change it.
+If your layout sets the cover slot's action to **Jump to Album**, click the slot to select the restored track in **All Tracks** with the **Albums** presentation. The action works without a cover and does not start playback.
+
 ### Choose what happens if a PipeWire device disappears
 
 In the output chooser, select your named PipeWire device, such as a USB DAC. Leave **Let system use other outputs** off (the default) if you don't want audio to play through speakers when the DAC is absent at startup or disconnects during playback.

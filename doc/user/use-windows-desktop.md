@@ -62,7 +62,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    If the total shows `--:--`, the elapsed time remains visible, but the slider is disabled.
    Press `Ctrl+L`, or choose **Reveal Current Track** from the Now Playing menu in Modern or **Playback** in Classic. Aobus selects and scrolls to the track in the List where playback started, using **All Tracks** if that List no longer contains it. If reveal changes views, `Alt+Left` returns to the view you left with its filter intact.
    Aobus remembers your output backend, device, and profile. If the named output you requested is missing at launch, Aobus waits rather than playing through the default device. Reconnect it or choose another output, then press Play.
-   Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
+   Now Playing can show a restored track's cover before you press Play. If there's no track to show or the track has no assigned cover, you see a transparent equalizer instead.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.
    In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline. See [interpreting playback quality](play-music.md#inspect-playback-quality) to distinguish source fidelity, pipeline changes, and incomplete evidence.

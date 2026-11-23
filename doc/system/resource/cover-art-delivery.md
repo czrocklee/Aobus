@@ -57,10 +57,8 @@ A composition root that supplies no cache directory leaves the cache inert, and 
 GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
 A `ResourceImageController` maintains one optional active image interest, while `CoverArtView` distinguishes empty, no-cover placeholder, and decoded-image presentation and delegates decoded-image rendering to `ImageWidget`.
 
-Runtime shares one read-through memory cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers of one library runtime.
+Within one library runtime, interactive frontends and system-media adapters share a read-through memory cache bounded to 128 entries and 128 MiB of aggregate encoded bytes.
 Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or destruction.
-Each presenter retains one generation-fenced selection.
-Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
 
 TUI retains one cancellable selection-settle task, one selected-resource byte interest and transform task, transformed cover data for that id, and separate Kitty paint state for image id `1` and the last terminal box.
 MPRIS retains process-local id-to-file/URL/byte-size entries and one current-resource request in each frontend bridge.
@@ -132,7 +130,7 @@ The slot defaults are:
 
 GTK exposes those choices through `track.table.groupCoverPlaceholderStyle`, `track.coverArt.placeholderStyle`, and `playback.image.placeholderStyle`.
 Unknown values fall back to the slot default and produce a diagnostic.
-WinUI exposes the inspector choice through `track.coverArt.placeholderStyle` in its shell preset documents, and uses the fixed mapping wherever a slot authors nothing. Neither the group heading nor the Now Playing slot is authored, and no placeholder choice is persisted.
+WinUI shell presets can set the Inspector's `track.coverArt.placeholderStyle`. Group headings and Now Playing use their slot defaults. WinUI neither offers nor saves a user preference for these styles.
 
 The shared SVG assets for `note`, `vinyl`, and `equalizer` live under `asset/ui/no-cover/`; `soul` reuses the authoritative brand mark under `asset/brand/`.
 GTK packages them as GResources and WinUI packages them as application content; both packages include the brand license alongside the Soul mark.
@@ -140,18 +138,13 @@ GTK packages them as GResources and WinUI packages them as application content; 
 
 ### Current playback artwork
 
-The shared playback snapshot publishes the current track's live primary cover
-alongside its title, artist and album. Committed cover replacement, removal and
-track deletion reach Now Playing consumers in GTK, WinUI, TUI and system media
-adapters through the normal playback subscription. TUI artwork itself follows
-its selected detail track. Metadata refresh and missing-track fallback belong
-to [playback application commits](../playback/application-commit.md#live-now-playing-metadata).
+The playback snapshot publishes the current track's live primary cover alongside its title, artist, and album. Now Playing in GTK, WinUI, AppKit, and system-media adapters receives committed cover changes and track deletion through the playback subscription. TUI Detail follows the focused row instead. [Playback application commits](../playback/application-commit.md#live-now-playing-metadata) owns metadata refresh and missing-track fallback.
 
 ### GTK full-size image
 
-The GTK Now Playing component selects the track, primary cover and placeholder identity from the shared playback snapshot.
-It has no separate library-change subscription or track read. Same-track cover edits and removals arrive through that snapshot.
-Idle transport clears the displayed track, cover and placeholder identity even if the snapshot retains now-playing metadata.
+GTK Now Playing takes the track and primary cover from the playback snapshot and derives its placeholder identity from that metadata, without a separate library subscription or track read. During Idle it shows a track only when held for deferred resume, even if succession has been cleared. Stop clears the track, cover, and placeholder identity.
+
+The cover slot's configured **Jump to Album** (`jumpToAlbum`) action reveals the playback track in the All Tracks album presentation, not the row being browsed. The button's accessible name is “Show current album”. The action works without a decoded cover and does not start playback. With no playback track, it does nothing.
 
 Loading an invalid id cancels the active interest and displays the configured no-cover placeholder.
 A full-size cache hit is applied directly.
@@ -159,8 +152,8 @@ On a miss, the controller clears stale imagery and requests the shared loader.
 The loader requests shared `ResourceBytes`, checks source dimensions, decodes through Gdk on a worker, inserts a successful current result under the full-size key, and completes on the GTK callback executor.
 Absence, an over-budget source, or decode failure leaves the widget empty.
 The controller reports decoded-image availability after cache lookup and every current asynchronous completion.
-The persistent Now Playing cover remains visible with its placeholder when no decoded image is available, while the tooltip-surface `playback.image` remains hidden during invalid-id, pending, absent, over-budget, and decode-failure states.
-A successful current decode makes that tooltip content eligible for the shell's normal delayed reveal; losing the decoded image hides the tooltip root so the shell cancels a pending reveal or closes an open tooltip.
+The persistent Now Playing slot remains visible unless hidden by the layout: an invalid cover id shows its placeholder, while a valid id whose image is pending or unavailable leaves the slot empty. The tooltip-surface `playback.image` stays hidden in either case.
+Only a decoded image for the current cover makes the tooltip eligible for the [shell's delayed reveal](../shell/layout-lifecycle.md#expand-and-build). If the decoded image disappears, the shell cancels a pending reveal or closes the tooltip. If an image arrives beneath a stationary pointer, the tooltip stays closed until the pointer leaves and re-enters.
 
 `ImageWidget` fits and rerenders the source for logical allocation and display scale.
 During allocation churn it may show a cheaper interim resample and schedules a high-quality render after the settle interval.
@@ -181,10 +174,7 @@ The widget controller cancels its old interest on every full-size or thumbnail l
 
 ### WinUI
 
-Selecting no group or Inspector entity clears and hides both decoded image and placeholder.
-Now Playing instead selects its configured placeholder when there is no active track.
-Selecting an invalid id for an entity clears the decoded image and displays the slot's fixed no-cover placeholder.
-Selecting a valid id hides the placeholder before consulting the encoded-byte cache or starting an asynchronous runtime read.
+WinUI hides artwork and its placeholder when a group or Inspector slot has no entity. Now Playing follows the playback snapshot, including a track held after restore; with no track, it shows `equalizer`. An invalid resource id shows the slot's [no-cover placeholder](#placeholder-presentation). A valid id hides the placeholder before the cache lookup or asynchronous read.
 An `AppRuntime`-owned `ResourceByteMemoryCache` coalesces equal resource requests and shares retained encoded bytes among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the cache.
 A current cached or loaded payload is copied into owning native memory on a worker; the callback executor wraps that memory as a random-access stream and replaces the image through the native XAML decoder without another application payload copy.
 Absent, over-budget, or undecodable valid resources leave both the decoded image and placeholder hidden.
@@ -287,9 +277,6 @@ Frontend cache-key and transform changes require no library migration because de
 
 GTK and WinUI display a cover slot for every grouped track section.
 Album groups may display their valid primary cover; other group types carry no representative resource and therefore display the group-heading placeholder.
-GTK displays the configured slot placeholder for an invalid id, keeps the Now Playing placeholder visible while playback is idle, clears it immediately when a valid-resource load starts, and updates only through the current callback interest.
-The GTK Now Playing cover tooltip appears only for a successfully decoded current image; under the [shell tooltip scheduling contract](../shell/layout-lifecycle.md#expand-and-build), an image that becomes available beneath a stationary pointer remains closed until the pointer leaves and re-enters.
-WinUI displays fixed `monogram`, `vinyl`, and `equalizer` placeholders in group heading, Inspector, and Now Playing respectively, derives the vinyl outer ring and center label from the current shared theme accent, keeps the Now Playing placeholder visible without an active track, and applies the same invalid-id/pending-valid distinction through generation-fenced presenters.
 AppKit publishes selected and playing encoded bytes only for the current identities; its native views and MediaPlayer adapter decode independently. Absent or stale results publish no decoded cover or MediaPlayer artwork, while an image-less native `AobusArtworkView` draws its own system-note fallback.
 TUI shows its compact absence line while delivery is pending and when the resource is absent, over-budget, or undecodable; this line is not a shared graphical no-cover placeholder and does not reserve an artwork panel.
 MPRIS omits `mpris:artUrl` while file export is pending and when no valid file URL can be produced.
@@ -323,7 +310,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`ResourceByteMemoryCacheTest.cpp`](../../../test/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond cache destruction, application-runtime and controlled-reader paths, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement cache.
 - [`ResourceImageLoaderTest.cpp`](../../../test/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
-- [`PlaybackImageTest.cpp`](../../../test/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, live cover updates across playback snapshots, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
+- [`PlaybackImageTest.cpp`](../../../test/linux-gtk/layout/components/PlaybackImageTest.cpp) covers live cover updates, authored visibility, decoded-image tooltip gating and hover timing, and album reveal without starting a restored track, including when artwork is absent or undecodable.
 - [`CoverArtPlaceholderTest.cpp`](../../../test/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects style ids, slot defaults, candidate priority, semantic group monograms, and deterministic foreground colors.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`AppKitArtworkScenario.mm`](../../../test/macos-appkit/AppKitArtworkScenario.mm) and [`AppKitMediaScenario.mm`](../../../test/macos-appkit/AppKitMediaScenario.mm) protect current-cover replacement, native and MediaPlayer artwork publication, clock-anchor retention, and synchronous-cache-hit publication.

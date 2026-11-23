@@ -151,14 +151,7 @@ The native item view reports the complete display count while materializing rows
 on demand; its row-model least-recently-used cache holds at most 2048 entries.
 Category table cells own only first-name text/count projections and render localized `+N` including duplicates; sorting/grouping uses the primary name, not all-credit membership.
 Inspector Credits use complete owning sections, displaying every name/kind/role and independent per-kind mixed state. Its all-kind/category edit actions open Properties at the requested scope.
-Cover art is asynchronous and ignores results from superseded selections.
-Both shells pin the selection's artwork above the inspector's fields, where it stays put as those fields scroll. Classic caps it smaller than Modern does; neither cap changes what is shown.
-One active-runtime loader coalesces group-heading, Inspector, Now Playing, and SMTC requests and holds at most 128 encoded-byte cache entries.
-An invalid cover resource id displays `monogram` for a realized group heading, `vinyl` in Inspector, and `equalizer` in Now Playing.
-Now Playing continues to display `equalizer` before playback starts and after transport returns to idle.
-Windows exposes no placeholder preference in this version.
-A valid resource id hides its placeholder while loading; absence or decode failure remains empty rather than being presented as confirmed no-cover.
-When no group-heading or Inspector entity exists, both placeholder and decoded cover are hidden.
+Both shells pin the selection's cover above the scrolling Inspector fields. Classic uses a smaller size cap than Modern. Now Playing instead follows the playback track, including a restored track before playback resumes. [WinUI cover delivery](../resource/cover-art-delivery.md#winui) owns the shared cache, placeholder states, and cancellation rules.
 
 The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
 
