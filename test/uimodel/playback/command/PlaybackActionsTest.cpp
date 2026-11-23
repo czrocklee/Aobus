@@ -29,7 +29,6 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
-#include <tuple>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -116,17 +115,13 @@ namespace ao::uimodel::test
     auto& playback = fixture.runtime().playback();
 
     std::int32_t playSelectionCount = 0;
-    auto actions = PlaybackActions{playback, [&playSelectionCount] { ++playSelectionCount; }};
-
+    auto actions = PlaybackActions{playback,
+                                   [&playSelectionCount]
+                                   {
+                                     ++playSelectionCount;
+                                     return true;
+                                   }};
     actions.setSelectionAvailable(true);
-
-    SECTION("Play uses selection when idle without a current track")
-    {
-      CHECK(actions.tryExecute(PlaybackCommand::Play));
-
-      CHECK(playSelectionCount == 1);
-      CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
-    }
 
     SECTION("PlayPause toggles between playing and paused")
     {
@@ -139,6 +134,7 @@ namespace ao::uimodel::test
       CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
 
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+      CHECK(playSelectionCount == 0);
     }
 
     SECTION("PlayPause resumes a restored sequence track")
@@ -175,7 +171,31 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackActions - primary Play needs a selection or a resumable subject")
+  TEST_CASE("PlaybackActions - returns whether the selected target accepted Play or PlayPause")
+  {
+    auto fixture = PlaybackUiFixture{};
+    fixture.makePlaybackReady();
+    auto const command = GENERATE(PlaybackCommand::Play, PlaybackCommand::PlayPause);
+    auto const selectionAccepted = GENERATE(false, true);
+    CAPTURE(playbackCommandId(command), selectionAccepted);
+    std::int32_t playSelectionCount = 0;
+    auto actions = PlaybackActions{fixture.runtime().playback(),
+                                   [&]
+                                   {
+                                     ++playSelectionCount;
+                                     return selectionAccepted;
+                                   }};
+
+    CHECK_FALSE(actions.tryExecute(command));
+    CHECK(playSelectionCount == 0);
+
+    actions.setSelectionAvailable(true);
+    REQUIRE(actions.isEnabled(command));
+    CHECK(actions.tryExecute(command) == selectionAccepted);
+    CHECK(playSelectionCount == 1);
+  }
+
+  TEST_CASE("PlaybackActions - Play resumes its subject before starting the focused selection")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -183,26 +203,10 @@ namespace ao::uimodel::test
     auto const trackB = fixture.addPlayableTrack("Browsed Track");
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    auto actions = PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto actions = PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
-    auto availability = AvailabilityLog{actions};
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::PlayPause));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play));
-    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
 
-    availability.clear();
     REQUIRE(runtime.views().setSelection(fixture.viewId, {trackA}));
-    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, "$title = \"Browsed Track\""));
-    fixture.executor->drain();
-    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
-    availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, ""));
-    fixture.executor->drain();
-    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
     REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
     REQUIRE(fixture.tryWaitForPlayback(trackA));
     auto const offset = std::chrono::milliseconds{250};
@@ -238,7 +242,7 @@ namespace ao::uimodel::test
     CHECK(fixture.tryWaitForPlayback(trackB));
   }
 
-  TEST_CASE("PlaybackActions - local and system Play retain deferred audio after clearing the sequence")
+  TEST_CASE("PlaybackActions - retains deferred audio after clearing the sequence")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -246,7 +250,7 @@ namespace ao::uimodel::test
     auto const trackB = fixture.addPlayableTrack("Selected Track");
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    auto actions = PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto actions = PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
 
     REQUIRE(fixture.playFromView(trackA));
@@ -266,19 +270,18 @@ namespace ao::uimodel::test
     REQUIRE(playback.snapshot().transport.elapsed == offset);
 
     REQUIRE(playback.snapshot().transport.hasDeferredResume);
-    auto const origin = GENERATE(PlaybackActionOrigin::Primary, PlaybackActionOrigin::SystemMedia);
-    CAPTURE(origin);
+    CHECK(actions.isCapable(PlaybackCommand::Play));
 
     SECTION("Play resumes without a selected row")
     {
       REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
-      REQUIRE(actions.tryExecute(PlaybackCommand::Play, origin));
+      REQUIRE(actions.tryExecute(PlaybackCommand::Play));
     }
 
     SECTION("PlayPause resumes despite browsing a different row")
     {
       REQUIRE(runtime.views().setSelection(fixture.viewId, {trackB}));
-      REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause, origin));
+      REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
     }
 
     SECTION("A pending output leaves the deferred track and the selection alone")
@@ -291,14 +294,15 @@ namespace ao::uimodel::test
       REQUIRE(held.transport == audio::Transport::Idle);
       REQUIRE(held.hasDeferredResume);
       REQUIRE(held.output.optPendingOutputSelection);
-      CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, origin));
-      CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause, origin));
+      CHECK_FALSE(actions.isCapable(PlaybackCommand::Play));
+      CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
+      CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
       CHECK(playback.snapshot().transport == held);
       CHECK(runtime.views().firstVisibleSelectedTrack(fixture.viewId) == trackB);
 
       playback.commands().setOutputDevice(output);
       fixture.executor->drain();
-      REQUIRE(actions.tryExecute(PlaybackCommand::Play, origin));
+      REQUIRE(actions.tryExecute(PlaybackCommand::Play));
     }
 
     fixture.executor->drain();
@@ -307,104 +311,64 @@ namespace ao::uimodel::test
     CHECK(playback.snapshot().transport.elapsed == offset);
   }
 
-  TEST_CASE("PlaybackActions - only system media may use the host fallback without a selected row")
+  TEST_CASE("PlaybackActions - Play rechecks the visible selection before the filter change is delivered")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    std::int32_t selectedStarts = 0;
-    std::int32_t remoteStarts = 0;
-    bool remoteAvailable = false;
-    bool remoteStarted = true;
-    auto actions = PlaybackActions{fixture.runtime().playback(),
-                                   [&] { ++selectedStarts; },
-                                   SystemMediaPlayHandler{
-                                     .canPlay = [&] { return remoteAvailable; },
-                                     .play =
-                                       [&]
-                                     {
-                                       ++remoteStarts;
-                                       return remoteStarted;
-                                     },
-                                   }};
-
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(selectedStarts == 0);
-    CHECK(remoteStarts == 0);
-    REQUIRE(actions.isCapable(PlaybackCommand::Play));
-    auto selectedOnly = PlaybackActions{fixture.runtime().playback(), [&] { ++selectedStarts; }};
-    CHECK_FALSE(selectedOnly.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(selectedStarts == 0);
-
-    remoteAvailable = true;
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
-    remoteStarted = false;
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(remoteStarts == 1);
-    remoteStarted = true;
-    REQUIRE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(remoteStarts == 2);
-    CHECK(selectedStarts == 0);
-    actions.setSelectionAvailable(true);
-    REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
-    CHECK(remoteStarts == 2);
-    CHECK(selectedStarts == 1);
-  }
-
-  TEST_CASE("PlaybackActions - focused selection publishes system media availability changes without a selection")
-  {
-    auto fixture = PlaybackUiFixture{};
-    fixture.makePlaybackReady();
-    auto const trackId = fixture.addPlayableTrack("Projected Track");
+    auto const selectedTrack = fixture.addPlayableTrack("Selected Track");
+    fixture.addPlayableTrack("Other Track");
+    fixture.executor->drain();
     auto& runtime = fixture.runtime();
-    auto const canStartRemote = [&runtime]
+    auto& views = runtime.views();
+    std::int32_t startRequests = 0;
+    auto actions = PlaybackActions{runtime.playback(),
+                                   [&startRequests]
+                                   {
+                                     ++startRequests;
+                                     return true;
+                                   }};
+    actions.bindFocusedSelection(runtime.workspace(), views);
+    auto availability = AvailabilityLog{actions};
+    auto const checkNoPlayTarget = [&]
     {
-      auto const viewId = runtime.workspace().snapshot().activeViewId;
-      auto& views = runtime.views();
+      CHECK_FALSE(actions.isCapable(PlaybackCommand::Play));
 
-      if (!views.selectedTrackIds(viewId).empty())
+      for (auto const command : {PlaybackCommand::Play, PlaybackCommand::PlayPause})
       {
-        return views.firstVisibleSelectedTrack(viewId) != kInvalidTrackId;
+        CAPTURE(playbackCommandId(command));
+        CHECK_FALSE(actions.isEnabled(command));
+        CHECK_FALSE(actions.tryExecute(command));
       }
 
-      auto const projectionRes = views.findTrackListProjection(viewId);
-      return projectionRes && (*projectionRes)->size() > 0;
+      CHECK(startRequests == 0);
     };
-    auto actions = PlaybackActions{runtime.playback(),
-                                   [] {},
-                                   SystemMediaPlayHandler{
-                                     .canPlay = canStartRemote,
-                                     .play = canStartRemote,
-                                   }};
-    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
-    auto availability = AvailabilityLog{actions};
 
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    checkNoPlayTarget();
+    REQUIRE(views.setSelection(fixture.viewId, {selectedTrack}));
+    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
+    CHECK(availability.aggregateCount == 1);
+    REQUIRE(actions.isEnabled(PlaybackCommand::Play));
 
     availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Missing")"));
+    REQUIRE(views.setFilter(fixture.viewId, R"($title = "Other Track")"));
+    // The filter already hides the selected row; the projection change is still queued.
+    checkNoPlayTarget();
     fixture.executor->drain();
+    CHECK(views.trackListState(fixture.viewId).selection == std::vector{selectedTrack});
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK_FALSE(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(availability.aggregateCount == 1);
+    checkNoPlayTarget();
 
     availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, ""));
+    REQUIRE(views.setFilter(fixture.viewId, ""));
     fixture.executor->drain();
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(actions.tryExecute(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
-    CHECK(runtime.views().firstVisibleSelectedTrack(fixture.viewId) == kInvalidTrackId);
-
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {trackId}));
-    availability.clear();
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Missing")"));
-    fixture.executor->drain();
-    checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
-    CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play, PlaybackActionOrigin::SystemMedia));
+    CHECK(availability.aggregateCount == 1);
+    CHECK(actions.isEnabled(PlaybackCommand::Play));
+    CHECK(actions.isEnabled(PlaybackCommand::PlayPause));
+    CHECK(actions.isCapable(PlaybackCommand::Play));
+    REQUIRE(actions.tryExecute(PlaybackCommand::Play));
+    CHECK(startRequests == 1);
   }
 
   TEST_CASE("PlaybackActions - manual play resumes the interrupted track when its output appears")
@@ -418,7 +382,8 @@ namespace ao::uimodel::test
     fixture.executor->drain();
     auto const trackId = fixture.addPlayableTrack("Interrupted Track");
     auto const selectedTrackId = fixture.addPlayableTrack("Different Selection");
-    auto actions = PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto actions = PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
+    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
 
     REQUIRE(fixture.playFromView(trackId));
     auto const offset = std::chrono::milliseconds{250};
@@ -499,7 +464,7 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("Sequence First");
     auto const secondTrack = fixture.addPlayableTrack("Sequence Second");
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     SECTION("Next and Previous enablement follows live sequence targets")
     {
@@ -552,7 +517,7 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     SECTION("no track distinguishes unavailable from ready playback")
     {
@@ -564,10 +529,10 @@ namespace ao::uimodel::test
 
       checkCommandPolicy(actions,
                          CommandPolicy{false, false, false, false, false, false, true, true},
-                         CommandPolicy{true, false, true, false, false, false, true, true});
+                         CommandPolicy{false, false, true, false, false, false, true, true});
     }
 
-    SECTION("current track keeps protocol controls capable while output is pending")
+    SECTION("an active track is playable but a pending output blocks Play and not Pause capability")
     {
       fixture.makePlaybackReady();
       auto const firstTrack = fixture.addPlayableTrack("Capability First");
@@ -585,7 +550,7 @@ namespace ao::uimodel::test
 
       checkCommandPolicy(actions,
                          CommandPolicy{false, false, false, true, false, false, false, false},
-                         CommandPolicy{true, true, false, true, false, false, false, false});
+                         CommandPolicy{false, true, false, true, false, false, false, false});
     }
 
     SECTION("restored idle track is playable and pause-capable without being pause-enabled")
@@ -612,7 +577,12 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     std::int32_t playSelectionCount = 0;
-    auto actions = PlaybackActions{fixture.runtime().playback(), [&playSelectionCount] { ++playSelectionCount; }};
+    auto actions = PlaybackActions{fixture.runtime().playback(),
+                                   [&playSelectionCount]
+                                   {
+                                     ++playSelectionCount;
+                                     return true;
+                                   }};
     actions.setSelectionAvailable(true);
     auto availability = AvailabilityLog{actions};
 
@@ -643,7 +613,7 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("Event First");
     auto const secondTrack = fixture.addPlayableTrack("Event Second");
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
     auto availability = AvailabilityLog{actions};
 
     REQUIRE(fixture.playFromView(firstTrack));

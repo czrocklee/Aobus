@@ -18,7 +18,9 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace ao::rt
 {
@@ -59,17 +61,25 @@ namespace ao::winui
   private:
     struct PointerCallbackState;
 
+    enum class PointerEnd : std::uint8_t
+    {
+      Finish,
+      Cancel
+    };
+
     /// Establish a blank state before the first model snapshot.
     void resetPresentation();
     void stop() noexcept;
 
-    void beginPointerInteraction();
-    void endPointerInteraction();
+    void handlePreviewKeyDown(winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& args);
+    void beginPointerInteraction(winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args);
+    void endPointerInteraction(PointerEnd end);
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
     void scheduleFinalSeek(uimodel::SeekSliderUpdate update);
     void commitPendingFinalSeek();
     void cancelPendingFinalSeek() noexcept;
 
+    bool hasPendingFinalSeek() const noexcept;
     void applyState(uimodel::PlaybackPositionViewState const& state);
     void applyStateToSlider();
     void setSliderRange(std::chrono::milliseconds duration);
@@ -94,17 +104,19 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _finalSeekTimer{nullptr};
     std::shared_ptr<PointerCallbackState> _pointerCallbackStatePtr;
     winrt::Windows::Foundation::IInspectable _pointerPressedHandler{nullptr};
-    winrt::Windows::Foundation::IInspectable _pointerReleasedHandler{nullptr};
-    winrt::Windows::Foundation::IInspectable _pointerCaptureLostHandler{nullptr};
+    winrt::Windows::Foundation::IInspectable _pointerEndedHandler{nullptr};
+    winrt::Windows::Foundation::IInspectable _pointerCanceledHandler{nullptr};
     winrt::Windows::Foundation::IInspectable _pointerEnteredHandler{nullptr};
     winrt::Windows::Foundation::IInspectable _pointerMovedHandler{nullptr};
     winrt::Windows::Foundation::IInspectable _pointerExitedHandler{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Slider::ValueChanged_revoker _valueChangedRevoker{};
+    winrt::Microsoft::UI::Xaml::UIElement::PreviewKeyDown_revoker _previewKeyDownRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Slider::Loaded_revoker _loadedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Slider::Unloaded_revoker _unloadedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _finalSeekTickRevoker{};
     winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering_revoker _renderingRevoker{};
     uimodel::SeekInteraction _interaction;
+    std::optional<std::uint32_t> _optPointerId;
     uimodel::PlaybackPositionInterpolator _interpolator;
     uimodel::PlaybackPositionViewState _state{};
     std::unique_ptr<uimodel::PlaybackPositionViewModel> _viewModelPtr;

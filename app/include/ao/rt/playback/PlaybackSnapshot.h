@@ -60,6 +60,12 @@ namespace ao::rt
     OutputState output{};
     QualityState quality{};
 
+    bool hasSeekableSubject() const noexcept
+    {
+      return nowPlaying.trackId != kInvalidTrackId && occurrenceId.value != 0 &&
+             duration > std::chrono::milliseconds{0};
+    }
+
     /**
      * Semantic equality excludes the correlated elapsed clock sample. Position
      * discontinuities remain content through their explicit revisions.

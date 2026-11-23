@@ -35,7 +35,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 
 namespace ao::gtk::layout::test
@@ -104,7 +103,7 @@ namespace ao::gtk::layout::test
       : appPtr{Gtk::Application::create(std::string{applicationId})}
       , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
-      , playbackActions{runtimePtr->playback(), [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
+      , playbackActions{runtimePtr->playback(), [this] { return runtimePtr->playSelectionInFocusedView().has_value(); }}
       , actions{components.schema()}
       , session{componentStateStore}
       , context{.registry = components,

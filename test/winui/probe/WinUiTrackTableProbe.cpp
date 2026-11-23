@@ -1534,7 +1534,8 @@ namespace
       }
 
       _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_optTempRoot->root() / "probe-theme.yaml");
-      _playbackActionsPtr = std::make_unique<ao::uimodel::PlaybackActions>(_runtimePtr->playback(), [] {});
+      _playbackActionsPtr =
+        std::make_unique<ao::uimodel::PlaybackActions>(_runtimePtr->playback(), [] { return false; });
 
       ao::winui::layout::registerTrackComponents(*_registryPtr,
                                                  _runtimePtr->async(),

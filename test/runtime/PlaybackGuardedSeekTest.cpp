@@ -2,11 +2,14 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
 #include "test/runtime/ApplicationPlaybackTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -55,6 +58,7 @@ namespace ao::rt::test
 
     auto const published = fixture.playback.snapshot();
     REQUIRE(published.transport.occurrenceId.value != 0);
+    auto settlements = std::vector<PlaybackTransportSnapshot>{};
     auto previews = std::vector<std::chrono::milliseconds>{};
     auto const previewSubscription = fixture.playback.events().onSeekPreview(
       [&previews](std::chrono::milliseconds const elapsed) noexcept { previews.push_back(elapsed); });
@@ -82,13 +86,26 @@ namespace ao::rt::test
         published.transport.occurrenceId, std::chrono::milliseconds{100}, PlaybackSeekMode::Preview);
     }
 
+    SECTION("guarded final seek notifies inline despite rejection")
+    {
+      fixture.commands().seek(published.transport.occurrenceId,
+                              std::chrono::milliseconds{100},
+                              PlaybackSeekMode::Final,
+                              [&] { settlements.push_back(fixture.playback.snapshot().transport); });
+      REQUIRE(settlements.size() == 1);
+      CHECK(settlements.front().occurrenceId == lowerOccurrence);
+      CHECK(settlements.front().finalSeekRevision == published.transport.finalSeekRevision);
+    }
+
     CHECK(fixture.playbackTransport.state().elapsed == lowerElapsed);
     CHECK(fixture.playback.snapshot().transport.occurrenceId == lowerOccurrence);
     CHECK(fixture.playback.snapshot().transport.finalSeekRevision == published.transport.finalSeekRevision);
     CHECK(fixture.playback.snapshot().transport.elapsed != std::chrono::milliseconds{100});
     CHECK(previews.empty());
 
+    auto const settlementCount = settlements.size();
     fixture.executor.runUntilIdle();
+    CHECK(settlements.size() == settlementCount);
     CHECK(fixture.playback.snapshot().transport.occurrenceId == lowerOccurrence);
     CHECK(fixture.playback.snapshot().transport.finalSeekRevision == published.transport.finalSeekRevision);
     CHECK(previews.empty());
@@ -160,19 +177,41 @@ namespace ao::rt::test
     auto const started = fixture.playback.snapshot();
     bool queuedMute = false;
     bool finalAcceptedInsidePublication = true;
+    bool finalAcceptedInsideSettlement = true;
+    bool previewPublishedAtSettlement = false;
+    auto observedRevision = started.transport.finalSeekRevision;
+    auto observedRevisionAtSettlement = PlaybackFinalSeekRevision{};
+    auto settlements = std::vector<PlaybackTransportSnapshot>{};
     auto previews = std::vector<std::chrono::milliseconds>{};
     auto const previewSubscription = fixture.playback.events().onSeekPreview(
       [&previews](std::chrono::milliseconds const elapsed) noexcept { previews.push_back(elapsed); });
     auto const snapshotSubscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const&) noexcept
+      [&](PlaybackSnapshot const& snapshot)
       {
+        observedRevision = snapshot.transport.finalSeekRevision;
+
         if (!queuedMute)
         {
           queuedMute = true;
           fixture.commands().setMuted(true);
-          fixture.commands().seek(
-            started.transport.occurrenceId, std::chrono::milliseconds{50}, PlaybackSeekMode::Preview);
-          fixture.commands().seek(started.transport.occurrenceId, std::chrono::milliseconds{100});
+          fixture.commands().seek(started.transport.occurrenceId,
+                                  std::chrono::milliseconds{50},
+                                  PlaybackSeekMode::Preview,
+                                  [&]
+                                  {
+                                    settlements.push_back(fixture.playback.snapshot().transport);
+                                    previewPublishedAtSettlement = !previews.empty();
+                                  });
+          fixture.commands().seek(started.transport.occurrenceId,
+                                  std::chrono::milliseconds{100},
+                                  PlaybackSeekMode::Final,
+                                  [&]
+                                  {
+                                    settlements.push_back(fixture.playback.snapshot().transport);
+                                    observedRevisionAtSettlement = observedRevision;
+                                    finalAcceptedInsideSettlement = fixture.commands().trySeek(
+                                      started.transport.occurrenceId, std::chrono::milliseconds{175});
+                                  });
           finalAcceptedInsidePublication =
             fixture.commands().trySeek(started.transport.occurrenceId, std::chrono::milliseconds{75});
         }
@@ -180,15 +219,27 @@ namespace ao::rt::test
 
     fixture.commands().setVolume(0.5F);
     REQUIRE(queuedMute);
+    CHECK(settlements.empty());
     CHECK_FALSE(finalAcceptedInsidePublication);
     CHECK_FALSE(fixture.commands().trySeek(started.transport.occurrenceId, std::chrono::milliseconds{150}));
 
     fixture.executor.runUntilIdle();
-    CHECK(fixture.playback.snapshot().transport.volume.muted);
-    CHECK(fixture.playback.snapshot().transport.occurrenceId == started.transport.occurrenceId);
-    CHECK(fixture.playback.snapshot().transport.finalSeekRevision.value ==
-          started.transport.finalSeekRevision.value + 1);
-    CHECK(fixture.playback.snapshot().transport.elapsed == std::chrono::milliseconds{100});
+    REQUIRE(settlements.size() == 2);
+    auto const& previewSettled = settlements.front();
+    CHECK(previewSettled.volume.muted);
+    CHECK(previewSettled.positionRevision == started.transport.positionRevision);
+    CHECK(previewSettled.finalSeekRevision == started.transport.finalSeekRevision);
+    CHECK(previewPublishedAtSettlement);
+
+    auto const& settled = settlements.back();
+    CHECK(settled.volume.muted);
+    CHECK(settled.occurrenceId == started.transport.occurrenceId);
+    CHECK(settled.finalSeekRevision.value == started.transport.finalSeekRevision.value + 1);
+    CHECK(settled.positionRevision.value == started.transport.positionRevision.value + 1);
+    CHECK(settled.elapsed == std::chrono::milliseconds{100});
+    CHECK(observedRevisionAtSettlement == settled.finalSeekRevision);
+    CHECK_FALSE(finalAcceptedInsideSettlement);
+    CHECK(fixture.playback.snapshot().transport == settled);
     REQUIRE(previews.size() == 1);
     CHECK(previews.front() == std::chrono::milliseconds{50});
   }
@@ -214,6 +265,23 @@ namespace ao::rt::test
     CHECK(fixture.playback.elapsed() == std::chrono::milliseconds{0});
   }
 
+  TEST_CASE("PlaybackCommands guarded seek - closed admission notifies immediately without a position change")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const runtimePtr = makeStateOnlyRuntime(tempDir);
+    runtimePtr->shutdown();
+    auto& playback = runtimePtr->playback();
+    auto const before = playback.snapshot();
+    auto settlements = std::vector<PlaybackSnapshot>{};
+
+    playback.commands().seek(
+      {}, std::chrono::milliseconds{100}, PlaybackSeekMode::Final, [&] { settlements.push_back(playback.snapshot()); });
+
+    REQUIRE(settlements.size() == 1);
+    CHECK(settlements.front() == before);
+    CHECK(settlements.front().transport.elapsed == before.transport.elapsed);
+  }
+
   TEST_CASE("PlaybackCommands guarded seek - service destruction discards already queued positioning")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
@@ -224,19 +292,23 @@ namespace ao::rt::test
     fixture.commands().pause();
     auto const before = fixture.playback.snapshot().transport;
     bool handedOff = false;
+    bool settled = false;
     auto const subscription = fixture.playback.events().onSnapshot(
       [&](PlaybackSnapshot const&)
       {
         if (!handedOff)
         {
           handedOff = true;
-          fixture.commands().seek(before.occurrenceId, std::chrono::milliseconds{100});
+          fixture.commands().seek(
+            before.occurrenceId, std::chrono::milliseconds{100}, PlaybackSeekMode::Final, [&] { settled = true; });
         }
       });
     fixture.commands().setMuted(true);
     REQUIRE(handedOff);
+    CHECK_FALSE(settled);
     fixture.playbackStoragePtr.reset();
     fixture.executor.runUntilIdle();
+    CHECK_FALSE(settled);
     CHECK(fixture.playbackTransport.state().occurrenceId == before.occurrenceId);
     CHECK(fixture.playbackTransport.elapsed() == before.elapsed);
   }

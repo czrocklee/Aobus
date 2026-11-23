@@ -10,10 +10,12 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
@@ -88,6 +90,8 @@ namespace ao::appkit::test
 {
   namespace
   {
+    constexpr auto kResumeClockThreshold = std::chrono::milliseconds{250};
+
     void requireStatus(MediaRemoteCommandHandler const& handler,
                        MediaRemoteCommandEvent const& event,
                        MediaRemoteCommandStatus expected)
@@ -162,6 +166,22 @@ namespace ao::appkit::test
       }
     }
 
+    void requireNoPlayTarget(MediaPlayerAdapter const& media)
+    {
+      auto const before = media.diagnostics();
+      auto const handler = media.remoteCommandHandler();
+      requireNativeCommandAvailability(media);
+
+      for (auto const command : {MediaRemoteCommand::Play, MediaRemoteCommand::PlayPause})
+      {
+        AO_INVARIANT(!media.isCommandAvailable(command), "Remote Play must be unavailable without a target");
+        requireStatus(handler, {.command = command}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+      }
+
+      AO_INVARIANT(media.diagnostics().admittedCommandCount == before.admittedCommandCount,
+                   "Remote Play without a target must not enqueue work");
+    }
+
     void exerciseIdle(MediaPlayerAdapter& media)
     {
       requireNativeCommandAvailability(media);
@@ -192,7 +212,7 @@ namespace ao::appkit::test
                    "Rejected media commands must not enqueue work");
     }
 
-    void exerciseEmptySelectionPlay(LibrarySession& session)
+    void exerciseVisibleSelectionPlay(LibrarySession& session)
     {
       auto& playback = session.runtime().playback();
       requireWaitUntil(
@@ -202,11 +222,11 @@ namespace ao::appkit::test
           return transport.ready && !transport.output.optPendingOutputSelection;
         },
         "The idle Play fixture must have a ready output");
-      auto const* firstRow = session.rowAt(0);
-      AO_INVARIANT(firstRow != nullptr && session.selection().empty(),
-                   "The idle Play fixture must have projected rows but no selection");
-      auto const firstId = firstRow->id;
-      auto const& before = playback.snapshot().transport;
+      auto const* selectedRow = session.rowAt(1);
+      AO_INVARIANT(selectedRow != nullptr && session.selection().empty(),
+                   "The idle Play fixture must have at least two projected rows but no selection");
+      auto const selectedId = selectedRow->id;
+      auto const before = playback.snapshot().transport;
       AO_INVARIANT(before.transport == audio::Transport::Idle && !before.hasDeferredResume &&
                      before.nowPlaying.trackId == kInvalidTrackId,
                    "Only a new start may satisfy the idle Play fixture");
@@ -217,10 +237,39 @@ namespace ao::appkit::test
       AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId,
                    "Primary Play must not start an unselected row");
 
+      auto& media = session.mediaPlayer();
+      requireNoPlayTarget(media);
+      auto* const observer =
+        [[AobusMediaPublicationObserver alloc] initWithCenter:MPNowPlayingInfoCenter.defaultCenter];
+      session.select({selectedId});
+      AO_INVARIANT(
+        media.isCommandAvailable(MediaRemoteCommand::Play) && media.isCommandAvailable(MediaRemoteCommand::PlayPause),
+        "A selection-only change must enable Play and PlayPause with a visible target");
+      requireNativeCommandAvailability(media);
+      AO_INVARIANT(
+        playback.snapshot().transport.positionRevision == before.positionRevision && observer.publicationCount == 0,
+        "Selection alone must not reanchor playback or publish Now Playing");
+
+      auto const beforePlay = media.diagnostics();
+      requireStatus(
+        media.remoteCommandHandler(), {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::Success);
+      // Clear the target in this main-thread turn, before the queued Play can run.
+      session.select({});
+      drainMediaCallbacks();
+      auto const afterPlay = media.diagnostics();
+      AO_INVARIANT(afterPlay.settledCommandCount == beforePlay.settledCommandCount + 1 &&
+                     afterPlay.handledCommandCount == beforePlay.handledCommandCount,
+                   "Admitted Play must settle without being handled after its target is cleared");
+      auto const& idle = playback.snapshot().transport;
+      AO_INVARIANT(idle.transport == audio::Transport::Idle && idle.nowPlaying.trackId == kInvalidTrackId,
+                   "Remote Play must not start playback from a cleared selection");
+
+      session.select({selectedId});
       executeRemote(session, {.command = MediaRemoteCommand::Play});
       waitForTransport(session, audio::Transport::Playing);
-      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == firstId && session.selection().empty(),
-                   "Remote Play must start the first projected row without changing selection");
+      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == selectedId &&
+                     session.selection() == std::vector{selectedId},
+                   "Remote Play must start the selected track, not row zero");
     }
 
     void exerciseFilteredRemotePlay(LibrarySession& session)
@@ -270,19 +319,13 @@ namespace ao::appkit::test
       waitForTransport(session, audio::Transport::Idle);
 
       auto& media = session.mediaPlayer();
-      auto const handler = media.remoteCommandHandler();
-      AO_INVARIANT(
-        !media.isCommandAvailable(MediaRemoteCommand::Play) && !media.isCommandAvailable(MediaRemoteCommand::PlayPause),
-        "Remote Play and PlayPause must be unavailable when every selected track is filtered out");
-      requireNativeCommandAvailability(media);
-      requireStatus(
-        handler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
-      requireStatus(
-        handler, {.command = MediaRemoteCommand::PlayPause}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+      AO_INVARIANT(session.selection() == std::vector{hiddenId}, "Filtering must preserve the remembered selection");
+      requireNoPlayTarget(media);
 
       session.select({hiddenId, selectedId, firstId});
-      AO_INVARIANT(media.isCommandAvailable(MediaRemoteCommand::Play),
-                   "Remote Play must re-enable when a selected track is visible");
+      AO_INVARIANT(
+        media.isCommandAvailable(MediaRemoteCommand::Play) && media.isCommandAvailable(MediaRemoteCommand::PlayPause),
+        "Remote start commands must re-enable when a selected track is visible");
       requireNativeCommandAvailability(media);
       executeRemote(session, {.command = MediaRemoteCommand::Play});
       waitForTransport(session, audio::Transport::Playing);
@@ -290,25 +333,23 @@ namespace ao::appkit::test
                    "Remote Play must use the first projected selection in selection order");
       executeRemote(session, {.command = MediaRemoteCommand::Stop});
       waitForTransport(session, audio::Transport::Idle);
-      session.select({});
+      session.select({hiddenId});
       auto const emptyRes = runtime.views().setFilter(viewId, R"($title = "Missing Track")");
       AO_INVARIANT(emptyRes);
       requireWaitUntil([&] { return session.displayIndex().rowCount() == 0; },
                        "The empty-projection filter must settle before checking remote availability");
-      AO_INVARIANT(
-        !media.isCommandAvailable(MediaRemoteCommand::Play) && !media.isCommandAvailable(MediaRemoteCommand::PlayPause),
-        "Remote Play and PlayPause must be unavailable when the projection is empty");
-      requireNativeCommandAvailability(media);
-      requireStatus(
-        handler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+      requireNoPlayTarget(media);
 
       auto const clearRes = runtime.views().setFilter(viewId, "");
       AO_INVARIANT(clearRes);
       requireWaitUntil([&] { return session.displayIndexOf(hiddenId).has_value(); },
                        "The rest of the media scenario must use the unfiltered fixture");
-      AO_INVARIANT(media.isCommandAvailable(MediaRemoteCommand::Play),
-                   "Clearing an empty filter must restore remote Play availability");
+      AO_INVARIANT(
+        media.isCommandAvailable(MediaRemoteCommand::Play) && media.isCommandAvailable(MediaRemoteCommand::PlayPause),
+        "Revealing the remembered selection must restore remote Play without changing the selection or transport");
       requireNativeCommandAvailability(media);
+      session.select({});
+      requireNoPlayTarget(media);
     }
 
     void exerciseMetadata(LibrarySession& session)
@@ -359,13 +400,30 @@ namespace ao::appkit::test
 
     void exerciseTransport(LibrarySession& session)
     {
-      auto const pausedRevision = session.runtime().playback().snapshot().transport.positionRevision;
+      auto& playback = session.runtime().playback();
+      constexpr auto kPausedOffset = std::chrono::milliseconds{500};
+      playback.commands().seek(kPausedOffset);
+      requireWaitUntil([&] { return playback.snapshot().transport.elapsed == kPausedOffset; },
+                       "The paused fixture must hold a nonzero offset");
+      auto const paused = playback.snapshot().transport;
+      auto* const observer =
+        [[AobusMediaPublicationObserver alloc] initWithCenter:MPNowPlayingInfoCenter.defaultCenter];
+      auto const otherId = session.rowAt(0)->id;
+      AO_INVARIANT(otherId != paused.nowPlaying.trackId, "The selection must compete with the paused subject");
+      session.select({});
+      session.select({otherId});
+      AO_INVARIANT(observer.publicationCount == 0, "Selection changes must not republish Now Playing");
       executeRemote(session, {.command = MediaRemoteCommand::Pause});
-      AO_INVARIANT(session.runtime().playback().snapshot().transport.positionRevision == pausedRevision,
+      AO_INVARIANT(playback.snapshot().transport.positionRevision == paused.positionRevision,
                    "Duplicate remote Pause must not change the playback position anchor");
       executeRemote(session, {.command = MediaRemoteCommand::Play});
       waitForTransport(session, audio::Transport::Playing);
-      auto const playingRevision = session.runtime().playback().snapshot().transport.positionRevision;
+      auto const& playing = playback.snapshot().transport;
+      AO_INVARIANT(playing.nowPlaying.trackId == paused.nowPlaying.trackId &&
+                     playing.occurrenceId == paused.occurrenceId && playing.elapsed >= paused.elapsed &&
+                     playing.elapsed < paused.elapsed + kResumeClockThreshold,
+                   "Remote Play must resume the paused occurrence at its offset instead of starting the selection");
+      auto const playingRevision = playing.positionRevision;
       executeRemote(session, {.command = MediaRemoteCommand::Play});
       AO_INVARIANT(session.runtime().playback().snapshot().transport.positionRevision == playingRevision,
                    "Duplicate remote Play must not restart the track");
@@ -389,11 +447,11 @@ namespace ao::appkit::test
       auto& media = session.mediaPlayer();
       auto const handler = media.remoteCommandHandler();
       auto const before = media.diagnostics();
-      AO_INVARIANT(
-        session.displayIndex().displayCount() >= 3, "Consecutive Next commands need three ordered fixture tracks");
-      AO_INVARIANT(session.runtime().playback().snapshot().transport.nowPlaying.trackId == session.rowAt(0)->id,
-                   "The consecutive Next fixture must start on its first track");
-      auto const thirdId = session.rowAt(2)->id;
+      auto const optIndex =
+        session.displayIndexOf(session.runtime().playback().snapshot().transport.nowPlaying.trackId);
+      AO_INVARIANT(optIndex && *optIndex + 2 < session.displayIndex().displayCount(),
+                   "Consecutive Next commands need two more ordered fixture tracks");
+      auto const expectedId = session.rowAt(*optIndex + 2)->id;
 
       // Admit both commands before yielding to their main-queue deliveries.
       requireStatus(handler, {.command = MediaRemoteCommand::Next}, MediaRemoteCommandStatus::Success);
@@ -403,8 +461,8 @@ namespace ao::appkit::test
       AO_INVARIANT(after.settledCommandCount == before.settledCommandCount + 2 &&
                      after.handledCommandCount == before.handledCommandCount + 2,
                    "Both queued Next commands must be handled");
-      AO_INVARIANT(session.runtime().playback().snapshot().transport.nowPlaying.trackId == thirdId,
-                   "Two queued Next commands must advance from the first fixture track to the third");
+      AO_INVARIANT(session.runtime().playback().snapshot().transport.nowPlaying.trackId == expectedId,
+                   "Two queued Next commands must advance by two tracks");
       waitForTransport(session, audio::Transport::Playing);
     }
 
@@ -487,6 +545,48 @@ namespace ao::appkit::test
                      snapshots[3].elapsed == std::chrono::milliseconds{1500} &&
                      snapshots[3].occurrenceId == started.occurrenceId,
                    "Backlogged media seeks must commit their captured positions in FIFO order");
+    }
+
+    void exerciseDeferredResume(LibrarySession& session)
+    {
+      auto& runtime = session.runtime();
+      auto& playback = runtime.playback();
+      auto const paused = playback.snapshot().transport;
+      AO_INVARIANT(paused.transport == audio::Transport::Paused && paused.elapsed > std::chrono::milliseconds{0},
+                   "Checkpoint a paused track at its nonzero seek offset");
+      auto const otherId = session.rowAt(0)->id;
+      AO_INVARIANT(otherId != paused.nowPlaying.trackId);
+      session.select({otherId});
+      auto const savedRes = runtime.savePlaybackSession();
+      AO_INVARIANT(savedRes, "The paused subject and seek offset must be checkpointed");
+      executeRemote(session, {.command = MediaRemoteCommand::Stop});
+      waitForTransport(session, audio::Transport::Idle);
+      auto* const center = MPNowPlayingInfoCenter.defaultCenter;
+      AO_INVARIANT(center.nowPlayingInfo == nil, "Stop must clear Now Playing before restoring the subject");
+      auto const restoredRes = runtime.restorePlaybackSession();
+      AO_INVARIANT(restoredRes && restoredRes->restored, "The saved paused subject must be restorable");
+      AO_INVARIANT(playback.snapshot().succession.currentTrackId == paused.nowPlaying.trackId,
+                   "Restore must supply a cursor to clear independently of its held audio");
+      auto* const observer = [[AobusMediaPublicationObserver alloc] initWithCenter:center];
+      playback.commands().clearSequence();
+      auto const& restored = playback.snapshot();
+      AO_INVARIANT(restored.transport.transport == audio::Transport::Idle && restored.transport.hasDeferredResume &&
+                     restored.succession.currentTrackId == kInvalidTrackId,
+                   "The held audio must be independent of the succession cursor");
+      auto* const info = center.nowPlayingInfo;
+      AO_INVARIANT(center.playbackState == MPNowPlayingPlaybackStateStopped &&
+                     [info[MPMediaItemPropertyTitle] isEqual:nativeText(paused.nowPlaying.title)] != NO &&
+                     std::abs([info[MPNowPlayingInfoPropertyElapsedPlaybackTime] doubleValue] -
+                              std::chrono::duration<double>{paused.elapsed}.count()) < 0.001 &&
+                     [info[MPNowPlayingInfoPropertyPlaybackRate] isEqual:@0.0] != NO,
+                   "Idle Now Playing must retain the held title and offset at zero rate before remote Play");
+      AO_INVARIANT(observer.publicationCount == 0, "Clearing only the sequence must not republish Now Playing");
+      executeRemote(session, {.command = MediaRemoteCommand::Play});
+      waitForTransport(session, audio::Transport::Playing);
+      auto const& resumed = playback.snapshot().transport;
+      AO_INVARIANT(resumed.nowPlaying.trackId == paused.nowPlaying.trackId && resumed.elapsed >= paused.elapsed &&
+                     resumed.elapsed < paused.elapsed + kResumeClockThreshold,
+                   "Remote Play must restore held audio at its offset instead of starting the selected track");
     }
 
     void exerciseSeek(LibrarySession& session)
@@ -582,6 +682,8 @@ namespace ao::appkit::test
     MediaRemoteCommandHandler exerciseRetirement(LibrarySession& session)
     {
       auto& media = session.mediaPlayer();
+      auto const trackId = session.rowAt(0)->id;
+      session.select({trackId});
       auto const handler = media.remoteCommandHandler();
       auto const before = media.diagnostics();
       AO_INVARIANT(before.registeredCommandCount == 7, "Snapshot updates must not duplicate command registration");
@@ -594,6 +696,8 @@ namespace ao::appkit::test
                      after.handledCommandCount == before.handledCommandCount &&
                      after.settledCommandCount == before.settledCommandCount,
                    "Retirement must unregister targets and fence already queued native deliveries");
+      session.select({});
+      session.select({trackId});
       requireStatus(handler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::CommandFailed);
       requireNativeCommandAvailability(media);
       AO_INVARIANT(MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo == nil &&
@@ -607,10 +711,27 @@ namespace ao::appkit::test
       // The session's original adapter is retired, so this controlled-clock
       // adapter is the sole native publisher over the same production runtime.
       auto& playback = session.runtime().playback();
-      auto actions = uimodel::PlaybackActions{playback, [] {}};
+      std::int32_t startAttempts = 0;
+      auto actions = uimodel::PlaybackActions{playback,
+                                              [&]
+                                              {
+                                                ++startAttempts;
+                                                return false;
+                                              }};
+      actions.bindFocusedSelection(session.runtime().workspace(), session.runtime().views());
       auto now = std::chrono::steady_clock::time_point{};
       auto media = MediaPlayerAdapter{playback, actions, session.runtime().resourceBytes(), [&] { return now; }};
       auto const trackId = session.rowAt(0)->id;
+      session.select({trackId});
+      auto const before = media.diagnostics();
+      requireStatus(
+        media.remoteCommandHandler(), {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::Success);
+      drainMediaCallbacks();
+      auto const after = media.diagnostics();
+      AO_INVARIANT(startAttempts == 1 && after.settledCommandCount == before.settledCommandCount + 1 &&
+                     after.handledCommandCount == before.handledCommandCount,
+                   "An admitted Play must settle unhandled when the selection start is rejected");
+
       session.play(trackId);
       waitForTransport(session, audio::Transport::Playing);
       auto const started = playback.snapshot().transport;
@@ -641,6 +762,9 @@ namespace ao::appkit::test
       };
 
       now += std::chrono::seconds{2};
+      // Selection changes must not move the anchor used by the next metadata publication.
+      session.select({});
+      session.select({trackId});
       rename("Media clock title");
       AO_INVARIANT(playback.snapshot().transport.positionRevision == started.positionRevision,
                    "A title edit must not create a playback clock anchor");
@@ -718,12 +842,13 @@ namespace ao::appkit::test
       exerciseIdle(session.mediaPlayer());
       [window orderOut:nil];
       AO_INVARIANT(window.visible == NO, "Media commands must work with the application window hidden");
-      exerciseEmptySelectionPlay(session);
+      exerciseVisibleSelectionPlay(session);
       exerciseMetadata(session);
       exerciseForeignPause(session);
       exerciseTransport(session);
       exerciseConsecutiveNext(session);
       exerciseBackloggedSeek(session, session.mediaPlayer(), false);
+      exerciseDeferredResume(session);
       exerciseSeek(session);
       exerciseFilteredRemotePlay(session);
       exerciseCommandAvailability(session);
@@ -734,8 +859,8 @@ namespace ao::appkit::test
     requireStatus(retiredHandler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::CommandFailed);
     drainMediaCallbacks();
     [window close];
-    APP_LOG_INFO(
-      "MEDIA PLAYER PASS: metadata, hidden-window commands, Play origins and targets, stale seeks, and retirement");
+    APP_LOG_INFO("MEDIA PLAYER PASS: metadata, hidden-window commands, Play targets and rejected starts, stale seeks, "
+                 "and retirement");
     return 0;
   }
 } // namespace ao::appkit::test

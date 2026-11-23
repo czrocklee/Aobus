@@ -60,8 +60,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 Its List navigation pane consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `KeymapPlan` is a replaceable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
 `EventController` translates terminal events from that plan or from fixed scoped protocol into runtime/UIModel commands.
-On supported Linux builds, `App` composes the shared [`ao::systemmedia` MPRIS adapter](mpris.md) after `EventController` so external commands borrow the same selection-aware `PlaybackActions` and callback executor.
-The adapter lives under `app/systemmedia/linux/`; it adds no GTK dependency to the TUI and no native dependency to runtime, Core, or UIModel.
+On supported Linux builds, `App` gives the shared [MPRIS adapter](mpris.md) the callback executor and `EventController`'s `PlaybackActions`, so a system Play uses the same cursor target as local Play. The adapter has no GTK dependency.
 `--system-media=off` skips construction of its bridge, private thread, and artwork interests, while `auto` degrades to inert when support or a usable session bus is absent.
 `CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
@@ -97,7 +96,6 @@ The adapter lives under `app/systemmedia/linux/`; it adds no GTK dependency to t
 - Reload materializes the same active view id and preserves its filter, presentation, grouping, sorting, history identity, filter draft, selected track when that track remains visible, and independent List cursor and presentation-picker highlight.
 - Play/pause, stop, sequence previous/next, and keyboard shuffle/repeat actions use `PlaybackActions`; the mouse mode preset applies its shuffle/repeat pair through `PlaybackCommands`, and explicit selected-track activation remains a distinct view-based sequence command.
 - A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
-- A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag previews a per-list terminal-cell layout; only normal release commits it, while any interruption rolls the preview back.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
 
@@ -112,13 +110,15 @@ With mouse control enabled, no foreground surface owning the click, and playback
 Keyboard shuffle and repeat remain independent and report localized status even when turning a mode off. If they select shuffle with repeat-one, the button shows `SHF1`, its hover names both preferences, and the next click returns to `SEQ-`.
 An unrecognized runtime mode keeps its space but has no click or hover target; a stale click cannot change it to a recognized mode.
 
-The dock keeps the mode and output targets stationary through ordinary ticks, volume changes, and muting when duration, backend, locale, and terminal width stay the same:
+With backend, locale, and terminal width fixed, the dock reserves the following widths to keep the mode and output targets stationary through ordinary clock ticks, volume changes, and muting:
 
 | Control         | Width budget                                                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Mode and output | The mode occupies six cells in every mode and locale. Its entire padded target highlights on hover. The two targets touch without overlapping; each contributes one padding cell between the labels, with no extra separator.  |
-| Elapsed time    | Reserve the width of the known duration; until it resolves, use the compact zero-time label.                                                                                                                                   |
-| Volume          | Reserve the full localized numeric volume and, where space permits, the mute label. Preserve readable title space and a seek cell before allocating extra width to mute; ellipsize a longer mute label within the stable slot. |
+| Mode and output | The mode occupies six cells in every mode and locale and its full padded target highlights on hover. The two targets touch without overlapping. Each contributes one padding cell between the labels, with no extra separator. |
+| Elapsed time    | Reserve the width of a known total. With an unknown total, reserve up to eight cells (`99:59:59`) without taking space from the title, numeric volume, or last seek cell.                                                      |
+| Volume          | Reserve the full localized numeric volume. Fit the mute label without taking space from the title or last seek cell; ellipsize a longer label within the slot.                                                                 |
+
+With an unknown total, the elapsed clock can outgrow its reservation on narrow layouts or at longer elapsed times, moving the controls.
 
 Hover replaces ordinary workspace hints with the localized current mode and click destination, right-aligned. When both do not fit, the current mode takes priority. The hover status omits activity if it cannot fit four frame cells and one content cell. Active input, visual selection, popovers, and keyboard panel resizing keep their own hints.
 
@@ -334,6 +334,8 @@ Only painted text has a hit region. Hover highlights the pointed field without c
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
 Soul and the effective `playback.playPause` shortcut (Space by default) follow [primary Play policy](../playback/application-commit.md#primary-play). They pause active playback even with a pending output request, but cannot resume a held track on an unavailable output. Only when there is no subject to resume can they start a track under the cursor; marks do not substitute for the cursor.
 Stop is an idempotent silent no-op when playback is already Idle.
+
+For a track with an unknown duration, the dock shows elapsed time and `--:--` for the total. The rail has no pointer target unless the occurrence is seekable.
 
 Seek press begins a shared `SeekInteraction` gesture and captures the current playback occurrence and duration. Pointer motion publishes guarded queued preview seeks, and release publishes the matching guarded queued final seek through `PlaybackPositionViewModel`.
 Release beyond the rail clamps to the captured rail range. If playback is replaced while the pointer remains held, continued motion and release stay inert; only a fresh press may target the replacement.

@@ -34,6 +34,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
@@ -314,25 +315,17 @@ namespace ao::appkit
     storage.editorPtr = std::make_unique<LibraryEditorModel>(
       runtime, storage.catalog, [&storage] { storage.invalidate(DesktopInvalidation::Editor); });
 
-    storage.actionsPtr = std::make_unique<uimodel::PlaybackActions>(
-      runtime.playback(),
-      [this]
+    auto const playSelection = [this]
+    {
+      if (auto const res = this->runtime().playSelectionInFocusedView(); !res)
       {
-        auto& appRuntime = this->runtime();
+        reportPlaybackFailure(res.error());
+        return false;
+      }
 
-        if (auto res = appRuntime.playSelectionInFocusedView(); !res)
-        {
-          appRuntime.notifications().post(
-            rt::NotificationSeverity::Error,
-            i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
-            rt::NotificationLifetime::history());
-        }
-      },
-      uimodel::SystemMediaPlayHandler{
-        .canPlay = [this] { return canPlayFromRemoteCommand(); },
-        .play = [this] { return tryPlayFromRemoteCommand(); },
-      });
-
+      return true;
+    };
+    storage.actionsPtr = std::make_unique<uimodel::PlaybackActions>(runtime.playback(), playSelection);
     storage.actionsPtr->bindFocusedSelection(runtime.workspace(), runtime.views());
     storage.mediaPlayerPtr =
       std::make_unique<MediaPlayerAdapter>(runtime.playback(), *storage.actionsPtr, runtime.resourceBytes());
@@ -757,52 +750,18 @@ namespace ao::appkit
 
   void LibrarySession::play(TrackId trackId)
   {
-    std::ignore = tryPlayFromView(_storagePtr->viewId, trackId);
-  }
-
-  TrackId LibrarySession::remotePlayTarget(rt::ViewId const viewId) const
-  {
-    auto& views = runtime().views();
-
-    // Remote Play alone supplies a default row, and only for an empty selection.
-    // Read the current view, not the browser binding, whose updates may still be queued.
-    if (!views.selectedTrackIds(viewId).empty())
+    if (auto const res = runtime().playback().commands().startFromView(_storagePtr->viewId, trackId); !res)
     {
-      return views.firstVisibleSelectedTrack(viewId);
+      reportPlaybackFailure(res.error());
     }
-
-    if (auto const projectionRes = views.findTrackListProjection(viewId); projectionRes && (*projectionRes)->size() > 0)
-    {
-      return (*projectionRes)->trackIdAt(0);
-    }
-
-    return kInvalidTrackId;
   }
 
-  bool LibrarySession::canPlayFromRemoteCommand() const
+  void LibrarySession::reportPlaybackFailure(Error const& error) const
   {
-    return remotePlayTarget(runtime().workspace().snapshot().activeViewId) != kInvalidTrackId;
-  }
-
-  bool LibrarySession::tryPlayFromRemoteCommand() const
-  {
-    auto const viewId = runtime().workspace().snapshot().activeViewId;
-    auto const trackId = remotePlayTarget(viewId);
-    return trackId != kInvalidTrackId && tryPlayFromView(viewId, trackId);
-  }
-
-  bool LibrarySession::tryPlayFromView(rt::ViewId viewId, TrackId trackId) const
-  {
-    if (auto res = runtime().playback().commands().startFromView(viewId, trackId); !res)
-    {
-      runtime().notifications().post(
-        rt::NotificationSeverity::Error,
-        i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
-        rt::NotificationLifetime::history());
-      return false;
-    }
-
-    return true;
+    runtime().notifications().post(
+      rt::NotificationSeverity::Error,
+      i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", error.message}}),
+      rt::NotificationLifetime::history());
   }
 
   void LibrarySession::execute(uimodel::PlaybackCommand command)
@@ -835,6 +794,13 @@ namespace ao::appkit
         break;
       case uimodel::SeekSliderAction::None: break;
     }
+  }
+
+  void LibrarySession::seekBy(rt::PlaybackOccurrenceId presentedOccurrence, std::chrono::milliseconds delta) const
+  {
+    // Unlike an absolute thumb target, a key step uses the live position at execution.
+    runtime().playback().commands().seekBy(
+      presentedOccurrence, delta, rt::PlaybackRelativeSeekEndBehavior::ClampIfChanged);
   }
 
   void LibrarySession::setVolume(float volume)

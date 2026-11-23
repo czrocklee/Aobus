@@ -19,14 +19,19 @@
 #include "test/linux-gtk/layout/LayoutTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -153,6 +158,17 @@ namespace ao::gtk::layout::test
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
       REQUIRE(ao::gtk::test::tryWaitForPlaybackSettlement(runtime, trackId));
     }
+
+    void restoreCurrentPlayback(rt::AppRuntime& runtime)
+    {
+      REQUIRE(runtime.savePlaybackSession());
+      runtime.playback().commands().stop();
+      auto const restoredRes = runtime.restorePlaybackSession();
+      REQUIRE(restoredRes);
+      REQUIRE(restoredRes->restored);
+      REQUIRE(runtime.playback().snapshot().transport.transport == audio::Transport::Idle);
+      REQUIRE(runtime.playback().snapshot().transport.hasDeferredResume);
+    }
   } // namespace
 
   TEST_CASE("PlaybackImage - applies declarative image properties")
@@ -189,6 +205,7 @@ namespace ao::gtk::layout::test
         coverTrackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary,
                                                                    library::test::TrackSpec{
                                                                      .title = "Cover Track",
+                                                                     .album = "Restored Album",
                                                                      .uri = coverUri,
                                                                      .coverArtId = coverResourceId,
                                                                      .duration = std::chrono::seconds{1},
@@ -343,7 +360,83 @@ namespace ao::gtk::layout::test
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
     }
 
-    SECTION("no-cover placeholder preserves the configured playback action")
+    SECTION("initial bind decodes and reveals the restored cover without resuming playback")
+    {
+      rt::test::addReadyAudioProvider(runtime);
+      ao::gtk::test::drainGtkEvents();
+      startPlayback(runtime, coverTrackId);
+      auto& playback = runtime.playback();
+      auto const offset = std::chrono::milliseconds{250};
+      playback.commands().seek(offset);
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(playback.snapshot().transport.elapsed == offset);
+      restoreCurrentPlayback(runtime);
+
+      // A sequence cursor is not needed for the transport's retained subject.
+      playback.commands().clearSequence();
+      REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
+      auto const occurrence = playback.snapshot().transport.occurrenceId;
+      REQUIRE(occurrence.value != 0);
+      auto const viewId = runtime.workspace().snapshot().activeViewId;
+      REQUIRE(viewId != rt::kInvalidViewId);
+      REQUIRE(runtime.views().setSelection(viewId, {noCoverTrackId}));
+      REQUIRE(runtime.views().firstVisibleSelectedTrack(viewId) == noCoverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.props["action"] = LayoutValue{std::string{"jumpToAlbum"}};
+      node.optTooltip = BoxedLayoutNode{LayoutNode{.type = "playback.image"}};
+      auto const compPtr = fixture.components().create(ctx, node);
+      REQUIRE(compPtr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
+      REQUIRE(coverArt);
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover);
+      auto* const tooltip = popover->get_child();
+      REQUIRE(tooltip);
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&] { return coverArt->hasImage() && tooltip->get_visible(); }));
+
+      REQUIRE(runtime.views().setSelection(viewId, {coverTrackId}));
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(runtime.views().setSelection(viewId, {noCoverTrackId}));
+      ao::gtk::test::drainGtkEvents();
+      CHECK(coverArt->hasImage());
+      CHECK(tooltip->get_visible());
+      REQUIRE(button->get_visible());
+      REQUIRE(button->get_sensitive());
+
+      auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
+      auto const sub =
+        playback.events().onRevealTrackRequested([&](auto const& event) noexcept { optRequest = event; });
+      emitClicked(*button);
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(optRequest);
+      CHECK(optRequest->trackId == coverTrackId);
+      auto const albumViewId = runtime.workspace().snapshot().activeViewId;
+      REQUIRE(albumViewId != rt::kInvalidViewId);
+      CHECK(optRequest->preferredViewId == albumViewId);
+      CHECK(runtime.views().trackListState(albumViewId).presentation.id == "albums");
+      CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
+      CHECK(playback.snapshot().transport.hasDeferredResume);
+      CHECK(playback.snapshot().transport.nowPlaying.trackId == coverTrackId);
+      CHECK(playback.snapshot().transport.occurrenceId == occurrence);
+      CHECK(playback.snapshot().transport.elapsed == offset);
+
+      playback.commands().stop();
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+      CHECK(coverArt->isShowingPlaceholder());
+      CHECK_FALSE(coverArt->hasImage());
+      CHECK_FALSE(tooltip->get_visible());
+      optRequest.reset();
+      emitClicked(*button);
+      ao::gtk::test::drainGtkEvents();
+      CHECK_FALSE(optRequest);
+    }
+
+    SECTION("unavailable art preserves the configured playback action")
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
@@ -351,6 +444,7 @@ namespace ao::gtk::layout::test
       auto node = LayoutNode{.type = "playback.image"};
       node.props["action"] = LayoutValue{std::string{"jumpToAlbum"}};
       node.props["placeholderStyle"] = LayoutValue{std::string{"monogram"}};
+      node.optTooltip = BoxedLayoutNode{LayoutNode{.type = "playback.image"}};
       auto const compPtr = fixture.components().create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
@@ -363,17 +457,52 @@ namespace ao::gtk::layout::test
       auto const revealSubscription = fixture.runtime().playback().events().onRevealTrackRequested(
         [&revealedTrackId](auto const& request) noexcept { revealedTrackId = request.trackId; });
 
-      startPlayback(fixture.runtime(), noCoverTrackId);
+      auto trackId = noCoverTrackId;
+
+      SECTION("playing without a cover")
+      {
+        startPlayback(runtime, trackId);
+      }
+
+      SECTION("restored without a cover")
+      {
+        startPlayback(runtime, trackId);
+        restoreCurrentPlayback(runtime);
+      }
+
+      SECTION("restored with an undecodable cover")
+      {
+        trackId = corruptCoverTrackId;
+        startPlayback(runtime, trackId);
+        restoreCurrentPlayback(runtime);
+        bool settled = false;
+        auto const probe = imageLoaderPtr->requestFull(corruptCoverResourceId, [&](auto const&) { settled = true; });
+        REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&] { return settled; }));
+      }
+
       ao::gtk::test::drainGtkEvents();
 
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover);
+      auto* const tooltip = popover->get_child();
+      REQUIRE(tooltip);
+      CHECK_FALSE(tooltip->get_visible());
       CHECK(button->get_visible());
-      CHECK(coverArt->isShowingPlaceholder());
-      CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Monogram);
-      CHECK(coverArt->placeholderPresentation().monogram == "A");
+      CHECK_FALSE(coverArt->hasImage());
+
+      if (trackId == noCoverTrackId)
+      {
+        CHECK(coverArt->isShowingPlaceholder());
+        CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Monogram);
+        CHECK(coverArt->placeholderPresentation().monogram == "A");
+      }
+      else
+      {
+        CHECK_FALSE(coverArt->isShowingPlaceholder());
+      }
 
       emitClicked(*button);
-
-      CHECK(revealedTrackId == noCoverTrackId);
+      CHECK(revealedTrackId == trackId);
     }
 
     SECTION("playback image tooltip opens for cover art and closes when no cover remains")

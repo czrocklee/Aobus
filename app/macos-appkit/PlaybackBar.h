@@ -15,6 +15,7 @@
 namespace ao::appkit
 {
   struct DesktopViewState;
+  class LibrarySession;
 }
 
 namespace ao::i18n
@@ -25,7 +26,8 @@ namespace ao::i18n
 @interface AobusSeekSlider : AobusSlider
 - (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget;
 - (std::optional<ao::appkit::PlaybackSeekTarget>)seekTarget;
-/// Call once per native action to classify its value change or tracking-end commit.
+- (void)dispatchSeekToSession:(ao::appkit::LibrarySession&)session;
+/// Classifies an absolute value change or tracking-end commit.
 - (ao::uimodel::SeekSliderUpdate)seekUpdate;
 @end
 

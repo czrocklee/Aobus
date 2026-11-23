@@ -15,7 +15,7 @@ The exact D-Bus names, methods, properties, mappings, and metadata keys belong t
 The [system architecture](../overview.md) places `ao_system_media_linux` in the application platform layer under `app/systemmedia/linux/`, with the headers its frontends consume under `app/include/ao/systemmedia/linux/`.
 Its `ao::systemmedia` implementation depends on runtime, UIModel, and GIO, and is shared by GTK and TUI without depending on either GTK or FTXUI.
 Core, runtime, and UIModel have no MPRIS, GIO, D-Bus, or native system-media dependency, and the TUI does not acquire a GTK dependency.
-The GTK and TUI composition roots inject their existing callback executor, `rt::PlaybackService`, selection-aware `uimodel::PlaybackActions`, host commands, and asynchronous `ResourceId`-to-URL request.
+The GTK and TUI composition roots inject their callback executor, `rt::PlaybackService`, `uimodel::PlaybackActions`, host commands, and asynchronous `ResourceId`-to-URL request. GTK supplies the focused selection for Play; TUI supplies the track under its cursor.
 
 The bridge reads the coherent playback snapshot and occurrence-correlated live `elapsed()` query on that owner executor.
 It executes ordinary transport commands through `PlaybackActions`; occurrence-guarded seeks, including past-end Next behavior, use `PlaybackCommands` directly.
@@ -48,35 +48,31 @@ It subscribes to playback and command availability only after acquisition, and c
 
 ## Command and state invariants
 
-- MPRIS dispatches transport methods through `PlaybackActions` with the system-media origin. Like [primary Play](../playback/application-commit.md#primary-play), Play or the start side of Play/Pause gives a paused or deferred subject priority over starting another track. An unavailable output does not make Play pick another track instead.
-- When Idle or Error has no subject to resume and the output is ready, MPRIS can invoke a dedicated host start handler when its availability predicate reports a target. Otherwise it uses the same eligible selection as primary Play.
+- `PlaybackActions` dispatch follows the shared [Play target policy](../playback/application-commit.md#primary-play). The owner-executor turn uses the live transport and selection or cursor, not the state seen by an earlier property query.
 - Repeat and shuffle authority remains behind `PlaybackCommands`; MPRIS does not reconstruct succession or access its internal owner.
 - Seek, volume, and now-playing state come from the coherent `PlaybackService` boundary.
-- The advertised Play, Pause, Next, and Previous capabilities come from `PlaybackActions::isCapable`, not from GTK or TUI controls. A supported method need not change the current transport state.
+- The advertised Play, Pause, Next, and Previous capabilities come from `PlaybackActions::isCapable`, not from GTK or TUI controls. `CanPlay` is true during active playback or when Play can resume or start a track. `CanPause` requires a current track; execution pauses only active playback.
 - Runtime and Core values never contain D-Bus object paths or file URLs.
-- A stale `SetPosition`, an invalid range, or a request without a current track does not mutate playback.
 - `CanSeek` requires a valid current track, a nonzero playback occurrence, and a known positive duration.
-- Preview seek updates do not emit the protocol's final-seek signal.
 
 Protocol properties are derived on demand.
 Metadata construction derives an occurrence-qualified object path from `TrackId` and `PlaybackOccurrenceId` and copies current title, artist, album, duration, and the current resolved art URL.
 A new occurrence refreshes `Metadata` even when the track and descriptive metadata repeat.
 
-The endpoint acknowledges a recognized transport method even if `tryExecute` declines it, for example when Idle has neither an eligible selection nor a host fallback. A command that reaches the runtime follows normal command admission and completion rules.
-Relative seek captures the current occurrence and signed offset, then uses queued `seekBy` with `PlaybackRelativeSeekEndBehavior::Next`.
-At execution, runtime samples live elapsed and advances only for a positive offset strictly past the known endpoint, with an available successor and matching runtime/audio identity.
-Without an admissible successor it is a successful no-op; other offsets use an overflow-safe guarded final seek, including an exact-end seek.
-Absolute seek accepts only the current occurrence-qualified track path and a non-negative value no greater than known duration, then submits an occurrence-bearing queued seek.
+A successful reply acknowledges a recognized player method, even when Play is already satisfied or has no target. It does not confirm submission, state change, or audio completion.
+
+Both seek methods do nothing without a current track. Relative seek captures the current occurrence and signed offset, then queues `seekBy` with `PlaybackRelativeSeekEndBehavior::Next`.
+At execution, runtime samples live elapsed. A positive offset strictly past the known end advances only with an available successor and matching runtime/audio identity; otherwise that past-end request is a no-op. Other offsets use an overflow-safe guarded final seek, including an exact-end seek.
+Absolute seek ignores a stale occurrence-qualified track path, a negative position, or a position beyond a known duration. The queued seek still requires a seekable occurrence at execution.
 Replacement or replay before execution makes either captured occurrence stale and produces no seek or `Seeked`.
-A successful reply may mean a no-op or a submitted command; it does not confirm a playback state change or audio completion.
 
 Rate remains fixed: finite nonzero writes are accepted without changing rate, zero executes pause, and non-finite writes are rejected.
 Volume, shuffle, and loop writes route to their runtime authorities.
 `Position` reads live elapsed correlated to the published occurrence, rather than the snapshot's potentially old clock anchor; when audio has advanced to a successor ahead of runtime publication, the query keeps the published anchor instead of pairing a successor position with old metadata.
 
 Transport, occurrence, now-playing, duration, volume, repeat, shuffle, and command-availability observations select the affected protocol fields.
-The bridge reads the initial capability values at acquisition and sends only capabilities whose exported booleans change. In particular, a focused selection change alone does not change `CanPlay`, which reflects output readiness or a current playback subject.
-Final runtime seeks emit `Seeked`; preview updates do not.
+The bridge reads initial capabilities at acquisition and sends only changed booleans. A selection, filter, or cursor change can change `CanPlay` without a playback snapshot.
+Accepted Final seeks emit `Seeked`; previews and rejected seeks do not.
 
 ## Frontend identity and host commands
 
@@ -161,7 +157,7 @@ Cover-art resource behavior also follows the [cover-art delivery specification](
 
 - [`MprisBridge.cpp`](../../../app/systemmedia/linux/MprisBridge.cpp) owns protocol mapping, owner-executor handling, signals, and subscriptions.
 - [`MprisBusSession.cpp`](../../../app/systemmedia/linux/MprisBusSession.cpp) owns the private connection, native context, invocation transfer, bounded flush, local close, and native join.
-- [`MprisPlaybackEndpoint.h`](../../../app/systemmedia/linux/MprisPlaybackEndpoint.h) owns command and capability mapping without D-Bus types.
+- [`MprisPlaybackEndpoint.cpp`](../../../app/systemmedia/linux/MprisPlaybackEndpoint.cpp) maps commands and capabilities without D-Bus types.
 - [`MprisArtUrlSession.h`](../../../app/systemmedia/linux/MprisArtUrlSession.h) owns current-resource correlation and callback invalidation before cancellation.
 - [`MprisArtUrlCache.cpp`](../../../app/systemmedia/linux/MprisArtUrlCache.cpp) owns content-addressed file-URL artifacts.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) composes the GTK identity and host callbacks; TUI [`App.cpp`](../../../app/tui/App.cpp) composes its unique identity, runtime option, and normal exit path.
@@ -174,9 +170,9 @@ Focused Linux integration sources live under [`test/systemmedia/linux/`](../../.
 - [`MprisBridgeTest.cpp`](../../../test/systemmedia/linux/MprisBridgeTest.cpp) covers state, command, capability, and content-addressed artwork mapping.
 - [`MprisPlaybackPositionTest.cpp`](../../../test/systemmedia/linux/MprisPlaybackPositionTest.cpp) covers live-clock and queued occurrence-guarded positioning.
 - [`MprisArtUrlSessionTest.cpp`](../../../test/systemmedia/linux/MprisArtUrlSessionTest.cpp) covers request replacement, synchronous completion, cancellation ordering, and destruction.
-- [`MprisBridgeIntegrationTest.cpp`](../../../test/systemmedia/linux/MprisBridgeIntegrationTest.cpp) covers private-bus properties, independent identities, no-queue contention, startup rollback, replacement after retirement, and Quit.
+- [`MprisBridgeIntegrationTest.cpp`](../../../test/systemmedia/linux/MprisBridgeIntegrationTest.cpp) covers private-bus properties and Play delivery, independent identities, no-queue contention, startup rollback, replacement after retirement, and Quit.
 - [`MprisBusSessionTest.cpp`](../../../test/systemmedia/linux/MprisBusSessionTest.cpp) covers owned invocation disposal, repeated close/publication settlement, fragmented, closed, rejected, malformed, oversized, and stalled authentication, GUID verification, authenticated `Hello` cancellation, spoofed and genuine name loss, address selection and rejection, partial-registration rollback, and stalled-write flush deadlines.
-- [`MprisSignalTest.cpp`](../../../test/systemmedia/linux/MprisSignalTest.cpp) checks changed-property signal order and distinguishes a capability change from a local selection change.
+- [`MprisSignalTest.cpp`](../../../test/systemmedia/linux/MprisSignalTest.cpp) checks changed-property signal order and `CanPlay` changes from focused selection and output readiness.
 - [`TuiMprisProcessTest.cpp`](../../../test/systemmedia/linux/TuiMprisProcessTest.cpp) exercises the real parser and TUI process on owned PTYs/private buses: auto/off, invalid options, child-environment discovery, acknowledged Quit, and keyboard/signal exit. It does not establish physical desktop-client behavior; its normal/ASan availability follows the [suite contract](../../development/test/test-suite.md).
 
 ## Related documents

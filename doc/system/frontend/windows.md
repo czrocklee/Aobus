@@ -151,18 +151,13 @@ The native item view reports the complete display count while materializing rows
 on demand; its row-model least-recently-used cache holds at most 2048 entries.
 Category table cells own only first-name text/count projections and render localized `+N` including duplicates; sorting/grouping uses the primary name, not all-credit membership.
 Inspector Credits use complete owning sections, displaying every name/kind/role and independent per-kind mixed state. Its all-kind/category edit actions open Properties at the requested scope.
-Cover art is asynchronous and ignores results from superseded selections.
-Both shells pin the selection's artwork above the inspector's fields, where it stays put as those fields scroll. Classic caps it smaller than Modern does; neither cap changes what is shown.
-One active-runtime loader coalesces group-heading, Inspector, Now Playing, and SMTC requests and holds at most 128 encoded-byte cache entries.
-An invalid cover resource id displays `monogram` for a realized group heading, `vinyl` in Inspector, and `equalizer` in Now Playing.
-Now Playing continues to display `equalizer` before playback starts and after transport returns to idle.
-Windows exposes no placeholder preference in this version.
-A valid resource id hides its placeholder while loading; absence or decode failure remains empty rather than being presented as confirmed no-cover.
-When no group-heading or Inspector entity exists, both placeholder and decoded cover are hidden.
+Both shells pin the selection's cover above the scrolling Inspector fields. Classic uses a smaller size cap than Modern. Now Playing instead follows the playback track, including a restored track before playback resumes. [WinUI cover delivery](../resource/cover-art-delivery.md#winui) owns the shared cache, placeholder states, and cancellation rules.
 
 The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
 
 Modern Soul handles right-click, hold, and hover like Classic Soul. Its click instead follows [primary Play policy](../playback/application-commit.md#primary-play), as does Classic's separate Play/Pause button.
+
+Both shells bind a [seek drag](../playback/README.md#position-and-keyboard-seeking) to the pointer captured by the slider or its template part. A release or capture loss from another pointer cannot end it. If the owner is canceled or the slider detaches mid-drag, the control discards its preview rather than committing a position.
 
 Enabled, engaged shuffle and repeat icons use a live accent theme resource in
 their element's resource scope. The icon style keeps the accent independent of
@@ -183,16 +178,11 @@ device names are not persisted.
 
 ### How SMTC availability follows playback
 
-The native SMTC session starts disabled.
-It subscribes to playback and attempts to apply the initial snapshot before enabling the session.
-Failure of an optional availability or status/metadata update does not prevent enablement.
-Each later snapshot advertises Play and Pause from `PlaybackActions::isCapable()` because those buttons describe protocol support; invoking either repeatedly may validly leave transport unchanged.
-Stop, Next, and Previous instead use `isEnabled()` because their availability depends on current playback state.
-Buttons outside this supported command set are ignored.
+The SMTC bridge attempts the initial button and metadata updates before enabling the native session. The availability subscription updates buttons, including Play on selection-only changes. Playback snapshots update transport status, title, artist, and album; when the cover changes, the bridge requests replacement artwork asynchronously. The two updates have independent optional-WinRT boundaries: failure of either does not suppress the other or prevent initial enablement.
 
-The dispatcher delivers a button press to `PlaybackActions` with the system-media origin. It rechecks the live state on that turn. Like the window's Play control, system Play resumes a held track first; with no held track it starts the first selected track still in the focused projection, or does nothing if there is none.
-Availability and playback-status/metadata updates use independent optional-WinRT boundaries: failure to update one does not suppress the other.
-Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
+SMTC advertises Play during active playback or when the [shared Play target policy](../playback/application-commit.md#primary-play) allows resume or start. Pause is advertised when there is a current track; Stop, Next, and Previous follow `PlaybackActions::isEnabled()`. Other buttons are ignored.
+
+The native press handler queues delivery without retaining the window's controls. On the dispatcher, a still-live bridge uses the same `PlaybackActions` as the window's transport controls against the current transport and focused selection. A press has no playback-result reply; repeated Play during active playback and repeated Pause while paused leave transport unchanged.
 
 ## Failure and cancellation
 

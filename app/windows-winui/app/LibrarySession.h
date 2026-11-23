@@ -134,7 +134,7 @@ namespace ao::winui
     void reportRootCommitFailure(Error const& error);
     void reportBusy();
     void reportReady(std::filesystem::path const& root);
-    void requestPlaySelection();
+    bool tryRequestPlaySelection();
 
     struct Storage;
     std::unique_ptr<Storage> _storagePtr;

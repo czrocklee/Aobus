@@ -24,17 +24,18 @@ namespace ao::uimodel
                                  std::chrono::milliseconds elapsed,
                                  std::chrono::milliseconds duration)
   {
-    auto const elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
-
-    switch (auto const durSec = std::chrono::duration_cast<std::chrono::seconds>(duration).count(); mode)
+    auto const formatClock = [](std::chrono::milliseconds const time)
     {
-      case PlaybackTimeMode::Elapsed: return std::format("{:d}:{:02d}", elapsedSec / 60, elapsedSec % 60);
+      auto const seconds = std::chrono::duration_cast<std::chrono::seconds>(time).count();
+      return std::format("{}:{:02d}", seconds / 60, seconds % 60);
+    };
 
-      case PlaybackTimeMode::Duration: return std::format("{:d}:{:02d}", durSec / 60, durSec % 60);
-
-      case PlaybackTimeMode::Combined:
-      default:
-        return std::format("{:d}:{:02d} / {:d}:{:02d}", elapsedSec / 60, elapsedSec % 60, durSec / 60, durSec % 60);
+    if (mode == PlaybackTimeMode::Elapsed)
+    {
+      return formatClock(elapsed);
     }
+
+    auto const total = duration > std::chrono::milliseconds::zero() ? formatClock(duration) : "--:--";
+    return mode == PlaybackTimeMode::Duration ? total : std::format("{} / {}", formatClock(elapsed), total);
   }
 } // namespace ao::uimodel

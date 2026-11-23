@@ -11,9 +11,9 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationIds.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -119,6 +119,7 @@ namespace ao::appkit
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);
     void seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target);
+    void seekBy(rt::PlaybackOccurrenceId presentedOccurrence, std::chrono::milliseconds delta) const;
     void setVolume(float volume);
     void selectOutput(audio::OutputDeviceSelection const& selection);
     std::optional<std::chrono::steady_clock::duration> refreshActivity();
@@ -142,10 +143,7 @@ namespace ao::appkit
     void refreshSelection();
     void updateSelection(std::vector<TrackId> ids);
     void refreshSelectedCover();
-    TrackId remotePlayTarget(rt::ViewId viewId) const;
-    bool canPlayFromRemoteCommand() const;
-    bool tryPlayFromRemoteCommand() const;
-    bool tryPlayFromView(rt::ViewId viewId, TrackId trackId) const;
+    void reportPlaybackFailure(Error const& error) const;
     struct Storage;
     std::unique_ptr<Storage> _storagePtr;
   };

@@ -1275,6 +1275,7 @@ es:table {
     appkit_clear_recent_menu { "Vaciar menú" }
     appkit_unknown_folder { "Carpeta desconocida" }
     appkit_playback_position_value { "{elapsed} de {duration}" }
+    appkit_playback_position_unknown_duration_value { "Tiempo transcurrido: {elapsed}, duración desconocida" }
     appkit_selection_total { "Seleccionadas: {selected, number} / {total, plural, one {# pista} other {# pistas}}" }
     appkit_tracks_selected { "{count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
     appkit_track_of_total { "{track, number} de {total, number}" }

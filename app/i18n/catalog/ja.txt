@@ -1275,6 +1275,7 @@ ja:table {
     appkit_clear_recent_menu { "メニューを消去" }
     appkit_unknown_folder { "不明なフォルダ" }
     appkit_playback_position_value { "{elapsed}（全体 {duration}）" }
+    appkit_playback_position_unknown_duration_value { "経過時間 {elapsed}、総再生時間は不明" }
     appkit_selection_total { "{selected, number} 曲を選択中 / {total, plural, other {全 # 曲}}" }
     appkit_tracks_selected { "{count, plural, other {# 曲を選択中}}" }
     appkit_track_of_total { "{track, number} / {total, number}" }

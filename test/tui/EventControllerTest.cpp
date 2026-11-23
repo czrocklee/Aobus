@@ -6,6 +6,7 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include "test/media/wav/TestWav.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
@@ -70,6 +71,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
@@ -89,6 +91,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <optional>
@@ -1944,8 +1947,18 @@ namespace ao::tui::test
 
     REQUIRE(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
     enterCommand(controller, "toggle");
-    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
-    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
+    auto const paused = currentPlayback(fixture).transport;
+    CHECK(paused.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    REQUIRE(paused.transport == audio::Transport::Paused);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const cursorTrack = library.selectedTrackView().track->id;
+    REQUIRE(cursorTrack != paused.nowPlaying.trackId);
+    fixture.observedPositionRevision = paused.positionRevision;
+    enterCommand(controller, "play");
+    REQUIRE(fixture.tryWaitForPlayback(cursorTrack));
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
 
     enterCommand(controller, "stop");
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
@@ -2321,7 +2334,7 @@ namespace ao::tui::test
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == initialTrack);
   }
 
-  TEST_CASE("EventController - primary play is unavailable while the filter leaves no track cursor")
+  TEST_CASE("EventController - playback is unavailable while the filter leaves no track cursor")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -2335,7 +2348,16 @@ namespace ao::tui::test
     REQUIRE(library.applyFilter());
     REQUIRE(library.tracks().empty());
     CHECK_FALSE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
+    CHECK_FALSE(actions.isCapable(uimodel::PlaybackCommand::Play));
+    auto const notificationsBeforePlay = notificationCount(fixture);
     CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(notificationCount(fixture) == notificationsBeforePlay);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(notificationCount(fixture) == notificationsBeforePlay + 1);
+    CHECK(lastNotification(fixture) == "Playback control unavailable");
 
     library.clearFilterDraft();
     REQUIRE(library.applyFilter());
@@ -2343,6 +2365,45 @@ namespace ao::tui::test
     REQUIRE(library.selectedTrackView().track != nullptr);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
     REQUIRE(fixture.tryWaitForPlayback(library.selectedTrackView().track->id));
+  }
+
+  TEST_CASE("EventController - transport starts the track cursor rather than marks or a group boundary")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.sections().size() == 2);
+    auto const pairIt = std::ranges::find(library.sections(), std::size_t{2}, &TrackSection::rowCount);
+    REQUIRE(pairIt != library.sections().end());
+    library.setSelectedTrackIndex(static_cast<std::int32_t>(pairIt->rowBegin));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const markedTrack = library.selectedTrackView().track->id;
+    library.toggleFocusedMark();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrackView().track != nullptr);
+    auto const cursorTrack = library.selectedTrackView().track->id;
+    REQUIRE(cursorTrack != markedTrack);
+    REQUIRE(cursorTrack != library.tracks().front().id);
+    REQUIRE(library.selectedTrackIds() == std::vector{markedTrack});
+
+    SECTION("Space starts the cursor")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    }
+
+    SECTION("Play starts the cursor directly")
+    {
+      auto& actions = controller.playbackActions();
+      REQUIRE(actions.isCapable(uimodel::PlaybackCommand::Play));
+      REQUIRE(actions.tryExecute(uimodel::PlaybackCommand::Play));
+    }
+
+    REQUIRE(fixture.tryWaitForPlayback(cursorTrack));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.sourceListId == library.currentListId());
   }
 
   TEST_CASE("EventController - primary play resumes its subject and offset while browsing another list")
@@ -2407,6 +2468,38 @@ namespace ao::tui::test
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
+  }
+
+  TEST_CASE("EventController - Space reports only start failure when the runtime filter excludes the cursor")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    // Commit the filter in the runtime, then press Space before the TUI sees the projection change.
+    auto& views = fixture.runtimePtr->views();
+    auto const viewId = library.activeViewId();
+    REQUIRE(views.setFilter(viewId, R"($title = "Second")"));
+    auto const projectionPtr = ao::test::requireValue(views.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr->size() == 1);
+    auto const cursor = library.selectedTrackView();
+    REQUIRE(cursor.track != nullptr);
+    REQUIRE_FALSE(projectionPtr->indexOf(cursor.track->id));
+    REQUIRE(controller.playbackActions().isEnabled(uimodel::PlaybackCommand::PlayPause));
+    auto const notificationsBefore = notificationCount(fixture);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+
+    auto const transport = currentPlayback(fixture).transport;
+    CHECK(transport.transport == audio::Transport::Idle);
+    CHECK(transport.nowPlaying.trackId == kInvalidTrackId);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == notificationsBefore + 1);
+    auto const& warning = feed.entries.back();
+    CHECK(warning.severity == rt::NotificationSeverity::Warning);
+    CHECK(std::get<std::string>(warning.message) ==
+          i18n::requiredText(library.textCatalog(), i18n::MessageId::TuiPlaybackStartFailed));
   }
 
   TEST_CASE("EventController - idle stop is a silent no-op")
@@ -3233,21 +3326,38 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.finalSeekRevision == stabilized.finalSeekRevision);
   }
 
-  TEST_CASE("EventController - disabled seek rail ignores mouse clicks")
+  TEST_CASE("EventController - a stale seek target cannot seek a current track of unknown duration")
   {
     auto fixture = EventControllerFixture{};
+    // A one-frame whole file has a zero-millisecond duration.
+    auto const bytes = ao::test::wav::makeWav(ao::test::wav::Spec{
+      .sampleRate = 44100,
+      .audioData = std::vector<std::uint8_t>(2, 0x21),
+    });
+    auto const file = ao::test::TempFile{bytes, ".wav"};
+    std::filesystem::copy_file(file.path, fixture.runtimePtr->musicRoot() / "unknown.wav");
+    auto const trackId = fixture.addTrack(library::test::TrackSpec{.title = "Unknown duration", .uri = "unknown.wav"});
     auto library = fixture.makeLibrary();
-    auto& hitRegions = fixture.hitRegions;
-    hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
+    fixture.addReadyAudioProvider();
+    auto& playback = fixture.runtimePtr->playback();
+    REQUIRE(playback.commands().startFromView(library.activeViewId(), trackId));
+    REQUIRE(fixture.tryWaitForPlayback(trackId));
+    auto const before = playback.snapshot().transport;
+    REQUIRE(before.occurrenceId.value != 0);
+    REQUIRE(before.duration == std::chrono::milliseconds::zero());
+
+    fixture.hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
-    auto previewSub = fixture.runtimePtr->playback().events().onSeekPreview(
-      [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
+                                                      { seekPreviews.push_back(elapsed); });
     auto controller = fixture.makeEvents(library);
 
-    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
-
-    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Mouse("", press)));
+    CHECK_FALSE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1})));
+    CHECK_FALSE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 25, .y = 1})));
     CHECK(seekPreviews.empty());
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
   TEST_CASE("EventController - modal overlays block seek rail mouse clicks")

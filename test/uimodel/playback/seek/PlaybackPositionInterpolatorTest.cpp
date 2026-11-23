@@ -41,6 +41,26 @@ namespace ao::uimodel::test
       CHECK(interpolator.interpolateElapsed(startTime + std::chrono::seconds{10}) == duration);
     }
 
+    SECTION("Unknown total does not erase the elapsed anchor or stop the playing clock")
+    {
+      auto const startTime = FrameClock::fromMicros(1'000'000);
+      auto const elapsed = std::chrono::milliseconds{3200};
+      interpolator.updateState(elapsed, {}, true);
+      CHECK(interpolator.interpolateElapsed(startTime) == elapsed);
+      CHECK(interpolator.interpolateElapsed(startTime + std::chrono::seconds{1}) == std::chrono::milliseconds{4200});
+      interpolator.updateState(std::chrono::milliseconds{4035}, {}, false);
+      CHECK(interpolator.interpolateElapsed(startTime + std::chrono::seconds{3}) == std::chrono::milliseconds{4035});
+    }
+
+    SECTION("An unknown total does not allow a large restored offset to wrap")
+    {
+      auto const startTime = FrameClock::fromMicros(0);
+      auto const maximumElapsed = std::chrono::milliseconds::max();
+      interpolator.updateState(maximumElapsed - std::chrono::milliseconds{1}, {}, true);
+      REQUIRE(interpolator.interpolateElapsed(startTime) == maximumElapsed - std::chrono::milliseconds{1});
+      CHECK(interpolator.interpolateElapsed(startTime + std::chrono::seconds{1}) == maximumElapsed);
+    }
+
     SECTION("Frame clock moving backwards re-bases the interpolation")
     {
       interpolator.updateState(std::chrono::seconds{1}, std::chrono::seconds{5}, true);

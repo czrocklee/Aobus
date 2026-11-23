@@ -35,6 +35,7 @@ namespace ao::i18n::test
       {MessageId::AppKitPropertiesSelection, {{"count", 2}}},
       {MessageId::AppKitUnavailablePresentation, {{"id", "I"}}},
       {MessageId::AppKitPlaybackPositionValue, {{"elapsed", "1:23"}, {"duration", "5:00"}}},
+      {MessageId::AppKitPlaybackPositionUnknownDurationValue, {{"elapsed", "0:17"}}},
       {MessageId::AppKitSelectionTotal, {{"selected", 1}, {"total", 2}}},
       {MessageId::AppKitTracksSelected, {{"count", 2}}},
       {MessageId::AppKitTrackOfTotal, {{"track", 1}, {"total", 2}}},
@@ -115,9 +116,17 @@ namespace ao::i18n::test
           "1 selected / 1 track");
     CHECK(requiredFormat(*catalogRes, MessageId::AppKitSelectionTotal, {{"selected", 1000}, {"total", 50000}}) ==
           "1,000 selected / 50,000 tracks");
+  }
+
+  TEST_CASE("AppKit messages - seek accessibility describes known and unknown durations")
+  {
+    auto catalogRes = MessageCatalog::create("en");
+    REQUIRE(catalogRes);
     CHECK(requiredFormat(*catalogRes,
                          MessageId::AppKitPlaybackPositionValue,
                          {{"elapsed", "1:23"}, {"duration", "5:00"}}) == "1:23 of 5:00");
+    CHECK(requiredFormat(*catalogRes, MessageId::AppKitPlaybackPositionUnknownDurationValue, {{"elapsed", "0:17"}}) ==
+          "0:17 elapsed, duration unknown");
   }
 
   TEST_CASE("AppKit messages - repeat modes expose distinct accessibility descriptions")

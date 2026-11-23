@@ -1275,6 +1275,7 @@ zh_Hant:table {
     appkit_clear_recent_menu { "清除選單" }
     appkit_unknown_folder { "未知的資料夾" }
     appkit_playback_position_value { "{elapsed}，共 {duration}" }
+    appkit_playback_position_unknown_duration_value { "已播放 {elapsed}，總長度未知" }
     appkit_selection_total { "已選取 {selected, number} / {total, plural, other {共 # 首曲目}}" }
     appkit_tracks_selected { "{count, plural, other {已選取 # 首曲目}}" }
     appkit_track_of_total { "{track, number} / {total, number}" }

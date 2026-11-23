@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 
 namespace ao::gtk
 {
@@ -106,7 +107,7 @@ namespace ao::gtk
 
   void TimeLabel::applyState(ao::uimodel::PlaybackPositionViewState const& view)
   {
-    if (view.duration == std::chrono::milliseconds{0})
+    if (!view.hasTrack)
     {
       reset();
       return;
@@ -136,13 +137,16 @@ namespace ao::gtk
     updateTickState();
     _dirty = true;
     _lastElapsed = std::chrono::seconds{0};
-    _lastDuration = std::chrono::seconds{0};
+    _optLastDuration.reset();
   }
 
   void TimeLabel::updateLabel(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration)
   {
     auto const coarseElapsed = std::chrono::duration_cast<std::chrono::seconds>(elapsed);
-    auto const coarseDuration = std::chrono::duration_cast<std::chrono::seconds>(duration);
+    // An unknown total and a known subsecond total render differently.
+    auto const optCoarseDuration = duration > std::chrono::milliseconds{0}
+                                     ? std::optional{std::chrono::duration_cast<std::chrono::seconds>(duration)}
+                                     : std::nullopt;
 
     switch (_mode)
     {
@@ -154,7 +158,7 @@ namespace ao::gtk
 
         break;
       case Mode::Duration:
-        if (!_dirty && coarseDuration == _lastDuration)
+        if (!_dirty && optCoarseDuration == _optLastDuration)
         {
           return;
         }
@@ -162,7 +166,7 @@ namespace ao::gtk
         break;
       case Mode::Combined:
       default:
-        if (!_dirty && coarseElapsed == _lastElapsed && coarseDuration == _lastDuration)
+        if (!_dirty && coarseElapsed == _lastElapsed && optCoarseDuration == _optLastDuration)
         {
           return;
         }
@@ -171,7 +175,7 @@ namespace ao::gtk
     }
 
     _lastElapsed = coarseElapsed;
-    _lastDuration = coarseDuration;
+    _optLastDuration = optCoarseDuration;
     _dirty = false;
 
     _label.set_text(ao::uimodel::formatPlaybackTime(_mode, elapsed, duration));

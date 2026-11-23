@@ -18,9 +18,12 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 1. Open a list or library view and select the track where playback should begin.
 2. Press Enter or activate the row to start a sequence from that view.
 3. Use the transport controls for play/pause, previous, next, shuffle, and repeat.
-   Play in the window or from system media controls continues a paused or restored track even if you have selected another row. With no track to resume, Play starts the first selected track that matches the current filter; it does not choose an unselected row.
+   Play in the window or from system media controls resumes a paused or restored track, even if another row is selected.
+   When stopped with nothing to resume, Play starts the first selected track still visible in the current view, provided the output is available.
    The default application shortcuts include Ctrl+P for play/pause, Ctrl+Left and Ctrl+Right for previous and next, Ctrl+U for shuffle, and Ctrl+R for repeat.
-4. Drag or click the seek control to change position.
+4. Drag or click the seek slider, or focus it and press Left or Right without modifiers to move five seconds per press. Repeated presses add up.
+   If a different track starts or the same track starts again during a drag, the slider and clock show the new playback position. Release and drag again to seek.
+   If the total shows `--:--`, you can still read the elapsed time, but you can't seek.
 5. Use the volume button for precision control, scroll over it for two-percentage-point changes, or middle-click it to toggle mute.
 6. Open **Edit → Preferences... → Playback/Output** to choose an output device.
 
@@ -28,6 +31,9 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 
 Press Ctrl+L to select the playing track in the List where playback started, even if the track also appears in the List you're browsing. If a quick filter hides it there, Aobus shows an unfiltered view without clearing your filter. If the source List was deleted or no longer contains the track, Aobus looks in **All Tracks** instead.
 If reveal changes views, press the mouse Back button once to return to the view and filter you left.
+
+When a library reopens with a track to resume, Now Playing shows that track's cover if available. Selecting another row doesn't change it.
+If your layout sets the cover slot's action to **Jump to Album**, click the slot to select the restored track in **All Tracks** with the **Albums** presentation. The action works without a cover and does not start playback.
 
 ### Choose what happens if a PipeWire device disappears
 

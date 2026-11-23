@@ -204,6 +204,7 @@ namespace ao::appkit
       registerCommands();
       snapshotSub =
         playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+      // Selection changes can enable Play without publishing a playback snapshot.
       availabilitySub = actions.onAvailabilityChanged([this] { refreshCommandAvailability(playback.snapshot()); });
       handleSnapshot(playback.snapshot());
     }
@@ -428,7 +429,7 @@ namespace ao::appkit
       }
 
       auto const optCommand = playbackCommand(admitted.command);
-      return optCommand && actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+      return optCommand && actions.tryExecute(*optCommand);
     }
 
     void refreshCommandAvailability(rt::PlaybackSnapshot const& snapshot)
@@ -445,31 +446,33 @@ namespace ao::appkit
       nextAdmission.occurrenceId = transport.occurrenceId;
       nextAdmission.duration = transport.duration;
       nextAdmission.available[commandIndex(MediaRemoteCommand::Play)] =
-        isActiveTransport(transport.transport) ||
-        actions.isEnabled(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia);
+        actions.isCapable(uimodel::PlaybackCommand::Play);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Pause)] =
         transport.transport == audio::Transport::Paused || actions.isEnabled(uimodel::PlaybackCommand::Pause);
       nextAdmission.available[commandIndex(MediaRemoteCommand::PlayPause)] =
-        actions.isEnabled(uimodel::PlaybackCommand::PlayPause, uimodel::PlaybackActionOrigin::SystemMedia);
+        actions.isEnabled(uimodel::PlaybackCommand::PlayPause);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Previous)] =
         actions.isEnabled(uimodel::PlaybackCommand::Previous);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Next)] =
         actions.isEnabled(uimodel::PlaybackCommand::Next);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Stop)] =
         actions.isEnabled(uimodel::PlaybackCommand::Stop);
-      nextAdmission.available[commandIndex(MediaRemoteCommand::ChangePosition)] =
-        transport.occurrenceId.value != 0 && transport.nowPlaying.trackId != kInvalidTrackId &&
-        transport.duration > std::chrono::milliseconds{0};
+      nextAdmission.available[commandIndex(MediaRemoteCommand::ChangePosition)] = transport.hasSeekableSubject();
 
+      auto previousAvailable = std::array<bool, kCommandCount>{};
       {
         auto lock = std::scoped_lock{gatePtr->mutex};
+        previousAvailable = gatePtr->snapshot.available;
         gatePtr->snapshot = nextAdmission;
       }
 
       for (std::size_t index = 0; index < nativeSession.commands.size(); ++index)
       {
-        auto* const command = nativeSession.commands[index].command;
-        command.enabled = static_cast<BOOL>(nextAdmission.available[index]);
+        if (!hasLastTransport || previousAvailable[index] != nextAdmission.available[index])
+        {
+          auto* const command = nativeSession.commands[index].command;
+          command.enabled = static_cast<BOOL>(nextAdmission.available[index]);
+        }
       }
     }
 
@@ -485,9 +488,9 @@ namespace ao::appkit
       refreshCommandAvailability(snapshot);
       auto const& transport = snapshot.transport;
 
-      auto const clockChanged = !hasLastSnapshot || transport.transport != lastSnapshot.transport.transport ||
-                                transport.positionRevision != lastSnapshot.transport.positionRevision ||
-                                transport.duration != lastSnapshot.transport.duration;
+      auto const clockChanged = !hasLastTransport || transport.transport != lastTransport.transport ||
+                                transport.positionRevision != lastTransport.positionRevision ||
+                                transport.duration != lastTransport.duration;
 
       if (clockChanged)
       {
@@ -497,10 +500,11 @@ namespace ao::appkit
       }
 
       auto const coverChanged = displayedCoverId != transport.nowPlaying.coverArtId;
-      auto const publicationChanged = clockChanged || transport.nowPlaying != lastSnapshot.transport.nowPlaying ||
-                                      snapshot.succession.currentTrackId != lastSnapshot.succession.currentTrackId;
-      lastSnapshot = snapshot;
-      hasLastSnapshot = true;
+      auto const publicationChanged = clockChanged || transport.nowPlaying != lastTransport.nowPlaying ||
+                                      (transport.transport == audio::Transport::Idle &&
+                                       transport.hasDeferredResume != lastTransport.hasDeferredResume);
+      lastTransport = transport;
+      hasLastTransport = true;
 
       if (coverChanged)
       {
@@ -520,7 +524,7 @@ namespace ao::appkit
                                                      auto* const data = [NSData dataWithBytes:encoded.data()
                                                                                        length:encoded.size()];
                                                      artwork = [[NSImage alloc] initWithData:data];
-                                                     publishNowPlaying(lastSnapshot);
+                                                     publishNowPlaying(lastTransport);
                                                    }
                                                  });
 
@@ -534,21 +538,18 @@ namespace ao::appkit
 
       if (publicationChanged || coverChanged)
       {
-        publishNowPlaying(snapshot);
+        publishNowPlaying(transport);
       }
     }
 
-    void publishNowPlaying(rt::PlaybackSnapshot const& snapshot) const
+    void publishNowPlaying(rt::PlaybackTransportSnapshot const& transport) const
     {
       AO_EXPECTS(NSThread.isMainThread);
       auto* const center = MPNowPlayingInfoCenter.defaultCenter;
-      auto const& transport = snapshot.transport;
-      auto const resumableSubject = transport.nowPlaying.trackId != kInvalidTrackId &&
-                                    snapshot.succession.currentTrackId == transport.nowPlaying.trackId;
       center.playbackState = playbackState(transport.transport);
 
       if (transport.nowPlaying.trackId == kInvalidTrackId ||
-          (transport.transport == audio::Transport::Idle && !resumableSubject))
+          (transport.transport == audio::Transport::Idle && !transport.hasDeferredResume))
       {
         center.nowPlayingInfo = nil;
         return;
@@ -626,12 +627,12 @@ namespace ao::appkit
     async::Subscription snapshotSub;
     async::Subscription availabilitySub;
     rt::ResourceByteMemoryCache::Request artworkRequest;
-    rt::PlaybackSnapshot lastSnapshot{};
+    rt::PlaybackTransportSnapshot lastTransport{};
     std::chrono::steady_clock::time_point clockReceiptTime{};
     std::chrono::milliseconds clockElapsed{0};
     ResourceId displayedCoverId = kInvalidResourceId;
     NSImage* artwork = nil;
-    bool hasLastSnapshot = false;
+    bool hasLastTransport = false;
     bool retired = false;
   };
 

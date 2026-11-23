@@ -668,19 +668,31 @@ probes are separate manual desktop checks.
 
 ### Output selection probe
 
+Run the options below separately from the naming gate. Use a private, idle
+active console and run as the signed-in test user without elevation. For a
+scheduled launch, use an interactive token with run level `Limited`.
+
 The default automation run restores a saved request for a missing WASAPI
 endpoint. The Modern output button's tooltip explains the unavailable request;
 the flyout shows a disabled advisory, leaves alternate devices unchecked, and
-accepts an explicit choice of the discard-only endpoint. To check the same
-choice from Classic's Soul button, run this on a private interactive console:
+accepts an explicit choice of the discard-only endpoint. The probe refuses the
+choice if a platform endpoint shares the discard device's name. To check the
+same choice from Classic's Soul button, run without a media fixture:
 
 ```bat
 bazel run //app/windows-winui:ao_winui_automation_probe -- --classic-output
 ```
 
-Classic activates the frame's playback adapters, including SMTC; the default
-run does not. The ordinary audit writes a silent WAV to exercise Rescan;
-neither mode issues Play or changes the Windows default device.
+Classic activates the frame's playback adapters, including SMTC, only while
+idle with no playback subject and the missing request still pending. After
+confirming the ready discard route by backend, device, and profile, the probe
+reads the window's SMTC Play flag on selection, clearing, and reselection.
+It checks that the disabled controls' Play flag stays unchanged on a selection
+change after retirement. This is property readback, not OS media-button
+delivery or a test of callbacks queued at retirement.
+
+The default run does not activate those adapters; it writes a silent WAV for
+Rescan. Neither mode issues Play or changes the Windows default device.
 
 ### Primary Play probe
 
@@ -695,10 +707,40 @@ bazel run //app/windows-winui:ao_winui_automation_probe -- --primary-play "C:\fi
 The probe copies the fixture into its disposable library and requires a ready
 discard-only route before invoking Play. A pass distinguishes starting a
 selected row from resuming the same paused track at its saved position while
-another List and row are selected. It also dispatches an SMTC Play button
-through the production command handler, checking that it uses the system-media
-origin and that a session with no target reports no error. This does not test
-OS button delivery, WASAPI rendering, audibility, or physical input.
+another List and row are selected. The probe also calls the production SMTC
+Play handler directly: with no target the subject stays empty and notification
+entries stay unchanged; after Stop, Play starts a new occurrence of the visible
+selected row. This does not test OS button delivery, WASAPI rendering,
+audibility, or physical input.
+
+### Seek probes
+
+Supply a private PCM WAV with a decoded duration longer than 11 seconds. Use
+an absolute path to a regular file, not a symlink, with the lowercase `.wav`
+extension and a size of at most 16 MiB. Run each command separately:
+
+```bat
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-steps "C:\fixtures\private.wav"
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-range classic "C:\fixtures\private.wav"
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-range modern "C:\fixtures\private.wav"
+```
+
+Expect exit code 0. The probes require the ready discard-only route.
+`--seek-steps` posts `WM_KEYDOWN` and `WM_KEYUP` for two Right arrows and one
+Left arrow to its own focused Modern input window, not system-wide. It checks
+1 → 11 → 6 seconds for the same paused occurrence.
+
+The steps probe also checks the disabled slider and two `00:00` clocks before
+playback. Restoring the saved six-second position for the track without a
+catalog duration must yield a new deferred occurrence, elapsed `0:06`, total
+`--:--`, and a slider that is disabled and refuses keyboard focus.
+
+`--seek-range` reads the shipping slider's UI Automation `RangeValue` bounds
+(zero to decoded duration, in milliseconds) and current position. Paired
+`SetValue` calls coalesce to one committed seek at each of the minimum,
+maximum, and a fresh interior target, updating the thumb and elapsed clock
+without changing the paused occurrence. Neither path exercises physical drag,
+pointer capture, or replacement or replay during a held gesture.
 
 ## Native tests and sanitizers
 

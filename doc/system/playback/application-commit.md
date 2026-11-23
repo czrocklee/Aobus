@@ -141,13 +141,17 @@ boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 ### Primary Play
 
-[`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local transport controls and system media commands the same resume priority:
+[`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local and system-media commands the same Play target policy:
 
-- Play/Pause pauses active playback.
-- Play or Play/Pause resumes a paused track or a track held for deferred resume. Clearing succession does not discard the transport's deferred subject or offset. If its requested output is pending, Play is unavailable; it does not start the browsed track instead.
-- With no subject to resume, Idle or Error can start a selection only when the output is ready. The local controls in GTK, WinUI and AppKit use the first selected track present in the focused view's projection. The TUI uses the track under its cursor, not its marks. With no such track, local Play is disabled; it does not choose the first row.
+- During active playback (Opening, Buffering, Playing, or Seeking), Play/Pause pauses; a repeated Play does not restart the track.
+- Play or the start side of Play/Pause resumes a paused or deferred track first. Clearing succession does not discard a deferred subject or its offset. A pending output request blocks resume without falling back to another track.
+- With no subject to resume, Idle or Error can start a track only when the output is ready. GTK, WinUI, and AppKit use the first selected track still present in the focused view's live projection. The TUI uses the track under its cursor, not its marks. A missing or filtered-out target does not fall back to the first row.
 
-When neither origin has a subject to resume, the host may provide a separate system-media start handler and availability predicate. GTK and WinUI use the same projected selection for both origins; a selected track hidden by the filter is not eligible. On AppKit, system Play and the start side of system Play/Pause can use the first projected row if nothing is selected, and become unavailable when the projection is empty or every selected track is filtered out; the local control never falls back to an unselected row. MPRIS still acknowledges a recognized transport method even when `tryExecute` declines it. Explicit row activation requests a start from that row rather than resuming a different track.
+`isCapable(Play)` advertises Play during active playback even though `tryExecute(Play)` returns `false` without changing transport. Otherwise Play availability requires a resumable subject or an eligible target on a ready output. A selection change alone can enable or disable Play without a playback publication. When a delayed command reaches the frontend executor, it checks the current transport and target again: advertising Play does not reserve a track.
+
+For a new selection start, local and system-media commands use the same frontend callback. `tryExecute` returns the callback's immediate start-admission result, not confirmation that decoder preparation finished or audio started.
+
+Activating a row explicitly requests playback from that row rather than resuming a different track.
 
 ### Admission and execution
 
@@ -174,6 +178,7 @@ orthogonal command temporarily owned the boundary. The original occurrence-free
 `seekBy` captures an occurrence and signed delta in the same FIFO.
 At execution it requires the matching occurrence and positive duration, samples live Transport elapsed, and clamps the relative target without overflowing before issuing a guarded Final.
 Its default `Clamp` behavior issues a Final seek at the clamped target, including the end request at a positive duration; `Next` instead explicitly advances for a positive offset strictly past the live endpoint, only with an available successor and matching runtime/audio identity.
+With `ClampIfChanged`, a slider step that cannot move the live position issues no Final. Repeated outward steps at a paused endpoint do not flush audio again.
 The accepted Next uses existing succession cancellation of pending explicit preparation and lookahead; a rejected or ordinary relative seek does not invalidate command generations.
 An exact-end target remains a Final seek and therefore an end request; unavailable or stale past-end Next is a no-op.
 Sequential queued relative commands therefore accumulate from each execution's live position rather than a cached publication; headless consumers do not need rendering subscriptions.
@@ -267,7 +272,9 @@ An accepted Final seek advances both revision identities. A target inside the Tr
 An unguarded Final clamps its target to `[0, duration]`; a guarded seek first requires its nonzero expected occurrence, a valid current subject, positive duration, and a target in that inclusive range, rejecting a target past the duration.
 Active playback additionally requires the expected opaque audio item to remain Engine-current across prepared-next disarm and RT splice settlement, including for an end request.
 Preview applies the guarded occurrence, subject, duration, and range checks but only publishes a position; it never mutates audio, disarms lookahead, ends the Track, or advances either seek revision.
-Any rejection emits no seek event and advances no seek revision; a matched final issuance reports success even when an audio failure later appears through the existing transport-status channel.
+A rejected seek publishes no Preview or Final update and advances neither the position revision nor the final-seek revision. A successful `trySeek` reports issuance, not audio completion; a later audio failure is reported through transport status.
+
+A guarded seek's optional settlement callback runs after any resulting publication, even on rejection. It can run inline, follows observer reentrancy rules and reports neither acceptance nor audio completion. Shutdown abandons callbacks already in the queue. A seek submitted after admission closes does not run, but its callback runs immediately.
 
 A Final seek to a **positive** duration is a transport end request, not a decoder seek.
 While Playing it cancels prepared audio through an item-guarded stop barrier and completes the subject through natural Idle succession, without emitting Stopped or replaying a successor whose splice already won.
@@ -314,7 +321,8 @@ so contract-fulfilling observers run synchronously in connection order.
 An escaping exception enters AO fatal handling at that boundary and provides no later-observer guarantee.
 Observer-issued commands join the queue.
 
-Seek previews carry only their elapsed position and do not alter the snapshot.
+A seek preview carries an elapsed position without changing the snapshot. Canceling a gesture never issues a seek. On cancellation or a rejected Final, the service notifies `onSeekPreviewEnded` subscribers only if that gesture still owns the preview on the current occurrence. The slider and clock can then resample live elapsed without changing either seek revision or clearing a newer preview.
+
 Playing-track reveal requests carry the subject's track and source List ids. GTK, TUI and WinUI use [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source) before selecting or scrolling to the row. AppKit does not handle this playback reveal; its Reveal in Finder action locates a file instead.
 
 Explicit reveals, such as album navigation or GTK startup restore, carry the track and optional preferred view and List ids (invalid when unspecified). GTK and WinUI prefer the view, use the supplied List as a fallback, and do not weaken the target view's filter to expose a hidden row.
@@ -328,12 +336,10 @@ Events produced within a command are delivered after snapshot settlement.
 A result-bearing command rejected because admission is closed returns
 `InvalidState`; void commands after shutdown are ignored. Guarded `trySeek` and
 `tryNext` use `false` for every synchronous admission or identity/input
-rejection and never leave deferred work behind. The guarded queued `seek`
-overload has no later result channel; execution-time rejection emits neither a
-preview nor a final update. Immediate lower
-validation errors return to the caller. A queued command has no later public
-result channel; playback execution failures continue through the internal
-recovery and notification owners.
+rejection and never leave deferred work behind. Immediate lower validation
+errors return to the caller. A queued command has no later public result
+channel; playback execution failures continue through the internal recovery
+and notification owners.
 
 An inspection decoder failure is asynchronous: it publishes the existing
 track-open notification and leaves the previous session and snapshot unchanged.

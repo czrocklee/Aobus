@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 
 #include <chrono>
@@ -47,6 +48,8 @@ namespace ao::rt
 
     virtual async::Subscription onSnapshot(PlaybackSnapshotObserver observer) = 0;
     virtual async::Subscription onSeekPreview(compat::MoveOnlyFunction<void(std::chrono::milliseconds)> handler) = 0;
+    // Cancellation or a rejected pointer Final can end its preview without a snapshot or position revision.
+    virtual async::Subscription onSeekPreviewEnded(compat::MoveOnlyFunction<void(PlaybackOccurrenceId)> handler) = 0;
     virtual async::Subscription onRevealTrackRequested(
       compat::MoveOnlyFunction<void(PlaybackRevealTrackRequest const&)> handler) = 0;
 

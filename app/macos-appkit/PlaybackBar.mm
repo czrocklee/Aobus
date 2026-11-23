@@ -10,6 +10,7 @@
 #include "SoulButton.h"
 #include <ao/uimodel/playback/command/PlaybackCommandText.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
+#include <ao/uimodel/playback/seek/SeekStep.h>
 
 #include <algorithm>
 #include <array>
@@ -59,6 +60,18 @@ namespace
     return field;
   }
 
+  std::string playbackBarTime(ao::uimodel::PlaybackTimeMode mode,
+                              ao::uimodel::PlaybackPositionViewState const& position,
+                              std::chrono::milliseconds elapsed)
+  {
+    if (!position.hasTrack)
+    {
+      return mode == ao::uimodel::PlaybackTimeMode::Combined ? "0:00 / 0:00" : "0:00";
+    }
+
+    return ao::uimodel::formatPlaybackTime(mode, elapsed, position.duration);
+  }
+
   void detachView(NSView* view)
   {
     if ([view.superview isKindOfClass:NSStackView.class] != NO)
@@ -75,21 +88,51 @@ namespace
   }
 } // namespace
 
+@interface AobusSeekSlider ()
+- (void)presentPlaybackFraction:(double)fraction;
+@end
+
 @implementation AobusSeekSlider {
   std::optional<ao::appkit::PlaybackSeekTarget> _optPresentedTarget;
   std::optional<ao::appkit::PlaybackSeekTarget> _optGestureTarget;
   std::optional<ao::uimodel::SeekSliderUpdate> _optFinalUpdate;
   ao::uimodel::SeekInteraction _interaction;
+  std::optional<std::chrono::seconds> _optKeyOffset;
+  double _playbackFraction;
 }
 - (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget
 {
+  if (optTarget && _optGestureTarget && optTarget->revision != _optGestureTarget->revision)
+  {
+    // An external seek can replace the absolute position without replacing the track occurrence.
+    _interaction.retirePointerInteraction();
+  }
+
   _optPresentedTarget = optTarget;
   _interaction.applyViewState(optTarget ? optTarget->duration : std::chrono::milliseconds{0},
                               optTarget.has_value(),
                               optTarget ? optTarget->occurrenceId : ao::rt::PlaybackOccurrenceId{});
 }
+- (void)presentPlaybackFraction:(double)fraction
+{
+  _playbackFraction = fraction;
+
+  if (!_interaction.isPointerCurrent())
+  {
+    self.doubleValue = fraction;
+  }
+}
+- (BOOL)isRetiredDrag
+{
+  return static_cast<BOOL>(_interaction.isPointerActive() && !_interaction.isPointerCurrent());
+}
 - (std::optional<ao::appkit::PlaybackSeekTarget>)seekTarget
 {
+  if ([self isRetiredDrag] != NO)
+  {
+    return std::nullopt;
+  }
+
   return _interaction.isPointerActive() || _optFinalUpdate ? _optGestureTarget : _optPresentedTarget;
 }
 - (std::chrono::milliseconds)seekElapsed
@@ -97,9 +140,63 @@ namespace
   return std::chrono::milliseconds{static_cast<std::int64_t>(std::clamp(self.doubleValue, 0.0, 1.0) *
                                                              static_cast<double>(_interaction.duration().count()))};
 }
+- (BOOL)sendAction:(SEL)action to:(id)target
+{
+  if ([self isRetiredDrag] != NO)
+  {
+    // AppKit's cell can still write a drag value until its mouse tracking returns.
+    self.doubleValue = _playbackFraction;
+    return NO;
+  }
+
+  return [super sendAction:action to:target];
+}
 - (ao::uimodel::SeekSliderUpdate)seekUpdate
 {
+  if ([self isRetiredDrag] != NO)
+  {
+    // Also guard a native action delivered directly to the target.
+    self.doubleValue = _playbackFraction;
+    return {};
+  }
+
   return _optFinalUpdate ? *_optFinalUpdate : _interaction.valueChanged([self seekElapsed]);
+}
+- (void)dispatchSeekToSession:(ao::appkit::LibrarySession&)session
+{
+  auto const optTarget = [self seekTarget];
+
+  if (auto const optOffset = std::exchange(_optKeyOffset, std::nullopt); optOffset && optTarget)
+  {
+    session.seekBy(optTarget->occurrenceId, *optOffset);
+    return;
+  }
+
+  if (auto const update = [self seekUpdate]; optTarget)
+  {
+    session.seek(update, *optTarget);
+  }
+}
+- (void)keyDown:(NSEvent*)event
+{
+  // Native arrows carry Function and NumericPad; Caps Lock does not modify navigation.
+  auto const modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask &
+                         ~(NSEventModifierFlagFunction | NSEventModifierFlagNumericPad | NSEventModifierFlagCapsLock);
+  auto* const text = event.charactersIgnoringModifiers;
+  auto const key = text.length == 1 ? [text characterAtIndex:0] : 0;
+
+  if (modifiers != 0 || (key != NSLeftArrowFunctionKey && key != NSRightArrowFunctionKey))
+  {
+    [super keyDown:event];
+    return;
+  }
+
+  if (self.enabled != NO && _optPresentedTarget && !_interaction.isPointerActive())
+  {
+    _optKeyOffset = key == NSLeftArrowFunctionKey ? -ao::uimodel::kDefaultSeekOffset : ao::uimodel::kDefaultSeekOffset;
+    [self sendAction:self.action to:self.target];
+    _optKeyOffset.reset();
+  }
 }
 - (void)mouseDown:(NSEvent*)event
 {
@@ -110,6 +207,12 @@ namespace
 
   _optGestureTarget = _optPresentedTarget;
   [super mouseDown:event];
+
+  if ([self isRetiredDrag] != NO)
+  {
+    self.doubleValue = _playbackFraction;
+  }
+
   auto const update = _interaction.endPointerInteraction([self seekElapsed]);
 
   if (update.action == ao::uimodel::SeekSliderAction::Commit)
@@ -590,8 +693,7 @@ namespace
                                 : @"repeat"
      accessibilityDescription:nil];
   auto const duration = state.position.duration;
-  _duration.stringValue = nativeText(
-    ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Duration, std::chrono::milliseconds{}, duration));
+  _duration.stringValue = nativeText(playbackBarTime(ao::uimodel::PlaybackTimeMode::Duration, state.position, {}));
   _seek.enabled = static_cast<BOOL>(state.position.seekable);
   [_seek presentSeekTarget:state.position.seekable
                              ? std::optional{ao::appkit::PlaybackSeekTarget{.occurrenceId = state.position.occurrenceId,
@@ -640,21 +742,27 @@ namespace
   auto const& play = state.transport[static_cast<std::size_t>(ao::uimodel::PlaybackCommand::PlayPause)];
   [_soul presentState:state.soul playing:static_cast<BOOL>(play.playing) modern:modern];
   auto const duration = state.position.duration;
-  _elapsed.stringValue = nativeText(ao::uimodel::formatPlaybackTime(
-    (modern != NO) ? ao::uimodel::PlaybackTimeMode::Elapsed : ao::uimodel::PlaybackTimeMode::Combined,
-    elapsed,
-    duration));
-  _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
-    *_optCatalog,
-    MessageId::AppKitPlaybackPositionValue,
-    {{"elapsed", ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Elapsed, elapsed, duration)},
-     {"duration", ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Duration, elapsed, duration)}});
+  auto const elapsedText = playbackBarTime(ao::uimodel::PlaybackTimeMode::Elapsed, state.position, elapsed);
+  _elapsed.stringValue = nativeText(
+    modern != NO ? elapsedText : playbackBarTime(ao::uimodel::PlaybackTimeMode::Combined, state.position, elapsed));
 
-  if ([_seek isTrackingGesture] == NO)
+  if (state.position.hasTrack && duration <= std::chrono::milliseconds::zero())
   {
-    _seek.doubleValue =
-      duration.count() > 0 ? static_cast<double>(elapsed.count()) / static_cast<double>(duration.count()) : 0;
+    _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
+      *_optCatalog, MessageId::AppKitPlaybackPositionUnknownDurationValue, {{"elapsed", elapsedText}});
   }
+  else
+  {
+    _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
+      *_optCatalog,
+      MessageId::AppKitPlaybackPositionValue,
+      {{"elapsed", elapsedText},
+       {"duration", playbackBarTime(ao::uimodel::PlaybackTimeMode::Duration, state.position, elapsed)}});
+  }
+
+  [_seek presentPlaybackFraction:duration.count() > 0
+                                   ? static_cast<double>(elapsed.count()) / static_cast<double>(duration.count())
+                                   : 0];
 }
 
 - (BOOL)soulNeedsFrames

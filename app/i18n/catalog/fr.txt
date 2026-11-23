@@ -1275,6 +1275,7 @@ fr:table {
     appkit_clear_recent_menu { "Effacer le menu" }
     appkit_unknown_folder { "Dossier inconnu" }
     appkit_playback_position_value { "{elapsed} sur {duration}" }
+    appkit_playback_position_unknown_duration_value { "Temps écoulé : {elapsed}, durée inconnue" }
     appkit_selection_total { "Sélection : {selected, number} / {total, plural, one {# morceau} other {# morceaux}}" }
     appkit_tracks_selected { "{count, plural, one {# morceau sélectionné} other {# morceaux sélectionnés}}" }
     appkit_track_of_total { "{track, number} sur {total, number}" }

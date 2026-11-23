@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <utility>
 
@@ -69,7 +70,7 @@ namespace ao::winui
     _hasState = false;
     _dirty = true;
     _lastElapsed = std::chrono::seconds{0};
-    _lastDuration = std::chrono::seconds{0};
+    _optLastDuration.reset();
   }
 
   void PlaybackTimeControl::resetPresentation()
@@ -105,12 +106,10 @@ namespace ao::winui
     _state = state;
     _hasState = true;
 
-    if (state.duration <= std::chrono::milliseconds{0})
+    if (!state.hasTrack)
     {
       _interpolator.reset();
       _dirty = true;
-      _lastElapsed = std::chrono::seconds{0};
-      _lastDuration = std::chrono::seconds{0};
 
       if (_presentationActive)
       {
@@ -183,7 +182,7 @@ namespace ao::winui
       return;
     }
 
-    if (_state.duration <= std::chrono::milliseconds{0})
+    if (!_state.hasTrack)
     {
       _text.Text(winrt::to_hstring(uimodel::describeTimeTemplate(_mode)));
       return;
@@ -198,7 +197,10 @@ namespace ao::winui
                                        std::chrono::milliseconds const duration)
   {
     auto const coarseElapsed = std::chrono::duration_cast<std::chrono::seconds>(elapsed);
-    auto const coarseDuration = std::chrono::duration_cast<std::chrono::seconds>(duration);
+    // A known subsecond total renders as 0:00, not the unknown-duration marker.
+    auto const optCoarseDuration = duration > std::chrono::milliseconds{0}
+                                     ? std::optional{std::chrono::duration_cast<std::chrono::seconds>(duration)}
+                                     : std::nullopt;
 
     switch (_mode)
     {
@@ -210,7 +212,7 @@ namespace ao::winui
 
         break;
       case uimodel::PlaybackTimeMode::Duration:
-        if (!_dirty && coarseDuration == _lastDuration)
+        if (!_dirty && optCoarseDuration == _optLastDuration)
         {
           return;
         }
@@ -218,7 +220,7 @@ namespace ao::winui
         break;
       case uimodel::PlaybackTimeMode::Combined:
       default:
-        if (!_dirty && coarseElapsed == _lastElapsed && coarseDuration == _lastDuration)
+        if (!_dirty && coarseElapsed == _lastElapsed && optCoarseDuration == _optLastDuration)
         {
           return;
         }
@@ -227,7 +229,7 @@ namespace ao::winui
     }
 
     _lastElapsed = coarseElapsed;
-    _lastDuration = coarseDuration;
+    _optLastDuration = optCoarseDuration;
     _dirty = false;
     _text.Text(winrt::to_hstring(uimodel::formatPlaybackTime(_mode, elapsed, duration)));
   }

@@ -133,7 +133,7 @@ namespace ao::winui
     std::vector<ListId> knownListIds{};
     std::function<void(ListId)> persistListPresentations{};
     std::function<void(ListId)> persistColumnLayouts{};
-    std::function<void()> requestPlaySelection{};
+    std::function<bool()> requestPlaySelection{};
   };
 
   struct InteractiveBorrowers final
@@ -722,7 +722,7 @@ namespace ao::winui
             APP_LOG_WARN("LibrarySession: failed to persist column layout: {}", savedRes.error().message);
           }
         },
-        .requestPlaySelection = [this] { requestPlaySelection(); },
+        .requestPlaySelection = [this] { return tryRequestPlaySelection(); },
       });
   }
 
@@ -912,20 +912,26 @@ namespace ao::winui
     reportStatus(formatResource("winui_library_ready_at", utility::pathToUtf8(root)));
   }
 
-  void LibrarySession::requestPlaySelection()
+  bool LibrarySession::tryRequestPlaySelection()
   {
     auto& storage = *_storagePtr;
 
     if (storage.shutdown)
     {
-      return;
+      return false;
     }
 
     // PlaybackActions only requests a start when the focused projection has a selection.
     auto const token = storage.ownerCallbackGate.token();
     auto& runtime = storage.requireRuntimeGraph().runtime;
+    auto const playedRes = runtime.playSelectionInFocusedView();
 
-    if (auto const playedRes = runtime.playSelectionInFocusedView(); !playedRes && token.accepts())
+    if (playedRes)
+    {
+      return true;
+    }
+
+    if (token.accepts())
     {
       auto message = formatResource("playback_failed", playedRes.error().message);
       runtime.notifications().post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
@@ -935,6 +941,8 @@ namespace ao::winui
         reportStatus(std::move(message));
       }
     }
+
+    return false;
   }
 
   Result<> LibrarySession::playTrack(rt::ViewId const viewId, TrackId const trackId)

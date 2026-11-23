@@ -15,7 +15,6 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/systemmedia/linux/MprisBridge.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
-#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_approx.hpp>
@@ -116,7 +115,8 @@ namespace ao::systemmedia::test
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions =
+      uimodel::PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto bridge = MprisBridge{
       *fixture.executor,
@@ -209,29 +209,38 @@ namespace ao::systemmedia::test
       CHECK(logPtr->events[2].reply);
     }
 
-    SECTION("Output readiness changes CanPlay but focused selection does not")
+    SECTION("CanPlay follows an actionable focused selection")
     {
       auto const trackId = fixture.addPlayableTrack("Selected Track");
       REQUIRE(runtime.views().setSelection(fixture.viewId, {trackId}));
-      REQUIRE(actions.isEnabled(uimodel::PlaybackCommand::Play));
-      REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
-      REQUIRE_FALSE(actions.isEnabled(uimodel::PlaybackCommand::Play));
-      auto const readyPtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
-      CHECK(::g_variant_get_boolean(readyPtr.get()) == TRUE);
+      auto const availablePtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(availablePtr.get()) == TRUE);
 
-      playback.commands().setOutputDevice(audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
-                                                                       .deviceId = audio::DeviceId{"missing"},
-                                                                       .profileId = audio::kProfileShared});
-      REQUIRE(fixture.executor->tryDrainUntil([&playback] { return !playback.snapshot().transport.ready; }));
-      auto const unreadyPtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
-      CHECK(::g_variant_get_boolean(unreadyPtr.get()) == FALSE);
+      SECTION("Clearing only the selection removes CanPlay")
+      {
+        REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+        CHECK(playback.snapshot().transport.ready);
+      }
+
+      SECTION("Losing output removes CanPlay even with the selection")
+      {
+        playback.commands().setOutputDevice(audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
+                                                                         .deviceId = audio::DeviceId{"missing"},
+                                                                         .profileId = audio::kProfileShared});
+        REQUIRE(fixture.executor->tryDrainUntil([&playback] { return !playback.snapshot().transport.ready; }));
+      }
+
+      auto const unavailablePtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(unavailablePtr.get()) == FALSE);
 
       auto const lock = std::scoped_lock{logPtr->mutex};
-      REQUIRE(logPtr->events.size() == 3);
-      CHECK(logPtr->events[0].reply);
-      auto const changedPtr = requireSingleChangedProperty(logPtr->events[1], "CanPlay", G_VARIANT_TYPE_BOOLEAN);
-      CHECK(::g_variant_get_boolean(changedPtr.get()) == FALSE);
-      CHECK(logPtr->events[2].reply);
+      REQUIRE(logPtr->events.size() == 4);
+      auto const firstPtr = requireSingleChangedProperty(logPtr->events[0], "CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      auto const secondPtr = requireSingleChangedProperty(logPtr->events[2], "CanPlay", G_VARIANT_TYPE_BOOLEAN);
+      CHECK(::g_variant_get_boolean(firstPtr.get()) == TRUE);
+      CHECK(logPtr->events[1].reply);
+      CHECK(::g_variant_get_boolean(secondPtr.get()) == FALSE);
+      CHECK(logPtr->events[3].reply);
     }
   }
 } // namespace ao::systemmedia::test

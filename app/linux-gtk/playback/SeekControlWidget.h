@@ -44,10 +44,12 @@ namespace ao::gtk
 
   private:
     void applyState(uimodel::PlaybackPositionViewState const& view);
+    bool hasPendingFinalSeek() const noexcept;
     void startTickIfNeeded();
     void stopTick();
     void updateTickState();
 
+    bool tryHandleSeekKey(Gdk::Event const& event);
     void handlePointerEvent(Glib::RefPtr<Gdk::Event const> const& eventPtr);
     void handleScaleValueChanged();
     void beginUserInteraction(Glib::RefPtr<Gdk::Event const> const& eventPtr);
@@ -70,7 +72,8 @@ namespace ao::gtk
     std::optional<uimodel::SeekSliderUpdate> _optPendingFinalSeek;
     rt::PlaybackOccurrenceId _presentedOccurrenceId{};
     Glib::RefPtr<Gdk::Event const> _pointerPressEventPtr;
-    sigc::scoped_connection _pointerEventConnection;
+    sigc::scoped_connection _inputEventConnection;
+    sigc::scoped_connection _changeValueConnection;
     sigc::scoped_connection _valueChangedConnection;
     sigc::scoped_connection _stateFlagsConnection;
     sigc::scoped_connection _mapConnection;

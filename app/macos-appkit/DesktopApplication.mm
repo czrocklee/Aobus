@@ -1084,14 +1084,7 @@ namespace ao::appkit
 {
   if (_closing == NO)
   {
-    nativeCallback(
-      [&]
-      {
-        if (auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget]; optTarget)
-        {
-          _sessionPtr->seek([static_cast<AobusSeekSlider*>(sender) seekUpdate], *optTarget);
-        }
-      });
+    nativeCallback([&] { [static_cast<AobusSeekSlider*>(sender) dispatchSeekToSession:*_sessionPtr]; });
   }
 }
 

@@ -105,7 +105,17 @@ Frontend composition obtains the platform provider set from Core audio and trans
 
 ### Primary Play
 
-UIModel gives a track held by the transport priority over a new start from the browsed selection. See [primary Play](application-commit.md#primary-play) for command admission and the distinction from row activation and system media commands.
+UIModel gives a track held by the transport priority over a new start for both local and system-media Play. See the [shared Play target policy](application-commit.md#primary-play) for selection, delayed delivery, and the distinction from explicit row activation.
+
+### Position and keyboard seeking
+
+On a focused desktop slider, unmodified Left and Right arrows seek in five-second steps regardless of track length. GTK and WinUI accumulate nearby presses from the displayed target and hold it until that seek settles, even if it is rejected. A clock tick or an unrelated position change cannot confirm the seek. AppKit applies each step to the live position when the command executes. The TUI step defaults to five seconds and is configurable. Pointer seeks are not rounded to keyboard steps.
+
+A drag belongs to the playback occurrence on which it began. If playback installs another occurrence (even of the same track) or the track stops being seekable, the slider and clock follow the live position and duration. The control still handles the old gesture until release, but sends no more previews or seeks from it. Seeking the replacement requires a new press.
+
+If a drag's final seek is rejected, the slider and clock return to live elapsed time unless a newer preview owns the display. They respond to the [preview-ended event](application-commit.md#observation), not a position change.
+
+For a track of unknown duration, show elapsed time and `--:--` for the total and disable seeking. For a track of known duration, show the total even at position zero or after its occurrence ends; without a current occurrence the slider is read-only. With no track to display, use the frontend's idle clock.
 
 ### Explicit start
 

@@ -77,13 +77,12 @@ namespace ao::winui
   {
     if (auto const optCommand = commandForButton(button); optCommand)
     {
-      actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+      actions.tryExecute(*optCommand);
     }
   }
 
   struct SmtcBridge::State final
   {
-    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher{nullptr};
     winrt::Windows::Media::SystemMediaTransportControls controls{nullptr};
     uimodel::PlaybackActions* actions = nullptr;
     ResourceId displayedArtworkId{kInvalidResourceId};
@@ -123,7 +122,6 @@ namespace ao::winui
                          async::Runtime& asyncRuntime)
     : _statePtr{std::make_shared<State>()}, _resourceBytes{resourceBytes}, _asyncRuntime{asyncRuntime}
   {
-    _statePtr->dispatcher = std::move(dispatcher);
     _statePtr->actions = &actions;
     _statePtr->active = true;
 
@@ -149,22 +147,32 @@ namespace ao::winui
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     _statePtr->buttonRevoker = _statePtr->controls.ButtonPressed(
       winrt::auto_revoke,
-      [weakStatePtr](winrt::Windows::Media::SystemMediaTransportControls const&,
-                     winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
+      [weakStatePtr, dispatcher = std::move(dispatcher)](
+        winrt::Windows::Media::SystemMediaTransportControls const&,
+        winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
       {
-        if (auto statePtr = weakStatePtr.lock(); statePtr)
-        {
-          statePtr->dispatcher.TryEnqueue(
-            [weakStatePtr, button = args.Button()]
+        // Only lock State on the owner thread so an in-flight press cannot
+        // become the last owner of the window's controls during retirement.
+        dispatcher.TryEnqueue(
+          [weakStatePtr, button = args.Button()]
+          {
+            if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
             {
-              if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
-              {
-                dispatchSmtcButton(button, *statePtr->actions);
-              }
-            });
-        }
+              dispatchSmtcButton(button, *statePtr->actions);
+            }
+          });
       });
 
+    // The actions signal also runs when only the focused selection changes.
+    _availabilitySub = actions.onAvailabilityChanged(
+      [weakStatePtr]
+      {
+        if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active)
+        {
+          updateCommandAvailability(*statePtr);
+        }
+      });
+    updateCommandAvailability(*_statePtr);
     _snapshotSub =
       playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     handleSnapshot(playback.snapshot());
@@ -178,8 +186,24 @@ namespace ao::winui
     _statePtr->displayedArtworkId = kInvalidResourceId;
     _artworkRequest.reset();
     _artworkTask.reset();
+    _availabilitySub.reset();
     _snapshotSub.reset();
     _nativeSessionRetirement.reset();
+  }
+
+  void SmtcBridge::updateCommandAvailability(State const& state)
+  {
+    runOptionalWinRt("updating SMTC command availability",
+                     [&state]
+                     {
+                       auto const& actions = *state.actions;
+                       // Active playback still advertises Play even though it is idempotent.
+                       state.controls.IsPlayEnabled(actions.isCapable(uimodel::PlaybackCommand::Play));
+                       state.controls.IsPauseEnabled(actions.isCapable(uimodel::PlaybackCommand::Pause));
+                       state.controls.IsStopEnabled(actions.isEnabled(uimodel::PlaybackCommand::Stop));
+                       state.controls.IsNextEnabled(actions.isEnabled(uimodel::PlaybackCommand::Next));
+                       state.controls.IsPreviousEnabled(actions.isEnabled(uimodel::PlaybackCommand::Previous));
+                     });
   }
 
   void SmtcBridge::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
@@ -188,19 +212,6 @@ namespace ao::winui
     {
       return;
     }
-
-    runOptionalWinRt("updating SMTC command availability",
-                     [this]
-                     {
-                       auto const& actions = *_statePtr->actions;
-                       // Play/Pause advertise protocol support, not whether the
-                       // command would change the current transport state.
-                       _statePtr->controls.IsPlayEnabled(actions.isCapable(uimodel::PlaybackCommand::Play));
-                       _statePtr->controls.IsPauseEnabled(actions.isCapable(uimodel::PlaybackCommand::Pause));
-                       _statePtr->controls.IsStopEnabled(actions.isEnabled(uimodel::PlaybackCommand::Stop));
-                       _statePtr->controls.IsNextEnabled(actions.isEnabled(uimodel::PlaybackCommand::Next));
-                       _statePtr->controls.IsPreviousEnabled(actions.isEnabled(uimodel::PlaybackCommand::Previous));
-                     });
 
     runOptionalWinRt("updating the SMTC playback snapshot",
                      [this, &snapshot]

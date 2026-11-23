@@ -55,6 +55,7 @@ namespace ao::uimodel
     SeekSliderAction action = SeekSliderAction::None;
     rt::PlaybackOccurrenceId occurrenceId{};
     std::chrono::milliseconds elapsed{0};
+    bool endsPointerPreview = false;
   };
 
   class SeekInteraction final
@@ -66,10 +67,14 @@ namespace ao::uimodel
     void reset() noexcept;
 
     bool tryBeginPointerInteraction() noexcept;
+    // Ignore the rest of the held gesture without treating later motion as a discrete seek.
+    void retirePointerInteraction() noexcept;
     SeekSliderUpdate endPointerInteraction(std::chrono::milliseconds elapsed) noexcept;
     SeekSliderUpdate valueChanged(std::chrono::milliseconds elapsed) noexcept;
 
     bool isPointerActive() const noexcept { return _pointerActive; }
+    // A retired drag still owns its input sequence, but no longer owns the displayed position.
+    bool isPointerCurrent() const noexcept { return _pointerOccurrenceCurrent; }
     bool hasPendingFinalSeek() const noexcept { return _pendingFinalSeek; }
     std::chrono::milliseconds duration() const noexcept;
     rt::PlaybackOccurrenceId occurrenceId() const noexcept { return _occurrenceId; }

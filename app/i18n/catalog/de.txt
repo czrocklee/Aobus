@@ -1275,6 +1275,7 @@ de:table {
     appkit_clear_recent_menu { "Einträge löschen" }
     appkit_unknown_folder { "Unbekannter Ordner" }
     appkit_playback_position_value { "{elapsed} von {duration}" }
+    appkit_playback_position_unknown_duration_value { "{elapsed} vergangen, Dauer unbekannt" }
     appkit_selection_total { "{selected, number} ausgewählt / {total, plural, one {# Titel} other {# Titel}}" }
     appkit_tracks_selected { "{count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
     appkit_track_of_total { "{track, number} von {total, number}" }

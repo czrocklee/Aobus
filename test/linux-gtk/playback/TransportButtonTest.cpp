@@ -10,6 +10,7 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -31,7 +32,7 @@ namespace ao::gtk::test
 
     SECTION("PlayPause action maps initial view state to button attributes")
     {
-      auto actions = uimodel::PlaybackActions{playback, [] {}};
+      auto actions = uimodel::PlaybackActions{playback, {}};
       auto button =
         TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
@@ -48,7 +49,7 @@ namespace ao::gtk::test
 
     SECTION("The selected catalog supplies the accessible control name")
     {
-      auto actions = uimodel::PlaybackActions{playback, [] {}};
+      auto actions = uimodel::PlaybackActions{playback, {}};
       auto catalog = ao::test::messageCatalog("de-DE");
       auto button = TransportButton{playback, actions, catalog, TransportButton::Action::Previous};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
@@ -75,7 +76,12 @@ namespace ao::gtk::test
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
     std::int32_t playSelectionCalls = 0;
-    auto actions = uimodel::PlaybackActions{playback, [&] { ++playSelectionCalls; }};
+    auto actions = uimodel::PlaybackActions{playback,
+                                            [&]
+                                            {
+                                              ++playSelectionCalls;
+                                              return true;
+                                            }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto button =
       TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};

@@ -17,7 +17,7 @@ namespace ao::uimodel
 
 namespace ao::winui
 {
-  /// Call on the owner dispatcher to handle a native SMTC button. Unsupported buttons do nothing.
+  /// Handle a native SMTC button on the owner dispatcher. Unsupported buttons do nothing; there is no result reply.
   void dispatchSmtcButton(winrt::Windows::Media::SystemMediaTransportControlsButton button,
                           uimodel::PlaybackActions& actions);
 } // namespace ao::winui

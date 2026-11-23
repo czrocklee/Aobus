@@ -266,6 +266,35 @@ namespace ao::rt::test
     CHECK(playback.elapsed() == offset);
   }
 
+  TEST_CASE("PlaybackCommands seekBy - a slider step pinned at an endpoint does not seek again")
+  {
+    auto fixture = PlaybackSuccessionTransportFixture{};
+    fixture.buildThreeTrackManualView();
+    auto playback = fixture.createPlayback();
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    fixture.transport.executor.drain();
+    auto& commands = playback.commands();
+    commands.pause();
+    auto const& transport = playback.snapshot().transport;
+    auto const duration = transport.duration;
+    REQUIRE(duration > std::chrono::milliseconds::zero());
+    commands.seek(std::chrono::milliseconds::zero());
+    auto const startRevision = transport.finalSeekRevision;
+    auto const step = [&](std::chrono::milliseconds delta)
+    { commands.seekBy(transport.occurrenceId, delta, PlaybackRelativeSeekEndBehavior::ClampIfChanged); };
+    step(-duration);
+    CHECK(transport.elapsed == std::chrono::milliseconds::zero());
+    CHECK(transport.finalSeekRevision == startRevision);
+    step(duration);
+    REQUIRE(transport.elapsed == duration);
+    REQUIRE(transport.finalSeekRevision.value == startRevision.value + 1);
+    step(duration);
+    CHECK(transport.finalSeekRevision.value == startRevision.value + 1);
+    step(-duration);
+    CHECK(transport.elapsed == std::chrono::milliseconds::zero());
+    CHECK(transport.finalSeekRevision.value == startRevision.value + 2);
+  }
+
   TEST_CASE("PlaybackCommands seekBy - past-end Next cancels an older pending explicit preparation", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();

@@ -248,18 +248,14 @@ namespace ao::gtk::layout
       void syncSnapshot(rt::PlaybackSnapshot const& snapshot)
       {
         auto const& transport = snapshot.transport;
-        auto const trackId =
-          transport.transport == audio::Transport::Idle ? kInvalidTrackId : transport.nowPlaying.trackId;
-        auto const coverArtId =
-          transport.transport == audio::Transport::Idle ? kInvalidResourceId : transport.nowPlaying.coverArtId;
-        auto const candidates = std::array<std::string_view, 3>{
-          transport.nowPlaying.album,
-          transport.nowPlaying.artist,
-          transport.nowPlaying.title,
-        };
-        auto identity = transport.transport == audio::Transport::Idle
-                          ? uimodel::CoverArtPlaceholderIdentity{}
-                          : uimodel::makeCoverArtPlaceholderIdentity(candidates);
+        auto const& subject = transport.nowPlaying;
+        auto const hasSubject = subject.trackId != kInvalidTrackId &&
+                                (transport.transport != audio::Transport::Idle || transport.hasDeferredResume);
+        auto const trackId = hasSubject ? subject.trackId : kInvalidTrackId;
+        auto const coverArtId = hasSubject ? subject.coverArtId : kInvalidResourceId;
+        auto const candidates = std::array<std::string_view, 3>{subject.album, subject.artist, subject.title};
+        auto identity =
+          hasSubject ? uimodel::makeCoverArtPlaceholderIdentity(candidates) : uimodel::CoverArtPlaceholderIdentity{};
 
         if (_synced && trackId == _currentTrackId && coverArtId == _currentCoverArtId && identity == _currentIdentity)
         {

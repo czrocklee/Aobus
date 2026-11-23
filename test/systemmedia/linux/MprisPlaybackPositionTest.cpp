@@ -27,7 +27,7 @@ namespace ao::systemmedia::test
     struct MprisPositionFixture final
     {
       MprisPositionFixture()
-        : playback{createPlayback(application)}, actions{playback, [] {}}, endpoint{playback, actions, callbacks}
+        : playback{createPlayback(application)}, actions{playback, {}}, endpoint{playback, actions, callbacks}
       {
         REQUIRE(application.playAndWait(application.firstTrackId));
         application.transport.executor.drain();

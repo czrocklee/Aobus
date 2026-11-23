@@ -61,6 +61,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -159,7 +160,7 @@ namespace ao::tui
     , _keymapPlan{keymapPlan}
     , _asyncRuntime{asyncRuntime}
     , _playback{playback}
-    , _playbackActions{_playback, [this] { playSelectedTrack(); }}
+    , _playbackActions{_playback, [this] { return tryPlaySelectedTrack(); }}
     , _seekViewModel{_playback, {}}
     , _volumeViewModel{_playback}
     , _outputDevices{bindings.outputDevices}
@@ -638,15 +639,18 @@ namespace ao::tui
     leaveNavigation();
   }
 
-  void EventController::playSelectedTrack()
+  bool EventController::tryPlaySelectedTrack()
   {
     if (auto const* track = _library.selectedTrackView().track;
-        track == nullptr || !_playback.commands().startFromView(_library.activeViewId(), track->id))
+        track != nullptr && _playback.commands().startFromView(_library.activeViewId(), track->id))
     {
-      postActivityNotification(
-        rt::NotificationSeverity::Warning,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackStartFailed)});
+      return true;
     }
+
+    postActivityNotification(
+      rt::NotificationSeverity::Warning,
+      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackStartFailed)});
+    return false;
   }
 
   void EventController::applyListOrderCommand(ListOrderCommand const command)
@@ -663,7 +667,8 @@ namespace ao::tui
 
   void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
   {
-    if (!_playbackActions.tryExecute(command))
+    // The start callback reports its own admission failure, distinct from an unavailable control.
+    if (!_playbackActions.isEnabled(command))
     {
       if (command != uimodel::PlaybackCommand::Stop)
       {
@@ -673,7 +678,8 @@ namespace ao::tui
       return;
     }
 
-    if (command == uimodel::PlaybackCommand::ToggleShuffle || command == uimodel::PlaybackCommand::CycleRepeat)
+    if (_playbackActions.tryExecute(command) &&
+        (command == uimodel::PlaybackCommand::ToggleShuffle || command == uimodel::PlaybackCommand::CycleRepeat))
     {
       auto const& state = _playback.snapshot().succession;
       auto repeat = std::string_view{"off"};
@@ -834,7 +840,7 @@ namespace ao::tui
         _shell.closeInput();
         _settings.open();
         break;
-      case CommandAction::Play: playSelectedTrack(); break;
+      case CommandAction::Play: std::ignore = tryPlaySelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
       case CommandAction::Previous: executePlaybackCommand(uimodel::PlaybackCommand::Previous); break;
@@ -1178,7 +1184,7 @@ namespace ao::tui
 
       if (isDoubleClick)
       {
-        playSelectedTrack();
+        std::ignore = tryPlaySelectedTrack();
       }
 
       return true;
