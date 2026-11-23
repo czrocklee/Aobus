@@ -707,10 +707,11 @@ bazel run //app/windows-winui:ao_winui_automation_probe -- --primary-play "C:\fi
 The probe copies the fixture into its disposable library and requires a ready
 discard-only route before invoking Play. A pass distinguishes starting a
 selected row from resuming the same paused track at its saved position while
-another List and row are selected. It also dispatches an SMTC Play button
-through the production command handler, checking that it uses the system-media
-origin and that a session with no target reports no error. This does not test
-OS button delivery, WASAPI rendering, audibility, or physical input.
+another List and row are selected. The probe also calls the production SMTC
+Play handler directly: with no target the subject stays empty and notification
+entries stay unchanged; after Stop, Play starts a new occurrence of the visible
+selected row. This does not test OS button delivery, WASAPI rendering,
+audibility, or physical input.
 
 ### Seek probes
 

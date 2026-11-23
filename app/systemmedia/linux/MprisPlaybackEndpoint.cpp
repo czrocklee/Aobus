@@ -37,7 +37,7 @@ namespace ao::systemmedia
     }
 
     // The reply acknowledges a recognized method, even if Play is already satisfied or has no target.
-    _actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+    _actions.tryExecute(*optCommand);
     return true;
   }
 

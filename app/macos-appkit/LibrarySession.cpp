@@ -315,25 +315,17 @@ namespace ao::appkit
     storage.editorPtr = std::make_unique<LibraryEditorModel>(
       runtime, storage.catalog, [&storage] { storage.invalidate(DesktopInvalidation::Editor); });
 
-    storage.actionsPtr = std::make_unique<uimodel::PlaybackActions>(
-      runtime.playback(),
-      [this]
+    auto const playSelection = [this]
+    {
+      if (auto const res = this->runtime().playSelectionInFocusedView(); !res)
       {
-        auto& appRuntime = this->runtime();
+        reportPlaybackFailure(res.error());
+        return false;
+      }
 
-        if (auto res = appRuntime.playSelectionInFocusedView(); !res)
-        {
-          appRuntime.notifications().post(
-            rt::NotificationSeverity::Error,
-            i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
-            rt::NotificationLifetime::history());
-        }
-      },
-      uimodel::SystemMediaPlayHandler{
-        .canPlay = [this] { return canPlayFromRemoteCommand(); },
-        .play = [this] { return tryPlayFromRemoteCommand(); },
-      });
-
+      return true;
+    };
+    storage.actionsPtr = std::make_unique<uimodel::PlaybackActions>(runtime.playback(), playSelection);
     storage.actionsPtr->bindFocusedSelection(runtime.workspace(), runtime.views());
     storage.mediaPlayerPtr =
       std::make_unique<MediaPlayerAdapter>(runtime.playback(), *storage.actionsPtr, runtime.resourceBytes());
@@ -758,39 +750,18 @@ namespace ao::appkit
 
   void LibrarySession::play(TrackId trackId)
   {
-    std::ignore = tryPlayFromView(_storagePtr->viewId, trackId);
-  }
-
-  TrackId LibrarySession::remotePlayTarget(rt::ViewId const viewId) const
-  {
-    // Read the current view, not the browser binding, whose updates may still be queued.
-    return runtime().views().firstVisibleSelectedTrack(viewId);
-  }
-
-  bool LibrarySession::canPlayFromRemoteCommand() const
-  {
-    return remotePlayTarget(runtime().workspace().snapshot().activeViewId) != kInvalidTrackId;
-  }
-
-  bool LibrarySession::tryPlayFromRemoteCommand() const
-  {
-    auto const viewId = runtime().workspace().snapshot().activeViewId;
-    auto const trackId = remotePlayTarget(viewId);
-    return trackId != kInvalidTrackId && tryPlayFromView(viewId, trackId);
-  }
-
-  bool LibrarySession::tryPlayFromView(rt::ViewId viewId, TrackId trackId) const
-  {
-    if (auto res = runtime().playback().commands().startFromView(viewId, trackId); !res)
+    if (auto const res = runtime().playback().commands().startFromView(_storagePtr->viewId, trackId); !res)
     {
-      runtime().notifications().post(
-        rt::NotificationSeverity::Error,
-        i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
-        rt::NotificationLifetime::history());
-      return false;
+      reportPlaybackFailure(res.error());
     }
+  }
 
-    return true;
+  void LibrarySession::reportPlaybackFailure(Error const& error) const
+  {
+    runtime().notifications().post(
+      rt::NotificationSeverity::Error,
+      i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", error.message}}),
+      rt::NotificationLifetime::history());
   }
 
   void LibrarySession::execute(uimodel::PlaybackCommand command)

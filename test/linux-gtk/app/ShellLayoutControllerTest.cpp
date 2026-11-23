@@ -64,7 +64,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -84,9 +83,7 @@ namespace ao::gtk::test
       std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr =
         std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
       ThemeCoordinator themeCoordinator;
-      uimodel::PlaybackActions playbackActions{
-        runtimeFixture.runtime().playback(),
-        [this] { std::ignore = runtimeFixture.runtime().playSelectionInFocusedView(); }};
+      uimodel::PlaybackActions playbackActions{runtimeFixture.runtime().playback(), {}};
       std::optional<audio::OutputDeviceSelection> optOutputSelectionRequested;
       ShellLayoutController controller{
         runtimeFixture.runtime(),
@@ -911,9 +908,7 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
-    auto& playback = runtime.playback();
-    auto playbackActions =
-      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions = uimodel::PlaybackActions{runtime.playback(), {}};
     auto unrelatedActionPtr = Gio::SimpleAction::create("unrelated");
     window.add_action(unrelatedActionPtr);
     auto retainedShellActionPtr = Glib::RefPtr<Gio::SimpleAction>{};
@@ -961,9 +956,7 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
-    auto& playback = runtime.playback();
-    auto playbackActions =
-      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions = uimodel::PlaybackActions{runtime.playback(), {}};
     auto const tempDir = fixture.tempDir().path();
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
     auto layoutStorePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
@@ -1001,9 +994,7 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
-    auto& playback = runtime.playback();
-    auto playbackActions =
-      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions = uimodel::PlaybackActions{runtime.playback(), {}};
 
     auto const tempDir = fixture.tempDir().path();
     auto const topLevelCount = Gtk::Window::list_toplevels().size();
@@ -1038,9 +1029,7 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
-    auto& playback = runtime.playback();
-    auto playbackActions =
-      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto playbackActions = uimodel::PlaybackActions{runtime.playback(), {}};
 
     auto const tempDir = fixture.tempDir().path();
     auto const componentStateDir = tempDir / "layout-state";

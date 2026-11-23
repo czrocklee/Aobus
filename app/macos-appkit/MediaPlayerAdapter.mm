@@ -429,7 +429,7 @@ namespace ao::appkit
       }
 
       auto const optCommand = playbackCommand(admitted.command);
-      return optCommand && actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+      return optCommand && actions.tryExecute(*optCommand);
     }
 
     void refreshCommandAvailability(rt::PlaybackSnapshot const& snapshot)
@@ -450,7 +450,7 @@ namespace ao::appkit
       nextAdmission.available[commandIndex(MediaRemoteCommand::Pause)] =
         transport.transport == audio::Transport::Paused || actions.isEnabled(uimodel::PlaybackCommand::Pause);
       nextAdmission.available[commandIndex(MediaRemoteCommand::PlayPause)] =
-        actions.isEnabled(uimodel::PlaybackCommand::PlayPause, uimodel::PlaybackActionOrigin::SystemMedia);
+        actions.isEnabled(uimodel::PlaybackCommand::PlayPause);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Previous)] =
         actions.isEnabled(uimodel::PlaybackCommand::Previous);
       nextAdmission.available[commandIndex(MediaRemoteCommand::Next)] =

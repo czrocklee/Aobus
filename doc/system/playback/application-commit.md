@@ -147,7 +147,9 @@ boundary is rejected by contract; owners must defer teardown until it unwinds.
 - Play or the start side of Play/Pause resumes a paused or deferred track first. Clearing succession does not discard a deferred subject or its offset. A pending output request blocks resume without falling back to another track.
 - With no subject to resume, Idle or Error can start a track only when the output is ready. GTK, WinUI, and AppKit use the first selected track still present in the focused view's live projection. The TUI uses the track under its cursor, not its marks. A missing or filtered-out target does not fall back to the first row.
 
-System controls may offer Play during active playback, when the command is a no-op. Otherwise Play is available only if it can resume or start a track. The host can supply its own system-media start handler and availability predicate. A selection change alone can enable or disable Play without a playback publication. When a delayed command reaches the frontend executor, it checks the current transport and target again: advertising Play does not reserve a track.
+`isCapable(Play)` advertises Play during active playback even though `tryExecute(Play)` returns `false` without changing transport. Otherwise Play availability requires a resumable subject or an eligible target on a ready output. A selection change alone can enable or disable Play without a playback publication. When a delayed command reaches the frontend executor, it checks the current transport and target again: advertising Play does not reserve a track.
+
+For a new selection start, local and system-media commands use the same frontend callback. `tryExecute` returns the callback's immediate start-admission result, not confirmation that decoder preparation finished or audio started.
 
 Activating a row explicitly requests playback from that row rather than resuming a different track.
 

@@ -48,7 +48,7 @@ It subscribes to playback and command availability only after acquisition, and c
 
 ## Command and state invariants
 
-- `PlaybackActions` dispatch uses the system-media origin and the shared [Play target policy](../playback/application-commit.md#primary-play). The owner-executor turn uses the live transport and selection or cursor, not the state seen by an earlier property query.
+- `PlaybackActions` dispatch follows the shared [Play target policy](../playback/application-commit.md#primary-play). The owner-executor turn uses the live transport and selection or cursor, not the state seen by an earlier property query.
 - Repeat and shuffle authority remains behind `PlaybackCommands`; MPRIS does not reconstruct succession or access its internal owner.
 - Seek, volume, and now-playing state come from the coherent `PlaybackService` boundary.
 - The advertised Play, Pause, Next, and Previous capabilities come from `PlaybackActions::isCapable`, not from GTK or TUI controls. `CanPlay` is true during active playback or when Play can resume or start a track. `CanPause` requires a current track; execution pauses only active playback.

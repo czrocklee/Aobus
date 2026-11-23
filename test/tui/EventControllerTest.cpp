@@ -2334,7 +2334,7 @@ namespace ao::tui::test
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == initialTrack);
   }
 
-  TEST_CASE("EventController - primary play is unavailable while the filter leaves no track cursor")
+  TEST_CASE("EventController - playback is unavailable while the filter leaves no track cursor")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -2348,10 +2348,9 @@ namespace ao::tui::test
     REQUIRE(library.applyFilter());
     REQUIRE(library.tracks().empty());
     CHECK_FALSE(actions.isEnabled(uimodel::PlaybackCommand::PlayPause));
-    CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play));
-    auto const notificationsBeforePlay = notificationCount(fixture);
     CHECK_FALSE(actions.isCapable(uimodel::PlaybackCommand::Play));
-    CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia));
+    auto const notificationsBeforePlay = notificationCount(fixture);
+    CHECK_FALSE(actions.tryExecute(uimodel::PlaybackCommand::Play));
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
     CHECK(notificationCount(fixture) == notificationsBeforePlay);
 
@@ -2396,11 +2395,11 @@ namespace ao::tui::test
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
     }
 
-    SECTION("System Play starts the same cursor")
+    SECTION("Play starts the cursor directly")
     {
       auto& actions = controller.playbackActions();
       REQUIRE(actions.isCapable(uimodel::PlaybackCommand::Play));
-      REQUIRE(actions.tryExecute(uimodel::PlaybackCommand::Play, uimodel::PlaybackActionOrigin::SystemMedia));
+      REQUIRE(actions.tryExecute(uimodel::PlaybackCommand::Play));
     }
 
     REQUIRE(fixture.tryWaitForPlayback(cursorTrack));
@@ -2469,6 +2468,38 @@ namespace ao::tui::test
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
+  }
+
+  TEST_CASE("EventController - Space reports only start failure when the runtime filter excludes the cursor")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    // Commit the filter in the runtime, then press Space before the TUI sees the projection change.
+    auto& views = fixture.runtimePtr->views();
+    auto const viewId = library.activeViewId();
+    REQUIRE(views.setFilter(viewId, R"($title = "Second")"));
+    auto const projectionPtr = ao::test::requireValue(views.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr->size() == 1);
+    auto const cursor = library.selectedTrackView();
+    REQUIRE(cursor.track != nullptr);
+    REQUIRE_FALSE(projectionPtr->indexOf(cursor.track->id));
+    REQUIRE(controller.playbackActions().isEnabled(uimodel::PlaybackCommand::PlayPause));
+    auto const notificationsBefore = notificationCount(fixture);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+
+    auto const transport = currentPlayback(fixture).transport;
+    CHECK(transport.transport == audio::Transport::Idle);
+    CHECK(transport.nowPlaying.trackId == kInvalidTrackId);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == notificationsBefore + 1);
+    auto const& warning = feed.entries.back();
+    CHECK(warning.severity == rt::NotificationSeverity::Warning);
+    CHECK(std::get<std::string>(warning.message) ==
+          i18n::requiredText(library.textCatalog(), i18n::MessageId::TuiPlaybackStartFailed));
   }
 
   TEST_CASE("EventController - idle stop is a silent no-op")

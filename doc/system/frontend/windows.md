@@ -182,7 +182,7 @@ The SMTC bridge attempts the initial button and metadata updates before enabling
 
 SMTC advertises Play during active playback or when the [shared Play target policy](../playback/application-commit.md#primary-play) allows resume or start. Pause is advertised when there is a current track; Stop, Next, and Previous follow `PlaybackActions::isEnabled()`. Other buttons are ignored.
 
-The native press handler queues delivery without retaining the window's controls. On the dispatcher, a still-live bridge invokes `PlaybackActions` with the system-media origin against the current transport and focused selection. A press has no playback-result reply; repeated Play during active playback and repeated Pause while paused leave transport unchanged.
+The native press handler queues delivery without retaining the window's controls. On the dispatcher, a still-live bridge uses the same `PlaybackActions` as the window's transport controls against the current transport and focused selection. A press has no playback-result reply; repeated Play during active playback and repeated Pause while paused leave transport unchanged.
 
 ## Failure and cancellation
 

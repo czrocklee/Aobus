@@ -65,7 +65,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
@@ -1232,36 +1231,11 @@ namespace
       return true;
     }
 
-    bool tryCheckSmtcPlay()
+    bool tryCheckSmtcPlayWithoutTarget()
     {
       _stage = "SMTC Play with no selected row";
       using SmtcButton = winrt::Windows::Media::SystemMediaTransportControlsButton;
       auto& runtime = _sessionPtr->runtime();
-      std::int32_t primaryStarts = 0;
-      std::int32_t systemStarts = 0;
-
-      {
-        // Only the system-media origin admits a fallback without a selection.
-        // Drop the borrower before an assertion can shut down the session.
-        auto actions = ao::uimodel::PlaybackActions{
-          runtime.playback(),
-          [&primaryStarts] { ++primaryStarts; },
-          ao::uimodel::SystemMediaPlayHandler{.play =
-                                                [&systemStarts]
-                                              {
-                                                ++systemStarts;
-                                                return true;
-                                              }},
-        };
-        ao::winui::dispatchSmtcButton(SmtcButton::Play, actions);
-      }
-
-      if (!tryCheckPrimary(primaryStarts == 0 && systemStarts == 1,
-                           "the native Play button must dispatch with the system-media origin"))
-      {
-        return false;
-      }
-
       auto const notificationsBefore = runtime.notifications().feed();
       ao::winui::dispatchSmtcButton(SmtcButton::Play, _sessionPtr->playbackActions());
       return tryCheckPrimary(runtime.notifications().feed().entries == notificationsBefore.entries,
@@ -1290,13 +1264,13 @@ namespace
 
       if (!tryCheckDiscardRoute() ||
           !tryCheckPrimary(idle.transport == ao::audio::Transport::Idle &&
-                             idle.nowPlaying.trackId == ao::kInvalidTrackId &&
+                             idle.nowPlaying.trackId == ao::kInvalidTrackId && !idle.hasDeferredResume &&
                              activeState().listId == ao::rt::kAllTracksListId && projectionRes &&
                              (*projectionRes)->indexOf(_seed.summaryTracks.front()) &&
                              (*projectionRes)->indexOf(_seed.summaryTracks.at(1)) &&
                              runtime.views().setSelection(view, {}) && play && !play.IsEnabled(),
                            "an unselected, nonempty source List must disable Play") ||
-          !tryCheckSmtcPlay())
+          !tryCheckSmtcPlayWithoutTarget())
       {
         return;
       }
@@ -1658,13 +1632,60 @@ namespace
         return;
       }
 
+      auto& playback = _sessionPtr->runtime().playback();
+      auto const resumedOriginal = [&]
+      {
+        auto const& transport = playback.snapshot().transport;
+        return transport.nowPlaying.trackId == _seed.summaryTracks.front() &&
+               transport.occurrenceId == _primaryOccurrence && transport.elapsed == kPrimaryOffset;
+      }();
+
+      if (tryCheckPrimary(
+            resumedOriginal, "Play from the second List must resume the original occurrence and exact offset") &&
+          tryCheckPrimary(activeState().listId == _seed.composerListId &&
+                            activeState().selection == std::vector{_seed.summaryTracks.at(1)},
+                          "resuming A must leave B selected in the second List"))
+      {
+        playback.commands().stop();
+        afterFrame(&WinUiAutomationProbe::startSmtcSelectedPlay);
+      }
+    }
+
+    void startSmtcSelectedPlay()
+    {
+      _stage = "SMTC Play with B selected";
+
+      if (!tryAwaitPrimaryTransport(ao::audio::Transport::Idle, &WinUiAutomationProbe::startSmtcSelectedPlay))
+      {
+        return;
+      }
+
+      auto& runtime = _sessionPtr->runtime();
+      auto const& idle = runtime.playback().snapshot().transport;
+      auto const view = runtime.workspace().snapshot().activeViewId;
+
+      if (tryCheckPrimary(idle.nowPlaying.trackId == ao::kInvalidTrackId && !idle.hasDeferredResume &&
+                            runtime.views().firstVisibleSelectedTrack(view) == _seed.summaryTracks.at(1),
+                          "SMTC Play needs a visible selection of B and no subject to resume"))
+      {
+        // Exercise the production dispatch, not OS button delivery. SMTC has no command result reply.
+        using SmtcButton = winrt::Windows::Media::SystemMediaTransportControlsButton;
+        ao::winui::dispatchSmtcButton(SmtcButton::Play, _sessionPtr->playbackActions());
+        afterFrame(&WinUiAutomationProbe::confirmSmtcSelectedPlay);
+      }
+    }
+
+    void confirmSmtcSelectedPlay()
+    {
+      if (!tryAwaitPrimaryTransport(ao::audio::Transport::Playing, &WinUiAutomationProbe::confirmSmtcSelectedPlay))
+      {
+        return;
+      }
+
       auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
-      check(transport.nowPlaying.trackId == _seed.summaryTracks.front() &&
-              transport.occurrenceId == _primaryOccurrence && transport.elapsed == kPrimaryOffset,
-            "Play from the second List must resume the original occurrence and exact offset");
-      check(activeState().listId == _seed.composerListId &&
-              activeState().selection == std::vector{_seed.summaryTracks.at(1)},
-            "resuming A must leave B selected in the second List");
+      check(transport.nowPlaying.trackId == _seed.summaryTracks.at(1) && transport.occurrenceId.value != 0 &&
+              transport.occurrenceId != _primaryOccurrence,
+            "SMTC Play must start a new occurrence of the selected row B");
       finish();
     }
 

@@ -155,7 +155,7 @@ namespace ao::tui
     void activateGoTo(CommandAction action);
     bool tryHandleGoToEvent(ftxui::Event const& event);
     void navigateCurrentMetadata(bool album);
-    void playSelectedTrack();
+    bool tryPlaySelectedTrack();
     void reportPlaybackControlUnavailable();
     void applyListOrderCommand(ListOrderCommand command);
     void executePlaybackCommand(uimodel::PlaybackCommand command);

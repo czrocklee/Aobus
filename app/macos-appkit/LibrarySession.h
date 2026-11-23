@@ -14,7 +14,6 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -144,10 +143,7 @@ namespace ao::appkit
     void refreshSelection();
     void updateSelection(std::vector<TrackId> ids);
     void refreshSelectedCover();
-    TrackId remotePlayTarget(rt::ViewId viewId) const;
-    bool canPlayFromRemoteCommand() const;
-    bool tryPlayFromRemoteCommand() const;
-    bool tryPlayFromView(rt::ViewId viewId, TrackId trackId) const;
+    void reportPlaybackFailure(Error const& error) const;
     struct Storage;
     std::unique_ptr<Storage> _storagePtr;
   };

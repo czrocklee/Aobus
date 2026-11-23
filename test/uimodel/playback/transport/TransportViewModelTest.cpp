@@ -29,7 +29,7 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     SECTION("every command has complete semantic icon and label policy")
     {
@@ -174,7 +174,7 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("First");
     fixture.addPlayableTrack("Second");
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
     REQUIRE(fixture.playFromView(firstTrack));
 
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
@@ -201,7 +201,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
@@ -235,7 +235,7 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("First");
     auto const secondTrack = fixture.addPlayableTrack("Second");
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     SECTION("PlayPause resumes paused playback")
     {
@@ -294,7 +294,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(playback,
@@ -322,7 +322,7 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = PlaybackActions{playback, [] {}};
+    auto actions = PlaybackActions{playback, {}};
     auto catalog = ao::test::messageCatalog("de-DE");
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModel = TransportViewModel{

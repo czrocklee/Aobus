@@ -122,7 +122,7 @@ namespace ao::uimodel
       return views.firstVisibleSelectedTrack(workspace.snapshot().activeViewId) != kInvalidTrackId;
     }
 
-    void refresh() { owner.setSelectionAvailability(hasVisibleSelection(), owner.hasSystemMediaSelection()); }
+    void refresh() { owner.setSelectionAvailable(hasVisibleSelection()); }
 
     void bindProjection()
     {
@@ -163,13 +163,10 @@ namespace ao::uimodel
     async::Subscription deltaSub;
   };
 
-  PlaybackActions::PlaybackActions(rt::PlaybackService& playback,
-                                   std::function<void()> playSelection,
-                                   SystemMediaPlayHandler systemMediaPlay)
+  PlaybackActions::PlaybackActions(rt::PlaybackService& playback, std::function<bool()> playSelection)
     : _playback{playback}
     , _commands{playback.commands()}
     , _playSelection{std::move(playSelection)}
-    , _systemMediaPlay{std::move(systemMediaPlay)}
     , _lastSnapshot{playback.snapshot()}
   {
     _snapshotSub =
@@ -184,23 +181,9 @@ namespace ao::uimodel
     _focusedSelectionPtr->bindProjection();
   }
 
-  bool PlaybackActions::hasSystemMediaSelection() const
+  void PlaybackActions::setSelectionAvailable(bool const available)
   {
-    if (_systemMediaPlay.play)
-    {
-      return _systemMediaPlay.canPlay ? _systemMediaPlay.canPlay() : true;
-    }
-
-    return _focusedSelectionPtr ? _focusedSelectionPtr->hasVisibleSelection() : _selectionAvailable;
-  }
-
-  void PlaybackActions::setSelectionAvailability(bool const primaryAvailable, bool const systemMediaAvailable)
-  {
-    auto const primaryChanged = std::exchange(_selectionAvailable, primaryAvailable) != primaryAvailable;
-    auto const systemMediaChanged =
-      std::exchange(_systemMediaSelectionAvailable, systemMediaAvailable) != systemMediaAvailable;
-
-    if (primaryChanged || systemMediaChanged)
+    if (std::exchange(_selectionAvailable, available) != available)
     {
       _commandAvailabilityChangedSignals[commandIndex(PlaybackCommand::Play)].emit();
       _commandAvailabilityChangedSignals[commandIndex(PlaybackCommand::PlayPause)].emit();
@@ -208,14 +191,9 @@ namespace ao::uimodel
     }
   }
 
-  void PlaybackActions::setSelectionAvailable(bool const available)
+  bool PlaybackActions::tryExecute(PlaybackCommand command)
   {
-    setSelectionAvailability(available, _systemMediaPlay.play ? hasSystemMediaSelection() : available);
-  }
-
-  bool PlaybackActions::tryExecute(PlaybackCommand command, PlaybackActionOrigin const origin)
-  {
-    if (!isEnabled(command, origin))
+    if (!isEnabled(command))
     {
       return false;
     }
@@ -235,13 +213,9 @@ namespace ao::uimodel
         {
           _commands.resume();
         }
-        else if (origin == PlaybackActionOrigin::SystemMedia && _systemMediaPlay.play)
+        else
         {
-          return _systemMediaPlay.play();
-        }
-        else if (_playSelection)
-        {
-          _playSelection();
+          return _playSelection && _playSelection();
         }
 
         break;
@@ -265,7 +239,7 @@ namespace ao::uimodel
     return true;
   }
 
-  bool PlaybackActions::isEnabled(PlaybackCommand command, PlaybackActionOrigin const origin) const
+  bool PlaybackActions::isEnabled(PlaybackCommand command) const
   {
     auto const& snapshot = _playback.snapshot();
     auto const& transport = snapshot.transport;
@@ -277,11 +251,6 @@ namespace ao::uimodel
       }
 
       // A command can arrive before our focus or projection subscriber refreshes the presentation.
-      if (origin == PlaybackActionOrigin::SystemMedia && _systemMediaPlay.play)
-      {
-        return hasSystemMediaSelection();
-      }
-
       return _focusedSelectionPtr ? _focusedSelectionPtr->hasVisibleSelection() : _selectionAvailable;
     };
 
@@ -305,8 +274,8 @@ namespace ao::uimodel
     switch (auto const& transport = _playback.snapshot().transport; command)
     {
       case PlaybackCommand::Play:
-        // A repeated Play is already satisfied while active; otherwise it needs an actionable system-media target.
-        return isActivePlayback(transport.transport) || isEnabled(command, PlaybackActionOrigin::SystemMedia);
+        // A repeated Play is already satisfied while playback is active.
+        return isActivePlayback(transport.transport) || isEnabled(command);
       case PlaybackCommand::Pause: return transport.nowPlaying.trackId != kInvalidTrackId;
       case PlaybackCommand::PlayPause:
         return isActivePlayback(transport.transport) || playIntent(transport) != PlayIntent::None;

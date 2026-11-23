@@ -77,7 +77,7 @@ namespace ao::winui
   {
     if (auto const optCommand = commandForButton(button); optCommand)
     {
-      actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+      actions.tryExecute(*optCommand);
     }
   }
 

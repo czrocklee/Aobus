@@ -105,7 +105,10 @@ namespace ao::gtk
                               i18n::requiredFormat(
                                 textCatalog, i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
                               rt::NotificationLifetime::history());
+                            return false;
                           }
+
+                          return true;
                         }}
       , textCatalog{std::move(catalog)}
       , trackPresentationCatalog{runtime.workspace(), textCatalog}

@@ -711,11 +711,27 @@ namespace ao::appkit::test
       // The session's original adapter is retired, so this controlled-clock
       // adapter is the sole native publisher over the same production runtime.
       auto& playback = session.runtime().playback();
-      auto actions = uimodel::PlaybackActions{playback, [] {}};
+      std::int32_t startAttempts = 0;
+      auto actions = uimodel::PlaybackActions{playback,
+                                              [&]
+                                              {
+                                                ++startAttempts;
+                                                return false;
+                                              }};
       actions.bindFocusedSelection(session.runtime().workspace(), session.runtime().views());
       auto now = std::chrono::steady_clock::time_point{};
       auto media = MediaPlayerAdapter{playback, actions, session.runtime().resourceBytes(), [&] { return now; }};
       auto const trackId = session.rowAt(0)->id;
+      session.select({trackId});
+      auto const before = media.diagnostics();
+      requireStatus(
+        media.remoteCommandHandler(), {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::Success);
+      drainMediaCallbacks();
+      auto const after = media.diagnostics();
+      AO_INVARIANT(startAttempts == 1 && after.settledCommandCount == before.settledCommandCount + 1 &&
+                     after.handledCommandCount == before.handledCommandCount,
+                   "An admitted Play must settle unhandled when the selection start is rejected");
+
       session.play(trackId);
       waitForTransport(session, audio::Transport::Playing);
       auto const started = playback.snapshot().transport;
@@ -843,8 +859,8 @@ namespace ao::appkit::test
     requireStatus(retiredHandler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::CommandFailed);
     drainMediaCallbacks();
     [window close];
-    APP_LOG_INFO(
-      "MEDIA PLAYER PASS: metadata, hidden-window commands, Play origins and targets, stale seeks, and retirement");
+    APP_LOG_INFO("MEDIA PLAYER PASS: metadata, hidden-window commands, Play targets and rejected starts, stale seeks, "
+                 "and retirement");
     return 0;
   }
 } // namespace ao::appkit::test

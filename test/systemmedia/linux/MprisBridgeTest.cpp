@@ -25,6 +25,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -288,7 +289,7 @@ namespace ao::systemmedia::test
 
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto playbackSource = FakePlaybackSource{};
     auto pending = std::vector<PendingArt>{};
     std::int32_t cancellationCount = 0;
@@ -343,7 +344,7 @@ namespace ao::systemmedia::test
     constexpr auto kResourceId = ResourceId{33};
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto playbackSource = FakePlaybackSource{};
     auto capturedCompletion = MprisBridge::OnArtUrlReady{};
     auto bus = PrivateBus{};
@@ -373,7 +374,7 @@ namespace ao::systemmedia::test
     constexpr auto kTitle = std::string_view{"龙卷风"};
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto playbackSource = FakePlaybackSource{};
     auto snapshot = playbackSnapshot(TrackId{1}, kInvalidResourceId);
     snapshot.transport.nowPlaying.title = kTitle;
@@ -832,26 +833,33 @@ namespace ao::systemmedia::test
     auto const firstTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    std::int32_t systemMediaStartCount = 0;
-    auto actions = uimodel::PlaybackActions{
-      playback,
-      [] {},
-      uimodel::SystemMediaPlayHandler{.play =
-                                        [&systemMediaStartCount]
-                                      {
-                                        ++systemMediaStartCount;
-                                        return true;
-                                      }},
-    };
+    std::int32_t selectionStartCount = 0;
+    auto actions = uimodel::PlaybackActions{playback,
+                                            [&]
+                                            {
+                                              ++selectionStartCount;
+                                              return runtime.playSelectionInFocusedView().has_value();
+                                            }};
+    actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
     CHECK(endpoint.tryDispatchPlayerMethod("PlayPause"));
     CHECK(endpoint.tryDispatchPlayerMethod("Play"));
-    CHECK(systemMediaStartCount == 2);
+    CHECK(selectionStartCount == 0);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
 
-    REQUIRE(playback.commands().startFromView(viewId, firstTrack));
+    REQUIRE(runtime.views().setSelection(viewId, {secondTrack}));
+    CHECK(endpoint.tryDispatchPlayerMethod("PlayPause"));
+    REQUIRE(tryWaitForPlayback(fixture, secondTrack));
+    CHECK(selectionStartCount == 1);
+    CHECK(endpoint.tryDispatchPlayerMethod("Stop"));
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
+
+    REQUIRE(runtime.views().setSelection(viewId, {firstTrack}));
+    CHECK(endpoint.tryDispatchPlayerMethod("Play"));
     REQUIRE(tryWaitForPlayback(fixture, firstTrack));
+    CHECK(selectionStartCount == 2);
     CHECK(endpoint.tryDispatchPlayerMethod("Next"));
     CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
     CHECK(endpoint.tryDispatchPlayerMethod("Previous"));
@@ -861,6 +869,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
     CHECK(endpoint.tryDispatchPlayerMethod("Stop"));
     CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
+    CHECK(selectionStartCount == 2);
     CHECK_FALSE(endpoint.tryDispatchPlayerMethod("Seek"));
   }
 
@@ -877,7 +886,7 @@ namespace ao::systemmedia::test
     REQUIRE(playback.commands().startFromView(viewId, firstTrack));
     REQUIRE(tryWaitForPlayback(fixture, firstTrack));
 
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
     bool requested = false;
@@ -909,7 +918,7 @@ namespace ao::systemmedia::test
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     std::int32_t raiseCount = 0;
     std::int32_t quitCount = 0;
     auto callbacks = MprisBridge::Callbacks{
@@ -934,7 +943,7 @@ namespace ao::systemmedia::test
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -951,7 +960,7 @@ namespace ao::systemmedia::test
     auto const firstTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -988,7 +997,7 @@ namespace ao::systemmedia::test
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
     auto state = rt::PlaybackTransportSnapshot{};
@@ -1011,7 +1020,7 @@ namespace ao::systemmedia::test
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -1034,7 +1043,7 @@ namespace ao::systemmedia::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(fixture, library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -1062,7 +1071,7 @@ namespace ao::systemmedia::test
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -1099,7 +1108,7 @@ namespace ao::systemmedia::test
     REQUIRE(tryWaitForPlayback(fixture, track2));
     REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -1134,7 +1143,7 @@ namespace ao::systemmedia::test
     REQUIRE(tryWaitForPlayback(fixture, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
 
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
 
@@ -1209,7 +1218,7 @@ namespace ao::systemmedia::test
     REQUIRE(playback.commands().startFromView(viewId, firstTrackId));
     REQUIRE(tryWaitForPlayback(fixture, firstTrackId));
 
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions = uimodel::PlaybackActions{playback, {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, actions, callbacks};
     auto const before = playback.snapshot().transport;

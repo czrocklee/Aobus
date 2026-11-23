@@ -115,7 +115,8 @@ namespace ao::systemmedia::test
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto actions =
+      uimodel::PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto bridge = MprisBridge{
       *fixture.executor,
