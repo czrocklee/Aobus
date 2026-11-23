@@ -8,7 +8,10 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <forward_list>
 #include <initializer_list>
+#include <list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -118,12 +121,18 @@ template<typename... Ts>
 struct Packed
 {
   Packed(int /*val*/) {}
+
+  template<typename... Us>
+  Packed(Us&&... /*values*/)
+  {
+  }
 };
 
 template<typename T>
 struct IdentityInput
 {
   IdentityInput(std::type_identity_t<T> /*val*/) {}
+  IdentityInput(T /*value*/, std::type_identity_t<T> /*fallback*/) {}
 };
 
 template<typename T = std::string const>
@@ -243,6 +252,74 @@ void ctadPrimitiveDeductionCases()
   [[maybe_unused]] auto const explicitValues = std::to_array<int>({1, 2, 3});
 
   deduceInTemplate(1);
+}
+
+void ctadPointerCases(Sink* sink)
+{
+  // NEGATIVE - nullptr does not deduce Sink*.
+  [[maybe_unused]] static constinit auto nullSink = std::atomic<Sink*>{nullptr};
+
+  // NEGATIVE - a braced argument cannot supply the atomic's pointer type.
+  [[maybe_unused]] auto const bracedNull = std::atomic<Sink*>{{nullptr}};
+
+  // POSITIVE - the first argument supplies T; the braced second argument only initializes it.
+  [[maybe_unused]] auto const bracedFallback = Box<Sink*>{sink, {nullptr}};
+
+  // NEGATIVE - the two pair elements must be deduced independently.
+  [[maybe_unused]] auto const bracedPair = std::pair<Sink*, Sink*>{sink, {nullptr}};
+
+  // NEGATIVE - integer zero also requires a null-to-pointer conversion.
+  [[maybe_unused]] std::atomic<Sink*> zeroSink{0};
+
+  // NEGATIVE - the two arguments would deduce conflicting types for T.
+  [[maybe_unused]] auto const boxed = Box<Sink*>{sink, nullptr};
+
+  // POSITIVE - only the first argument deduces T; the fallback converts afterward.
+  [[maybe_unused]] auto const withFallback = IdentityInput<Sink*>{sink, nullptr};
+
+  // POSITIVE - a null value already typed as Sink* still deduces Sink*.
+  [[maybe_unused]] auto const typedNullSink = std::atomic<Sink*>{static_cast<Sink*>(nullptr)};
+
+  // NEGATIVE - tuple deduction would change the second element type.
+  [[maybe_unused]] auto const tuple = std::tuple<Sink*, Sink*>{sink, nullptr};
+
+  // POSITIVE - both tuple elements already have the intended pointer type.
+  [[maybe_unused]] auto const typedTuple = std::tuple<Sink*, Sink*>{sink, static_cast<Sink*>(nullptr)};
+
+  // POSITIVE - the second element already has the intended std::nullptr_t type.
+  [[maybe_unused]] auto const mixedTuple = std::tuple<Sink*, std::nullptr_t>{sink, nullptr};
+
+  // NEGATIVE - the copy deduction candidate would unwrap the inner tuple.
+  [[maybe_unused]] auto const nested = std::tuple<std::tuple<Sink*, std::nullptr_t>>{mixedTuple};
+
+  // NEGATIVE - the guide from pair would unpack it into two tuple elements.
+  [[maybe_unused]] auto const nestedPair = std::tuple<std::pair<Sink*, Sink*>>{std::pair{sink, sink}};
+
+  // NEGATIVE - forwarding constructor parameters do not deduce the class pack.
+  [[maybe_unused]] auto const forwarded = Packed<Sink*, Sink*>{sink, nullptr};
+
+  // NEGATIVE - the initializer list would deduce std::nullptr_t, not Sink*.
+  [[maybe_unused]] auto const deque = std::deque<Sink*>{nullptr};
+  [[maybe_unused]] auto const list = std::list<Sink*>{sink, nullptr};          // NEGATIVE
+  [[maybe_unused]] auto const forwardList = std::forward_list<Sink*>{nullptr}; // NEGATIVE
+
+  // NEGATIVE - the second list element conflicts with the first for deduction.
+  [[maybe_unused]] auto const bag = IlBag<Sink*>{sink, nullptr};
+
+  // NEGATIVE - IlBag{{nullptr}} deduces IlBag<std::nullptr_t>, not IlBag<Sink*>.
+  [[maybe_unused]] auto const bracedElement = IlBag<Sink*>{{nullptr}};
+
+  // NEGATIVE - Box takes T, not initializer_list<T>; the list type is only contextual.
+  [[maybe_unused]] auto const contextualList = Box<std::initializer_list<Sink*>>{{sink}};
+
+  // POSITIVE - a custom initializer-list constructor can still deduce typed pointers.
+  [[maybe_unused]] auto const typedBag = IlBag<Sink*>{sink, static_cast<Sink*>(nullptr)};
+
+  // NEGATIVE - nullptr does not deduce a pointer-to-member type.
+  [[maybe_unused]] auto const nullMember = std::atomic<std::uint16_t Row::*>{nullptr};
+
+  // POSITIVE - the member address already has the intended pointer-to-member type.
+  [[maybe_unused]] auto const member = Box<std::uint16_t Row::*>{&Row::disc};
 }
 
 void ctadNegativeCases()

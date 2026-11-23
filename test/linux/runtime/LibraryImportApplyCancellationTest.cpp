@@ -67,7 +67,7 @@ namespace ao::rt::test
 
     std::atomic<RestoreStopProbe*>& armedProbe()
     {
-      static constinit auto probe = std::atomic{static_cast<RestoreStopProbe*>(nullptr)};
+      static constinit auto probe = std::atomic<RestoreStopProbe*>{nullptr};
       return probe;
     }
 
