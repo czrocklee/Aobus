@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace ao::library
 {
@@ -83,7 +84,12 @@ namespace ao::rt
   };
 
   struct ProjectionReset final
-  {};
+  {
+    // A section change still replaces all row coordinates. When its source edit
+    // is known, only inserted or updated IDs can need fresh row data. No value
+    // means the reset cannot narrow that set; an empty vector means no such IDs.
+    std::optional<std::vector<TrackId>> optAffectedTrackIds{};
+  };
 
   struct ProjectionInsertRange final
   {
@@ -120,8 +126,10 @@ namespace ao::rt
   /**
    * Validates sequential projection coordinates against an initial row count.
    *
-   * Reset and source invalidation are valid only as singleton batches. Every
-   * regular range is interpreted after the ranges that precede it.
+   * Reset and source invalidation are valid only as singleton batches. Regular
+   * ranges are sequential: removes have descending starts, followed by inserts
+   * and then updates, each in ascending non-overlapping ranges. Insert and
+   * update coordinates also refer to the final state; remove coordinates do not.
    */
   bool isValidTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize);
 

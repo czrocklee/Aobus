@@ -32,17 +32,17 @@ namespace ao::gtk
    * Builds a SignalListItemFactory for the given track field.
    *
    * The returned factory handles the full lifecycle:
-   * - setup: creates the appropriate widget hierarchy (label, stack, etc.)
-   * - bind: connects the row object data and establishes reactive updates (playing state, metadata)
-   * - unbind: performs necessary cleanup to avoid leaks when rows are recycled
+   * - setup: creates the cell widgets and subscribes once to model playing changes
+   * - bind: observes the bound row's fields and applies current field and playing state
+   * - unbind: disconnects the field observer, retires any edit session, and releases the row
    *
    * @param field The track field to build a column factory for.
+   * @param beginEditSession A callback to capture an authoring session for the bound row.
    * @param commitFn A callback to handle metadata changes if the column is editable.
-   * @param playingModel Model used to drive the now-playing highlight. Each cell
-   *        subscribes once to its playing-changed signal and styles from playingTrackId().
+   * @param model The model that supplies display fields and now-playing state.
    */
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
                                                               MetadataEditSessionFn const& beginEditSession,
                                                               MetadataCommitFn const& commitFn,
-                                                              TrackListModel& playingModel);
+                                                              TrackListModel& model);
 } // namespace ao::gtk

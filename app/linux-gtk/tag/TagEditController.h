@@ -38,7 +38,6 @@ namespace ao::async
 }
 namespace ao::gtk
 {
-  class TrackRowCache;
   class ThemeCoordinator;
   class TagPopover;
   class TrackViewPage;
@@ -81,8 +80,6 @@ namespace ao::gtk
     TagEditController(TagEditController&&) = delete;
     TagEditController& operator=(TagEditController&&) = delete;
 
-    void setDataProvider(TrackRowCache* provider);
-
     void openTrackContextMenu(TrackViewPage& page, TrackSelection const& selection, double xPosition, double yPosition);
 
     void presentProperties(TrackSelection const& selection);
@@ -97,7 +94,6 @@ namespace ao::gtk
     void applyListMembershipToCurrentSelection(ListId listId, bool add);
     void applyListOrderToCurrentSelection(TrackOrderCommand action);
     void openTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
-    void presentPropertiesDialog();
     void unparentClosedContextPopover();
     void scheduleContextPopoverRetirement();
     void finishContextPopoverRetirement();
@@ -117,7 +113,6 @@ namespace ao::gtk
     rt::NotificationService& _notifications;
     rt::TextOrderingPolicy const* _textOrderingPolicy;
     i18n::MessageCatalog _textCatalog;
-    TrackRowCache* _dataProvider = nullptr;
     Gtk::Window& _parent;
     ThemeCoordinator& _themeCoordinator;
 

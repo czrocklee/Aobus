@@ -206,6 +206,7 @@ cc_library(
         "track/TrackColumnViewHost.cpp",
         "track/TrackCustomViewDialog.cpp",
         "track/TrackFieldUi.cpp",
+        "track/TrackListItem.cpp",
         "track/TrackListModel.cpp",
         "track/TrackOrderDragController.cpp",
         "track/TrackPageHost.cpp",

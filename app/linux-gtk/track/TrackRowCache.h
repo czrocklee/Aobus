@@ -11,12 +11,16 @@
 #include <glibmm/refptr.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <vector>
 
 namespace ao::rt
 {
   class Library;
-  struct TrackRow;
+  class TrackListProjection;
+  struct TrackListProjectionDeltaBatch;
+  struct TrackRowRange;
 }
 
 namespace ao::gtk
@@ -34,9 +38,10 @@ namespace ao::gtk
    * Rows are fully resolved at load time: display formatting never re-enters
    * storage.
    *
-   * The cache keeps itself coherent: it subscribes to library changes for its
-   * own lifetime, so no owner has to hold that subscription on its behalf or
-   * remember to invalidate after a mutation it did not make.
+   * GTK list-item identity is separate from this cache. Before publishing a
+   * projection delta, the model refreshes affected rows with field subscribers.
+   * Other holders must call trackRow() to refresh a stale field object. The ordinary
+   * library observer handles changes even when no projection reports them.
    */
   class TrackRowCache final
   {
@@ -49,33 +54,38 @@ namespace ao::gtk
     TrackRowCache& operator=(TrackRowCache&&) = delete;
     ~TrackRowCache() = default;
 
-    /**
-     * Get the shared TrackRowObject for a given ID.
-     * @return TrackRowObject if it was loaded, nullptr otherwise.
-     */
+    /// Load on first access or refresh a stale row in place. Null means the track is absent.
     Glib::RefPtr<TrackRowObject> trackRow(TrackId id) const;
 
     std::size_t cachedRowCount() const noexcept { return _rowCache.size(); }
+    /// Number of snapshot row lookups, including in-place refreshes and misses.
+    std::size_t rowLoadCount() const noexcept { return _rowLoadCount; }
 
-    /**
-     * Invalidate entry for a track (after updates or deletion).
-     */
-    void invalidate(TrackId id) const;
-
-    /**
-     * Clear all cached rows without reloading.
-     * Subsequent trackRow() calls will lazily reload from the database.
-     */
-    void clearCache();
+    void prepareNotification(rt::TrackListProjection const& projection,
+                             rt::TrackListProjectionDeltaBatch const& batch) const;
 
   private:
     rt::Library const& _reads;
     i18n::MessageCatalog _textCatalog;
 
-    mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
+    struct Entry final
+    {
+      Glib::RefPtr<TrackRowObject> rowPtr;
+      std::uint64_t loadedRevision = 0;
+      bool stale = false;
+    };
+
+    mutable boost::unordered_flat_map<TrackId, Entry, std::hash<TrackId>> _rowCache;
+    mutable std::size_t _rowLoadCount = 0;
+    std::uint64_t _observedRevision = 0;
     // Declared last so it is released before the map its callback writes into.
     async::Subscription _changesSub;
 
-    Glib::RefPtr<TrackRowObject> createRowObject(rt::TrackRow row) const;
+    void markCachedRow(TrackId id, std::uint64_t revision, std::vector<TrackId>& bound) const;
+    void markCachedRange(rt::TrackListProjection const& projection,
+                         rt::TrackRowRange range,
+                         std::uint64_t revision,
+                         std::vector<TrackId>& bound) const;
+    static void markStale(Entry& entry, std::uint64_t revision, std::vector<TrackId>& bound);
   };
 } // namespace ao::gtk

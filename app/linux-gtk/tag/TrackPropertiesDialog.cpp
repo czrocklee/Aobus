@@ -10,7 +10,6 @@
 #include "completion/EntryCompletionController.h"
 #include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
-#include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -94,14 +93,12 @@ namespace ao::gtk
                                                rt::Library& library,
                                                rt::CompletionService& completion,
                                                i18n::MessageCatalog textCatalog,
-                                               TrackRowCache& rowCache,
                                                std::span<TrackId const> const trackIds)
     : AppDialog{}
     , _library{library}
     , _asyncRuntime{asyncRuntime}
     , _completion{completion}
     , _textCatalog{std::move(textCatalog)}
-    , _rowCache{rowCache}
     , _formModel{_textCatalog}
     , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
     , _creditsEditor{_completion, _textCatalog, _formModel, [this] { updateSaveEnabled(); }}
@@ -474,11 +471,6 @@ namespace ao::gtk
         }
 
         owner->setInteractionState(InteractionState::Closing);
-
-        for (auto const& change : replyRes->reply.changes)
-        {
-          owner->_rowCache.invalidate(change.trackId);
-        }
 
         // Return from the task completion before closing the native window. A
         // managed toplevel may retire its C++ owner as part of close handling;

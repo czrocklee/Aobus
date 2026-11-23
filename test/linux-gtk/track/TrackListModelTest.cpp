@@ -4,10 +4,12 @@
 #include "track/TrackListModel.h"
 
 #include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
+#include "track/TrackListItem.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
@@ -16,11 +18,15 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
 #include <gtk/gtk.h>
@@ -31,6 +37,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -82,6 +89,15 @@ namespace ao::gtk::test
       }
 
       return true;
+    }
+
+    Glib::RefPtr<TrackRowObject> trackRowAt(TrackListModel& model, ::guint position)
+    {
+      auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(model.get_object(position));
+      REQUIRE(itemPtr);
+      auto const rowPtr = model.trackRow(itemPtr->trackId());
+      REQUIRE(rowPtr);
+      return rowPtr;
     }
 
     struct SpyTrackListModelEvents final
@@ -142,14 +158,11 @@ namespace ao::gtk::test
     CHECK(fixture.modelPtr->indexOf(fixture.id1) == 0);
     CHECK(fixture.modelPtr->indexOf(fixture.id2) == 1);
     CHECK(fixture.modelPtr->get_n_items() == 2);
-    CHECK(fixture.modelPtr->get_item_type() != G_TYPE_INVALID);
+    CHECK(fixture.modelPtr->get_item_type() == TrackListItem::objectType());
 
-    auto const itemPtr = fixture.modelPtr->get_object(0);
-    REQUIRE(itemPtr != nullptr);
-    auto const castRowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
-    REQUIRE(castRowPtr);
-    CHECK(castRowPtr->trackId() == fixture.id1);
-    CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
+    auto const rowPtr = trackRowAt(*fixture.modelPtr, 0);
+    CHECK(rowPtr->trackId() == fixture.id1);
+    CHECK(rowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
   }
 
   TEST_CASE("TrackListModel - reports playing state without structural notifications")
@@ -157,35 +170,18 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = TrackListModelFixture{};
 
-    SECTION("Setting the playing track emits the playing-changed signal, not items_changed")
+    SECTION("Setting the same playing track twice emits only one playing-changed signal")
     {
       std::int32_t playingChangedCount = 0;
-      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      auto connection =
+        sigc::scoped_connection{fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; })};
 
-      CHECK(fixture.spy.events.empty());
       fixture.modelPtr->setPlayingTrackId(fixture.id1);
-
-      // The shared, cached row objects make items_changed a no-op (GTK dedups the
-      // rebind), so the highlight is driven by the dedicated signal instead.
-      CHECK(fixture.spy.events.empty());
       CHECK(playingChangedCount == 1);
+      CHECK(fixture.spy.events.empty());
       CHECK(fixture.modelPtr->playingTrackId() == fixture.id1);
 
-      // get_item_vfunc still stamps isPlaying() on the object it hands back, so a
-      // freshly bound (scrolled-in) row reflects the current playing track.
-      auto const playingRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
-      REQUIRE(playingRowPtr);
-      CHECK(playingRowPtr->isPlaying());
-    }
-
-    SECTION("Setting the same playing track twice is a no-op")
-    {
-      std::int32_t playingChangedCount = 0;
-      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
-
       fixture.modelPtr->setPlayingTrackId(fixture.id1);
-      fixture.modelPtr->setPlayingTrackId(fixture.id1);
-
       CHECK(playingChangedCount == 1);
       CHECK(fixture.spy.events.empty());
       CHECK(fixture.modelPtr->playingTrackId() == fixture.id1);
@@ -217,31 +213,22 @@ namespace ao::gtk::test
       CHECK(emptyModelPtr->get_n_items() == 0);
     }
 
-    SECTION("Switching the playing track re-emits the signal and restamps both rows")
+    SECTION("Switching the playing track re-emits the signal without replacing the cached row")
     {
       std::int32_t playingChangedCount = 0;
-      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      auto connection =
+        sigc::scoped_connection{fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; })};
 
-      auto const retainedRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
-      REQUIRE(retainedRowPtr);
-      CHECK_FALSE(retainedRowPtr->isPlaying());
-
+      auto const retainedRowPtr = trackRowAt(*fixture.modelPtr, 0);
       fixture.modelPtr->setPlayingTrackId(fixture.id1);
-      CHECK(fixture.modelPtr->get_object(0) == retainedRowPtr);
-      CHECK(retainedRowPtr->isPlaying());
-      fixture.modelPtr->setPlayingTrackId(fixture.id2);
+      CHECK(playingChangedCount == 1);
+      CHECK(trackRowAt(*fixture.modelPtr, 0) == retainedRowPtr);
 
+      fixture.modelPtr->setPlayingTrackId(fixture.id2);
       CHECK(playingChangedCount == 2);
       CHECK(fixture.spy.events.empty());
       CHECK(fixture.modelPtr->playingTrackId() == fixture.id2);
-
-      auto const oldRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
-      auto const newRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(1));
-      REQUIRE(oldRowPtr);
-      REQUIRE(newRowPtr);
-      CHECK(oldRowPtr == retainedRowPtr);
-      CHECK_FALSE(oldRowPtr->isPlaying());
-      CHECK(newRowPtr->isPlaying());
+      CHECK(trackRowAt(*fixture.modelPtr, 0) == retainedRowPtr);
     }
   }
 
@@ -266,8 +253,10 @@ namespace ao::gtk::test
       CHECK(fixture.modelPtr->indexOf(fixture.id2) == 2);
     }
 
-    SECTION("Delta batch notifications - Remove")
+    SECTION("Removing a selected track drops it but keeps the surviving selection")
     {
+      auto const selectionPtr = Gtk::MultiSelection::create(fixture.modelPtr);
+      REQUIRE(selectionPtr->select_all());
       fixture.sourcePtr->remove(fixture.id1);
 
       REQUIRE(fixture.spy.events.size() == 1);
@@ -276,6 +265,15 @@ namespace ao::gtk::test
       CHECK(fixture.spy.events[0].added == 0);
       CHECK(fixture.spy.events[0].sizeDuringEvent == 1);
       CHECK(fixture.modelPtr->get_n_items() == 1);
+      CHECK(selectionPtr->get_selection()->get_size() == 1);
+      CHECK(fixture.modelPtr->indexOf(fixture.id2) == 0);
+      CHECK(selectionPtr->is_selected(0));
+
+      fixture.sourcePtr->insert(fixture.id1, 0);
+
+      CHECK(selectionPtr->get_selection()->get_size() == 1);
+      CHECK_FALSE(selectionPtr->is_selected(0));
+      CHECK(selectionPtr->is_selected(1));
     }
 
     SECTION("Delta batch notifications - Update")
@@ -319,6 +317,105 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("TrackListModel - keeps selection and fresh row text during a cold title reorder")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    constexpr ::guint kTrackCount = 32;
+    constexpr ::guint kLastPosition = kTrackCount - 1U;
+    constexpr ::guint kMiddlePosition = 16;
+    auto const startsAtFront = GENERATE(true, false);
+    ::guint const oldPosition = startsAtFront ? 0U : kLastPosition;
+    ::guint const newPosition = startsAtFront ? kLastPosition : 0U;
+    ::guint const newOtherPosition = startsAtFront ? kMiddlePosition - 1U : kMiddlePosition + 1U;
+    auto const newTitle = std::string_view{startsAtFront ? "Track 99" : "Track 00"};
+    CAPTURE(oldPosition, newPosition);
+
+    // Each direction starts with a separate runtime, projection, and empty row cache.
+    auto trackIds = std::array<TrackId, kTrackCount>{};
+    auto fixture = GtkRuntimeFixture{[&trackIds](library::MusicLibrary& storage)
+                                     {
+                                       for (::guint position = 0; position < kTrackCount; ++position)
+                                       {
+                                         trackIds[position] =
+                                           library::test::addTrack(storage,
+                                                                   {.title = std::format("Track {:02}", position + 1),
+                                                                    .uri = std::format("track-{}.flac", position + 1)});
+                                       }
+                                     }};
+    auto& runtime = fixture.runtime();
+    auto const editedTrackId = trackIds[oldPosition];
+    auto const otherTrackId = trackIds[kMiddlePosition];
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
+      .target = rt::GlobalViewKind::AllTracks,
+      .optPresentation = rt::NavigationPresentation{.spec = {.sortBy = {{.field = rt::TrackSortField::Title}}}},
+    }));
+    auto const projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto const modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(projectionPtr);
+
+    REQUIRE(modelPtr->get_n_items() == kTrackCount);
+    auto const selectionPtr = Gtk::MultiSelection::create(modelPtr);
+    auto const oldItemPtr = std::dynamic_pointer_cast<TrackListItem>(selectionPtr->get_object(oldPosition));
+    auto const otherItemPtr = std::dynamic_pointer_cast<TrackListItem>(selectionPtr->get_object(kMiddlePosition));
+    REQUIRE(oldItemPtr);
+    REQUIRE(otherItemPtr);
+    REQUIRE(oldItemPtr->trackId() == editedTrackId);
+    REQUIRE(otherItemPtr->trackId() == otherTrackId);
+    REQUIRE(selectionPtr->select_item(oldPosition, true));
+    REQUIRE(selectionPtr->select_item(kMiddlePosition, false));
+    REQUIRE(selectionPtr->is_selected(oldPosition));
+    REQUIRE(selectionPtr->is_selected(kMiddlePosition));
+    CHECK(rowCache.rowLoadCount() == 0);
+
+    auto const oldRowPtr = modelPtr->trackRow(oldItemPtr->trackId());
+    auto const otherRowPtr = modelPtr->trackRow(otherItemPtr->trackId());
+    REQUIRE(oldRowPtr);
+    REQUIRE(otherRowPtr);
+    REQUIRE(oldRowPtr->fieldText(rt::TrackField::Title).raw() == (startsAtFront ? "Track 01" : "Track 32"));
+    REQUIRE(otherRowPtr->fieldText(rt::TrackField::Title) == "Track 17");
+    auto const cachedRowsBefore = rowCache.cachedRowCount();
+    REQUIRE(cachedRowsBefore == 2);
+    auto const rowLoadsBefore = rowCache.rowLoadCount();
+    REQUIRE(rowLoadsBefore == 2);
+
+    auto movedItemPtr = Glib::RefPtr<TrackListItem>{};
+    auto movedTitle = std::string{};
+    auto connection = sigc::scoped_connection{selectionPtr->signal_items_changed().connect(
+      [&](::guint position, ::guint, ::guint added)
+      {
+        if (newPosition >= position && newPosition - position < added)
+        {
+          auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(selectionPtr->get_object(newPosition));
+
+          if (!movedItemPtr && itemPtr && itemPtr->trackId() == editedTrackId)
+          {
+            // GTK has already followed the selection; no field observer has asked for data yet.
+            CHECK(rowCache.rowLoadCount() == rowLoadsBefore);
+            movedItemPtr = itemPtr;
+
+            if (auto const rowPtr = modelPtr->trackRow(itemPtr->trackId()); rowPtr)
+            {
+              movedTitle = rowPtr->fieldText(rt::TrackField::Title).raw();
+            }
+          }
+        }
+      })};
+
+    updateRuntimeTrack(runtime, editedTrackId, [newTitle](library::test::TrackSpec& spec) { spec.title = newTitle; });
+
+    CHECK(movedItemPtr == oldItemPtr);
+    CHECK(movedTitle == newTitle);
+    CHECK(selectionPtr->get_selection()->get_size() == 2);
+    CHECK(selectionPtr->is_selected(newPosition));
+    CHECK(selectionPtr->is_selected(newOtherPosition));
+    CHECK(selectionPtr->get_object(newPosition) == oldItemPtr);
+    CHECK(selectionPtr->get_object(newOtherPosition) == otherItemPtr);
+    CHECK(rowCache.cachedRowCount() == cachedRowsBefore);
+    // Only the edited row's explicit request may load a payload, regardless of GTK's identity lookups.
+    CHECK(rowCache.rowLoadCount() - rowLoadsBefore <= 1);
+  }
+
   TEST_CASE("TrackListModel - section ranges propagate without materializing rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -335,7 +432,7 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
-    CHECK(modelPtr->get_item_type() == TrackRowObject::objectType());
+    CHECK(modelPtr->get_item_type() == TrackListItem::objectType());
     CHECK(rowCache.cachedRowCount() == 0);
     CHECK(modelPtr->get_section(0) == std::make_pair(::guint{0}, ::guint{3}));
     CHECK(modelPtr->get_section(3) == std::make_pair(::guint{3}, ::guint{G_MAXUINT}));
@@ -510,8 +607,7 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
-    auto const cachedTrackCPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(2));
-    REQUIRE(cachedTrackCPtr);
+    auto const cachedTrackCPtr = trackRowAt(*modelPtr, 2);
     CHECK(cachedTrackCPtr->fieldText(rt::TrackField::Title) == "Track C");
 
     updateRuntimeTrack(runtime, trackC, [](library::test::TrackSpec& spec) { spec.title = "Updated Track C"; });
@@ -546,13 +642,12 @@ namespace ao::gtk::test
       CHECK(spy.events[1].added == 1);
       CHECK(spy.events[1].sizeDuringEvent == 3);
 
-      auto const refreshedTrackCPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(2));
-      REQUIRE(refreshedTrackCPtr);
-      CHECK(refreshedTrackCPtr != cachedTrackCPtr);
-      CHECK(refreshedTrackCPtr->fieldText(rt::TrackField::Title) == "Updated Track C");
+      auto const refreshedTrackCPtr = trackRowAt(*modelPtr, 2);
+      CHECK(refreshedTrackCPtr == cachedTrackCPtr);
+      CHECK(cachedTrackCPtr->fieldText(rt::TrackField::Title) == "Updated Track C");
     }
 
-    SECTION("Structural batches reset after invalidating final-coordinate updates")
+    SECTION("Structural batches reset after refreshing final-coordinate updates")
     {
       auto const insertedTrack = addRuntimeTrack(runtime, makeTrackSpec("Inserted", "Artist", "Album"));
       auto const finalTrackIds = std::array{trackA, insertedTrack, trackB, trackC};
@@ -576,10 +671,9 @@ namespace ao::gtk::test
       CHECK(spy.events.front().added == 4);
       CHECK(spy.events.front().sizeDuringEvent == 4);
 
-      auto const refreshedTrackCPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(3));
-      REQUIRE(refreshedTrackCPtr);
-      CHECK(refreshedTrackCPtr != cachedTrackCPtr);
-      CHECK(refreshedTrackCPtr->fieldText(rt::TrackField::Title) == "Updated Track C");
+      auto const refreshedTrackCPtr = trackRowAt(*modelPtr, 3);
+      CHECK(refreshedTrackCPtr == cachedTrackCPtr);
+      CHECK(cachedTrackCPtr->fieldText(rt::TrackField::Title) == "Updated Track C");
     }
   }
 } // namespace ao::gtk::test

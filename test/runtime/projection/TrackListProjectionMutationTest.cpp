@@ -5,6 +5,7 @@
 #include "test/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -13,8 +14,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <memory>
+#include <span>
 #include <variant>
 #include <vector>
 
@@ -359,11 +362,29 @@ namespace ao::rt::test
     auto const id1 = fixture.firstId;
     auto const id2 = fixture.secondId;
     auto& batches = fixture.batches;
+    auto const requireSingleReset = [&batches] -> ProjectionReset const&
+    {
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* reset = std::get_if<ProjectionReset>(&batches.front().deltas.front());
+      REQUIRE(reset != nullptr);
+      return *reset;
+    };
+    auto const checkAffectedTrackIds = [&requireSingleReset](std::span<TrackId const> expectedIds)
+    {
+      auto const& optAffectedTrackIds = requireSingleReset().optAffectedTrackIds;
+      REQUIRE(optAffectedTrackIds);
+      CHECK(std::ranges::is_permutation(*optAffectedTrackIds, expectedIds));
+    };
+
+    CHECK_FALSE(requireSingleReset().optAffectedTrackIds); // Initial subscription.
+    batches.clear();
 
     SECTION("batch insertion with grouping")
     {
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
+      CHECK_FALSE(requireSingleReset().optAffectedTrackIds);
       batches.clear();
 
       auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
@@ -375,9 +396,7 @@ namespace ao::rt::test
       CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
       CHECK(trackGroupHeadingText(proj.groupAt(2).heading.primary) == "Rock");
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds(arr);
     }
 
     SECTION("batch removal with grouping")
@@ -391,9 +410,7 @@ namespace ao::rt::test
       env.source.batchRemove(arr);
       REQUIRE(proj.size() == 0);
       CHECK(proj.groupCount() == 0);
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds({});
     }
 
     SECTION("batch update with grouping")
@@ -413,9 +430,34 @@ namespace ao::rt::test
       REQUIRE(proj.groupCount() == 2);
       CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bravo");
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds(arr);
+    }
+
+    SECTION("insertion and update in the same grouped batch")
+    {
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::Genre,
+        .sortBy = {TrackSortTerm{.field = TrackSortField::Genre}, TrackSortTerm{.field = TrackSortField::Title}},
+      });
+      batches.clear();
+
+      auto const id3 =
+        env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      // The update changes order inside the existing group; only the insertion adds a section.
+      env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "Z"; });
+      env.source.replaceWithBatch(std::array{id1, id2, id3},
+                                  delta::RegularTrackEditScript{
+                                    .edits = {delta::InsertRange{.start = 2, .trackIds = {id3}},
+                                              delta::UpdateRange{.start = 0, .trackIds = {id1}}},
+                                  });
+
+      REQUIRE(proj.size() == 3);
+      CHECK(proj.trackIdAt(0) == id2);
+      CHECK(proj.trackIdAt(1) == id1);
+      CHECK(proj.trackIdAt(2) == id3);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
+      checkAffectedTrackIds(std::array{id1, id3});
     }
 
     SECTION("single update with grouping")
@@ -433,9 +475,7 @@ namespace ao::rt::test
       REQUIRE(proj.groupCount() == 2);
       CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Artist");
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds(std::array{id1});
     }
 
     SECTION("single insertion with grouping")
@@ -450,9 +490,7 @@ namespace ao::rt::test
       REQUIRE(proj.groupCount() == 2);
       CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds(std::array{id3});
     }
 
     SECTION("single removal with grouping")
@@ -471,9 +509,7 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(proj.groupCount() == 1);
       CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
-      REQUIRE(batches.size() == 1);
-      REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      checkAffectedTrackIds({});
     }
   }
 

@@ -14,11 +14,17 @@
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
+#include <sigc++/signal.h>
 
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <optional>
+
+namespace ao::rt
+{
+  struct TrackRow;
+}
 
 namespace ao::gtk
 {
@@ -26,12 +32,10 @@ namespace ao::gtk
   {
   public:
     static Glib::RefPtr<TrackRowObject> create(TrackId id, i18n::MessageCatalog const& textCatalog);
-    static ::GType objectType();
 
     TrackId trackId() const { return _id; }
 
     Glib::ustring const* stringField(rt::TrackField field) const noexcept;
-    bool trySetStringField(rt::TrackField field, Glib::ustring const& value);
 
     // Display text for any field, without a by-value copy. Text-backed fields
     // return their stored slot directly; computed fields are formatted on first
@@ -53,83 +57,30 @@ namespace ao::gtk
     AudioCodec codec() const { return _codec; }
 
     std::uint16_t year() const { return _year; }
-    void setYear(std::uint16_t year);
-
     library::RecordingDate recordingDate() const { return _recordingDate; }
-    void setRecordingDate(library::RecordingDate date);
-
     std::uint16_t discNumber() const { return _discNumber; }
-    void setDiscNumber(std::uint16_t discNumber);
-
     std::uint16_t discTotal() const { return _discTotal; }
-    void setDiscTotal(std::uint16_t discTotal);
-
     std::uint16_t trackNumber() const { return _trackNumber; }
-    void setTrackNumber(std::uint16_t trackNumber);
-
     std::uint16_t trackTotal() const { return _trackTotal; }
-    void setTrackTotal(std::uint16_t trackTotal);
-
     std::uint16_t movementNumber() const { return _movementNumber; }
-    void setMovementNumber(std::uint16_t movementNumber);
-
     std::uint16_t movementTotal() const { return _movementTotal; }
-    void setMovementTotal(std::uint16_t movementTotal);
 
     std::uint32_t bitrate() const { return _bitrate; }
     std::uint64_t fileSize() const { return _fileSize; }
     std::optional<FileTimestamp> modifiedTime() const { return _optModifiedTime; }
     library::FileStatus status() const { return _status; }
 
-    bool isPlaying() const { return _playing; }
-    void setPlaying(bool playing) { _playing = playing; }
+    // Emitted once after populate has replaced all fields and invalidated computed text.
+    sigc::signal<void()>& signalFieldsChanged() noexcept { return _fieldsChanged; }
 
-    void populate(Glib::ustring title,
-                  Glib::ustring artist,
-                  Glib::ustring album,
-                  Glib::ustring albumArtist,
-                  Glib::ustring genre,
-                  Glib::ustring composer,
-                  Glib::ustring conductor,
-                  Glib::ustring ensemble,
-                  Glib::ustring work,
-                  Glib::ustring movement,
-                  Glib::ustring soloist,
-                  Glib::ustring tags,
-                  Glib::ustring filePath,
-                  std::chrono::milliseconds duration,
-                  std::uint16_t year,
-                  std::uint16_t discNumber,
-                  std::uint16_t discTotal,
-                  std::uint16_t trackNumber,
-                  std::uint16_t trackTotal,
-                  std::uint16_t movementNumber,
-                  std::uint16_t movementTotal,
-                  std::uint32_t sampleRate,
-                  std::uint8_t channels,
-                  std::uint8_t bitDepth,
-                  AudioCodec codec,
-                  std::uint32_t bitrate,
-                  std::uint64_t fileSize,
-                  std::optional<FileTimestamp> optModifiedTime,
-                  library::FileStatus status = library::FileStatus::Available,
-                  library::RecordingDate recordingDate = {},
-                  std::array<std::uint16_t, 3> creditCounts = {});
+    void populate(rt::TrackRow row);
 
   protected:
-    explicit TrackRowObject();
-    explicit TrackRowObject(i18n::MessageCatalog const& textCatalog);
+    explicit TrackRowObject(i18n::MessageCatalog textCatalog);
 
   private:
-    // Clears every memoized computed-field string. Called by any mutator: computed
-    // display values derive from the numeric/text members, so changing one of them
-    // invalidates the cache wholesale. Editing is rare, so a full reset is simpler
-    // and safer than a per-field dependency map.
-    void invalidateComputedCache() noexcept { _computedFilled = 0; }
-
     TrackId _id;
-    // Empty only on the private GObject type-registration sentinel.
-    std::optional<i18n::MessageCatalog> _optTextCatalog;
+    i18n::MessageCatalog _textCatalog;
 
     // Holds both text-backed fields (filled at populate) and lazily memoized
     // computed-field strings; mutable so displayText() can fill computed slots
@@ -138,7 +89,6 @@ namespace ao::gtk
     mutable std::uint32_t _computedFilled = 0;
 
     Glib::ustring _tags;
-    std::array<std::uint16_t, 3> _creditCounts{};
     std::array<Glib::ustring, 3> _creditSummaries;
 
     std::chrono::milliseconds _duration{0};
@@ -160,10 +110,6 @@ namespace ao::gtk
     std::optional<FileTimestamp> _optModifiedTime{};
     library::FileStatus _status = library::FileStatus::Available;
 
-    // Plain bool: do not replace with Glib::Property<bool>. Nothing subscribes
-    // to per-row property notifications; now-playing highlight is driven by
-    // TrackListModel's dedicated signal, and this flag is only stamped by
-    // get_item_vfunc and read at bind time.
-    bool _playing = false;
+    sigc::signal<void()> _fieldsChanged;
   };
 } // namespace ao::gtk

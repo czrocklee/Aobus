@@ -3,8 +3,8 @@
 
 #include "track/TrackListModel.h"
 
+#include "track/TrackListItem.h"
 #include "track/TrackRowCache.h"
-#include "track/TrackRowObject.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/ScopedTimer.h>
@@ -24,25 +24,11 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <utility>
 #include <variant>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    void invalidateUpdatedRows(TrackRowCache const& provider,
-                               rt::TrackListProjection const& projection,
-                               rt::ProjectionUpdateRange const& delta)
-    {
-      for (auto const index : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
-      {
-        provider.invalidate(projection.trackIdAt(index));
-      }
-    }
-  } // namespace
-
   TrackListModel::TrackListModel()
     : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{}, Gtk::SectionModel{}
   {
@@ -89,9 +75,14 @@ namespace ao::gtk
     return (_projectionPtr != nullptr) ? _projectionPtr->indexOf(trackId) : std::nullopt;
   }
 
+  Glib::RefPtr<TrackRowObject> TrackListModel::trackRow(TrackId trackId) const
+  {
+    return _provider->trackRow(trackId);
+  }
+
   ::GType TrackListModel::get_item_type_vfunc()
   {
-    return TrackRowObject::objectType();
+    return TrackListItem::objectType();
   }
 
   ::guint TrackListModel::get_n_items_vfunc()
@@ -101,28 +92,13 @@ namespace ao::gtk
 
   ::gpointer TrackListModel::get_item_vfunc(::guint position)
   {
-    if (_projectionPtr == nullptr || _provider == nullptr)
+    if (_projectionPtr == nullptr || position >= _projectionPtr->size())
     {
       return nullptr;
     }
 
-    if (position >= _projectionPtr->size())
-    {
-      return nullptr;
-    }
-
-    auto const trackId = _projectionPtr->trackIdAt(position);
-    auto const rowPtr = _provider->trackRow(trackId);
-
-    if (!rowPtr)
-    {
-      return nullptr;
-    }
-
-    // Synchronize playing state before returning the object to the UI
-    rowPtr->setPlaying(trackId == _playingTrackId);
-
-    auto* const gobj = rowPtr->gobj();
+    auto const itemPtr = _items.get(_projectionPtr->trackIdAt(position));
+    auto* const gobj = itemPtr->gobj();
     (::g_object_ref)(gobj); // NOLINT(readability-redundant-parentheses): bypass the GLib function-like macro.
     return gobj;
   }
@@ -159,10 +135,7 @@ namespace ao::gtk
 
     _playingTrackId = id;
 
-    // Do not emit items_changed for the old/new rows: the row objects are shared
-    // and cached, so get_item_vfunc hands GTK back an identical pointer and the
-    // rebind is deduplicated away. Instead notify cells directly; each one is
-    // subscribed (once, at setup) and restyles from playingTrackId().
+    // A playing-state change does not replace a list item. Notify the cells directly.
     _playingChanged.emit();
   }
 
@@ -179,6 +152,7 @@ namespace ao::gtk
       return;
     }
 
+    _provider->prepareNotification(*_projectionPtr, batch);
     auto const containsOnlyUpdates =
       std::ranges::all_of(batch.deltas,
                           [](rt::TrackListProjectionDelta const& delta)
@@ -200,17 +174,6 @@ namespace ao::gtk
     }
     else
     {
-      // The projection has already reached the batch's final state. Structural
-      // deltas cannot be exposed sequentially, but final-coordinate updates
-      // still need to evict any materialized row objects before the reset.
-      for (auto const& delta : batch.deltas)
-      {
-        if (auto const* update = std::get_if<rt::ProjectionUpdateRange>(&delta); update != nullptr)
-        {
-          invalidateUpdatedRows(*_provider, *_projectionPtr, *update);
-        }
-      }
-
       applyResetDelta();
     }
 
@@ -263,7 +226,6 @@ namespace ao::gtk
     auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
 
-    invalidateUpdatedRows(*_provider, *_projectionPtr, delta);
     notifyUpdate(rowPosition, count);
   }
 

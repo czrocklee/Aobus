@@ -6,6 +6,7 @@
 #include "app/FormBuilder.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkText.h"
+#include "track/TrackListItem.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -53,6 +54,7 @@
 #include <gtkmm/stringobject.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -72,7 +74,64 @@ namespace ao::gtk
     {
       return std::format("<i>{}</i>", Glib::Markup::escape_text(std::string{text}).raw());
     }
-  }
+
+    class PreviewTrackLabel final : public Gtk::Label
+    {
+    public:
+      explicit PreviewTrackLabel(i18n::MessageCatalog textCatalog)
+        : _textCatalog{std::move(textCatalog)}
+      {
+        set_halign(Gtk::Align::START);
+        set_ellipsize(Pango::EllipsizeMode::END);
+      }
+
+      PreviewTrackLabel(PreviewTrackLabel const&) = delete;
+      PreviewTrackLabel& operator=(PreviewTrackLabel const&) = delete;
+      PreviewTrackLabel(PreviewTrackLabel&&) = delete;
+      PreviewTrackLabel& operator=(PreviewTrackLabel&&) = delete;
+      ~PreviewTrackLabel() override { unbind(); }
+
+      void bind(Glib::RefPtr<TrackRowObject> rowPtr)
+      {
+        unbind();
+        _boundRowPtr = std::move(rowPtr);
+
+        if (!_boundRowPtr)
+        {
+          set_text({});
+          return;
+        }
+
+        // The cell keeps the metadata row alive and disconnects before releasing it.
+        _fieldsChangedConnection = _boundRowPtr->signalFieldsChanged().connect([this] { updateText(*_boundRowPtr); });
+        updateText(*_boundRowPtr);
+      }
+
+      void unbind()
+      {
+        _fieldsChangedConnection.disconnect();
+        _boundRowPtr.reset();
+      }
+
+    private:
+      void updateText(TrackRowObject const& row)
+      {
+        auto const fieldText = [&row](rt::TrackField field)
+        {
+          auto const* const text = row.stringField(field);
+          return text != nullptr ? std::string_view{text->raw()} : std::string_view{};
+        };
+        set_text(uimodel::formatSmartListPreviewTrackLabel(_textCatalog,
+                                                           fieldText(rt::TrackField::Title),
+                                                           fieldText(rt::TrackField::Artist),
+                                                           fieldText(rt::TrackField::Album)));
+      }
+
+      i18n::MessageCatalog _textCatalog;
+      Glib::RefPtr<TrackRowObject> _boundRowPtr;
+      sigc::scoped_connection _fieldsChangedConnection;
+    };
+  } // namespace
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
                                    rt::Library& library,
@@ -530,31 +589,26 @@ namespace ao::gtk
   {
     auto factoryPtr = Gtk::SignalListItemFactory::create();
 
-    factoryPtr->signal_setup().connect(
+    factoryPtr->signal_setup().connect([textCatalog = _textCatalog](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                       { listItemPtr->set_child(*Gtk::make_managed<PreviewTrackLabel>(textCatalog)); });
+
+    factoryPtr->signal_bind().connect(_presentationCallbacks.guard(
+      [&trackRowCache = _trackRowCache](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+      {
+        auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(listItemPtr->get_item());
+        auto rowPtr = itemPtr ? trackRowCache.trackRow(itemPtr->trackId()) : nullptr;
+
+        if (auto* const label = dynamic_cast<PreviewTrackLabel*>(listItemPtr->get_child()); label != nullptr)
+        {
+          label->bind(std::move(rowPtr));
+        }
+      }));
+    factoryPtr->signal_unbind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
-        auto* const label = Gtk::make_managed<Gtk::Label>("");
-        label->set_halign(Gtk::Align::START);
-        label->set_ellipsize(Pango::EllipsizeMode::END);
-        listItemPtr->set_child(*label);
-      });
-
-    factoryPtr->signal_bind().connect(
-      [textCatalog = _textCatalog](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
-      {
-        auto const itemPtr = listItemPtr->get_item();
-        auto rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
-
-        if (auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child()); rowPtr && label)
+        if (auto* const label = dynamic_cast<PreviewTrackLabel*>(listItemPtr->get_child()); label != nullptr)
         {
-          auto const* title = rowPtr->stringField(rt::TrackField::Title);
-          auto const* artist = rowPtr->stringField(rt::TrackField::Artist);
-          auto const* album = rowPtr->stringField(rt::TrackField::Album);
-          auto const titleText = title != nullptr ? std::string_view{title->raw()} : std::string_view{};
-          auto const artistText = artist != nullptr ? std::string_view{artist->raw()} : std::string_view{};
-          auto const albumText = album != nullptr ? std::string_view{album->raw()} : std::string_view{};
-
-          label->set_text(uimodel::formatSmartListPreviewTrackLabel(textCatalog, titleText, artistText, albumText));
+          label->unbind();
         }
       });
 

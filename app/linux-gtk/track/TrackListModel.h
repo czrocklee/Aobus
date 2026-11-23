@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "track/TrackListItem.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -22,6 +23,7 @@
 namespace ao::gtk
 {
   class TrackRowCache;
+  class TrackRowObject;
 
   class TrackListModel final
     : public Gio::ListModel
@@ -39,17 +41,19 @@ namespace ao::gtk
 
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
+    // Resolving fields is explicit: GTK also requests items just to compare identity.
+    Glib::RefPtr<TrackRowObject> trackRow(TrackId trackId) const;
+
     /// Update the track rendered as now-playing. This emits signalPlayingChanged()
     /// instead of items_changed(); visible cells restyle from playingTrackId(), and
-    /// newly-bound/recycled cells are stamped in get_item_vfunc().
+    /// newly-bound/recycled cells read playingTrackId() at bind.
     void setPlayingTrackId(TrackId id);
 
     /// The track currently rendered as "playing", or kInvalidTrackId.
     TrackId playingTrackId() const noexcept { return _playingTrackId; }
 
-    /// Emitted when the playing track changes. Cells subscribe once (at setup) to
-    /// restyle in place, since the shared, cached row objects make GTK skip a
-    /// rebind on items_changed.
+    /// Emitted when the playing track changes. Cells subscribe once at setup so
+    /// they can restyle in place without replacing a list item or rebinding fields.
     sigc::signal<void()>& signalPlayingChanged() noexcept { return _playingChanged; }
 
   protected:
@@ -77,6 +81,7 @@ namespace ao::gtk
     std::shared_ptr<rt::TrackListProjection const> _projectionPtr;
     async::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
+    TrackListItemPool _items;
     TrackId _playingTrackId{kInvalidTrackId};
     sigc::signal<void()> _playingChanged;
     std::size_t _modelSize = 0;

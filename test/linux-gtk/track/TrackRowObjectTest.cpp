@@ -5,88 +5,63 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
-#include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <sigc++/scoped_connection.h>
 
 #include <chrono>
-#include <optional>
+#include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackRowObject - mutations refresh computed and text-backed display values")
+  TEST_CASE("TrackRowObject - same-track snapshots replace text and reset computed display values")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto const rowPtr = TrackRowObject::create(TrackId{1}, ao::test::englishMessageCatalog());
+    auto const id = TrackId{1};
+    auto const rowPtr = TrackRowObject::create(id, ao::test::englishMessageCatalog());
     REQUIRE(rowPtr);
-    rowPtr->populate("Track 1",
-                     "Artist 1",
-                     "Album 1",
-                     "",
-                     "Genre 1",
-                     "",
-                     "",
-                     "",
-                     "",
-                     "",
-                     "",
-                     "",
-                     "track-1.flac",
-                     std::chrono::minutes{3},
-                     2021,
-                     1,
-                     0,
-                     1,
-                     0,
-                     0,
-                     0,
-                     44100,
-                     2,
-                     16,
-                     AudioCodec::Unknown,
-                     320000,
-                     0,
-                     std::nullopt);
+    rowPtr->populate(rt::TrackRow{.id = id,
+                                  .artist = "Original artist",
+                                  .album = "Original album",
+                                  .duration = std::chrono::minutes{3},
+                                  .year = 2021,
+                                  .recordingDate = {.year = 1955, .month = 6, .day = 7}});
 
-    CHECK(rowPtr->trySetStringField(rt::TrackField::Artist, "New Artist"));
-    CHECK(rowPtr->fieldText(rt::TrackField::Artist) == "New Artist");
-    CHECK_FALSE(rowPtr->trySetStringField(rt::TrackField::Duration, "Failed"));
-    CHECK(rowPtr->duration() == std::chrono::minutes{3});
+    auto const* const artist = rowPtr->displayText(rt::TrackField::Artist);
+    REQUIRE(artist != nullptr);
+    CHECK(artist == rowPtr->stringField(rt::TrackField::Artist));
+    CHECK(*artist == "Original artist");
+    CHECK(rowPtr->fieldText(rt::TrackField::Year) == "2021");
+    CHECK(rowPtr->fieldText(rt::TrackField::Duration) == "3:00");
+    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate) == "1955-06-07");
 
-    rowPtr->setYear(2025);
-    rowPtr->setDiscNumber(2);
-    rowPtr->setDiscTotal(3);
-    rowPtr->setTrackNumber(4);
-    rowPtr->setTrackTotal(10);
-    CHECK(rowPtr->year() == 2025);
-    CHECK(rowPtr->discNumber() == 2);
-    CHECK(rowPtr->discTotal() == 3);
-    CHECK(rowPtr->trackNumber() == 4);
-    CHECK(rowPtr->trackTotal() == 10);
+    // Subscribers must see refreshed computed text during the notification itself.
+    auto publishedDates = std::vector<std::string>{};
+    auto const fieldsChangedConnection = sigc::scoped_connection{rowPtr->signalFieldsChanged().connect(
+      [&rowPtr, &publishedDates]
+      { publishedDates.push_back(rowPtr->fieldText(rt::TrackField::RecordingDate).raw()); })};
+    rowPtr->populate(rt::TrackRow{.id = id,
+                                  .artist = "Updated artist",
+                                  .duration = std::chrono::minutes{4},
+                                  .year = 2025,
+                                  .recordingDate = {.year = 1955, .month = 6}});
 
-    REQUIRE(rowPtr->displayText(rt::TrackField::Year) != nullptr);
-    CHECK(*rowPtr->displayText(rt::TrackField::Year) == "2025");
-    rowPtr->setYear(1999);
-    REQUIRE(rowPtr->displayText(rt::TrackField::Year) != nullptr);
-    CHECK(*rowPtr->displayText(rt::TrackField::Year) == "1999");
-
-    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate).empty());
-    rowPtr->setRecordingDate(library::RecordingDate{.year = 1955, .month = 6});
+    CHECK(rowPtr->trackId() == id);
+    CHECK(rowPtr->displayText(rt::TrackField::Artist) == artist);
+    CHECK(*artist == "Updated artist");
+    CHECK(rowPtr->fieldText(rt::TrackField::Album).empty());
+    CHECK(rowPtr->fieldText(rt::TrackField::Year) == "2025");
+    CHECK(rowPtr->fieldText(rt::TrackField::Duration) == "4:00");
     CHECK(rowPtr->recordingDate() == library::RecordingDate{.year = 1955, .month = 6});
-    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate) == "1955-06");
-    rowPtr->setRecordingDate(library::RecordingDate{.year = 1981});
-    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate) == "1981");
-    rowPtr->setRecordingDate({});
-    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate).empty());
 
-    REQUIRE(rowPtr->displayText(rt::TrackField::TrackNumber) != nullptr);
-    CHECK(*rowPtr->displayText(rt::TrackField::TrackNumber) == "4");
-    REQUIRE(rowPtr->displayText(rt::TrackField::Artist) != nullptr);
-    CHECK(rowPtr->displayText(rt::TrackField::Artist) == rowPtr->stringField(rt::TrackField::Artist));
-    CHECK(*rowPtr->displayText(rt::TrackField::Artist) == "New Artist");
+    rowPtr->populate(rt::TrackRow{.id = id, .recordingDate = {.year = 1981}});
+    rowPtr->populate(rt::TrackRow{.id = id});
+    CHECK(publishedDates == std::vector<std::string>{"1955-06", "1981", ""});
     CHECK(rowPtr->displayText(static_cast<rt::TrackField>(255)) == nullptr);
   }
 } // namespace ao::gtk::test

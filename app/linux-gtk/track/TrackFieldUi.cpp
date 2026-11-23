@@ -11,56 +11,13 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 #include <string>
-#include <utility>
-#include <variant>
 
 namespace ao::gtk
 {
   namespace
   {
-    // ---- Row edit value helpers ----
-
-    TrackFieldEditValue readStringEditValue(TrackRowObject const& row, rt::TrackField field)
-    {
-      if (auto const* stringValue = row.stringField(field); stringValue != nullptr)
-      {
-        return TrackFieldEditValue{std::in_place_type<std::string>, std::string{stringValue->raw()}};
-      }
-
-      return TrackFieldEditValue{};
-    }
-
-    bool tryApplyStringEditValue(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField field)
-    {
-      if (auto const* str = std::get_if<std::string>(&value); str != nullptr)
-      {
-        return row.trySetStringField(field, *str);
-      }
-
-      return false;
-    }
-
-    template<auto Getter>
-    TrackFieldEditValue readUint16Field(TrackRowObject const& row, rt::TrackField /*field*/)
-    {
-      return TrackFieldEditValue{std::in_place_type<std::uint16_t>, (row.*Getter)()};
-    }
-
-    template<auto Setter>
-    bool tryApplyUint16Field(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField /*field*/)
-    {
-      if (auto const* val = std::get_if<std::uint16_t>(&value); val != nullptr)
-      {
-        (row.*Setter)(*val);
-        return true;
-      }
-
-      return false;
-    }
-
     std::string readDisplayTrackNumber(TrackRowObject const& row)
     {
       return uimodel::formatDisplayTrackNumber(row.discNumber(), row.discTotal(), row.trackNumber());
@@ -74,8 +31,7 @@ namespace ao::gtk
 
   bool canInlineEdit(TrackFieldUiDefinition const& def)
   {
-    return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
-           uimodel::canWriteTrackFieldPatch(def.field);
+    return def.parseInlineEdit != nullptr && uimodel::canWriteTrackFieldPatch(def.field);
   }
 
   namespace
@@ -91,48 +47,36 @@ namespace ao::gtk
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Title)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Artist,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Artist)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Album,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Album)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::AlbumArtist,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::AlbumArtist)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Genre,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Genre)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Composer,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Composer)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Conductor,
@@ -154,90 +98,60 @@ namespace ao::gtk
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Movement,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Movement)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::RecordingDate,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return library::formatRecordingDate(row.recordingDate()); },
           .parseInlineEdit = uimodel::parseRecordingDateEditValue,
-          .readRowEditValue = +[](TrackRowObject const& row, rt::TrackField) -> TrackFieldEditValue
-          { return TrackFieldEditValue{row.recordingDate()}; },
-          .applyRowEditValue = +[](TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField) -> bool
-          {
-            if (auto const* date = std::get_if<library::RecordingDate>(&value); date != nullptr && date->isValid())
-            {
-              row.setRecordingDate(*date);
-              return true;
-            }
-
-            return false;
-          },
         },
         // ---- Metadata: number ----
         {
           .field = F::Year,
           .readRowText = +[](TrackRowObject const& row) -> std::string { return uimodel::formatUint16(row.year()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::year>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setYear>,
         },
         {
           .field = F::DiscNumber,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.discNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::discNumber>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setDiscNumber>,
         },
         {
           .field = F::DiscTotal,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.discTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::discTotal>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setDiscTotal>,
         },
         {
           .field = F::TrackNumber,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.trackNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::trackNumber>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setTrackNumber>,
         },
         {
           .field = F::TrackTotal,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.trackTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::trackTotal>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setTrackTotal>,
         },
         {
           .field = F::MovementNumber,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.movementNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::movementNumber>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setMovementNumber>,
         },
         {
           .field = F::MovementTotal,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return uimodel::formatUint16(row.movementTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
-          .readRowEditValue = readUint16Field<&TrackRowObject::movementTotal>,
-          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setMovementTotal>,
         },
         // ---- Duration ----
         {

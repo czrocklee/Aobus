@@ -15,9 +15,11 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
+#include <ao/library/FileManifestLayout.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
@@ -26,17 +28,23 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdk/gdkenums.h>
+#include <gdk/gdkkeysyms.h>
 #include <glib-object.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/singleselection.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <array>
 #include <chrono>
@@ -196,12 +204,7 @@ namespace ao::gtk::test
         auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
         columnView.append_column(columnPtr);
 
-        drainGtkEvents();
-
-        auto rowPtr = cache.trackRow(trackId);
-        CHECK(rowPtr);
-
-        // Realize the cell and check the display label is rendered.
+        // Realizing the cell materializes the row for the displayed label.
         realizeColumnView(window, columnView);
 
         auto* const label = findLabelByText(columnView, "Test Title");
@@ -246,8 +249,10 @@ namespace ao::gtk::test
         REQUIRE(replacementRequested);
 
         CHECK(stack->get_visible_child_name() == "edit");
+        entry->set_text("Abandoned on focus leave");
         REQUIRE(tryEmitFocusLeave(*entry));
         CHECK(stack->get_visible_child_name() == "display");
+        CHECK(entry->get_text() == "Test Title");
 
         // A terminal authoring session is detached before the editor can submit
         // again, even if an activation is delivered to its hidden entry.
@@ -259,7 +264,7 @@ namespace ao::gtk::test
         drainGtkEvents();
       }
 
-      SECTION("editable column routes the exact bound row field text and session identity")
+      SECTION("Escape discards the draft and a reopened editor commits to the bound row")
       {
         auto factoryPtr = buildColumnFactory(rt::TrackField::Title, beginEditSession, commitEdit, *modelPtr);
         auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
@@ -274,6 +279,23 @@ namespace ao::gtk::test
 
         stack->set_visible_child("edit");
         REQUIRE(tryEmitFocusEnter(*entry));
+        entry->set_text("Cancelled Title");
+        auto const keyControllerPtr = findController<Gtk::EventControllerKey>(*entry);
+        REQUIRE(keyControllerPtr);
+        gboolean handled = FALSE;
+        ::g_signal_emit_by_name(keyControllerPtr->gobj(),
+                                "key-pressed",
+                                static_cast<guint>(GDK_KEY_Escape),
+                                0U,
+                                static_cast<GdkModifierType>(0),
+                                &handled);
+        REQUIRE(handled != FALSE);
+        REQUIRE(stack->get_visible_child_name() == "display");
+        CHECK(commits.empty());
+
+        stack->set_visible_child("edit");
+        REQUIRE(tryEmitFocusEnter(*entry));
+        CHECK(entry->get_text() == "Test Title");
         entry->set_text("Committed Title");
         emitActivate(*entry);
 
@@ -283,6 +305,75 @@ namespace ao::gtk::test
         CHECK(commits[0].text == "Committed Title");
         CHECK(commits[0].sessionTargets == std::vector<TrackId>{trackId});
         CHECK(stack->get_visible_child_name() == "display");
+
+        columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+        drainGtkEvents();
+      }
+
+      SECTION("in-place refresh preserves the draft and only follows the bound row")
+      {
+        auto const titleFactoryPtr = buildColumnFactory(rt::TrackField::Title, beginEditSession, commitEdit, *modelPtr);
+        auto const durationFactoryPtr =
+          buildColumnFactory(rt::TrackField::Duration, beginEditSession, commitEdit, *modelPtr);
+        columnView.append_column(Gtk::ColumnViewColumn::create("Title", titleFactoryPtr));
+        columnView.append_column(Gtk::ColumnViewColumn::create("Duration", durationFactoryPtr));
+        realizeColumnView(window, columnView);
+
+        auto const rowPtr = cache.trackRow(trackId);
+        REQUIRE(rowPtr);
+        auto* const stack = findWidget<Gtk::Stack>(columnView);
+        auto* const entry = findWidget<Gtk::Entry>(columnView);
+        auto* const titleLabel = findLabelByText(columnView, "Test Title");
+        auto* const durationLabel = findLabelByText(columnView, "2:00");
+        REQUIRE(stack != nullptr);
+        REQUIRE(entry != nullptr);
+        REQUIRE(titleLabel != nullptr);
+        REQUIRE(durationLabel != nullptr);
+
+        auto const repopulate = [](TrackRowObject& row,
+                                   std::string title,
+                                   std::chrono::minutes duration,
+                                   library::FileStatus status = library::FileStatus::Available)
+        {
+          row.populate(
+            rt::TrackRow{.id = row.trackId(), .title = std::move(title), .duration = duration, .status = status});
+        };
+
+        stack->set_visible_child("edit");
+        REQUIRE(tryEmitFocusEnter(*entry));
+        entry->set_text("Local draft");
+        repopulate(*rowPtr, "Refreshed Title", std::chrono::minutes{4}, library::FileStatus::Missing);
+
+        CHECK(titleLabel->get_text() == "Refreshed Title");
+        CHECK(durationLabel->get_text() == "4:00");
+        CHECK(findWidgetByClass<Gtk::Widget>(columnView, "ao-missing-row") != nullptr);
+        CHECK(stack->get_visible_child() == entry);
+        CHECK(entry->get_text() == "Local draft");
+
+        REQUIRE(tryEmitFocusLeave(*entry));
+        CHECK(stack->get_visible_child() == titleLabel);
+        CHECK(entry->get_text() == "Refreshed Title");
+
+        REQUIRE_FALSE(rowPtr->signalFieldsChanged().empty());
+        sourcePtr->reset(std::array{secondTrackId});
+        // GTK can map the replacement before it delivers unbind for the old cells.
+        REQUIRE(
+          tryPumpGtkEventsUntil([&rowPtr] { return rowPtr->signalFieldsChanged().empty(); }, std::chrono::seconds{1}));
+
+        auto const secondRowPtr = cache.trackRow(secondTrackId);
+        REQUIRE(secondRowPtr);
+        auto* const replacementLabel = findLabelByText(columnView, "Second Title");
+        auto* const replacementEntry = findWidget<Gtk::Entry>(columnView);
+        REQUIRE(replacementLabel != nullptr);
+        REQUIRE(replacementEntry != nullptr);
+        repopulate(*rowPtr, "Retired Title", std::chrono::minutes{5});
+        CHECK(replacementLabel->get_text() == "Second Title");
+        CHECK(replacementEntry->get_text() == "Second Title");
+
+        repopulate(*secondRowPtr, "Refreshed Second Title", std::chrono::minutes{6});
+        CHECK(replacementLabel->get_text() == "Refreshed Second Title");
+        CHECK(replacementEntry->get_text() == "Refreshed Second Title");
+        CHECK(findWidgetByClass<Gtk::Widget>(columnView, "ao-missing-row") == nullptr);
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();
@@ -303,8 +394,29 @@ namespace ao::gtk::test
 
         stack->set_visible_child("edit");
         REQUIRE(tryEmitFocusEnter(*entry));
+        entry->set_text("Abandoned during replacement");
+
+        // The entry never took actual focus, so its leave handler cannot retire
+        // the session for us. Observe the old binding before GTK releases it.
+        bool editorUnbound = false;
+        bool editorClosedOnUnbind = false;
+        auto const unbindConnection = sigc::scoped_connection{factoryPtr->signal_unbind().connect(
+          [&, stack, entry](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+          {
+            if (!editorUnbound && itemPtr->get_child() == stack)
+            {
+              editorUnbound = true;
+              editorClosedOnUnbind = stack->get_visible_child_name() == "display" && entry->get_text() == "Test Title";
+              emitActivate(*entry);
+            }
+          })};
         sourcePtr->reset(std::array{secondTrackId});
-        drainGtkEvents();
+        REQUIRE(
+          tryPumpGtkEventsUntil([&] { return editorUnbound && findLabelByText(columnView, "Second Title") != nullptr; },
+                                std::chrono::seconds{1}));
+        CHECK(editorClosedOnUnbind);
+        CHECK(commits.empty());
+
         // GTK may replace the cell rather than recycle the same wrapper. Observe
         // the current binding without dereferencing an obsolete widget pointer.
         auto* const replacementStack = findWidget<Gtk::Stack>(columnView);

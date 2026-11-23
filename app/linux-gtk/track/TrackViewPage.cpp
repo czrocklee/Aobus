@@ -743,8 +743,7 @@ namespace ao::gtk
                 *this,
                 "inline metadata edit",
                 session.submitMetadataAsync(std::move(patch)),
-                [rowPtr, field, editValue = std::move(*editValueRes), uiDef](
-                  TrackViewPage* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
+                [](TrackViewPage* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
                 {
                   if (!replyRes)
                   {
@@ -768,7 +767,7 @@ namespace ao::gtk
                     case rt::AuthoringStatus::Applied: break;
                   }
 
-                  uiDef->applyRowEditValue(*rowPtr, editValue, field);
+                  // The row follows LibraryChanges and may already reflect a newer edit.
                   owner->clearStatusMessage();
                 });
   }

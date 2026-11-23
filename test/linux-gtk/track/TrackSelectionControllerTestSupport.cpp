@@ -5,8 +5,8 @@
 
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackFieldUi.h"
+#include "track/TrackListItem.h"
 #include "track/TrackRowBinding.h"
-#include "track/TrackRowObject.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/graphene_point.h>
@@ -34,12 +34,12 @@ namespace ao::gtk::test
                                          { itemPtr->set_child(*Gtk::make_managed<Gtk::Label>()); });
 
       factoryPtr->signal_bind().connect(
-        [cellText, tagsCell](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+        [cellText, tagsCell](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
         {
-          auto* const label = dynamic_cast<Gtk::Label*>(itemPtr->get_child());
-          auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr->get_item());
+          auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child());
+          auto const itemPtr = std::dynamic_pointer_cast<TrackListItem>(listItemPtr->get_item());
 
-          if (label != nullptr && rowPtr != nullptr)
+          if (label != nullptr && itemPtr != nullptr)
           {
             label->set_text(std::string{cellText});
 
@@ -50,7 +50,7 @@ namespace ao::gtk::test
 
             ::g_object_set_data(G_OBJECT(label->gobj()),
                                 kBoundTrackIdDataKey,
-                                GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+                                GUINT_TO_POINTER(static_cast<guint>(itemPtr->trackId().raw())));
           }
         });
 

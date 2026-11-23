@@ -9,7 +9,6 @@
 #include "i18n/GtkText.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
-#include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -76,11 +75,6 @@ namespace ao::gtk
     retireTagPopover();
   }
 
-  void TagEditController::setDataProvider(TrackRowCache* provider)
-  {
-    _dataProvider = provider;
-  }
-
   void TagEditController::openTrackContextMenu(TrackViewPage& page,
                                                TrackSelection const& selection,
                                                double xPosition,
@@ -119,13 +113,13 @@ namespace ao::gtk
 
   void TagEditController::presentProperties(TrackSelection const& selection)
   {
-    if (selection.selectedIds.empty() || _dataProvider == nullptr)
+    if (selection.selectedIds.empty())
     {
       return;
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _asyncRuntime, _library, _completion, _textCatalog, *_dataProvider, selection.selectedIds);
+      _parent, _asyncRuntime, _library, _completion, _textCatalog, selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -258,7 +252,11 @@ namespace ao::gtk
               [this]
               {
                 scheduleContextPopoverRetirement();
-                presentPropertiesDialog();
+
+                if (_optActiveSelection)
+                {
+                  presentProperties(*_optActiveSelection);
+                }
               });
 
     auto const lists = _library.snapshot().lists();
@@ -486,20 +484,6 @@ namespace ao::gtk
 
     page.openTagPopover(*_tagPopoverPtr, xPosition, yPosition);
     observeTagPopoverAnchor();
-  }
-
-  void TagEditController::presentPropertiesDialog()
-  {
-    if (!_optActiveSelection || _dataProvider == nullptr)
-    {
-      return;
-    }
-
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _asyncRuntime, _library, _completion, _textCatalog, *_dataProvider, _optActiveSelection->selectedIds);
-    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
-    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
-    dialog->present();
   }
 
   void TagEditController::unparentClosedContextPopover()

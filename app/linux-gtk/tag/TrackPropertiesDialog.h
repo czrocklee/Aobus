@@ -52,7 +52,6 @@ namespace ao::async
 
 namespace ao::gtk
 {
-  class TrackRowCache;
   class EntryCompletionController;
 
   class TrackPropertiesDialog final : public AppDialog
@@ -63,7 +62,6 @@ namespace ao::gtk
                           rt::Library& library,
                           rt::CompletionService& completion,
                           i18n::MessageCatalog textCatalog,
-                          TrackRowCache& rowCache,
                           std::span<TrackId const> trackIds);
     ~TrackPropertiesDialog() override;
 
@@ -120,7 +118,6 @@ namespace ao::gtk
     async::Runtime& _asyncRuntime;
     rt::CompletionService& _completion;
     i18n::MessageCatalog _textCatalog;
-    TrackRowCache& _rowCache;
     std::optional<uimodel::TrackAuthoringSession> _optEditSession;
     async::Subscription _editSessionInvalidatedSubscription;
     uimodel::TrackPropertiesFormModel _formModel;

@@ -157,9 +157,11 @@ All Tracks may still preserve source order in a custom flat unsorted presentatio
 An invalid custom spec is normalized at the presentation boundary where possible; query parsing failure falls back to the default recommendation rather than changing source content.
 Changing the active presentation triggers a projection rebuild as defined by [track-list projection](../library/track-list-projection.md).
 
-GTK row adapters cache display strings on `TrackRowObject` so recycled cells do not reformat computed fields on each scroll bind.
-Computed values are invalidated when one of their contributing row values changes.
-Now-playing row style is driven by the current playing id in `TrackListModel`; visible cells receive a dedicated change observation and newly bound/recycled rows read the same model state.
+GTK identifies a list item by `TrackId`. As long as GTK holds the item, a reorder returns the same object so selection follows the track. GTK may inspect many items to find a selection or lay out a list; looking up an identity does not load or retain track metadata.
+At bind, cells resolve and observe the row's display fields; views share cached `TrackRowObject` data and its memoized display strings.
+Before notifying GTK of a projection change, the adapter refreshes affected bound rows and makes current fields available to explicit lookups during the notification.
+A grouped structural reset may limit field refresh to the affected tracks when they are known. Reloading the fields invalidates memoized strings.
+Each cell subscribes to `TrackListModel` playing changes once at setup, independently of its row's field subscription. At bind it applies the model's current playing state.
 
 ## Implementation map
 
@@ -168,13 +170,19 @@ Now-playing row style is driven by the current playing id in `TrackListModel`; v
 - [`TrackListProjection.cpp`](../../../app/runtime/projection/TrackListProjection.cpp) owns grouping, sorting, source-order stability, and ordering-policy replacement.
 - [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp) resolves runtime heading values through the shared catalog.
 - UIModel presentation code under [`app/uimodel/library/presentation/`](../../../app/uimodel/library/presentation) owns catalog and recommendation adaptation.
+- [`TrackListItem.cpp`](../../../app/linux-gtk/track/TrackListItem.cpp) weakly indexes native list items by track id; [`TrackListModel.cpp`](../../../app/linux-gtk/track/TrackListModel.cpp) adapts projection notifications and exposes now-playing state.
+- [`TrackRowCache.cpp`](../../../app/linux-gtk/track/TrackRowCache.cpp) resolves display fields and prepares cached rows for publication; [`TrackColumnFactoryBuilder.cpp`](../../../app/linux-gtk/track/TrackColumnFactoryBuilder.cpp) binds cell fields and styles.
 
 ## Test map
 
 - [`TrackPresentationTest.cpp`](../../../test/runtime/TrackPresentationTest.cpp) locks built-ins and normalization.
 - Sorting and grouping tests under [`test/runtime/projection/`](../../../test/runtime/projection) lock compound groups and classical order.
 - Presentation recommendation tests under [`test/uimodel/library/presentation/`](../../../test/uimodel/library/presentation) lock selection behavior.
-- [`TrackRowCacheTest.cpp`](../../../test/linux-gtk/track/TrackRowCacheTest.cpp) and [`TrackListModelTest.cpp`](../../../test/linux-gtk/track/TrackListModelTest.cpp) protect GTK row caching and now-playing model state.
+- [`TrackListItemTest.cpp`](../../../test/linux-gtk/track/TrackListItemTest.cpp) protects GTK item identity through native-only ownership, disposal, and pool retirement.
+- [`TrackListPublicationTest.cpp`](../../../test/linux-gtk/track/TrackListPublicationTest.cpp) checks field freshness during grouped reorder and filter entry notifications, and continued field delivery after a list-only restore.
+- [`TrackListModelTest.cpp`](../../../test/linux-gtk/track/TrackListModelTest.cpp) checks GTK selection across reorder without loading unrelated fields, section mapping, and now-playing updates without structural changes.
+- [`TrackRowCacheTest.cpp`](../../../test/linux-gtk/track/TrackRowCacheTest.cpp) protects cache invalidation and in-place field refresh.
+- [`TrackColumnFactoryBuilderTest.cpp`](../../../test/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp) checks bound cell updates, now-playing styles, and inline draft handling across updates and reuse.
 
 ## Related documents
 
