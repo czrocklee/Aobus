@@ -115,7 +115,7 @@ class BazelTestRunnerTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError) as error:
                         runner.run(["probe"], environment)
                 self.assertIn(variable, str(error.exception))
-                self.assertIn(str(path), str(error.exception))
+                self.assertIn(repr(str(path)), str(error.exception))
         self.popen.assert_not_called()
 
     def test_bus_declaration_must_be_an_absolute_path(self):
