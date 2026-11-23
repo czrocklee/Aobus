@@ -712,6 +712,30 @@ through the production command handler, checking that it uses the system-media
 origin and that a session with no target reports no error. This does not test
 OS button delivery, WASAPI rendering, audibility, or physical input.
 
+### Seek probes
+
+Supply a private PCM WAV with a decoded duration longer than 11 seconds. Use
+an absolute path to a regular file, not a symlink, with the lowercase `.wav`
+extension and a size of at most 16 MiB. Run each command separately:
+
+```bat
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-steps "C:\fixtures\private.wav"
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-range classic "C:\fixtures\private.wav"
+bazel run //app/windows-winui:ao_winui_automation_probe -- --seek-range modern "C:\fixtures\private.wav"
+```
+
+Expect exit code 0. The probes require the ready discard-only route.
+`--seek-steps` posts `WM_KEYDOWN` and `WM_KEYUP` for two Right arrows and one
+Left arrow to its own focused Modern input window, not system-wide. It checks
+1 → 11 → 6 seconds for the same paused occurrence.
+
+`--seek-range` reads the shipping slider's UI Automation `RangeValue` bounds
+(zero to decoded duration, in milliseconds) and current position. Paired
+`SetValue` calls coalesce to one committed seek at each of the minimum,
+maximum, and a fresh interior target, updating the thumb and elapsed clock
+without changing the paused occurrence. Neither path exercises physical drag,
+pointer capture, or replacement or replay during a held gesture.
+
 ## Native tests and sanitizers
 
 The ordinary `bazel test //:tests` selection covers Core, application, TUI,

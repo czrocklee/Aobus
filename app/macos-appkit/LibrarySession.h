@@ -11,6 +11,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationIds.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
@@ -119,6 +120,7 @@ namespace ao::appkit
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);
     void seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target);
+    void seekBy(rt::PlaybackOccurrenceId presentedOccurrence, std::chrono::milliseconds delta) const;
     void setVolume(float volume);
     void selectOutput(audio::OutputDeviceSelection const& selection);
     std::optional<std::chrono::steady_clock::duration> refreshActivity();

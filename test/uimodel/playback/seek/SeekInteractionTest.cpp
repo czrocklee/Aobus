@@ -48,6 +48,7 @@ namespace ao::uimodel::test
       CHECK(commit.action == SeekSliderAction::Commit);
       CHECK(commit.occurrenceId == kFirstOccurrenceId);
       CHECK(commit.elapsed == std::chrono::seconds{8});
+      CHECK(commit.endsPointerPreview);
       CHECK_FALSE(model.isPointerActive());
       CHECK_FALSE(model.hasPendingFinalSeek());
 
@@ -64,6 +65,7 @@ namespace ao::uimodel::test
       CHECK(update.action == SeekSliderAction::Commit);
       CHECK(update.occurrenceId == kFirstOccurrenceId);
       CHECK(update.elapsed == std::chrono::seconds{11});
+      CHECK_FALSE(update.endsPointerPreview);
       CHECK_FALSE(model.hasPendingFinalSeek());
     }
 
@@ -91,6 +93,8 @@ namespace ao::uimodel::test
       model.applyViewState(std::chrono::seconds{30}, true, kSecondOccurrenceId);
 
       CHECK(model.isPointerActive());
+      CHECK_FALSE(model.isPointerCurrent());
+      CHECK(model.duration() == std::chrono::seconds{30});
       CHECK(model.valueChanged(std::chrono::seconds{15}).action == SeekSliderAction::None);
       CHECK(model.endPointerInteraction(std::chrono::seconds{15}).action == SeekSliderAction::None);
       CHECK_FALSE(model.isPointerActive());
@@ -112,6 +116,7 @@ namespace ao::uimodel::test
       REQUIRE(model.tryBeginPointerInteraction());
       model.applyViewState(std::chrono::seconds{25}, true, kFirstOccurrenceId);
 
+      CHECK(model.isPointerCurrent());
       CHECK(model.duration() == std::chrono::seconds{20});
       auto const preview = model.valueChanged(std::chrono::seconds{23});
       auto const commit = model.endPointerInteraction(std::chrono::seconds{24});
@@ -121,6 +126,35 @@ namespace ao::uimodel::test
       CHECK(commit.action == SeekSliderAction::Commit);
       CHECK(commit.occurrenceId == kFirstOccurrenceId);
       CHECK(commit.elapsed == std::chrono::seconds{20});
+    }
+
+    SECTION("re-enabling the same occurrence does not revive a held drag")
+    {
+      model.applyViewState(std::chrono::seconds{20}, true, kFirstOccurrenceId);
+      REQUIRE(model.tryBeginPointerInteraction());
+      REQUIRE(model.valueChanged(std::chrono::seconds{5}).action == SeekSliderAction::Preview);
+      REQUIRE(model.hasPendingFinalSeek());
+
+      model.applyViewState(std::chrono::seconds{20}, false, kFirstOccurrenceId);
+      CHECK(model.isPointerActive());
+      CHECK_FALSE(model.isPointerCurrent());
+      CHECK_FALSE(model.hasPendingFinalSeek());
+
+      model.applyViewState(std::chrono::seconds{25}, true, kFirstOccurrenceId);
+      CHECK(model.valueChanged(std::chrono::seconds{10}).action == SeekSliderAction::None);
+      CHECK(model.endPointerInteraction(std::chrono::seconds{11}).action == SeekSliderAction::None);
+      CHECK_FALSE(model.isPointerActive());
+
+      REQUIRE(model.tryBeginPointerInteraction());
+      auto const preview = model.valueChanged(std::chrono::seconds{26});
+      auto const commit = model.endPointerInteraction(std::chrono::seconds{27});
+      CHECK(preview.action == SeekSliderAction::Preview);
+      CHECK(preview.occurrenceId == kFirstOccurrenceId);
+      CHECK(preview.elapsed == std::chrono::seconds{25});
+      CHECK(commit.action == SeekSliderAction::Commit);
+      CHECK(commit.occurrenceId == kFirstOccurrenceId);
+      CHECK(commit.elapsed == std::chrono::seconds{25});
+      CHECK(commit.endsPointerPreview);
     }
 
     SECTION("reset clears state")

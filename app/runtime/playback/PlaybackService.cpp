@@ -76,6 +76,7 @@ namespace ao::rt
       std::uint64_t generation = 0;
       bool staleWhenSuperseded = false;
       compat::MoveOnlyFunction<Result<bool>()> operation;
+      compat::MoveOnlyFunction<void()> onSettled{};
     };
 
     Impl(async::Executor& executorRef,
@@ -274,17 +275,20 @@ namespace ao::rt
 
     void seek(PlaybackOccurrenceId const expectedOccurrenceId,
               std::chrono::milliseconds const elapsed,
-              PlaybackSeekMode const mode) override
+              PlaybackSeekMode const mode,
+              compat::MoveOnlyFunction<void()> onSettled) override
     {
-      submitVoid(
-        [this, expectedOccurrenceId, elapsed, mode]
-        {
-          std::ignore = transport.trySeek(expectedOccurrenceId,
-                                          elapsed,
-                                          mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
-                                                                            : PlaybackTransport::SeekMode::Final);
+      std::ignore = submitCommand(
+        QueuedCommand{
+          .operation = [this, expectedOccurrenceId, elapsed, mode] -> Result<bool>
+          {
+            auto const transportMode = mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
+                                                                         : PlaybackTransport::SeekMode::Final;
+            std::ignore = transport.trySeek(expectedOccurrenceId, elapsed, transportMode);
+            return false;
+          },
+          .onSettled = std::move(onSettled),
         },
-        false,
         false);
     }
 
@@ -313,7 +317,12 @@ namespace ao::rt
           }
 
           auto const targetElapsed = elapsed + std::clamp(delta, -elapsed, duration - elapsed);
-          std::ignore = transport.trySeek(expectedOccurrenceId, targetElapsed);
+
+          if (endBehavior != PlaybackRelativeSeekEndBehavior::ClampIfChanged || targetElapsed != elapsed)
+          {
+            std::ignore = transport.trySeek(expectedOccurrenceId, targetElapsed);
+          }
+
           return false;
         },
         false,
@@ -371,23 +380,23 @@ namespace ao::rt
                  false);
     }
 
-    Result<> submitResult(compat::MoveOnlyFunction<Result<bool>()> operation,
-                          bool const invalidatesOlderCommand,
-                          bool const staleWhenSuperseded,
-                          std::source_location location = std::source_location::current())
+    Result<> submitCommand(QueuedCommand command,
+                           bool const invalidatesOlderCommand,
+                           std::source_location location = std::source_location::current())
     {
       ensureOnExecutor(location);
 
       if (closed)
       {
+        if (command.onSettled)
+        {
+          notifySeekSettled(command.onSettled);
+        }
+
         return makeError(Error::Code::InvalidState, "Playback service is closed");
       }
 
-      auto command = QueuedCommand{
-        .generation = ++commandGenerationCounter,
-        .staleWhenSuperseded = staleWhenSuperseded,
-        .operation = std::move(operation),
-      };
+      command.generation = ++commandGenerationCounter;
 
       if (invalidatesOlderCommand)
       {
@@ -407,6 +416,16 @@ namespace ao::rt
       }
 
       return executeCommandAndContinue(command);
+    }
+
+    Result<> submitResult(compat::MoveOnlyFunction<Result<bool>()> operation,
+                          bool const invalidatesOlderCommand,
+                          bool const staleWhenSuperseded,
+                          std::source_location location = std::source_location::current())
+    {
+      return submitCommand(QueuedCommand{.staleWhenSuperseded = staleWhenSuperseded, .operation = std::move(operation)},
+                           invalidatesOlderCommand,
+                           location);
     }
 
     void submitVoid(compat::MoveOnlyFunction<void()> operation,
@@ -503,8 +522,19 @@ namespace ao::rt
 
     Result<> executeCommandAndContinue(QueuedCommand& command)
     {
+      // The command publishes its snapshot and leaves the commit before notifying.
       auto res = executeCommand(command);
-      scheduleCommandDrain();
+
+      if (command.onSettled)
+      {
+        // The settlement publication schedules the drain after its observers return.
+        notifySeekSettled(command.onSettled);
+      }
+      else
+      {
+        scheduleCommandDrain();
+      }
+
       return res;
     }
 
@@ -857,17 +887,39 @@ namespace ao::rt
     // Publishes inside the boundary so that a command issued by an observer is
     // admitted to the queue rather than executed reentrantly; the drain runs
     // once the outermost publication returns.
-    template<typename... Args>
-    void emitInsideBoundary(async::Signal<Args...>& signal, std::type_identity_t<Args>... args)
+    template<typename Publish>
+    void publishInsideBoundary(Publish publish)
     {
       ++publicationDepth;
-      signal.emit(args...);
+      publish();
       --publicationDepth;
 
       if (!isInsideBoundary())
       {
         scheduleCommandDrain();
       }
+    }
+
+    template<typename... Args>
+    void emitInsideBoundary(async::Signal<Args...>& signal, std::type_identity_t<Args>... args)
+    {
+      publishInsideBoundary([&] { signal.emit(args...); });
+    }
+
+    void notifySeekSettled(compat::MoveOnlyFunction<void()>& onSettled) noexcept
+    {
+      publishInsideBoundary(
+        [&onSettled]
+        {
+          try
+          {
+            onSettled();
+          }
+          catch (...)
+          {
+            AO_FATAL_EXCEPTION(std::current_exception(), "guarded seek settlement observer");
+          }
+        });
     }
 
     void shutdown() noexcept

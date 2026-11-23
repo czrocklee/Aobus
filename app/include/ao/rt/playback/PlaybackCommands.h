@@ -8,6 +8,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
@@ -27,6 +28,7 @@ namespace ao::rt
   {
     Clamp,
     Next,
+    ClampIfChanged,
   };
 
   /**
@@ -37,7 +39,7 @@ namespace ao::rt
    * restore, and discard keep call-level results on `AppRuntime` because their
    * callers act on them.
    * Once shutdown closes admission, void commands are ignored and a view start
-   * returns `InvalidState`.
+   * returns `InvalidState`. Guarded seek can still report settlement as below.
    */
   class PlaybackCommands
   {
@@ -72,16 +74,24 @@ namespace ao::rt
     /**
      * Queues or synchronously executes a seek whose occurrence is validated at
      * execution. A stale request issues no seek and publishes no seek update.
+     * `onSettled`, if supplied, runs on the callback executor after command
+     * settlement and any resulting publication, even if no seek was issued.
+     * It may run inline (including immediate rejection after admission closes),
+     * with the same reentrancy rules as a playback observer. It does not report
+     * audio completion. Use weak captures for shorter-lived clients; shutdown
+     * and destruction abandon queued callbacks without invoking them.
      */
     virtual void seek(PlaybackOccurrenceId expectedOccurrenceId,
                       std::chrono::milliseconds elapsed,
-                      PlaybackSeekMode mode = PlaybackSeekMode::Final) = 0;
+                      PlaybackSeekMode mode = PlaybackSeekMode::Final,
+                      compat::MoveOnlyFunction<void()> onSettled = {}) = 0;
 
     /**
      * Queues a guarded final seek relative to the execution-time live position.
      * The captured occurrence must still be current when the command executes.
      * Next advances only for a positive offset strictly past the live endpoint;
-     * without an admissible successor it does nothing. Clamp is the UI default.
+     * without an admissible successor it does nothing. Clamp is the UI default;
+     * ClampIfChanged skips the Final when a slider step cannot move any farther.
      */
     virtual void seekBy(PlaybackOccurrenceId expectedOccurrenceId,
                         std::chrono::milliseconds delta,

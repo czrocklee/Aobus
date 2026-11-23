@@ -19,8 +19,7 @@ namespace ao::uimodel
 
     if (_pointerActive && (!_enabled || occurrenceId != _pointerOccurrenceId))
     {
-      _pointerOccurrenceCurrent = false;
-      _pendingFinalSeek = false;
+      retirePointerInteraction();
     }
   }
 
@@ -56,6 +55,12 @@ namespace ao::uimodel
     return true;
   }
 
+  void SeekInteraction::retirePointerInteraction() noexcept
+  {
+    _pointerOccurrenceCurrent = false;
+    _pendingFinalSeek = false;
+  }
+
   SeekSliderUpdate SeekInteraction::endPointerInteraction(std::chrono::milliseconds elapsed) noexcept
   {
     if (!_pointerActive)
@@ -75,7 +80,10 @@ namespace ao::uimodel
 
     _pointerOccurrenceCurrent = false;
     _pendingFinalSeek = false;
-    return {.action = SeekSliderAction::Commit, .occurrenceId = _pointerOccurrenceId, .elapsed = clampedElapsed};
+    return {.action = SeekSliderAction::Commit,
+            .occurrenceId = _pointerOccurrenceId,
+            .elapsed = clampedElapsed,
+            .endsPointerPreview = true};
   }
 
   SeekSliderUpdate SeekInteraction::valueChanged(std::chrono::milliseconds elapsed) noexcept
@@ -111,6 +119,6 @@ namespace ao::uimodel
 
   std::chrono::milliseconds SeekInteraction::duration() const noexcept
   {
-    return _pointerActive ? _pointerDuration : _duration;
+    return _pointerOccurrenceCurrent ? _pointerDuration : _duration;
   }
 } // namespace ao::uimodel

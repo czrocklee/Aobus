@@ -10,9 +10,11 @@ On completion, the session clears the flag and calls the library invalidation ca
 
 ## Playback slider
 
-[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) uses shared `SeekInteraction` classification. Continuous pointer actions publish previews; ending the current tracking gesture delivers one final seek only if there was a value action. Keyboard and discrete actions commit directly.
+[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) uses the [shared seek interaction](../playback/README.md#position-and-keyboard-seeking). Pointer value changes preview against the starting occurrence and duration. Releasing a still-current gesture submits one final seek only if there was a value change. If playback is replaced, becomes unseekable, or another seek changes the position revision during the drag, the thumb follows the new position even while paused. The native cell may keep tracking, but its remaining actions cannot seek or move the thumb off that position. The session also checks the revision at dispatch, in case the change has not been presented yet.
 
-The gesture retains its starting playback occurrence and duration. A replacement occurrence (including same-track replay) or loss of seekability retires it instead of retargeting the preview or final seek. The session also rejects an obsolete position revision. The `presentation` scenario's [playback checks](../../../test/macos-appkit/AppKitPlaybackScenario.mm) cover repeated previews during one gesture, one final commit, and replacement including same-track replay, using generated AppKit events and native target/action callbacks, not physical input.
+Unmodified Left and Right on the focused slider queue relative steps against the presented occurrence and use live elapsed at execution. Other discrete value actions submit absolute seeks.
+
+The `presentation` scenario's [playback checks](../../../test/macos-appkit/AppKitPlaybackScenario.mm) cover repeated previews followed by one final seek, replacement including same-track replay, and relative key steps. They use generated AppKit events and native target/action callbacks, not physical input.
 
 ## Text completion
 

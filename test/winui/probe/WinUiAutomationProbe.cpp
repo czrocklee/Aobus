@@ -153,6 +153,11 @@ namespace
   }
 
   constexpr auto kPrimaryOffset = std::chrono::milliseconds{250};
+  // Off the five-second grid, but aligned to whole samples at any integer sample rate.
+  constexpr std::chrono::milliseconds kSeekStartOffset = std::chrono::seconds{1};
+  constexpr std::chrono::milliseconds kForwardOffset = std::chrono::seconds{11};
+  constexpr auto kBackwardOffset = std::chrono::seconds{6};
+  constexpr double kIntermediateRangeValue = 7000.0;
   constexpr std::size_t kProbeTrackCount = 12;
   constexpr auto kComposerFilter = R"($composer = "Bach")";
   constexpr auto kAlphaFilter = R"($title = "Audit Alpha")";
@@ -417,8 +422,7 @@ namespace
     return nullptr;
   }
 
-  // --primary-play takes an absolute private PCM WAV (at least 1 second, <= 16 MiB).
-  // Only this opt-in scenario copies playable media into its disposable library.
+  // The opt-in playback probes copy a private PCM WAV into the disposable library.
   ao::Result<SeededLibrary> seedLibrary(std::filesystem::path const& root,
                                         std::optional<std::filesystem::path> const& optPrimaryFixture)
   {
@@ -432,7 +436,7 @@ namespace
           std::filesystem::file_size(path) > kMaximumFixtureBytes)
       {
         return ao::makeError(
-          ao::Error::Code::InvalidInput, "--primary-play requires an absolute, regular private .wav, at most 16 MiB");
+          ao::Error::Code::InvalidInput, "playback probes require an absolute, regular private .wav, at most 16 MiB");
       }
 
       std::filesystem::create_directories(root);
@@ -562,11 +566,15 @@ namespace
     WinUiAutomationProbe(std::int32_t& result,
                          std::optional<std::string_view> const optListPreviewLocale,
                          bool const classicOutput,
-                         std::optional<std::filesystem::path> optPrimaryFixture)
+                         std::optional<std::filesystem::path> optPrimaryFixture,
+                         bool const seekSteps,
+                         std::optional<ao::winui::ShellMode> const optSeekRangeMode)
       : _result{result}
       , _optListPreviewLocale{optListPreviewLocale}
       , _classicOutput{classicOutput}
       , _optPrimaryFixture{std::move(optPrimaryFixture)}
+      , _seekSteps{seekSteps}
+      , _optSeekRangeMode{optSeekRangeMode}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& args)
@@ -698,6 +706,11 @@ namespace
         }
       }
 
+      if (_optSeekRangeMode)
+      {
+        _sessionPtr->settings().shellMode = *_optSeekRangeMode;
+      }
+
       implementation()->initialize(*_sessionPtr,
                                    [](std::filesystem::path) -> ao::Result<>
                                    { return ao::makeError(ao::Error::Code::NotSupported, "Audit does not restart"); });
@@ -723,7 +736,8 @@ namespace
                                if (_optPrimaryFixture)
                                {
                                  _window.AppWindow().ResizeClient(clientPixels(1200, 800));
-                                 afterFrame(&WinUiAutomationProbe::startPrimaryPlay);
+                                 afterFrame(_optSeekRangeMode ? &WinUiAutomationProbe::startSeekRange
+                                                              : &WinUiAutomationProbe::startPrimaryPlay);
                                }
                                else if (_classicOutput)
                                {
@@ -768,6 +782,13 @@ namespace
 
   private:
     using Step = void (WinUiAutomationProbe::*)();
+
+    enum class SeekRangeStep : std::uint8_t
+    {
+      Minimum,
+      Maximum,
+      Interior,
+    };
 
     winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> provider()
     {
@@ -1322,26 +1343,250 @@ namespace
 
       if (tryCheckPrimary(transport.nowPlaying.trackId == _seed.summaryTracks.front() &&
                             _primaryOccurrence.value != 0 && transport.duration >= std::chrono::seconds{1},
-                          "fresh Play must start selected A with at least one second of decodable audio"))
+                          "fresh Play must start A with at least one second of decodable audio"))
       {
-        invokePrimary(&WinUiAutomationProbe::browseDuringPause);
+        if (_optSeekRangeMode)
+        {
+          _sessionPtr->runtime().playback().commands().pause();
+          afterFrame(&WinUiAutomationProbe::browseDuringPause);
+        }
+        else
+        {
+          invokePrimary(&WinUiAutomationProbe::browseDuringPause);
+        }
       }
     }
 
     void browseDuringPause()
     {
-      _stage = "pause A and navigate to the second List";
+      _stage = _optSeekRangeMode ? "pause A for seek ranges" : "pause A and navigate to the second List";
 
       if (!tryAwaitPrimaryTransport(ao::audio::Transport::Paused, &WinUiAutomationProbe::browseDuringPause))
       {
         return;
       }
 
-      if (tryCheckPrimary(_sessionPtr->runtime().playback().commands().trySeek(_primaryOccurrence, kPrimaryOffset),
+      if (auto const offset = (_seekSteps || _optSeekRangeMode) ? kSeekStartOffset : kPrimaryOffset;
+          tryCheckPrimary(_sessionPtr->runtime().playback().commands().trySeek(_primaryOccurrence, offset),
                           "could not seek paused A"))
       {
-        selectSidebarList(L"Bach", &WinUiAutomationProbe::resumeFromOtherList);
+        if (_optSeekRangeMode)
+        {
+          afterFrame(&WinUiAutomationProbe::setSeekRangeTarget);
+        }
+        else if (_seekSteps)
+        {
+          afterFrame(&WinUiAutomationProbe::startSeekSteps);
+        }
+        else
+        {
+          selectSidebarList(L"Bach", &WinUiAutomationProbe::resumeFromOtherList);
+        }
       }
+    }
+
+    void startSeekRange()
+    {
+      _stage = "prepare the paused seek range";
+
+      if (!tryCheckDiscardRoute())
+      {
+        return;
+      }
+
+      auto& runtime = _sessionPtr->runtime();
+      auto const startRes = runtime.playback().commands().startFromView(
+        runtime.workspace().snapshot().activeViewId, _seed.summaryTracks.front());
+
+      if (tryCheckPrimary(startRes.has_value(), "could not start the private seek fixture"))
+      {
+        afterFrame(&WinUiAutomationProbe::pausePrimaryPlay);
+      }
+    }
+
+    Controls::Slider seekRangeSlider() const
+    {
+      auto const classic = _optSeekRangeMode == ao::winui::ShellMode::Classic;
+      return findVisualById<Controls::Slider>(_root, classic ? L"classic-seek" : L"modern-seek");
+    }
+
+    void setSeekRangeTarget()
+    {
+      if (!tryCheckDiscardRoute())
+      {
+        return;
+      }
+
+      auto const& playback = _sessionPtr->runtime().playback();
+      auto const transport = playback.snapshot().transport;
+      auto const slider = seekRangeSlider();
+
+      if (!tryCheckPrimary(slider && slider.IsEnabled() && transport.occurrenceId == _primaryOccurrence &&
+                             transport.transport == ao::audio::Transport::Paused && transport.duration > kForwardOffset,
+                           "seek range needs an enabled shipping Slider and a paused WAV longer than 11 seconds"))
+      {
+        return;
+      }
+
+      auto const peer = FrameworkElementAutomationPeer::CreatePeerForElement(slider);
+      auto const range =
+        peer ? peer.GetPattern(PatternInterface::RangeValue).try_as<Automation::Provider::IRangeValueProvider>()
+             : nullptr;
+      auto const elapsed = playback.elapsed();
+
+      if (!tryCheckPrimary(range && !range.IsReadOnly() && range.Minimum() == 0.0 &&
+                             range.Maximum() == static_cast<double>(transport.duration.count()) &&
+                             range.Value() == static_cast<double>(elapsed.count()),
+                           "the shipping range provider must expose the paused subject's position and bounds"))
+      {
+        return;
+      }
+
+      switch (_seekRangeStep)
+      {
+        case SeekRangeStep::Minimum:
+          _stage = "UIA seek range minimum";
+          _seekRangeElapsed = std::chrono::milliseconds::zero();
+          break;
+        case SeekRangeStep::Maximum:
+          _stage = "UIA seek range maximum";
+          _seekRangeElapsed = transport.duration;
+          break;
+        case SeekRangeStep::Interior:
+          _stage = "fresh UIA range action after the endpoints";
+          _seekRangeElapsed = kBackwardOffset;
+          break;
+      }
+
+      auto const target = static_cast<double>(_seekRangeElapsed.count());
+      _expectedRangeFinalRevision = transport.finalSeekRevision.value + 1;
+      // Use the shipping accessibility action, not pointer routing or capture.
+      range.SetValue(kIntermediateRangeValue);
+      range.SetValue(target);
+      check(range.Value() == target && slider.Value() == target && playback.elapsed() == elapsed &&
+              playback.snapshot().transport.finalSeekRevision == transport.finalSeekRevision,
+            "only the displayed target may change before the coalesced Final");
+      afterFrame(&WinUiAutomationProbe::awaitSeekRangeTarget);
+    }
+
+    void awaitSeekRangeTarget()
+    {
+      if (!tryCheckDiscardRoute())
+      {
+        return;
+      }
+
+      auto const& playback = _sessionPtr->runtime().playback();
+      auto const transport = playback.snapshot().transport;
+
+      if (!tryCheckPrimary(
+            transport.occurrenceId == _primaryOccurrence && transport.transport == ao::audio::Transport::Paused,
+            "a range seek must preserve the paused occurrence"))
+      {
+        return;
+      }
+
+      if (transport.finalSeekRevision.value < _expectedRangeFinalRevision)
+      {
+        afterFrame(&WinUiAutomationProbe::awaitSeekRangeTarget);
+        return;
+      }
+
+      auto const classic = _optSeekRangeMode == ao::winui::ShellMode::Classic;
+      auto const clock = findVisualById<Controls::TextBlock>(_root, classic ? L"classic-time" : L"modern-elapsed");
+      auto const seconds = std::chrono::duration_cast<std::chrono::seconds>(_seekRangeElapsed).count();
+      auto const expected = std::format("{}:{:02d}", seconds / 60, seconds % 60);
+
+      if (auto const slider = seekRangeSlider();
+          !tryCheckPrimary(transport.finalSeekRevision.value == _expectedRangeFinalRevision &&
+                             playback.elapsed() == _seekRangeElapsed && slider &&
+                             slider.Value() == static_cast<double>(_seekRangeElapsed.count()) && clock &&
+                             (classic ? winrt::to_string(clock.Text()).starts_with(expected + " / ")
+                                      : winrt::to_string(clock.Text()) == expected),
+                           "one coalesced Final must seek to the target and update the shipping Slider and clock"))
+      {
+        return;
+      }
+
+      switch (_seekRangeStep)
+      {
+        case SeekRangeStep::Minimum: _seekRangeStep = SeekRangeStep::Maximum; break;
+        case SeekRangeStep::Maximum: _seekRangeStep = SeekRangeStep::Interior; break;
+        case SeekRangeStep::Interior: finish(); return;
+      }
+
+      setSeekRangeTarget();
+    }
+
+    // Exercise XAML's keyboard route through the probe's own focused HWND, never
+    // SendInput (which could deliver to another app). Do not call the adapter or
+    // set Slider.Value as a substitute for testing actual horizontal key handling.
+    bool tryPostSeekArrow(::UINT const key)
+    {
+      ::HWND window = nullptr;
+      winrt::check_hresult(_window.as<::IWindowNative>()->get_WindowHandle(&window));
+      auto* const focus = ::GetFocus();
+
+      if (!tryCheckPrimary(
+            focus != nullptr && ::GetAncestor(focus, GA_ROOT) == window, "keyboard focus left the probe window"))
+      {
+        return false;
+      }
+
+      auto const scan = ::MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
+      auto const down = static_cast<::LPARAM>(1U | (scan << 16U) | (1U << 24U));
+      auto const up = down | static_cast<::LPARAM>(3U << 30U);
+      return tryCheckPrimary(
+        ::PostMessageW(focus, WM_KEYDOWN, key, down) != FALSE && ::PostMessageW(focus, WM_KEYUP, key, up) != FALSE,
+        "could not post the probe's arrow to its focused input site");
+    }
+
+    void startSeekSteps()
+    {
+      _stage = "two focused Right arrows from one second";
+      auto const slider = findVisualById<Controls::Slider>(_root, L"modern-seek");
+
+      if (tryCheckPrimary(
+            slider && slider.IsEnabled() && slider.Value() == static_cast<double>(kSeekStartOffset.count()) &&
+              slider.Maximum() > static_cast<double>(kForwardOffset.count()) && slider.Focus(FocusState::Keyboard),
+            "--seek-steps needs a focusable off-grid position and a WAV longer than 11 seconds") &&
+          tryPostSeekArrow(VK_RIGHT) && tryPostSeekArrow(VK_RIGHT))
+      {
+        afterFrame(&WinUiAutomationProbe::awaitForwardSteps);
+      }
+    }
+
+    void awaitForwardSteps()
+    {
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+
+      if (transport.elapsed != kForwardOffset)
+      {
+        afterFrame(&WinUiAutomationProbe::awaitForwardSteps);
+        return;
+      }
+
+      _stage = "focused Left from eleven seconds";
+
+      if (tryPostSeekArrow(VK_LEFT))
+      {
+        afterFrame(&WinUiAutomationProbe::awaitBackwardStep);
+      }
+    }
+
+    void awaitBackwardStep()
+    {
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+
+      if (transport.elapsed != kBackwardOffset)
+      {
+        afterFrame(&WinUiAutomationProbe::awaitBackwardStep);
+        return;
+      }
+
+      check(transport.occurrenceId == _primaryOccurrence && transport.transport == ao::audio::Transport::Paused,
+            "focused seek keys must preserve the paused occurrence");
+      finish();
     }
 
     void resumeFromOtherList()
@@ -2881,8 +3126,14 @@ namespace
         check(!error, "disposable state cleanup failed");
       }
 
-      std::cerr << std::format(
-        "WinUI {}: {} failure(s)\n", _optListPreviewLocale ? "localized List preview" : "naming audit", _failures);
+      auto label = std::string_view{_optListPreviewLocale ? "localized List preview" : "naming audit"};
+
+      if (_optSeekRangeMode)
+      {
+        label = "seek range probe";
+      }
+
+      std::cerr << std::format("WinUI {}: {} failure(s)\n", label, _failures);
       _result = _failures == 0 ? 0 : 1;
       Exit();
     }
@@ -2891,6 +3142,8 @@ namespace
     std::optional<std::string_view> const _optListPreviewLocale;
     bool const _classicOutput;
     std::optional<std::filesystem::path> const _optPrimaryFixture;
+    bool const _seekSteps;
+    std::optional<ao::winui::ShellMode> const _optSeekRangeMode;
     ao::rt::PlaybackOccurrenceId _primaryOccurrence{};
     std::size_t _failures = 0;
     bool _finished = false;
@@ -2921,6 +3174,9 @@ namespace
     std::unique_ptr<ao::rt::TextOrderingPolicy> _orderingPtr;
     std::unique_ptr<ao::rt::CompletionAliasPolicy> _aliasesPtr;
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
+    std::uint64_t _expectedRangeFinalRevision = 0;
+    std::chrono::milliseconds _seekRangeElapsed{};
+    SeekRangeStep _seekRangeStep = SeekRangeStep::Minimum;
     ao::rt::ViewId _modernFilteredViewId{};
     Controls::NavigationViewItem _modernBachBeforeUpsert{nullptr};
     ao::rt::ViewId _moveViewId{};
@@ -2959,9 +3215,20 @@ int main(int argc, char** argv)
   auto const classicOutput = argc == 2 && std::string_view{argv[1]} == "--classic-output";
   auto optPrimaryFixture = std::optional<std::filesystem::path>{};
 
-  if (argc == 3 && std::string_view{argv[1]} == "--primary-play")
+  auto const seekSteps = argc == 3 && std::string_view{argv[1]} == "--seek-steps";
+  auto optSeekRangeMode = std::optional<ao::winui::ShellMode>{};
+
+  if (argc == 3 && (seekSteps || std::string_view{argv[1]} == "--primary-play"))
   {
     optPrimaryFixture = ao::utility::pathFromUtf8(argv[2]);
+  }
+  else if (argc == 4 && std::string_view{argv[1]} == "--seek-range")
+  {
+    if (auto const mode = std::string_view{argv[2]}; mode == "classic" || mode == "modern")
+    {
+      optSeekRangeMode = mode == "classic" ? ao::winui::ShellMode::Classic : ao::winui::ShellMode::Modern;
+      optPrimaryFixture = ao::utility::pathFromUtf8(argv[3]);
+    }
   }
 
   if (argc != 1 && !classicOutput && !optPrimaryFixture)
@@ -2979,7 +3246,9 @@ int main(int argc, char** argv)
     {
       std::cerr
         << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale> | "
-           "--primary-play <absolute private .wav>]\n"
+           "--primary-play <absolute private .wav> | --seek-steps <private PCM .wav> | "
+           "--seek-range <classic|modern> <private PCM .wav>]\n"
+           "Seek modes require an absolute private PCM .wav longer than 11s, at most 16 MiB.\n"
            "The List preview mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
       return 2;
     }
@@ -2997,9 +3266,10 @@ int main(int argc, char** argv)
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
     Application::Start(
-      [&result, optListPreviewLocale, classicOutput, optPrimaryFixture](auto&&)
+      [&result, optListPreviewLocale, classicOutput, optPrimaryFixture, seekSteps, optSeekRangeMode](auto&&)
       {
-        std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale, classicOutput, optPrimaryFixture);
+        std::ignore = winrt::make<WinUiAutomationProbe>(
+          result, optListPreviewLocale, classicOutput, optPrimaryFixture, seekSteps, optSeekRangeMode);
       });
     return result;
   }

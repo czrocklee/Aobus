@@ -8,9 +8,11 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -56,6 +58,12 @@ namespace ao::uimodel
       return;
     }
 
+    if (_pendingSliderOccurrencePtr &&
+        (*_pendingSliderOccurrencePtr != snapshot.transport.occurrenceId || !snapshot.transport.hasSeekableSubject()))
+    {
+      _pendingSliderOccurrencePtr.reset();
+    }
+
     _clockTransport = snapshot.transport.transport;
     _clockOccurrenceId = snapshot.transport.occurrenceId;
     _clockPositionRevision = snapshot.transport.positionRevision;
@@ -74,6 +82,35 @@ namespace ao::uimodel
                                             std::chrono::milliseconds const elapsed)
   {
     _commands.seek(expectedOccurrenceId, elapsed);
+  }
+
+  void PlaybackPositionViewModel::commitSliderUpdate(SeekSliderUpdate const& update)
+  {
+    if (update.action != SeekSliderAction::Commit)
+    {
+      return;
+    }
+
+    if (update.endsPointerPreview)
+    {
+      seekFinal(update.occurrenceId, update.elapsed);
+      return;
+    }
+
+    // A new submission (including one for the same occurrence) supersedes
+    // the previous hold. Queued callbacks must not keep this control alive.
+    _pendingSliderOccurrencePtr = std::make_shared<rt::PlaybackOccurrenceId const>(update.occurrenceId);
+    _commands.seek(update.occurrenceId,
+                   update.elapsed,
+                   rt::PlaybackSeekMode::Final,
+                   [this, requestPtr = std::weak_ptr{_pendingSliderOccurrencePtr}]
+                   {
+                     if (!requestPtr.expired())
+                     {
+                       _pendingSliderOccurrencePtr.reset();
+                       render(_playback.snapshot().transport, true, false, _playback.elapsed());
+                     }
+                   });
   }
 
   void PlaybackPositionViewModel::seekBy(std::chrono::milliseconds const delta)

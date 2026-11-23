@@ -91,23 +91,24 @@
   _lastSeekFraction = sender.doubleValue;
   ++_seekCount;
 
-  auto const update = [static_cast<AobusSeekSlider*>(sender) seekUpdate];
-  auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget];
+  auto* const slider = static_cast<AobusSeekSlider*>(sender);
 
-  if (_seekObserver)
+  if (!_seekObserver)
   {
-    _seekObserver(update, true);
+    [slider dispatchSeekToSession:*_session];
+    return;
   }
+
+  auto const update = [slider seekUpdate];
+  auto const optTarget = [slider seekTarget];
+  _seekObserver(update, true);
 
   if (optTarget)
   {
     _session->seek(update, *optTarget);
   }
 
-  if (_seekObserver)
-  {
-    _seekObserver(update, false);
-  }
+  _seekObserver(update, false);
 }
 
 - (void)setSeekObserver:(std::function<void(ao::uimodel::SeekSliderUpdate const&, bool)>)observer
@@ -370,20 +371,19 @@ namespace
       strokeFraction >= kMinimumRingStrokeFraction, "Soul ring must retain the shared visible stroke thickness");
   }
 
-  NSEvent* rightArrowEvent(NSWindow* window)
+  NSEvent* makeArrowEvent(NSWindow* window, unichar character, bool repeat = false, NSEventModifierFlags modifiers = 0)
   {
-    unichar const character = NSRightArrowFunctionKey;
     auto* const text = [NSString stringWithCharacters:&character length:1];
     return [NSEvent keyEventWithType:NSEventTypeKeyDown
                             location:NSZeroPoint
-                       modifierFlags:NSEventModifierFlagFunction | NSEventModifierFlagNumericPad
+                       modifierFlags:NSEventModifierFlagFunction | NSEventModifierFlagNumericPad | modifiers
                            timestamp:NSProcessInfo.processInfo.systemUptime
                         windowNumber:window.windowNumber
                              context:nil
                           characters:text
          charactersIgnoringModifiers:text
-                           isARepeat:NO
-                             keyCode:124];
+                           isARepeat:static_cast<BOOL>(repeat)
+                             keyCode:character == NSLeftArrowFunctionKey ? 123 : 124];
   }
 
   void requireVolumeReadback(ao::appkit::LibrarySession& session, double expected, NSString* obligation)
@@ -411,9 +411,99 @@ namespace ao::appkit::test
                                 pressure:1];
     }
 
+    void exerciseSeekKeys(LibrarySession& session, AobusPlaybackBar* playback, NSWindow* window)
+    {
+      auto& service = session.runtime().playback();
+      auto const transport = [&] -> auto const& { return service.snapshot().transport; };
+      service.commands().pause();
+      requireWaitUntil([&] { return transport().transport == audio::Transport::Paused; },
+                       "Keyboard fixture must hold a paused occurrence");
+      service.commands().seek(1s);
+      requireWaitUntil([&] { return transport().elapsed == 1s; }, "Keyboard fixture must start at a known position");
+      [playback renderState:session.state() modern:YES];
+      [playback renderFrameForState:session.state() elapsed:1s modern:YES];
+      auto* const slider = requireControl<AobusSeekSlider>(playback.modernView, @"playback.seek");
+      AO_INVARIANT([window makeFirstResponder:slider] != NO && window.firstResponder == slider);
+
+      // Both key events arrive before a new frame or a refreshed slider target.
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey)];
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey, true)];
+      requireWaitUntil(
+        [&] { return transport().elapsed == 11s; }, "Two Right events must advance twice by five seconds");
+
+      auto const revision = transport().finalSeekRevision;
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey, false, NSEventModifierFlagOption)];
+      settleNativeCallbacks();
+      AO_INVARIANT(transport().elapsed == 11s && transport().finalSeekRevision == revision,
+                   "Option-Right must not commit the stale absolute target");
+
+      auto const duration = transport().duration;
+      service.commands().seek(duration - 1s);
+      requireWaitUntil([&] { return transport().elapsed == duration - 1s; }, "Calibrate just below the end");
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey)];
+      requireWaitUntil([&] { return transport().elapsed == duration; }, "Right must clamp at the end");
+      auto const endRevision = transport().finalSeekRevision;
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey, true)];
+      settleNativeCallbacks();
+      AO_INVARIANT(transport().elapsed == duration && transport().finalSeekRevision == endRevision,
+                   "Right at the end must not issue another seek");
+
+      [slider keyDown:makeArrowEvent(window, NSLeftArrowFunctionKey)];
+      requireWaitUntil([&] { return transport().elapsed == duration - 5s; }, "Left must subtract five seconds");
+      service.commands().seek(1s);
+      requireWaitUntil([&] { return transport().elapsed == 1s; }, "Calibrate just above the start");
+      [slider keyDown:makeArrowEvent(window, NSLeftArrowFunctionKey)];
+      requireWaitUntil([&] { return transport().elapsed == 0ms; }, "Left must clamp at zero");
+      auto const startRevision = transport().finalSeekRevision;
+      [slider keyDown:makeArrowEvent(window, NSLeftArrowFunctionKey, true)];
+      settleNativeCallbacks();
+      AO_INVARIANT(transport().elapsed == 0ms && transport().finalSeekRevision == startRevision,
+                   "Left at zero must not issue another seek");
+
+      [window sendEvent:makeArrowEvent(window, NSRightArrowFunctionKey, false, NSEventModifierFlagCapsLock)];
+      requireWaitUntil([&] { return transport().elapsed == 5s; }, "Caps Lock must not modify the focused Right arrow");
+
+      auto const occurrence = transport().occurrenceId;
+      session.play(transport().nowPlaying.trackId);
+      requireWaitUntil(
+        [&] { return transport().occurrenceId != occurrence && transport().transport == audio::Transport::Playing; },
+        "Replay must replace the occurrence without refreshing the slider");
+      auto const replayRevision = transport().finalSeekRevision;
+      [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey)];
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        transport().finalSeekRevision == replayRevision, "A key for the former occurrence must not seek its replay");
+    }
+
+    void requireSeekFrame(AobusPlaybackBar* playback,
+                          AobusSeekSlider* slider,
+                          std::chrono::milliseconds elapsed,
+                          std::chrono::milliseconds duration,
+                          std::string_view phase)
+    {
+      auto* const elapsedLabel = requireControl<NSTextField>(playback.modernView, @"playback.elapsed");
+      auto* const durationLabel = requireControl<NSTextField>(playback.modernView, @"playback.duration");
+      auto const expectedFraction = static_cast<double>(elapsed.count()) / static_cast<double>(duration.count());
+      auto const expectedElapsed = uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Elapsed, elapsed, duration);
+      auto const expectedDuration = uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Duration, elapsed, duration);
+      auto const expectedDescription = std::format("{} of {}", expectedElapsed, expectedDuration);
+      AO_INVARIANT(std::abs(slider.doubleValue - expectedFraction) < kControlTolerance,
+                   "{} must show the current thumb: got {}, expected {}",
+                   phase,
+                   slider.doubleValue,
+                   expectedFraction);
+      AO_INVARIANT(utf8(elapsedLabel.stringValue) == expectedElapsed &&
+                     utf8(durationLabel.stringValue) == expectedDuration &&
+                     utf8(slider.accessibilityValueDescription) == expectedDescription,
+                   "{} must show the current visual and accessible time",
+                   phase);
+    }
+
     struct SeekGestureOptions final
     {
       bool paused = false;
+      bool pauseReplacement = false;
+      bool reanchorWhileHeld = false;
       // Re-enter the slider's continuous action as AppKit does for each drag event.
       bool scrub = false;
     };
@@ -425,21 +515,43 @@ namespace ao::appkit::test
                              TrackId replacement,
                              SeekGestureOptions const options = {})
     {
+      auto& service = session.runtime().playback();
+      auto const transport = [&] -> auto const& { return service.snapshot().transport; };
+      auto const hasReplacement = replacement != kInvalidTrackId;
+      auto const retiresDrag = hasReplacement || options.reanchorWhileHeld;
+
       if (options.paused)
       {
-        session.runtime().playback().commands().pause();
+        service.commands().pause();
+        requireWaitUntil([&] { return transport().transport == audio::Transport::Paused; },
+                         "The paused drag requires a stable paused transport");
+      }
+
+      if (retiresDrag)
+      {
+        auto const startPosition = options.reanchorWhileHeld ? 2s : 3s;
+        service.commands().seek(startPosition);
         requireWaitUntil(
-          [&] { return session.runtime().playback().snapshot().transport.transport == audio::Transport::Paused; },
-          "Paused scrubbing requires a stable paused transport");
+          [&]
+          {
+            return transport().elapsed == startPosition &&
+                   (!options.reanchorWhileHeld || session.playbackElapsed() == startPosition);
+          },
+          "Start the held drag at a known position");
       }
 
       auto* const slider = requireControl<AobusSeekSlider>(playback.modernView, @"playback.seek");
       [playback renderState:session.state() modern:YES];
       [playback renderFrameForState:session.state() elapsed:session.playbackElapsed() modern:YES];
-      auto const initialRevision = session.state().positionRevision;
-      auto const expectedTrack = replacement == kInvalidTrackId
-                                   ? session.runtime().playback().snapshot().transport.nowPlaying.trackId
-                                   : replacement;
+      auto const initialOccurrence = transport().occurrenceId;
+      auto const initialPositionRevision = transport().positionRevision;
+      auto const initialElapsed = transport().elapsed;
+
+      if (options.reanchorWhileHeld)
+      {
+        requireSeekFrame(playback, slider, initialElapsed, transport().duration, "Before the paused drag");
+      }
+
       auto const beforeCount = target.seekCount;
       auto const knob = [static_cast<NSSliderCell*>(slider.cell) knobRectFlipped:slider.flipped];
       auto const start = [slider convertPoint:NSMakePoint(NSMidX(knob), NSMidY(knob)) toView:nil];
@@ -456,8 +568,11 @@ namespace ao::appkit::test
         std::chrono::milliseconds committedElapsed{-1};
         rt::PlaybackFinalSeekRevision finalSeek{};
       };
-      auto observation = Observation{.finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision};
-      auto previewSub = session.runtime().playback().events().onSeekPreview(
+      auto observation = Observation{.finalSeek = transport().finalSeekRevision};
+      auto anchorTransport = rt::PlaybackTransportSnapshot{};
+      auto anchorElapsed = std::chrono::milliseconds{};
+      std::size_t previewsBeforeRetirement = 0;
+      auto previewSub = service.events().onSeekPreview(
         [&](std::chrono::milliseconds)
         {
           ++observation.previewCount;
@@ -489,34 +604,99 @@ namespace ao::appkit::test
 
           observation.trackedPreviewAction = observation.trackedPreviewAction || [slider isTrackingGesture] != NO;
 
-          if (beforeDispatch && replacement != kInvalidTrackId && !observation.transitioned)
+          if (!beforeDispatch && !hasReplacement && !observation.transitioned)
           {
+            requireWaitUntil(
+              [&] { return observation.previewCount > 0 || transport().finalSeekRevision != observation.finalSeek; },
+              "A continuous native action must settle before tracking returns");
+            observation.heldFinalUnchanged =
+              observation.heldFinalUnchanged && transport().finalSeekRevision == observation.finalSeek;
+          }
+
+          bool const replaceNow = beforeDispatch && hasReplacement && !observation.transitioned;
+          bool const reanchorNow = !beforeDispatch && options.reanchorWhileHeld && !observation.transitioned;
+
+          if (replaceNow)
+          {
+            observation.transitioned = true;
             session.play(replacement);
             requireWaitUntil(
               [&]
               {
-                auto const& snapshot = session.runtime().playback().snapshot().transport;
-                return snapshot.nowPlaying.trackId == expectedTrack &&
-                       snapshot.transport == audio::Transport::Playing && snapshot.positionRevision != initialRevision;
+                return transport().nowPlaying.trackId == replacement && transport().occurrenceId != initialOccurrence &&
+                       transport().transport == audio::Transport::Playing;
               },
               "Replacement must publish while the native slider action is tracking");
-            observation.transitioned = true;
-            observation.finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision;
+
+            if (options.pauseReplacement)
+            {
+              service.commands().pause();
+              requireWaitUntil([&] { return transport().transport == audio::Transport::Paused; },
+                               "The paused replacement must settle before release");
+            }
+
+            AO_INVARIANT([slider isTrackingGesture] != NO && slider.window == window);
             [playback renderState:session.state() modern:YES];
+            auto const firstFrameElapsed = session.playbackElapsed();
+            [playback renderFrameForState:session.state() elapsed:firstFrameElapsed modern:YES];
+            requireSeekFrame(
+              playback, slider, firstFrameElapsed, transport().duration, "First replacement frame while held");
+          }
+          else if (reanchorNow)
+          {
+            observation.transitioned = true;
+            AO_INVARIANT(observation.previewedWhileTracking && observation.heldFinalUnchanged,
+                         "The paused drag must preview without committing before the external seek");
+            previewsBeforeRetirement = observation.previewCount;
           }
 
-          if (!beforeDispatch && replacement == kInvalidTrackId)
+          if (replaceNow || reanchorNow)
           {
+            anchorElapsed = 7s;
+            service.commands().seek(anchorElapsed);
             requireWaitUntil(
               [&]
               {
-                return observation.previewCount > 0 ||
-                       session.runtime().playback().snapshot().transport.finalSeekRevision != observation.finalSeek;
+                return transport().elapsed == anchorElapsed &&
+                       session.state().positionRevision == transport().positionRevision;
               },
-              "A continuous native action must settle before tracking returns");
-            observation.heldFinalUnchanged =
-              observation.heldFinalUnchanged &&
-              session.runtime().playback().snapshot().transport.finalSeekRevision == observation.finalSeek;
+              "The external seek must publish its anchor while the slider is held");
+            anchorTransport = transport();
+
+            if (reanchorNow)
+            {
+              AO_INVARIANT([slider isTrackingGesture] != NO && anchorTransport.transport == audio::Transport::Paused &&
+                             anchorTransport.occurrenceId == initialOccurrence &&
+                             anchorTransport.positionRevision != initialPositionRevision &&
+                             anchorTransport.finalSeekRevision.value == observation.finalSeek.value + 1,
+                           "The external seek must reanchor the same paused occurrence");
+            }
+
+            observation.finalSeek = anchorTransport.finalSeekRevision;
+            [playback renderState:session.state() modern:YES];
+            [playback renderFrameForState:session.state() elapsed:anchorElapsed modern:YES];
+            requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "New anchor while held");
+
+            if (replaceNow && !options.pauseReplacement)
+            {
+              // Advance the playing frame without changing its committed anchor.
+              anchorElapsed = 8s;
+              [playback renderFrameForState:session.state() elapsed:anchorElapsed modern:YES];
+              requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Latest held frame");
+            }
+
+            // Deliver stale cell values inside native tracking. Cover both NSControl action routing and direct
+            // delivery to the target; neither gets another render to repair the value.
+            slider.doubleValue = 0.25;
+            [slider sendAction:slider.action to:slider.target];
+            requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Stale drag action");
+            slider.doubleValue = 0.75;
+            // Use a target without an observer so this action takes the shipping dispatch path.
+            auto* const directTarget = [[AobusPresentationActionTarget alloc] initWithSession:session];
+            AO_INVARIANT([NSApp sendAction:slider.action to:directTarget from:slider] != NO);
+            requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Stale target action");
+            AO_INVARIANT(transport().positionRevision == anchorTransport.positionRevision);
+            [NSApp postEvent:seekMouseEvent(window, NSEventTypeLeftMouseUp, start) atStart:YES];
           }
 
           if (!beforeDispatch && options.scrub && !observation.scrubbing)
@@ -536,18 +716,44 @@ namespace ao::appkit::test
       [NSApp sendEvent:seekMouseEvent(window, NSEventTypeLeftMouseDown, start)];
       [target setSeekObserver:{}];
       AO_INVARIANT(target.seekCount > beforeCount && [slider isTrackingGesture] == NO &&
-                     observation.trackedPreviewAction && (replacement == kInvalidTrackId || observation.transitioned),
+                     observation.trackedPreviewAction && (!retiresDrag || observation.transitioned),
                    "A native continuous seek action must witness tracking and the requested timeline transition");
+
+      if (options.reanchorWhileHeld)
+      {
+        // Inspect the result of the release itself, with no repair frame.
+        requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Immediately after stale release");
+      }
+
       settleNativeCallbacks();
-      auto const finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision;
+      auto const finalSeek = transport().finalSeekRevision;
       AO_INVARIANT(observation.heldFinalUnchanged, "A preview must not commit a final seek during native tracking");
-      AO_INVARIANT(replacement == kInvalidTrackId
-                     ? finalSeek.value == observation.finalSeek.value + 1 && observation.commitCount == 1
-                     : finalSeek == observation.finalSeek && observation.commitCount == 0,
-                   "Only a current native gesture may deliver and commit exactly one final seek");
-      AO_INVARIANT(replacement == kInvalidTrackId ? observation.previewCount > 0 && observation.previewedWhileTracking
-                                                  : observation.previewCount == 0,
-                   "A current occurrence must preview during tracking; a replaced occurrence must not preview");
+      AO_INVARIANT(retiresDrag ? finalSeek == observation.finalSeek && observation.commitCount == 0
+                               : finalSeek.value == observation.finalSeek.value + 1 && observation.commitCount == 1,
+                   "Only a current native gesture may commit a final seek");
+      AO_INVARIANT(retiresDrag ? observation.previewCount == previewsBeforeRetirement
+                               : observation.previewCount > 0 && observation.previewedWhileTracking,
+                   "Only a current native gesture may preview during tracking");
+
+      if (retiresDrag)
+      {
+        requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "After native release settles");
+        AO_INVARIANT(transport().occurrenceId == anchorTransport.occurrenceId &&
+                       transport().positionRevision == anchorTransport.positionRevision,
+                     "The old release must not reanchor the current occurrence");
+        AO_INVARIANT(
+          !(options.pauseReplacement || options.reanchorWhileHeld) ||
+            (transport().transport == audio::Transport::Paused && service.elapsed() == anchorTransport.elapsed),
+          "The paused occurrence must keep its exact position after release");
+      }
+      else if (options.paused)
+      {
+        AO_INVARIANT(transport().occurrenceId == initialOccurrence &&
+                       transport().transport == audio::Transport::Paused &&
+                       observation.committedElapsed != initialElapsed &&
+                       std::chrono::abs(service.elapsed() - observation.committedElapsed) <= 1ms,
+                     "A fresh paused drag must move and seek its current occurrence at release");
+      }
 
       if (options.scrub)
       {
@@ -1044,7 +1250,7 @@ namespace ao::appkit::test
     AO_INVARIANT(acceptedClassicVolumeFocus != 0, "Classic volume must accept keyboard focus");
     auto const keyboardCount = target.volumeCount;
     auto const keyboardValue = classicVolume.doubleValue;
-    [classicVolume keyDown:rightArrowEvent(window)];
+    [classicVolume keyDown:makeArrowEvent(window, NSRightArrowFunctionKey)];
     AO_INVARIANT(target.volumeCount == keyboardCount + 1 && target.lastVolume > keyboardValue + kControlTolerance,
                  "a keyboard arrow must route the changed volume through target/action");
     requireVolumeReadback(session, target.lastVolume, @"keyboard volume action");
@@ -1159,11 +1365,18 @@ namespace ao::appkit::test
     session.navigate(sourceList);
     requireWaitUntil([&] { return activeList() == sourceList && session.displayIndexOf(firstId).has_value(); },
                      "Return to the seek fixture's source List");
-    exerciseSeekGesture(session, playback, target, window, secondId);
-    exerciseSeekGesture(session, playback, target, window, secondId);
+    exerciseSeekGesture(session, playback, target, window, secondId, {.pauseReplacement = true});
+    exerciseSeekGesture(session, playback, target, window, firstId);
+    exerciseSeekGesture(session, playback, target, window, firstId);
+    exerciseSeekGesture(
+      session, playback, target, window, kInvalidTrackId, {.paused = true, .reanchorWhileHeld = true});
+    exerciseSeekGesture(session, playback, target, window, kInvalidTrackId, {.paused = true, .scrub = true});
+    runtime.playback().commands().resume();
+    requireWaitUntil([&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Playing; },
+                     "Resume after the fresh paused drag");
     exerciseSeekGesture(session, playback, target, window, kInvalidTrackId);
-    exerciseSeekGesture(session, playback, target, window, kInvalidTrackId, {.paused = true});
     exerciseSeekGesture(session, playback, target, window, kInvalidTrackId, {.scrub = true});
+    exerciseSeekKeys(session, playback, window);
     session.runtime().playback().commands().stop();
     settleNativeCallbacks();
     [soul presentState:{.aura = uimodel::SoulAura::Radiant, .motionMode = uimodel::AobusSoulMotionMode::Animating}

@@ -107,6 +107,12 @@ Frontend composition obtains the platform provider set from Core audio and trans
 
 UIModel gives a track held by the transport priority over a new start for both local and system-media Play. See the [shared Play target policy](application-commit.md#primary-play) for selection, delayed delivery, and the distinction from explicit row activation.
 
+### Position and keyboard seeking
+
+On a focused desktop slider, unmodified Left and Right arrows seek in five-second steps regardless of track length. GTK and WinUI accumulate nearby presses from the displayed target and hold it until that seek settles, even if it is rejected. A clock tick or an unrelated position change cannot confirm the seek. AppKit applies each step to the live position when the command executes. The TUI step defaults to five seconds and is configurable. Pointer seeks are not rounded to keyboard steps.
+
+A drag belongs to the playback occurrence on which it began. If playback installs another occurrence (even of the same track) or the track stops being seekable, the slider and clock follow the live position and duration. The control still handles the old gesture until release, but sends no more previews or seeks from it. Seeking the replacement requires a new press.
+
 ### Explicit start
 
 A view start captures a launch description and constructs a candidate cursor session before changing active state. Player performs decoder inspection and optional optimistic decoder preparation on runtime workers. Acceptance returns to the callback executor and revalidates the source, request, playback generation, route, and start context before Engine commits.

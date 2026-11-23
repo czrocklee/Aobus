@@ -34,6 +34,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
@@ -822,6 +823,13 @@ namespace ao::appkit
         break;
       case uimodel::SeekSliderAction::None: break;
     }
+  }
+
+  void LibrarySession::seekBy(rt::PlaybackOccurrenceId presentedOccurrence, std::chrono::milliseconds delta) const
+  {
+    // Unlike an absolute thumb target, a key step uses the live position at execution.
+    runtime().playback().commands().seekBy(
+      presentedOccurrence, delta, rt::PlaybackRelativeSeekEndBehavior::ClampIfChanged);
   }
 
   void LibrarySession::setVolume(float volume)

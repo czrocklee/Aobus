@@ -10,12 +10,16 @@
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
+#include <ao/uimodel/playback/seek/SeekStep.h>
 
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
 #include <gdkmm/event.h>
 #include <gdkmm/frameclock.h>
 #include <gdkmm/surface.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/accelerator.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerlegacy.h>
@@ -49,21 +53,31 @@ namespace ao::gtk
     // and a hover tooltip consistent with the volume control.
     setTooltipAndAccessibleLabel(_scale, gtkText(textCatalog, i18n::MessageId::GtkPlaybackPosition));
 
+    // GtkRange still tracks the physical drag after its occurrence is replaced. Veto its
+    // native changes before they move the thumb; live position updates can still set it.
+    _changeValueConnection = _scale.signal_change_value().connect(
+      [this](Gtk::ScrollType, double) { return _interaction.isPointerActive() && !_interaction.isPointerCurrent(); },
+      false);
     _valueChangedConnection =
       _scale.signal_value_changed().connect(sigc::mem_fun(*this, &SeekControlWidget::handleScaleValueChanged));
 
     // GtkRange claims its own drag and cancels competing GestureClick observers.
     // Observe physical input without participating in that gesture arbitration.
-    auto pointerControllerPtr = Gtk::EventControllerLegacy::create();
-    pointerControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
-    _pointerEventConnection = pointerControllerPtr->signal_event().connect(
+    auto inputControllerPtr = Gtk::EventControllerLegacy::create();
+    inputControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    _inputEventConnection = inputControllerPtr->signal_event().connect(
       [this](Glib::RefPtr<Gdk::Event const> const& eventPtr)
       {
+        if (eventPtr->get_event_type() == Gdk::Event::Type::KEY_PRESS)
+        {
+          return tryHandleSeekKey(*eventPtr);
+        }
+
         handlePointerEvent(eventPtr);
         return false;
       },
       false);
-    _scale.add_controller(pointerControllerPtr);
+    _scale.add_controller(inputControllerPtr);
     _stateFlagsConnection = _scale.signal_state_flags_changed().connect(
       [this](Gtk::StateFlags)
       {
@@ -94,7 +108,8 @@ namespace ao::gtk
 
   SeekControlWidget::~SeekControlWidget()
   {
-    _pointerEventConnection.disconnect();
+    _inputEventConnection.disconnect();
+    _changeValueConnection.disconnect();
     _valueChangedConnection.disconnect();
     _stateFlagsConnection.disconnect();
     _mapConnection.disconnect();
@@ -104,10 +119,14 @@ namespace ao::gtk
     _debounceConnection.disconnect();
   }
 
+  bool SeekControlWidget::hasPendingFinalSeek() const noexcept
+  {
+    return _optPendingFinalSeek || _seekViewModel.hasPendingSliderFinal();
+  }
+
   void SeekControlWidget::startTickIfNeeded()
   {
-    if (!_isMapped || !_interpolator.isPlaying() || _interaction.isPointerActive() || _optPendingFinalSeek ||
-        _tickId != 0)
+    if (_tickId != 0)
     {
       return;
     }
@@ -115,6 +134,12 @@ namespace ao::gtk
     _tickId = _scale.add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clockPtr) -> bool
       {
+        if (_interaction.isPointerCurrent() || hasPendingFinalSeek())
+        {
+          _tickId = 0;
+          return false;
+        }
+
         auto const displayElapsed =
           _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clockPtr->get_frame_time()));
         setScaleValue(displayElapsed);
@@ -134,7 +159,7 @@ namespace ao::gtk
 
   void SeekControlWidget::updateTickState()
   {
-    if (_isMapped && _interpolator.isPlaying() && !_interaction.isPointerActive() && !_optPendingFinalSeek)
+    if (_isMapped && _interpolator.isPlaying() && !_interaction.isPointerCurrent() && !hasPendingFinalSeek())
     {
       startTickIfNeeded();
       return;
@@ -176,10 +201,38 @@ namespace ao::gtk
     _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
     updateTickState();
 
-    if (view.immediateUpdate && !_interaction.isPointerActive() && !_optPendingFinalSeek)
+    if (view.immediateUpdate && !_interaction.isPointerCurrent() && !hasPendingFinalSeek())
     {
       setScaleValue(view.elapsed);
     }
+  }
+
+  bool SeekControlWidget::tryHandleSeekKey(Gdk::Event const& event)
+  {
+    if (!_scale.has_focus() || !_scale.is_sensitive() || _scale.get_orientation() != Gtk::Orientation::HORIZONTAL ||
+        _interaction.isPointerActive() ||
+        (event.get_modifier_state() & Gtk::Accelerator::get_default_mod_mask()) != Gdk::ModifierType{})
+    {
+      return false;
+    }
+
+    auto const key = event.get_keyval();
+    bool const isRight = key == GDK_KEY_Right || key == GDK_KEY_KP_Right;
+
+    if (!isRight && key != GDK_KEY_Left && key != GDK_KEY_KP_Left)
+    {
+      return false;
+    }
+
+    bool const flipsForRtl = _scale.get_flippable() && _scale.get_direction() == Gtk::TextDirection::RTL;
+    bool const isInverted = _scale.get_inverted() != flipsForRtl;
+    constexpr auto kSeekOffset = std::chrono::duration_cast<std::chrono::milliseconds>(uimodel::kDefaultSeekOffset);
+    auto const delta = isRight != isInverted ? kSeekOffset : -kSeekOffset;
+
+    // Leave the adjustment increments alone so other inputs retain their native behavior.
+    // GtkRange clamps the displayed value and value_changed debounces the final seek.
+    _scale.set_value(_scale.get_value() + static_cast<double>(delta.count()));
+    return true;
   }
 
   void SeekControlWidget::handlePointerEvent(Glib::RefPtr<Gdk::Event const> const& eventPtr)
@@ -258,9 +311,10 @@ namespace ao::gtk
     auto const update = _interaction.endPointerInteraction(scaleElapsed());
     applySeekUpdate(update);
 
-    if (wasPointerActive && update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying())
+    if (wasPointerActive && update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying() &&
+        !hasPendingFinalSeek())
     {
-      // A paused replacement has no frame tick to retire the old drag's value.
+      // Release without a seek returns to the live position, even without a frame tick.
       setScaleValue(_interpolator.interpolateElapsed(uimodel::FrameClock::TimePoint{}));
     }
 
@@ -287,7 +341,7 @@ namespace ao::gtk
 
     if (optUpdate)
     {
-      _seekViewModel.seekFinal(optUpdate->occurrenceId, optUpdate->elapsed);
+      _seekViewModel.commitSliderUpdate(*optUpdate);
     }
 
     updateTickState();

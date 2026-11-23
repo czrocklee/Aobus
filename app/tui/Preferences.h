@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/uimodel/playback/seek/SeekStep.h>
 
 #include <cstdint>
 #include <string>
@@ -27,7 +28,7 @@ namespace ao::tui
   inline constexpr std::int32_t kMaximumSeekSeconds = 60;
   inline constexpr std::int32_t kMaximumWheelStep = 10;
   inline constexpr std::int32_t kMaximumVolumePercent = 10;
-  inline constexpr std::int32_t kDefaultSeekSeconds = 5;
+  inline constexpr auto kDefaultSeekSeconds = static_cast<std::int32_t>(uimodel::kDefaultSeekOffset.count());
   inline constexpr std::int32_t kDefaultVolumePercent = 5;
 
   struct Preferences final

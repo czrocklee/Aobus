@@ -18,6 +18,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -127,7 +128,10 @@ namespace ao::uimodel::test
       CHECK(log.last().immediateUpdate == false);
       CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{0});
 
-      viewModel.seekFinal(occurrenceId, std::chrono::milliseconds{500});
+      viewModel.commitSliderUpdate({.action = SeekSliderAction::Commit,
+                                    .occurrenceId = occurrenceId,
+                                    .elapsed = std::chrono::milliseconds{500},
+                                    .endsPointerPreview = true});
       fixture.executor.drain();
 
       CHECK(log.last().duration == expectedDuration);
@@ -225,6 +229,124 @@ namespace ao::uimodel::test
     log.clear();
     fixture.commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    CHECK(log.empty());
+  }
+
+  TEST_CASE("PlaybackPositionViewModel - overlapping queued slider finals hold until the latest settles")
+  {
+    auto fixture = PlaybackRelativeSeekFixture{};
+    auto& playback = fixture.playback;
+    auto& executor = fixture.application.transport.executor;
+    playback.commands().pause();
+    auto const before = playback.snapshot().transport;
+    REQUIRE(before.transport == audio::Transport::Paused);
+    REQUIRE(before.occurrenceId != PlaybackOccurrenceId{});
+    auto const firstElapsed = std::chrono::milliseconds{400};
+    auto const lastElapsed = std::chrono::milliseconds{600};
+
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+    // Like the slider, ignore clock updates while the hold is active.
+    PlaybackPositionViewModel const* observedModel = nullptr;
+    auto viewModel =
+      PlaybackPositionViewModel{playback,
+                                [&](auto const& view)
+                                {
+                                  if (observedModel != nullptr && !observedModel->hasPendingSliderFinal())
+                                  {
+                                    log.render(view);
+                                  }
+                                }};
+    observedModel = &viewModel;
+
+    bool submitted = false;
+    auto const snapshotSubscription = playback.events().onSnapshot(
+      [&](PlaybackSnapshot const&)
+      {
+        if (!submitted)
+        {
+          submitted = true;
+          viewModel.commitSliderUpdate(
+            {.action = SeekSliderAction::Commit, .occurrenceId = before.occurrenceId, .elapsed = firstElapsed});
+          viewModel.commitSliderUpdate(
+            {.action = SeekSliderAction::Commit, .occurrenceId = before.occurrenceId, .elapsed = lastElapsed});
+        }
+      });
+
+    playback.commands().setVolume(0.5F);
+    REQUIRE(submitted);
+    CHECK(viewModel.hasPendingSliderFinal());
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
+
+    REQUIRE(executor.tryDrainUntil(
+      [&] { return playback.snapshot().transport.finalSeekRevision != before.finalSeekRevision; }));
+    CHECK(playback.snapshot().transport.finalSeekRevision.value == before.finalSeekRevision.value + 1);
+    CHECK(playback.snapshot().transport.elapsed == firstElapsed);
+    CHECK(viewModel.hasPendingSliderFinal());
+    CHECK(log.empty());
+
+    executor.drain();
+    CHECK(playback.snapshot().transport.finalSeekRevision.value == before.finalSeekRevision.value + 2);
+    CHECK_FALSE(viewModel.hasPendingSliderFinal());
+    REQUIRE(!log.empty());
+    CHECK(log.last().occurrenceId == before.occurrenceId);
+    CHECK(log.last().elapsed == lastElapsed);
+    CHECK_FALSE(log.last().isPreviewing);
+    CHECK(log.last().immediateUpdate);
+  }
+
+  TEST_CASE("PlaybackPositionViewModel - rejected slider final restores the live clock without publication")
+  {
+    auto fixture = PlaybackRelativeSeekFixture{};
+    auto& playback = fixture.playback;
+    auto const before = playback.snapshot().transport;
+    auto const occurrenceId = before.occurrenceId;
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+    auto viewModel = PlaybackPositionViewModel{playback, [&](auto const& view) { log.render(view); }};
+    auto const liveElapsed = fixture.renderBlockElapsed();
+    REQUIRE(liveElapsed > playback.snapshot().transport.elapsed);
+    log.clear();
+
+    bool published = false;
+    auto const snapshotSubscription = playback.events().onSnapshot([&](PlaybackSnapshot const&) { published = true; });
+
+    viewModel.commitSliderUpdate(
+      {.action = SeekSliderAction::Commit, .occurrenceId = occurrenceId, .elapsed = std::chrono::milliseconds{-1}});
+
+    CHECK_FALSE(published);
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
+    CHECK_FALSE(viewModel.hasPendingSliderFinal());
+    REQUIRE(!log.empty());
+    CHECK(log.last().occurrenceId == occurrenceId);
+    CHECK(log.last().elapsed == liveElapsed);
+    CHECK_FALSE(log.last().isPreviewing);
+    CHECK(log.last().immediateUpdate);
+  }
+
+  TEST_CASE("PlaybackPositionViewModel - queued slider final can settle after view model teardown")
+  {
+    auto fixture = PlaybackRelativeSeekFixture{};
+    auto& playback = fixture.playback;
+    playback.commands().pause();
+    auto const before = playback.snapshot().transport;
+    auto const targetElapsed = std::chrono::milliseconds{400};
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+
+    {
+      auto viewModel = PlaybackPositionViewModel{playback, [&](auto const& view) { log.render(view); }};
+      auto const snapshotSubscription = playback.events().onSnapshot(
+        [&](PlaybackSnapshot const&)
+        {
+          viewModel.commitSliderUpdate(
+            {.action = SeekSliderAction::Commit, .occurrenceId = before.occurrenceId, .elapsed = targetElapsed});
+        });
+      playback.commands().setVolume(0.5F);
+      REQUIRE(viewModel.hasPendingSliderFinal());
+    }
+
+    log.clear();
+    fixture.application.transport.executor.drain();
+    CHECK(playback.snapshot().transport.finalSeekRevision.value == before.finalSeekRevision.value + 1);
+    CHECK(playback.snapshot().transport.elapsed == targetElapsed);
     CHECK(log.empty());
   }
 

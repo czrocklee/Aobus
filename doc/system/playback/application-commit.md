@@ -176,6 +176,7 @@ orthogonal command temporarily owned the boundary. The original occurrence-free
 `seekBy` captures an occurrence and signed delta in the same FIFO.
 At execution it requires the matching occurrence and positive duration, samples live Transport elapsed, and clamps the relative target without overflowing before issuing a guarded Final.
 Its default `Clamp` behavior issues a Final seek at the clamped target, including the end request at a positive duration; `Next` instead explicitly advances for a positive offset strictly past the live endpoint, only with an available successor and matching runtime/audio identity.
+With `ClampIfChanged`, a slider step that cannot move the live position issues no Final. Repeated outward steps at a paused endpoint do not flush audio again.
 The accepted Next uses existing succession cancellation of pending explicit preparation and lookahead; a rejected or ordinary relative seek does not invalidate command generations.
 An exact-end target remains a Final seek and therefore an end request; unavailable or stale past-end Next is a no-op.
 Sequential queued relative commands therefore accumulate from each execution's live position rather than a cached publication; headless consumers do not need rendering subscriptions.
@@ -269,7 +270,9 @@ An accepted Final seek advances both revision identities. A target inside the Tr
 An unguarded Final clamps its target to `[0, duration]`; a guarded seek first requires its nonzero expected occurrence, a valid current subject, positive duration, and a target in that inclusive range, rejecting a target past the duration.
 Active playback additionally requires the expected opaque audio item to remain Engine-current across prepared-next disarm and RT splice settlement, including for an end request.
 Preview applies the guarded occurrence, subject, duration, and range checks but only publishes a position; it never mutates audio, disarms lookahead, ends the Track, or advances either seek revision.
-Any rejection emits no seek event and advances no seek revision; a matched final issuance reports success even when an audio failure later appears through the existing transport-status channel.
+A rejected seek publishes no Preview or Final update and advances neither the position revision nor the final-seek revision. A successful `trySeek` reports issuance, not audio completion; a later audio failure is reported through transport status.
+
+A guarded seek's optional settlement callback runs after any resulting publication, even on rejection. It can run inline, follows observer reentrancy rules and reports neither acceptance nor audio completion. Shutdown abandons callbacks already in the queue. A seek submitted after admission closes does not run, but its callback runs immediately.
 
 A Final seek to a **positive** duration is a transport end request, not a decoder seek.
 While Playing it cancels prepared audio through an item-guarded stop barrier and completes the subject through natural Idle succession, without emitting Stopped or replaying a successor whose splice already won.
@@ -330,12 +333,10 @@ Events produced within a command are delivered after snapshot settlement.
 A result-bearing command rejected because admission is closed returns
 `InvalidState`; void commands after shutdown are ignored. Guarded `trySeek` and
 `tryNext` use `false` for every synchronous admission or identity/input
-rejection and never leave deferred work behind. The guarded queued `seek`
-overload has no later result channel; execution-time rejection emits neither a
-preview nor a final update. Immediate lower
-validation errors return to the caller. A queued command has no later public
-result channel; playback execution failures continue through the internal
-recovery and notification owners.
+rejection and never leave deferred work behind. Immediate lower validation
+errors return to the caller. A queued command has no later public result
+channel; playback execution failures continue through the internal recovery
+and notification owners.
 
 An inspection decoder failure is asynchronous: it publishes the existing
 track-open notification and leaves the previous session and snapshot unchanged.

@@ -8,18 +8,23 @@
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
+#include <ao/uimodel/playback/seek/SeekStep.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Core.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <ratio>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -31,6 +36,26 @@ namespace ao::winui
     explicit PointerCallbackState(SeekControl* const ownerValue)
       : owner{ownerValue}
     {
+    }
+
+    static winrt::Windows::Foundation::IInspectable makePointerEndHandler(
+      std::weak_ptr<PointerCallbackState> const& pointerCallbackStatePtr,
+      PointerEnd const end)
+    {
+      return winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
+        [pointerCallbackStatePtr, end](winrt::Windows::Foundation::IInspectable const&,
+                                       winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+        {
+          if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+          {
+            if (auto const pointerId = args.Pointer().PointerId(); statePtr->owner->_optPointerId == pointerId)
+            {
+              auto const canceled =
+                end == PointerEnd::Cancel || args.GetCurrentPoint(nullptr).Properties().IsCanceled();
+              statePtr->owner->endPointerInteraction(canceled ? PointerEnd::Cancel : PointerEnd::Finish);
+            }
+          }
+        }});
     }
 
     SeekControl* owner;
@@ -70,6 +95,40 @@ namespace ao::winui
       return nullptr;
     }
 
+    bool hasCaptureOnPressRoute(winrt::Microsoft::UI::Xaml::UIElement const& slider,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+    {
+      using namespace winrt::Microsoft::UI::Xaml;
+      auto const pointerId = args.Pointer().PointerId();
+      auto current = args.OriginalSource().try_as<DependencyObject>();
+
+      // The native thumb or track container takes capture before the press bubbles to the slider.
+      while (current)
+      {
+        auto const element = current.try_as<UIElement>();
+
+        if (auto const captures = element ? element.PointerCaptures() : nullptr; captures)
+        {
+          for (auto const& pointer : captures)
+          {
+            if (pointer.PointerId() == pointerId)
+            {
+              return true;
+            }
+          }
+        }
+
+        if (current == slider)
+        {
+          break;
+        }
+
+        current = Media::VisualTreeHelper::GetParent(current);
+      }
+
+      return false;
+    }
+
     uimodel::FrameClock::TimePoint currentFrameTime() noexcept
     {
       auto const microsDuration =
@@ -99,17 +158,32 @@ namespace ao::winui
       [this](winrt::Windows::Foundation::IInspectable const&,
              winrt::Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const& args)
       {
-        if (!_updating && _presentationActive && _viewModelPtr)
+        if (_updating || !_loaded || !_presentationActive || !_viewModelPtr)
         {
-          applySeekUpdate(_interaction.valueChanged(
-            std::chrono::milliseconds{static_cast<std::int64_t>(std::round(args.NewValue()))}));
+          return;
         }
+
+        if (_interaction.isPointerActive() && !_interaction.isPointerCurrent())
+        {
+          // The native Slider still owns the old drag. Discard its value and
+          // restore the live thumb in the same notification, until it ends.
+          setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
+          return;
+        }
+
+        applySeekUpdate(
+          _interaction.valueChanged(std::chrono::milliseconds{static_cast<std::int64_t>(std::round(args.NewValue()))}));
       });
+
+    _previewKeyDownRevoker = _slider.PreviewKeyDown(
+      winrt::auto_revoke,
+      [this](winrt::Windows::Foundation::IInspectable const&,
+             winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& args) { handlePreviewKeyDown(args); });
 
     auto const pointerCallbackStatePtr = std::weak_ptr{_pointerCallbackStatePtr};
     _pointerPressedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
       [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
-                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
       {
         if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
         {
@@ -118,28 +192,12 @@ namespace ao::winui
 
           if (statePtr->owner == owner)
           {
-            owner->beginPointerInteraction();
+            owner->beginPointerInteraction(args);
           }
         }
       }});
-    _pointerReleasedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
-                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
-      {
-        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
-        {
-          statePtr->owner->endPointerInteraction();
-        }
-      }});
-    _pointerCaptureLostHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
-                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
-      {
-        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
-        {
-          statePtr->owner->endPointerInteraction();
-        }
-      }});
+    _pointerEndedHandler = PointerCallbackState::makePointerEndHandler(pointerCallbackStatePtr, PointerEnd::Finish);
+    _pointerCanceledHandler = PointerCallbackState::makePointerEndHandler(pointerCallbackStatePtr, PointerEnd::Cancel);
     _pointerEnteredHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
       [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
                                 winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
@@ -169,9 +227,9 @@ namespace ao::winui
       }});
 
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler, true);
-    _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler, true);
-    _slider.AddHandler(
-      winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler, true);
+    _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerEndedHandler, true);
+    _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerEndedHandler, true);
+    _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerCanceledEvent(), _pointerCanceledHandler, true);
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler, true);
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler, true);
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler, true);
@@ -200,6 +258,11 @@ namespace ao::winui
         _decreaseTrackElement = nullptr;
         _thumbElement = nullptr;
         stopRendering();
+
+        if (_optPointerId)
+        {
+          endPointerInteraction(PointerEnd::Cancel);
+        }
       });
 
     if (_loaded)
@@ -221,9 +284,9 @@ namespace ao::winui
     if (_slider)
     {
       _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler);
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler);
-      _slider.RemoveHandler(
-        winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerEndedHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerEndedHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerCanceledEvent(), _pointerCanceledHandler);
       _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler);
       _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler);
       _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler);
@@ -235,6 +298,7 @@ namespace ao::winui
     _viewModelPtr.reset();
     cancelPendingFinalSeek();
     stopRendering();
+    _optPointerId.reset();
     _interaction.reset();
     _interpolator.reset();
     _state = {};
@@ -262,6 +326,7 @@ namespace ao::winui
 
     if (!_presentationActive)
     {
+      _optPointerId.reset();
       setPointerOver(false);
       stopRendering();
 
@@ -302,40 +367,86 @@ namespace ao::winui
     updateRenderingRegistration();
   }
 
-  void SeekControl::beginPointerInteraction()
+  void SeekControl::handlePreviewKeyDown(winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& args)
   {
-    auto const hadEarlyValueChange = _finalSeekPending;
-    auto const earlyUpdate = _pendingFinalUpdate;
+    using namespace winrt::Microsoft::UI::Xaml;
+    using winrt::Microsoft::UI::Input::InputKeyboardSource;
+    using winrt::Windows::System::VirtualKey;
+    using winrt::Windows::UI::Core::CoreVirtualKeyStates;
 
-    if (!_presentationActive || !_viewModelPtr || !_interaction.tryBeginPointerInteraction())
+    auto const key = args.OriginalKey();
+
+    if ((key != VirtualKey::Left && key != VirtualKey::Right) || args.Handled() || !_presentationActive ||
+        !_slider.IsEnabled() || _slider.FocusState() == FocusState::Unfocused ||
+        _slider.Orientation() != Controls::Orientation::Horizontal || _interaction.isPointerActive())
     {
       return;
     }
 
+    for (auto const modifier :
+         {VirtualKey::Shift, VirtualKey::Control, VirtualKey::Menu, VirtualKey::LeftWindows, VirtualKey::RightWindows})
+    {
+      if ((InputKeyboardSource::GetKeyStateForCurrentThread(modifier) & CoreVirtualKeyStates::Down) !=
+          CoreVirtualKeyStates::None)
+      {
+        return;
+      }
+    }
+
+    // Leave StepFrequency alone: it also sets the native pointer grid. Changing Value
+    // accumulates on the displayed target and uses the same debounced final as Page/Home/End.
+    auto const reversed = (_slider.FlowDirection() == FlowDirection::RightToLeft) != _slider.IsDirectionReversed();
+    auto const step = std::chrono::duration<double, std::milli>{uimodel::kDefaultSeekOffset}.count();
+    auto const delta = (key == VirtualKey::Right) != reversed ? step : -step;
+    args.Handled(true);
+    _slider.Value(std::clamp(_slider.Value() + delta, _slider.Minimum(), _slider.Maximum()));
+  }
+
+  void SeekControl::beginPointerInteraction(winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+  {
+    if (!_loaded || !_presentationActive || !_viewModelPtr || _optPointerId || !hasCaptureOnPressRoute(_slider, args) ||
+        !_interaction.tryBeginPointerInteraction())
+    {
+      return;
+    }
+
+    // Keep the first admitted pointer even if its playback occurrence is replaced.
+    _optPointerId = args.Pointer().PointerId();
+    auto const hadEarlyValueChange = _finalSeekPending;
+    auto const earlyUpdate = _pendingFinalUpdate;
     cancelPendingFinalSeek();
+    updateRenderingRegistration();
 
     if (hadEarlyValueChange && earlyUpdate.occurrenceId == _interaction.occurrenceId())
     {
       applySeekUpdate(_interaction.valueChanged(earlyUpdate.elapsed));
     }
-
-    updateRenderingRegistration();
   }
 
-  void SeekControl::endPointerInteraction()
+  void SeekControl::endPointerInteraction(PointerEnd const end)
   {
-    if (!_presentationActive || !_viewModelPtr)
+    if (!_optPointerId || !_presentationActive || !_viewModelPtr)
     {
       return;
     }
 
-    auto const wasPointerActive = _interaction.isPointerActive();
+    // Release, capture loss and cancellation can arrive for the same pointer.
+    _optPointerId.reset();
+
     auto const update = _interaction.endPointerInteraction(sliderElapsed());
+
+    if (end == PointerEnd::Cancel)
+    {
+      // Do not dispatch the canceled drag's pending Final.
+      updateRenderingRegistration();
+      return;
+    }
+
     applySeekUpdate(update);
 
-    if (wasPointerActive && update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying())
+    if (update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying() && !hasPendingFinalSeek())
     {
-      // A paused replacement has no frame tick to retire the old drag's value.
+      // Without a pending Final, a paused slider must show its live anchor.
       setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
     }
 
@@ -400,7 +511,7 @@ namespace ao::winui
 
     if (_viewModelPtr)
     {
-      _viewModelPtr->seekFinal(update.occurrenceId, update.elapsed);
+      _viewModelPtr->commitSliderUpdate(update);
     }
 
     updateRenderingRegistration();
@@ -417,6 +528,11 @@ namespace ao::winui
     }
   }
 
+  bool SeekControl::hasPendingFinalSeek() const noexcept
+  {
+    return _finalSeekPending || (_viewModelPtr && _viewModelPtr->hasPendingSliderFinal());
+  }
+
   void SeekControl::applyState(uimodel::PlaybackPositionViewState const& state)
   {
     if (_hasState && state.occurrenceId != _state.occurrenceId)
@@ -426,7 +542,9 @@ namespace ao::winui
 
     _state = state;
     _hasState = true;
+    auto const wasPointerCurrent = _interaction.isPointerCurrent();
     _interaction.applyViewState(state.duration, state.seekable, state.occurrenceId);
+    auto const pointerBecameStale = wasPointerCurrent && !_interaction.isPointerCurrent();
 
     if (state.duration <= std::chrono::milliseconds{0})
     {
@@ -450,7 +568,7 @@ namespace ao::winui
       setSliderRange(state.duration);
       _slider.IsEnabled(state.seekable);
 
-      if (state.immediateUpdate && !_interaction.isPointerActive() && !_finalSeekPending)
+      if ((state.immediateUpdate || pointerBecameStale) && !_interaction.isPointerCurrent() && !hasPendingFinalSeek())
       {
         setSliderValue(state.elapsed);
       }
@@ -475,7 +593,7 @@ namespace ao::winui
       return;
     }
 
-    if (!_interaction.isPointerActive() && !_finalSeekPending)
+    if (!_interaction.isPointerCurrent() && !hasPendingFinalSeek())
     {
       setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
     }
@@ -612,7 +730,7 @@ namespace ao::winui
   void SeekControl::updateRenderingRegistration()
   {
     auto const shouldRender = _presentationActive && _loaded && _hasState && _interpolator.isPlaying() &&
-                              !_interaction.isPointerActive() && !_finalSeekPending;
+                              !_interaction.isPointerCurrent() && !hasPendingFinalSeek();
 
     if (shouldRender && !_rendering)
     {
@@ -642,7 +760,7 @@ namespace ao::winui
 
   void SeekControl::renderFrame()
   {
-    if (!_presentationActive || !_loaded || _interaction.isPointerActive() || _finalSeekPending)
+    if (!_presentationActive || !_loaded || _interaction.isPointerCurrent() || hasPendingFinalSeek())
     {
       updateRenderingRegistration();
       return;

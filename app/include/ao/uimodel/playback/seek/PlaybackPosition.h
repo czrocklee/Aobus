@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ao::rt
@@ -22,6 +23,8 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  struct SeekSliderUpdate;
+
   /** Render state shared by playback-position controls. */
   struct PlaybackPositionViewState final
   {
@@ -59,6 +62,10 @@ namespace ao::uimodel
 
     void seekPreview(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
     void seekFinal(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
+    // Discrete steps hold their displayed target until the guarded Final settles.
+    // A pointer release finishes its existing shared preview instead.
+    void commitSliderUpdate(SeekSliderUpdate const& update);
+    bool hasPendingSliderFinal() const noexcept { return _pendingSliderOccurrencePtr != nullptr; }
     void seekBy(std::chrono::milliseconds delta);
 
   private:
@@ -83,6 +90,7 @@ namespace ao::uimodel
     rt::PlaybackPositionRevision _clockPositionRevision{};
     std::chrono::milliseconds _clockDuration{0};
 
+    std::shared_ptr<rt::PlaybackOccurrenceId const> _pendingSliderOccurrencePtr;
     async::Subscription _snapshotSub;
     async::Subscription _seekPreviewSub;
   };
