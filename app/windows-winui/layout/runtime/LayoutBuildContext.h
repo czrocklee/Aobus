@@ -69,5 +69,6 @@ namespace ao::winui::layout
 
     /// Bind a native Rescan menu item or button to the session for this generation.
     std::function<void(winrt::Microsoft::UI::Xaml::Controls::Control const&)> bindRescanControl{};
+    std::function<void(winrt::Microsoft::UI::Xaml::Controls::Control const&)> bindPlayPauseControl{};
   };
 } // namespace ao::winui::layout

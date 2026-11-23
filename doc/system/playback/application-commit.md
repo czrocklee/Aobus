@@ -139,6 +139,16 @@ boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 ## Commands and transitions
 
+### Primary Play
+
+[`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local transport controls and system media commands the same resume priority:
+
+- Play/Pause pauses active playback.
+- Play or Play/Pause resumes a paused track or a track held for deferred resume. Clearing succession does not discard the transport's deferred subject or offset. If its requested output is pending, Play is unavailable; it does not start the browsed track instead.
+- With no subject to resume, Idle or Error can start a selection only when the output is ready. The local controls in GTK, WinUI and AppKit use the first selected track present in the focused view's projection. The TUI uses the track under its cursor, not its marks. With no such track, local Play is disabled; it does not choose the first row.
+
+When neither origin has a subject to resume, the host may provide a separate system-media start handler and availability predicate. GTK and WinUI use the same projected selection for both origins; a selected track hidden by the filter is not eligible. On AppKit, system Play and the start side of system Play/Pause can use the first projected row if nothing is selected, and become unavailable when the projection is empty or every selected track is filtered out; the local control never falls back to an unselected row. MPRIS still acknowledges a recognized transport method even when `tryExecute` declines it. Explicit row activation requests a start from that row rather than resuming a different track.
+
 ### Admission and execution
 
 Outside a commit or publication, and with no queued backlog, a command executes
@@ -305,8 +315,12 @@ An escaping exception enters AO fatal handling at that boundary and provides no 
 Observer-issued commands join the queue.
 
 Seek previews carry only their elapsed position and do not alter the snapshot.
-Reveal requests carry the track and optional preferred view and List ids; unspecified preferences use invalid ids.
-GTK and WinUI workspace coordinators prefer the supplied view, fall back to the supplied List when necessary, and leave a track hidden by the active projection unchanged rather than weakening its filter.
+Playing-track reveal requests carry the subject's track and source List ids. GTK, TUI and WinUI use [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source) before selecting or scrolling to the row. AppKit does not handle this playback reveal; its Reveal in Finder action locates a file instead.
+
+Explicit reveals, such as album navigation or GTK startup restore, carry the track and optional preferred view and List ids (invalid when unspecified). GTK and WinUI prefer the view, use the supplied List as a fallback, and do not weaken the target view's filter to expose a hidden row.
+
+**Known limitation:** GTK uses the List hint to find an open page only when no view id was supplied. If a supplied view has already closed, GTK cannot reveal the row through the List hint. WinUI can reuse or open a view for that List.
+
 Events produced within a command are delivered after snapshot settlement.
 
 ## Failure and cancellation

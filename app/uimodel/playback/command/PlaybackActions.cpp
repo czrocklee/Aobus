@@ -8,55 +8,63 @@
 #include <ao/audio/Transport.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <initializer_list>
+#include <memory>
 #include <utility>
 
 namespace ao::uimodel
 {
   namespace
   {
-    bool hasIdleSequenceTrack(rt::PlaybackTransportSnapshot const& transport,
-                              rt::PlaybackSuccessionSnapshot const& succession) noexcept
+    enum class PlayIntent : std::uint8_t
     {
-      return transport.transport == audio::Transport::Idle && transport.nowPlaying.trackId != kInvalidTrackId &&
-             succession.currentTrackId == transport.nowPlaying.trackId;
+      None,
+      Resume,
+      StartSelection,
+    };
+
+    PlayIntent playIntent(rt::PlaybackTransportSnapshot const& transport) noexcept
+    {
+      // A pending route blocks both resume and a new start. Never substitute a browsed track for a held one.
+      if (transport.output.optPendingOutputSelection)
+      {
+        return PlayIntent::None;
+      }
+
+      if (transport.transport == audio::Transport::Paused)
+      {
+        return PlayIntent::Resume;
+      }
+
+      if (!transport.ready)
+      {
+        return PlayIntent::None;
+      }
+
+      if (transport.transport == audio::Transport::Idle)
+      {
+        return transport.hasDeferredResume ? PlayIntent::Resume : PlayIntent::StartSelection;
+      }
+
+      return transport.transport == audio::Transport::Error ? PlayIntent::StartSelection : PlayIntent::None;
     }
 
     bool isActivePlayback(audio::Transport const transport) noexcept
     {
       return transport == audio::Transport::Opening || transport == audio::Transport::Buffering ||
              transport == audio::Transport::Playing || transport == audio::Transport::Seeking;
-    }
-
-    bool shouldStartSelection(audio::Transport const transport) noexcept
-    {
-      return transport == audio::Transport::Idle || transport == audio::Transport::Error;
-    }
-
-    bool canPlay(rt::PlaybackTransportSnapshot const& transport,
-                 rt::PlaybackSuccessionSnapshot const& succession) noexcept
-    {
-      if (transport.transport == audio::Transport::Paused)
-      {
-        return !transport.output.optPendingOutputSelection;
-      }
-
-      return transport.ready &&
-             (hasIdleSequenceTrack(transport, succession) || shouldStartSelection(transport.transport));
-    }
-
-    bool canPlayPause(rt::PlaybackTransportSnapshot const& transport,
-                      rt::PlaybackSuccessionSnapshot const& succession) noexcept
-    {
-      return isActivePlayback(transport.transport) || canPlay(transport, succession);
     }
 
     bool canStop(rt::PlaybackTransportSnapshot const& transport) noexcept
@@ -85,37 +93,153 @@ namespace ao::uimodel
     }
   } // namespace
 
-  PlaybackActions::PlaybackActions(rt::PlaybackService& playback, std::function<void()> playSelection)
+  struct PlaybackActions::FocusedSelection final
+  {
+    FocusedSelection(PlaybackActions& ownerValue, rt::WorkspaceService& workspaceValue, rt::ViewService& viewsValue)
+      : owner{ownerValue}, workspace{workspaceValue}, views{viewsValue}
+    {
+      workspaceSub = workspace.onChanged([this](auto const&) { bindProjection(); });
+      projectionSub = views.onProjectionChanged(
+        [this](auto const& change)
+        {
+          if (change.viewId == workspace.snapshot().activeViewId)
+          {
+            bindProjection();
+          }
+        });
+      selectionSub = views.onSelectionChanged(
+        [this](auto const& change)
+        {
+          if (change.viewId == workspace.snapshot().activeViewId)
+          {
+            refresh();
+          }
+        });
+    }
+
+    bool hasVisibleSelection() const
+    {
+      return views.firstVisibleSelectedTrack(workspace.snapshot().activeViewId) != kInvalidTrackId;
+    }
+
+    void refresh() { owner.setSelectionAvailability(hasVisibleSelection(), owner.hasSystemMediaSelection()); }
+
+    void bindProjection()
+    {
+      auto projectionRes = views.findTrackListProjection(workspace.snapshot().activeViewId);
+      auto currentPtr = projectionRes ? std::move(*projectionRes) : nullptr;
+
+      if (currentPtr != projectionPtr)
+      {
+        deltaSub.reset();
+        projectionPtr = std::move(currentPtr);
+
+        if (projectionPtr)
+        {
+          // subscribe delivers its initial reset synchronously. Publish that
+          // state below, only after installing the subscription: an observer
+          // can navigate (and thus replace this binding) from refresh().
+          deltaSub = projectionPtr->subscribe(
+            [this](auto const&)
+            {
+              if (deltaSub)
+              {
+                refresh();
+              }
+            });
+        }
+      }
+
+      refresh();
+    }
+
+    PlaybackActions& owner;
+    rt::WorkspaceService& workspace;
+    rt::ViewService& views;
+    std::shared_ptr<rt::TrackListProjection const> projectionPtr;
+    async::Subscription workspaceSub;
+    async::Subscription projectionSub;
+    async::Subscription selectionSub;
+    async::Subscription deltaSub;
+  };
+
+  PlaybackActions::PlaybackActions(rt::PlaybackService& playback,
+                                   std::function<void()> playSelection,
+                                   SystemMediaPlayHandler systemMediaPlay)
     : _playback{playback}
     , _commands{playback.commands()}
     , _playSelection{std::move(playSelection)}
+    , _systemMediaPlay{std::move(systemMediaPlay)}
     , _lastSnapshot{playback.snapshot()}
   {
     _snapshotSub =
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
-  bool PlaybackActions::tryExecute(PlaybackCommand command)
+  PlaybackActions::~PlaybackActions() = default;
+
+  void PlaybackActions::bindFocusedSelection(rt::WorkspaceService& workspace, rt::ViewService& views)
   {
-    if (!isEnabled(command))
+    _focusedSelectionPtr = std::make_unique<FocusedSelection>(*this, workspace, views);
+    _focusedSelectionPtr->bindProjection();
+  }
+
+  bool PlaybackActions::hasSystemMediaSelection() const
+  {
+    if (_systemMediaPlay.play)
+    {
+      return _systemMediaPlay.canPlay ? _systemMediaPlay.canPlay() : true;
+    }
+
+    return _focusedSelectionPtr ? _focusedSelectionPtr->hasVisibleSelection() : _selectionAvailable;
+  }
+
+  void PlaybackActions::setSelectionAvailability(bool const primaryAvailable, bool const systemMediaAvailable)
+  {
+    auto const primaryChanged = std::exchange(_selectionAvailable, primaryAvailable) != primaryAvailable;
+    auto const systemMediaChanged =
+      std::exchange(_systemMediaSelectionAvailable, systemMediaAvailable) != systemMediaAvailable;
+
+    if (primaryChanged || systemMediaChanged)
+    {
+      _commandAvailabilityChangedSignals[commandIndex(PlaybackCommand::Play)].emit();
+      _commandAvailabilityChangedSignals[commandIndex(PlaybackCommand::PlayPause)].emit();
+      _availabilityChangedSignal.emit();
+    }
+  }
+
+  void PlaybackActions::setSelectionAvailable(bool const available)
+  {
+    setSelectionAvailability(available, _systemMediaPlay.play ? hasSystemMediaSelection() : available);
+  }
+
+  bool PlaybackActions::tryExecute(PlaybackCommand command, PlaybackActionOrigin const origin)
+  {
+    if (!isEnabled(command, origin))
     {
       return false;
     }
 
     auto const& snapshot = _playback.snapshot();
     auto const& transport = snapshot.transport;
-    auto const& succession = snapshot.succession;
-    auto const resumeCurrent =
-      transport.transport == audio::Transport::Paused || hasIdleSequenceTrack(transport, succession);
 
-    switch (command)
+    switch (auto const& succession = snapshot.succession; command)
     {
       case PlaybackCommand::Play:
-        if (resumeCurrent)
+      case PlaybackCommand::PlayPause:
+        if (command == PlaybackCommand::PlayPause && isActivePlayback(transport.transport))
+        {
+          _commands.pause();
+        }
+        else if (playIntent(transport) == PlayIntent::Resume)
         {
           _commands.resume();
         }
-        else if (shouldStartSelection(transport.transport) && _playSelection)
+        else if (origin == PlaybackActionOrigin::SystemMedia && _systemMediaPlay.play)
+        {
+          return _systemMediaPlay.play();
+        }
+        else if (_playSelection)
         {
           _playSelection();
         }
@@ -123,22 +247,6 @@ namespace ao::uimodel
         break;
 
       case PlaybackCommand::Pause: _commands.pause(); break;
-
-      case PlaybackCommand::PlayPause:
-        if (isActivePlayback(transport.transport))
-        {
-          _commands.pause();
-        }
-        else if (resumeCurrent)
-        {
-          _commands.resume();
-        }
-        else if (shouldStartSelection(transport.transport) && _playSelection)
-        {
-          _playSelection();
-        }
-
-        break;
 
       case PlaybackCommand::Stop: _commands.stop(); break;
 
@@ -157,16 +265,31 @@ namespace ao::uimodel
     return true;
   }
 
-  bool PlaybackActions::isEnabled(PlaybackCommand command) const
+  bool PlaybackActions::isEnabled(PlaybackCommand command, PlaybackActionOrigin const origin) const
   {
     auto const& snapshot = _playback.snapshot();
     auto const& transport = snapshot.transport;
+    auto const playEnabled = [&]
+    {
+      if (auto const intent = playIntent(transport); intent != PlayIntent::StartSelection)
+      {
+        return intent == PlayIntent::Resume;
+      }
+
+      // A command can arrive before our focus or projection subscriber refreshes the presentation.
+      if (origin == PlaybackActionOrigin::SystemMedia && _systemMediaPlay.play)
+      {
+        return hasSystemMediaSelection();
+      }
+
+      return _focusedSelectionPtr ? _focusedSelectionPtr->hasVisibleSelection() : _selectionAvailable;
+    };
 
     switch (auto const& succession = snapshot.succession; command)
     {
-      case PlaybackCommand::Play: return canPlay(transport, succession);
+      case PlaybackCommand::Play: return playEnabled();
       case PlaybackCommand::Pause: return isActivePlayback(transport.transport);
-      case PlaybackCommand::PlayPause: return canPlayPause(transport, succession);
+      case PlaybackCommand::PlayPause: return isActivePlayback(transport.transport) || playEnabled();
       case PlaybackCommand::Stop: return canStop(transport);
       case PlaybackCommand::Next: return transport.ready && succession.hasNext;
       case PlaybackCommand::Previous: return transport.ready && succession.hasPrevious;
@@ -183,9 +306,10 @@ namespace ao::uimodel
     {
       case PlaybackCommand::Play: return transport.nowPlaying.trackId != kInvalidTrackId || transport.ready;
       case PlaybackCommand::Pause: return transport.nowPlaying.trackId != kInvalidTrackId;
+      case PlaybackCommand::PlayPause:
+        return isActivePlayback(transport.transport) || playIntent(transport) != PlayIntent::None;
       case PlaybackCommand::Next:
       case PlaybackCommand::Previous:
-      case PlaybackCommand::PlayPause:
       case PlaybackCommand::Stop:
       case PlaybackCommand::ToggleShuffle:
       case PlaybackCommand::CycleRepeat: return isEnabled(command);
@@ -248,6 +372,12 @@ namespace ao::uimodel
             PlaybackCommand::Stop,
             PlaybackCommand::Next,
             PlaybackCommand::Previous});
+    }
+
+    if (after.hasDeferredResume != before.hasDeferredResume ||
+        after.output.optPendingOutputSelection.has_value() != before.output.optPendingOutputSelection.has_value())
+    {
+      mark({PlaybackCommand::Play, PlaybackCommand::PlayPause});
     }
 
     if (afterSuccession.hasNext != beforeSuccession.hasNext ||

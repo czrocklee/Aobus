@@ -13,9 +13,9 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/audio/BackendProvider.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
@@ -225,11 +225,12 @@ namespace ao::appkit
                                                                  std::filesystem::path const& stateRoot,
                                                                  bool restorePlayback,
                                                                  i18n::MessageCatalog catalog,
-                                                                 std::function<void(DesktopInvalidation)> onInvalidated)
+                                                                 std::function<void(DesktopInvalidation)> onInvalidated,
+                                                                 AudioProviderFactory createProviders)
   {
     auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{std::move(catalog), std::move(onInvalidated)}};
 
-    if (auto res = sessionPtr->initialize(root, stateRoot, restorePlayback); !res)
+    if (auto res = sessionPtr->initialize(root, stateRoot, restorePlayback, createProviders); !res)
     {
       return std::unexpected{res.error()};
     }
@@ -244,7 +245,8 @@ namespace ao::appkit
 
   Result<> LibrarySession::initialize(std::filesystem::path const& root,
                                       std::filesystem::path const& stateRoot,
-                                      bool restorePlayback)
+                                      bool restorePlayback,
+                                      AudioProviderFactory createProviders)
   {
     auto& storage = *_storagePtr;
     auto executorPtr = std::make_unique<MainRunLoopExecutor>();
@@ -281,7 +283,7 @@ namespace ao::appkit
     storage.librarySub =
       runtime.library().changes().onChanged([this](auto const& changeSet) { onLibraryChanged(changeSet); });
 
-    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    for (auto& providerPtr : createProviders())
     {
       runtime.addAudioProvider(std::move(providerPtr));
     }
@@ -316,16 +318,22 @@ namespace ao::appkit
       runtime.playback(),
       [this]
       {
-        if (auto const ids = selection(); !ids.empty())
+        auto& appRuntime = this->runtime();
+
+        if (auto res = appRuntime.playSelectionInFocusedView(); !res)
         {
-          play(ids.front());
+          appRuntime.notifications().post(
+            rt::NotificationSeverity::Error,
+            i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
+            rt::NotificationLifetime::history());
         }
-        else if (auto const& projectionPtr = _storagePtr->projectionPtr; projectionPtr && projectionPtr->size() > 0)
-        {
-          play(projectionPtr->trackIdAt(0));
-        }
+      },
+      uimodel::SystemMediaPlayHandler{
+        .canPlay = [this] { return canPlayFromRemoteCommand(); },
+        .play = [this] { return tryPlayFromRemoteCommand(); },
       });
 
+    storage.actionsPtr->bindFocusedSelection(runtime.workspace(), runtime.views());
     storage.mediaPlayerPtr =
       std::make_unique<MediaPlayerAdapter>(runtime.playback(), *storage.actionsPtr, runtime.resourceBytes());
 
@@ -749,11 +757,52 @@ namespace ao::appkit
 
   void LibrarySession::play(TrackId trackId)
   {
-    if (auto res = runtime().playback().commands().startFromView(_storagePtr->viewId, trackId); !res)
+    std::ignore = tryPlayFromView(_storagePtr->viewId, trackId);
+  }
+
+  TrackId LibrarySession::remotePlayTarget(rt::ViewId const viewId) const
+  {
+    auto& views = runtime().views();
+
+    // Remote Play alone supplies a default row, and only for an empty selection.
+    // Read the current view, not the browser binding, whose updates may still be queued.
+    if (!views.selectedTrackIds(viewId).empty())
+    {
+      return views.firstVisibleSelectedTrack(viewId);
+    }
+
+    if (auto const projectionRes = views.findTrackListProjection(viewId); projectionRes && (*projectionRes)->size() > 0)
+    {
+      return (*projectionRes)->trackIdAt(0);
+    }
+
+    return kInvalidTrackId;
+  }
+
+  bool LibrarySession::canPlayFromRemoteCommand() const
+  {
+    return remotePlayTarget(runtime().workspace().snapshot().activeViewId) != kInvalidTrackId;
+  }
+
+  bool LibrarySession::tryPlayFromRemoteCommand() const
+  {
+    auto const viewId = runtime().workspace().snapshot().activeViewId;
+    auto const trackId = remotePlayTarget(viewId);
+    return trackId != kInvalidTrackId && tryPlayFromView(viewId, trackId);
+  }
+
+  bool LibrarySession::tryPlayFromView(rt::ViewId viewId, TrackId trackId) const
+  {
+    if (auto res = runtime().playback().commands().startFromView(viewId, trackId); !res)
     {
       runtime().notifications().post(
-        rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
+        rt::NotificationSeverity::Error,
+        i18n::requiredFormat(catalog(), i18n::MessageId::PlaybackFailed, {{"detail", res.error().message}}),
+        rt::NotificationLifetime::history());
+      return false;
     }
+
+    return true;
   }
 
   void LibrarySession::execute(uimodel::PlaybackCommand command)

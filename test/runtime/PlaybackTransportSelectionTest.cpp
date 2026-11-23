@@ -25,6 +25,7 @@ namespace ao::rt::test
       fixture.playbackTransport.onRevealTrackRequested([&](auto const& ev) noexcept { revealRequests.push_back(ev); });
     fixture.playbackTransport.revealTrack(TrackId{42});
     REQUIRE(revealRequests.size() == 1);
+    CHECK_FALSE(revealRequests[0].fromPlaybackSource);
     CHECK(revealRequests[0].trackId == TrackId{42});
     CHECK(revealRequests[0].preferredListId == kInvalidListId);
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
@@ -69,6 +70,7 @@ namespace ao::rt::test
       [&](PlaybackTransport::RevealTrackRequested const& ev) noexcept { revealRequests.push_back(ev); });
     fixture.playbackTransport.revealPlayingTrack();
     REQUIRE(revealRequests.size() == 1);
+    CHECK(revealRequests[0].fromPlaybackSource);
     CHECK(revealRequests[0].trackId == kInvalidTrackId);
     CHECK(revealRequests[0].preferredListId == kInvalidListId);
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);

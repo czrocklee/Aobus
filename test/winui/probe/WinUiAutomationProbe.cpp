@@ -15,6 +15,7 @@
 #include "app/LibrarySession.h"
 #include "platform/NamedControl.h"
 #include "platform/ResourceLanguage.h"
+#include "platform/SmtcButton.h"
 #include "platform/WinRtStringResources.h"
 #include "test/media/wav/TestWav.h"
 #include <ao/CoreIds.h>
@@ -26,6 +27,7 @@
 #include <ao/async/Task.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/audio/Transport.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -58,12 +60,18 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
+#include <UIAutomationCore.h>
+#include <UIAutomationCoreApi.h>
 #include <commctrl.h>
 #include <microsoft.ui.xaml.window.h>
 #include <unicode/uchar.h>
@@ -81,6 +89,7 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.h>
+#include <winrt/Windows.Media.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 
 #include <algorithm>
@@ -130,6 +139,7 @@ namespace
             .profileId = ao::audio::kProfileShared};
   }
 
+  constexpr auto kPrimaryOffset = std::chrono::milliseconds{250};
   constexpr std::size_t kProbeTrackCount = 12;
   constexpr auto kComposerFilter = R"($composer = "Bach")";
   constexpr auto kAlphaFilter = R"($title = "Audit Alpha")";
@@ -394,8 +404,29 @@ namespace
     return nullptr;
   }
 
-  ao::Result<SeededLibrary> seedLibrary(std::filesystem::path const& root)
+  // --primary-play takes an absolute private PCM WAV (at least 1 second, <= 16 MiB).
+  // Only this opt-in scenario copies playable media into its disposable library.
+  ao::Result<SeededLibrary> seedLibrary(std::filesystem::path const& root,
+                                        std::optional<std::filesystem::path> const& optPrimaryFixture)
   {
+    if (optPrimaryFixture)
+    {
+      constexpr auto kMaximumFixtureBytes = std::uintmax_t{16U} * 1024U * 1024U;
+      auto const& path = *optPrimaryFixture;
+
+      if (!path.is_absolute() || path.extension() != L".wav" ||
+          !std::filesystem::is_regular_file(std::filesystem::symlink_status(path)) ||
+          std::filesystem::file_size(path) > kMaximumFixtureBytes)
+      {
+        return ao::makeError(
+          ao::Error::Code::InvalidInput, "--primary-play requires an absolute, regular private .wav, at most 16 MiB");
+      }
+
+      std::filesystem::create_directories(root);
+      std::filesystem::copy_file(path, root / "primary-0.wav");
+      std::filesystem::copy_file(root / "primary-0.wav", root / "primary-1.wav");
+    }
+
     auto const databasePath = ao::rt::LibraryPaths{root}.databasePath();
     std::filesystem::create_directories(databasePath);
     auto libraryRes = ao::library::MusicLibrary::open(root, databasePath);
@@ -414,7 +445,7 @@ namespace
 
     auto transaction = writableRes->writeTransaction();
     auto applyRes = transaction.apply(
-      [](ao::library::LibraryWrite& write) -> ao::Result<SeededLibrary>
+      [primaryPlay = optPrimaryFixture.has_value()](ao::library::LibraryWrite& write) -> ao::Result<SeededLibrary>
       {
         auto seed = SeededLibrary{};
 
@@ -433,11 +464,22 @@ namespace
             .composer(isNamedTrack ? "Bach" : "Debussy")
             .year(isNamedTrack ? std::uint16_t{2001} : std::uint16_t{2000})
             .trackNumber(static_cast<std::uint16_t>(index + 1));
-          // Only the selected fixture gets a physical file for the two rescan checks.
-          auto const uri = index == kRescanTrackIndex ? std::string{kRescanUri} : std::format("probe/{}.flac", title);
+
+          // Only the Play opt-in copies the Bach files; the ordinary audit writes the rescan target later.
+          auto uri = std::string{};
+
+          if (primaryPlay && isNamedTrack)
+          {
+            uri = std::format("primary-{}.wav", index);
+          }
+          else
+          {
+            uri = index == kRescanTrackIndex ? std::string{kRescanUri} : std::format("probe/{}.flac", title);
+          }
+
           builder.property().uri(uri);
 
-          if (index < kSelectionDurations.size())
+          if (!primaryPlay && index < kSelectionDurations.size())
           {
             builder.property().duration(kSelectionDurations.at(index));
           }
@@ -506,8 +548,12 @@ namespace
   public:
     WinUiAutomationProbe(std::int32_t& result,
                          std::optional<std::string_view> const optListPreviewLocale,
-                         bool const classicOutput)
-      : _result{result}, _optListPreviewLocale{optListPreviewLocale}, _classicOutput{classicOutput}
+                         bool const classicOutput,
+                         std::optional<std::filesystem::path> optPrimaryFixture)
+      : _result{result}
+      , _optListPreviewLocale{optListPreviewLocale}
+      , _classicOutput{classicOutput}
+      , _optPrimaryFixture{std::move(optPrimaryFixture)}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& args)
@@ -540,7 +586,7 @@ namespace
                  std::format("aobus-uia-audit-{}", std::chrono::steady_clock::now().time_since_epoch().count());
       auto const libraryRoot = _scratch / "library";
 
-      auto const seedRes = seedLibrary(libraryRoot);
+      auto const seedRes = seedLibrary(libraryRoot, _optPrimaryFixture);
 
       if (!seedRes)
       {
@@ -562,7 +608,7 @@ namespace
           ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false});
       };
 
-      if (!_optListPreviewLocale)
+      if (!_optListPreviewLocale && !_optPrimaryFixture)
       {
         // Save an exact, flat view distinct from both the pin and the All Tracks recommendation.
         // Reopen through the shipping session so binding the frame must not replace this restored spec.
@@ -618,7 +664,7 @@ namespace
 
       _sessionPtr = std::move(*sessionRes);
 
-      if (_optListPreviewLocale)
+      if (_optListPreviewLocale || _optPrimaryFixture)
       {
         ao::winui::test::addSilentAudioOutput(_sessionPtr->runtime());
       }
@@ -661,7 +707,12 @@ namespace
                              {
                                _loaded.revoke();
 
-                               if (_classicOutput)
+                               if (_optPrimaryFixture)
+                               {
+                                 _window.AppWindow().ResizeClient(clientPixels(1200, 800));
+                                 afterFrame(&WinUiAutomationProbe::startPrimaryPlay);
+                               }
+                               else if (_classicOutput)
                                {
                                  afterFrame(&WinUiAutomationProbe::openPendingOutputPicker);
                                }
@@ -673,7 +724,7 @@ namespace
                              });
       _window.Activate();
       // Only the separate Classic mode activates frame-owned playback adapters (including SMTC).
-      // Its private library has no audio files; the probe never issues a playback command.
+      // Its private library has no audio files; that mode never issues a playback command.
       if (_classicOutput)
       {
         if (_sessionPtr->runtime().playback().snapshot().transport.output.optPendingOutputSelection != missingOutput())
@@ -1063,6 +1114,9 @@ namespace
         return;
       }
 
+      auto const play = findVisualById<Button>(_root, L"modern-soul");
+      check(play && play.IsEnabled(), "the primary transport must accept the existing row selection");
+
       // Choose actual native items. Their SelectionChanged handler publishes
       // through the shipping controller; this is not physical pointer/keyboard input.
       rows.SelectedItem(rows.ItemFromContainer(alpha));
@@ -1078,7 +1132,237 @@ namespace
       rows.SelectedItems().Clear();
       check(activeState().selection.empty(), "the runtime did not receive the native clear");
       checkSelectionSummary("native clear", "");
+      check(play && !play.IsEnabled(), "a ready output and visible rows alone must not enable primary Play");
       rows.SelectedItem(rows.ItemFromContainer(alpha));
+      check(play && play.IsEnabled(), "a fresh native selection must re-enable primary Play");
+    }
+
+    bool tryCheckPrimary(bool condition, std::string_view message)
+    {
+      if (!condition)
+      {
+        fail(message);
+        finish();
+      }
+
+      return condition;
+    }
+
+    bool tryCheckDiscardRoute()
+    {
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+      auto const device = ao::winui::test::silentAudioDevice();
+      auto const discard = ao::audio::OutputDeviceSelection{
+        .backendId = device.backendId, .deviceId = device.id, .profileId = ao::audio::kProfileShared};
+      return tryCheckPrimary(
+        transport.ready && !transport.output.optPendingOutputSelection && transport.output.selectedDevice == discard,
+        "refusing playback without the fixed, ready discard-only endpoint");
+    }
+
+    void invokePrimary(Step next)
+    {
+      auto const play = findVisualById<Button>(_root, L"modern-soul");
+
+      if (tryCheckDiscardRoute() &&
+          tryCheckPrimary(play && play.IsEnabled(), "the primary transport must be invokable"))
+      {
+        invoke(play);
+        afterFrame(next);
+      }
+    }
+
+    bool tryAwaitPrimaryTransport(ao::audio::Transport expected, Step retry)
+    {
+      if (!tryCheckDiscardRoute())
+      {
+        return false;
+      }
+
+      auto const observed = _sessionPtr->runtime().playback().snapshot().transport.transport;
+
+      if (!tryCheckPrimary(observed != ao::audio::Transport::Error, "playback failed on the private WAV fixture"))
+      {
+        return false;
+      }
+
+      if (observed != expected)
+      {
+        afterFrame(retry);
+        return false;
+      }
+
+      return true;
+    }
+
+    bool tryCheckSmtcPlay()
+    {
+      _stage = "SMTC Play with no selected row";
+      using SmtcButton = winrt::Windows::Media::SystemMediaTransportControlsButton;
+      auto& runtime = _sessionPtr->runtime();
+      std::int32_t primaryStarts = 0;
+      std::int32_t systemStarts = 0;
+
+      {
+        // Only the system-media origin admits a fallback without a selection.
+        // Drop the borrower before an assertion can shut down the session.
+        auto actions = ao::uimodel::PlaybackActions{
+          runtime.playback(),
+          [&primaryStarts] { ++primaryStarts; },
+          ao::uimodel::SystemMediaPlayHandler{.play =
+                                                [&systemStarts]
+                                              {
+                                                ++systemStarts;
+                                                return true;
+                                              }},
+        };
+        ao::winui::dispatchSmtcButton(SmtcButton::Play, actions);
+      }
+
+      if (!tryCheckPrimary(primaryStarts == 0 && systemStarts == 1,
+                           "the native Play button must dispatch with the system-media origin"))
+      {
+        return false;
+      }
+
+      auto const notificationsBefore = runtime.notifications().feed();
+      ao::winui::dispatchSmtcButton(SmtcButton::Play, _sessionPtr->playbackActions());
+      return tryCheckPrimary(runtime.notifications().feed().entries == notificationsBefore.entries,
+                             "SMTC Play without a target must not report a launch error");
+    }
+
+    void startPrimaryPlay()
+    {
+      _stage = "primary Play with visible rows but no selection";
+      auto& runtime = _sessionPtr->runtime();
+      auto const view = runtime.workspace().snapshot().activeViewId;
+      auto const play = findVisualById<Button>(_root, L"modern-soul");
+      auto const projectionRes = runtime.views().findTrackListProjection(view);
+      auto const& idle = runtime.playback().snapshot().transport;
+      _primaryOccurrence = idle.occurrenceId;
+
+      if (!tryCheckDiscardRoute() ||
+          !tryCheckPrimary(idle.transport == ao::audio::Transport::Idle &&
+                             idle.nowPlaying.trackId == ao::kInvalidTrackId &&
+                             activeState().listId == ao::rt::kAllTracksListId && projectionRes &&
+                             (*projectionRes)->indexOf(_seed.summaryTracks.front()) &&
+                             (*projectionRes)->indexOf(_seed.summaryTracks.at(1)) &&
+                             runtime.views().setSelection(view, {}) && play && !play.IsEnabled(),
+                           "an unselected, nonempty source List must disable Play") ||
+          !tryCheckSmtcPlay())
+      {
+        return;
+      }
+
+      _stage = "primary Play with visible rows but no selection";
+
+      try
+      {
+        invoke(play);
+      }
+      catch (winrt::hresult_error const& error)
+      {
+        auto const code = static_cast<std::uint32_t>(error.code().value);
+
+        if (!tryCheckPrimary(code == UIA_E_ELEMENTNOTENABLED || code == UIA_E_ELEMENTNOTAVAILABLE,
+                             "unexpected error invoking disabled primary Play"))
+        {
+          return;
+        }
+      }
+
+      afterFrame(&WinUiAutomationProbe::selectPrimarySource);
+    }
+
+    void selectPrimarySource()
+    {
+      auto& runtime = _sessionPtr->runtime();
+      auto const view = runtime.workspace().snapshot().activeViewId;
+      auto const& idle = runtime.playback().snapshot().transport;
+      auto const play = findVisualById<Button>(_root, L"modern-soul");
+
+      if (auto const trackA = _seed.summaryTracks.front();
+          tryCheckPrimary(play && !play.IsEnabled() && idle.transport == ao::audio::Transport::Idle &&
+                            idle.nowPlaying.trackId == ao::kInvalidTrackId && idle.occurrenceId == _primaryOccurrence &&
+                            activeState().selection.empty() && runtime.views().setSelection(view, {trackA}) &&
+                            runtime.views().firstVisibleSelectedTrack(view) == trackA,
+                          "untargeted SMTC and disabled primary Play must leave the subject empty before selecting A"))
+      {
+        invokePrimary(&WinUiAutomationProbe::pausePrimaryPlay);
+      }
+    }
+
+    void pausePrimaryPlay()
+    {
+      _stage = "fresh primary Play of A";
+
+      if (!tryAwaitPrimaryTransport(ao::audio::Transport::Playing, &WinUiAutomationProbe::pausePrimaryPlay))
+      {
+        return;
+      }
+
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+      _primaryOccurrence = transport.occurrenceId;
+
+      if (tryCheckPrimary(transport.nowPlaying.trackId == _seed.summaryTracks.front() &&
+                            _primaryOccurrence.value != 0 && transport.duration >= std::chrono::seconds{1},
+                          "fresh Play must start selected A with at least one second of decodable audio"))
+      {
+        invokePrimary(&WinUiAutomationProbe::browseDuringPause);
+      }
+    }
+
+    void browseDuringPause()
+    {
+      _stage = "pause A and navigate to the second List";
+
+      if (!tryAwaitPrimaryTransport(ao::audio::Transport::Paused, &WinUiAutomationProbe::browseDuringPause))
+      {
+        return;
+      }
+
+      if (tryCheckPrimary(_sessionPtr->runtime().playback().commands().trySeek(_primaryOccurrence, kPrimaryOffset),
+                          "could not seek paused A"))
+      {
+        selectSidebarList(L"Bach", &WinUiAutomationProbe::resumeFromOtherList);
+      }
+    }
+
+    void resumeFromOtherList()
+    {
+      _stage = "primary Play while browsing B";
+      auto& runtime = _sessionPtr->runtime();
+      auto const view = runtime.workspace().snapshot().activeViewId;
+      auto const trackB = _seed.summaryTracks.at(1);
+      auto const& transport = runtime.playback().snapshot().transport;
+
+      if (tryCheckPrimary(activeState().listId == _seed.composerListId &&
+                            runtime.views().setSelection(view, {trackB}) &&
+                            runtime.views().firstVisibleSelectedTrack(view) == trackB &&
+                            transport.transport == ao::audio::Transport::Paused &&
+                            transport.occurrenceId == _primaryOccurrence && transport.elapsed == kPrimaryOffset,
+                          "the second List must select B while A remains paused at the seek offset"))
+      {
+        invokePrimary(&WinUiAutomationProbe::primaryPlayResumed);
+      }
+    }
+
+    void primaryPlayResumed()
+    {
+      _stage = "verify A resumed without a restart";
+
+      if (!tryAwaitPrimaryTransport(ao::audio::Transport::Playing, &WinUiAutomationProbe::primaryPlayResumed))
+      {
+        return;
+      }
+
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+      check(transport.nowPlaying.trackId == _seed.summaryTracks.front() &&
+              transport.occurrenceId == _primaryOccurrence && transport.elapsed == kPrimaryOffset,
+            "Play from the second List must resume the original occurrence and exact offset");
+      check(activeState().listId == _seed.composerListId &&
+              activeState().selection == std::vector{_seed.summaryTracks.at(1)},
+            "resuming A must leave B selected in the second List");
+      finish();
     }
 
     void openPendingOutputPicker()
@@ -1154,6 +1438,18 @@ namespace
 
       if (_classicOutput)
       {
+        auto& views = _sessionPtr->runtime().views();
+        check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.front()})),
+              "could not select a Classic track");
+        auto const play = findVisualById<Button>(_root, L"classic-play-pause");
+        auto const menu =
+          findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_playback"));
+        auto const playItem = menu ? findMenuItem(menu.Items(), L"winui_shell_play_pause") : nullptr;
+        check(play && play.IsEnabled() && playItem && playItem.IsEnabled(),
+              "Classic primary Play must accept the selected row");
+        check(static_cast<bool>(views.setSelection(_allTracksViewId, {})), "could not clear the Classic selection");
+        check(play && !play.IsEnabled() && playItem && !playItem.IsEnabled(),
+              "Classic primary Play must disable when the selection clears");
         finish();
       }
       else
@@ -2499,6 +2795,8 @@ namespace
     std::int32_t& _result;
     std::optional<std::string_view> const _optListPreviewLocale;
     bool const _classicOutput;
+    std::optional<std::filesystem::path> const _optPrimaryFixture;
+    ao::rt::PlaybackOccurrenceId _primaryOccurrence{};
     std::size_t _failures = 0;
     bool _finished = false;
     bool _grouped = false;
@@ -2564,8 +2862,14 @@ int main(int argc, char** argv)
   auto optListPreviewLocale = std::optional<std::string_view>{};
 
   auto const classicOutput = argc == 2 && std::string_view{argv[1]} == "--classic-output";
+  auto optPrimaryFixture = std::optional<std::filesystem::path>{};
 
-  if (argc != 1 && !classicOutput)
+  if (argc == 3 && std::string_view{argv[1]} == "--primary-play")
+  {
+    optPrimaryFixture = ao::utility::pathFromUtf8(argv[2]);
+  }
+
+  if (argc != 1 && !classicOutput && !optPrimaryFixture)
   {
     if (argc == 3 && std::string_view{argv[1]} == "--list-preview")
     {
@@ -2578,8 +2882,10 @@ int main(int argc, char** argv)
 
     if (!optListPreviewLocale)
     {
-      std::cerr << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale>]\n"
-                   "The optional mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
+      std::cerr
+        << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale> | "
+           "--primary-play <absolute private .wav>]\n"
+           "The List preview mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
       return 2;
     }
   }
@@ -2596,8 +2902,10 @@ int main(int argc, char** argv)
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
     Application::Start(
-      [&result, optListPreviewLocale, classicOutput](auto&&)
-      { std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale, classicOutput); });
+      [&result, optListPreviewLocale, classicOutput, optPrimaryFixture](auto&&)
+      {
+        std::ignore = winrt::make<WinUiAutomationProbe>(result, optListPreviewLocale, classicOutput, optPrimaryFixture);
+      });
     return result;
   }
   catch (winrt::hresult_error const& error)

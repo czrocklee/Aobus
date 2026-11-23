@@ -250,6 +250,8 @@ zh_Hans:table {
     notification_grouped_info { "{count, plural, one {# 条通知} other {# 条通知}}" }
     notification_grouped_warning { "{count, plural, one {# 条警告} other {# 条警告}}" }
     notification_grouped_error { "{count, plural, one {# 个错误} other {# 个错误}}" }
+    navigation_failed { "导航失败：{detail}" }
+    playback_failed { "播放失败：{detail}" }
     library_busy_try_again { "音乐库正忙。请重试。" }
     library_task_scanning { "扫描中" }
     library_task_updating { "更新中" }
@@ -827,10 +829,8 @@ zh_Hans:table {
     winui_activity_notifications { "通知" }
     winui_activity_hide_notification { "在状态栏中隐藏此通知" }
     winui_library_ready_at { "音乐库就绪：{root}" }
-    winui_navigation_failed { "导航失败：{detail}" }
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "视图加载失败：{detail}" }
-    winui_playback_failed { "播放失败：{detail}" }
     winui_column_resize_failed { "调整列宽失败：{detail}" }
     winui_column_settings_failed { "列设置失败：{detail}" }
     winui_column_move_failed { "移动列失败：{detail}" }

@@ -21,6 +21,8 @@ namespace ao::rt
     TrackId trackId = kInvalidTrackId;
     ViewId preferredViewId = kInvalidViewId;
     ListId preferredListId = kInvalidListId;
+    // A playing-track command follows source membership; explicit view reveals keep their target.
+    bool fromPlaybackSource = false;
   };
 
   /**

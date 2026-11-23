@@ -114,6 +114,7 @@ namespace ao::gtk::layout::test
                 .buildSnapshot = activateBuildSnapshot(session)}
       , layoutRuntime{components}
     {
+      playbackActions.bindFocusedSelection(runtimePtr->workspace(), runtimePtr->views());
       LayoutRuntime::registerStandardComponents(
         components,
         *runtimePtr,

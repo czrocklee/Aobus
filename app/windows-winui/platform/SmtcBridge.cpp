@@ -3,6 +3,7 @@
 
 #include "platform/SmtcBridge.h"
 
+#include "platform/SmtcButton.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -70,6 +71,15 @@ namespace ao::winui
       }
     }
   } // namespace
+
+  void dispatchSmtcButton(winrt::Windows::Media::SystemMediaTransportControlsButton const button,
+                          uimodel::PlaybackActions& actions)
+  {
+    if (auto const optCommand = commandForButton(button); optCommand)
+    {
+      actions.tryExecute(*optCommand, uimodel::PlaybackActionOrigin::SystemMedia);
+    }
+  }
 
   struct SmtcBridge::State final
   {
@@ -142,21 +152,14 @@ namespace ao::winui
       [weakStatePtr](winrt::Windows::Media::SystemMediaTransportControls const&,
                      winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
       {
-        auto const optCommand = commandForButton(args.Button());
-
-        if (!optCommand)
-        {
-          return;
-        }
-
         if (auto statePtr = weakStatePtr.lock(); statePtr)
         {
           statePtr->dispatcher.TryEnqueue(
-            [weakStatePtr, command = *optCommand]
+            [weakStatePtr, button = args.Button()]
             {
               if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
               {
-                statePtr->actions->tryExecute(command);
+                dispatchSmtcButton(button, *statePtr->actions);
               }
             });
         }

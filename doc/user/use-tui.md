@@ -28,7 +28,8 @@ aobus -C /music init
    ```
 
 2. Move through tracks with Up/Down, PageUp/PageDown, Home, and End. The shipped `j`/`k` shortcuts also move one row.
-3. Press Enter to play the focused track. Use Space to pause or resume, `s` to stop, `[`/`]` to seek, `-`/`+` to change volume, and `<`/`>` for the previous or next playback track.
+3. Press Enter to start playback from the focused track. Space pauses or resumes the current track even if you move the cursor. With nothing to resume, Space starts a sequence from the cursor only if it is on a track.
+   Use `s` to stop, `[`/`]` to seek, `-`/`+` to change volume, and `<`/`>` for the previous or next playback track.
 4. Press `l` to focus pinned Lists or open the List chooser. Press uppercase `L` to pin or unpin the Lists pane. Use `p` for presentations.
 5. Press `?` or F1 for the effective shortcut list. Shortcuts can be changed, so Help is the authority for the current session.
 
@@ -103,6 +104,8 @@ Use these shipped shortcuts:
 | `n`           | notifications                                            |
 | `g`           | Go to current track, artist, album, or workspace history |
 | `c`           | reveal the playing track directly                        |
+
+Press `c` to return to the playing track in the List where playback started, or **All Tracks** if it no longer belongs to that List. If reveal changes views, run `:back` once to return with your filter intact.
 
 On Linux, press `o` to choose a named PipeWire device. When you reopen **Output Devices**, the picker highlights the current device if it is listed. If your requested device is unavailable and awaiting discovery, no row is highlighted, so pressing Enter alone does nothing.
 

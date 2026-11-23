@@ -135,11 +135,12 @@ namespace winrt::Aobus::implementation
           return;
         }
 
-        if (auto const revealedRes =
-              self->_trackListPtr->revealTrack(request.trackId, request.preferredViewId, request.preferredListId);
-            !revealedRes)
+        if (auto const revealedRes = self->_trackListPtr->revealTrack(request); !revealedRes && self->_session)
         {
-          self->updateStatus(ao::winui::formatResource("winui_error", revealedRes.error().message));
+          auto const message = ao::winui::formatResource("navigation_failed", revealedRes.error().message);
+          self->_session->runtime().notifications().post(
+            ao::rt::NotificationSeverity::Error, message, ao::rt::NotificationLifetime::history());
+          self->updateStatus(message);
         }
       });
 
@@ -369,7 +370,7 @@ namespace winrt::Aobus::implementation
 
     if (!navigatedRes)
     {
-      updateStatus(ao::winui::formatResource("winui_navigation_failed", navigatedRes.error().message));
+      updateStatus(ao::winui::formatResource("navigation_failed", navigatedRes.error().message));
     }
   }
 

@@ -19,7 +19,7 @@ Its public boundary is `WorkspaceService.h`, `WorkspaceSnapshot.h`, `NavigationH
 
 `WorkspaceService` depends on `ViewService`, committed `LibraryChanges`, presentation values, and the runtime callback executor.
 It does not depend on playback.
-`AppRuntime::jumpToAlbum()` owns the one current command that composes workspace navigation with playback reveal.
+GTK, TUI, and WinUI pass the track and source List from a playback reveal request into workspace navigation. [Album reveal](#reveal-an-album) instead names an explicit destination view.
 
 ## Terminology
 
@@ -63,10 +63,10 @@ Invalid input and preparation failure use `Result` errors.
 
 `navigate(request)` resolves and prepares the request's target before changing the aggregate.
 
-- A plain `ListId` reuses an existing live, unfiltered view for that list when one exists.
+- A plain `ListId` reuses a live, unfiltered view already open in the workspace for that list when one exists.
 - A plain list without a reusable view creates a view with an empty filter.
 - A filtered-list target creates a distinct view from its explicit list and filter.
-- `GlobalViewKind::AllTracks` resolves to the All Tracks virtual list; unsupported global values return `InvalidInput`.
+- `GlobalViewKind::AllTracks` uses the same plain navigation rules for the All Tracks virtual list; unsupported global values return `InvalidInput`.
 
 `WorkspaceService` is the sole authority for the reuse-or-create decision.
 Presentation intent follows this matrix:
@@ -84,6 +84,20 @@ The command then prepares the next open set, focus, and history candidate and co
 Navigation returns the resulting active `ViewId`.
 Repeating navigation to the already-active equivalent point returns that same id without advancing revision or publishing.
 A missing list, source, or failed presentation update returns the lower recoverable error without changing snapshot or history.
+
+### Navigate to the playback source
+
+`navigateToTrackSource` resolves **List membership before view visibility**. It uses the supplied source List if it still contains the track, even if another List on screen also contains it. An explicit All Tracks source, an unspecified source (`kInvalidListId`), a missing source List, or a source List that no longer contains the track resolves to All Tracks. If the All Tracks lookup does not find the track, the command returns `NotFound`.
+
+A saved List whose filter cannot be evaluated is not a List that merely lacks the track. For example, an invalid inherited filter returns `FormatRejected` rather than falling back to All Tracks. Other lookup errors likewise propagate without changing the workspace or its history.
+
+If the active view belongs to the resolved List and shows the track, navigation returns that view without publishing or recording history.
+Otherwise, navigation focuses a live, unfiltered view already open for the resolved List or opens a new view with no quick filter.
+An inactive filtered view is not reused, even if it shows the track.
+Navigation leaves existing quick filters and the saved List unchanged.
+Only a newly opened view consults the host's presentation default.
+
+On a view change, workspace commits the live departure point and destination together. One Back restores the departing filter and presentation even if they changed after the last history entry. The returned view identifies where the host should select and scroll; navigation itself does not select a row or start playback.
 
 ### Focus an open view
 
@@ -108,7 +122,7 @@ Reapplying an identical presentation and history point succeeds without publicat
 ### Traverse history
 
 `goBack()` and `goForward()` copy the history candidate and move only that candidate cursor.
-Replay finds a live view matching list and filter or creates a replacement, restores the exact presentation, prepares the next open/focused snapshot, and commits snapshot plus cursor once.
+Replay reuses a live view already open in the workspace that matches list and filter or creates a replacement. It restores the exact presentation, prepares the next open/focused snapshot, and commits snapshot plus cursor once.
 Replay never appends a history point.
 
 `canGoBack()` and `canGoForward()` expose the current cursor boundaries without duplicating history state.
@@ -138,8 +152,7 @@ Stable preset identity and versioned persistence remain owned by the presentatio
 
 Album reveal is not a `WorkspaceService` command.
 `AppRuntime::jumpToAlbum(trackId)` rejects the invalid track id, navigates to All Tracks with an explicit `Override` carrying the built-in albums presentation, and submits playback reveal for the returned active view.
-The command returns empty success after submitting reveal.
-Workspace navigation remains committed if a future reveal boundary gains a separate asynchronous failure after submission.
+Success acknowledges submission, not a host having scrolled the row into view. The navigation is already committed when the host receives the reveal request.
 
 ## Preparation and commit
 
@@ -148,6 +161,7 @@ View creation and presentation updates complete before the no-fail aggregate swa
 `ViewService::createView()` itself publishes no creation signal, so a synchronously prepared view is not exposed as a partial workspace aggregate.
 
 Session restore creates every view first and destroys all created candidates if a later creation fails.
+Navigation and history replay reuse only views from the committed open set, so a destruction observer cannot adopt another candidate still being rolled back.
 Successful restore installs all ids, focus, presets, and one revision together.
 The implementation deliberately does not add a generic transaction object, detached candidate lease, command generation, or asynchronous command state machine.
 
@@ -184,7 +198,7 @@ The [workspace session specification](session.md) owns capture and restore, and 
 ## Test map
 
 - [`NavigationHistoryTest.cpp`](../../../test/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
-- [`WorkspaceNavigationTest.cpp`](../../../test/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion and reset batching, and album reveal.
+- [`WorkspaceNavigationTest.cpp`](../../../test/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion and reset batching, source-first navigation, and album reveal.
 - [`WorkspaceHistoryTest.cpp`](../../../test/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay and boundary availability.
 - [`WorkspacePresentationTest.cpp`](../../../test/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
 - [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.

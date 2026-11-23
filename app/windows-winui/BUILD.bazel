@@ -319,8 +319,8 @@ cc_library(
     ],
 )
 
-# The frame owns this adapter by value. Its C++/WinRT projections and native
-# media bridge stay implementation-only.
+# The frame owns this adapter by value. The SMTC event subscription stays
+# private; button dispatch is shared with the native playback probe.
 cc_library(
     name = "main_window_playback",
     srcs = [
@@ -328,7 +328,10 @@ cc_library(
         "platform/SmtcBridge.h",
         "playback/MainWindowPlayback.cpp",
     ],
-    hdrs = ["playback/MainWindowPlayback.h"],
+    hdrs = [
+        "platform/SmtcButton.h",
+        "playback/MainWindowPlayback.h",
+    ],
     copts = MSVC_WINUI_COPTS,
     implementation_deps = [
         ":error_boundary",
@@ -495,6 +498,7 @@ cc_library(
         "platform/NativeWindow.h",
         "platform/ScopedBooleanFlag.h",
         "platform/SmtcBridge.h",
+        "platform/SmtcButton.h",
         "playback/MainWindowPlayback.h",
         "playback/OutputDeviceControl.h",
         "theme/ThemeCoordinator.h",
@@ -713,6 +717,7 @@ winui_probe(
     ],
     linkopts = ["comctl32.lib"],
     deps = [
+        ":main_window_playback",
         ":named_control",
         "//app/i18n",
         "//app/i18n:completion",

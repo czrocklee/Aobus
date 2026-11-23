@@ -35,7 +35,15 @@ namespace ao::appkit::test
   class SessionFixture final
   {
   public:
-    SessionFixture(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
+    enum class AudioOutput : std::uint8_t
+    {
+      Silent,
+      CoreAudio,
+    };
+
+    SessionFixture(std::filesystem::path const& musicRoot,
+                   std::filesystem::path const& stateRoot,
+                   AudioOutput output = AudioOutput::CoreAudio);
     ~SessionFixture();
     SessionFixture(SessionFixture const&) = delete;
     SessionFixture& operator=(SessionFixture const&) = delete;

@@ -6,11 +6,14 @@
 #include "app/macos-appkit/LibraryEditorModel.h"
 #include "app/macos-appkit/MediaPlayerAdapter.h"
 #include <ao/Contract.h>
+#include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
@@ -27,6 +30,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <memory>
 #include <string>
@@ -186,6 +190,125 @@ namespace ao::appkit::test
                     MediaRemoteCommandStatus::CommandFailed);
       AO_INVARIANT(media.diagnostics().admittedCommandCount == before.admittedCommandCount,
                    "Rejected media commands must not enqueue work");
+    }
+
+    void exerciseEmptySelectionPlay(LibrarySession& session)
+    {
+      auto& playback = session.runtime().playback();
+      requireWaitUntil(
+        [&]
+        {
+          auto const& transport = playback.snapshot().transport;
+          return transport.ready && !transport.output.optPendingOutputSelection;
+        },
+        "The idle Play fixture must have a ready output");
+      auto const* firstRow = session.rowAt(0);
+      AO_INVARIANT(firstRow != nullptr && session.selection().empty(),
+                   "The idle Play fixture must have projected rows but no selection");
+      auto const firstId = firstRow->id;
+      auto const& before = playback.snapshot().transport;
+      AO_INVARIANT(before.transport == audio::Transport::Idle && !before.hasDeferredResume &&
+                     before.nowPlaying.trackId == kInvalidTrackId,
+                   "Only a new start may satisfy the idle Play fixture");
+      AO_INVARIANT(!session.state().transport[static_cast<std::size_t>(uimodel::PlaybackCommand::PlayPause)].enabled,
+                   "The primary Play control must be disabled without a selected row");
+      session.execute(uimodel::PlaybackCommand::PlayPause);
+      drainMediaCallbacks();
+      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId,
+                   "Primary Play must not start an unselected row");
+
+      executeRemote(session, {.command = MediaRemoteCommand::Play});
+      waitForTransport(session, audio::Transport::Playing);
+      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == firstId && session.selection().empty(),
+                   "Remote Play must start the first projected row without changing selection");
+    }
+
+    void exerciseFilteredRemotePlay(LibrarySession& session)
+    {
+      auto& runtime = session.runtime();
+      auto& playback = runtime.playback();
+      auto const viewId = runtime.workspace().snapshot().activeViewId;
+      AO_INVARIANT(session.displayIndex().rowCount() >= 4, "Filtered Play requires four distinct fixture tracks");
+      auto const firstId = session.rowAt(0)->id;
+      auto const* hiddenRow = session.rowAt(1);
+      auto const hiddenId = hiddenRow->id;
+      auto const filter = std::format("$title != \"{}\"", hiddenRow->title);
+      auto const selectedId = session.rowAt(2)->id;
+      auto const stagedId = session.rowAt(3)->id;
+      session.select({hiddenId, selectedId, firstId});
+
+      bool delivered = false;
+      runtime.async().callbackExecutor().defer(
+        [&]
+        {
+          auto const filterRes = runtime.views().setFilter(viewId, filter);
+          AO_INVARIANT(filterRes && session.displayIndexOf(hiddenId),
+                       "The runtime filter must commit before the browser receives the projection update");
+          // Keep a valid start pending while the remote turn runs. Trying any row instead of doing nothing
+          // would supersede it, even if the runtime rejects an attempted start of the hidden row.
+          auto const startRes = playback.commands().startFromView(viewId, stagedId);
+          AO_INVARIANT(startRes, "The control start must be admitted before the remote command");
+          auto& media = session.mediaPlayer();
+          auto const before = media.diagnostics();
+          requireStatus(
+            media.remoteCommandHandler(), {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::Success);
+          session.select({hiddenId});
+          drainMediaCallbacks();
+          AO_INVARIANT(media.diagnostics().settledCommandCount == before.settledCommandCount + 1 &&
+                         media.diagnostics().handledCommandCount == before.handledCommandCount &&
+                         session.displayIndexOf(hiddenId) &&
+                         playback.snapshot().transport.transport == audio::Transport::Idle,
+                       "Remote Play must decline at delivery time when the selection is hidden");
+          delivered = true;
+        });
+      requireWaitUntil([&] { return delivered && !session.displayIndexOf(hiddenId); },
+                       "The filtered projection must reach the browser after remote delivery");
+      waitForTransport(session, audio::Transport::Playing);
+      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == stagedId,
+                   "Remote Play must leave the pending start alone when the delivery-time selection is hidden");
+      executeRemote(session, {.command = MediaRemoteCommand::Stop});
+      waitForTransport(session, audio::Transport::Idle);
+
+      auto& media = session.mediaPlayer();
+      auto const handler = media.remoteCommandHandler();
+      AO_INVARIANT(
+        !media.isCommandAvailable(MediaRemoteCommand::Play) && !media.isCommandAvailable(MediaRemoteCommand::PlayPause),
+        "Remote Play and PlayPause must be unavailable when every selected track is filtered out");
+      requireNativeCommandAvailability(media);
+      requireStatus(
+        handler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+      requireStatus(
+        handler, {.command = MediaRemoteCommand::PlayPause}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+
+      session.select({hiddenId, selectedId, firstId});
+      AO_INVARIANT(media.isCommandAvailable(MediaRemoteCommand::Play),
+                   "Remote Play must re-enable when a selected track is visible");
+      requireNativeCommandAvailability(media);
+      executeRemote(session, {.command = MediaRemoteCommand::Play});
+      waitForTransport(session, audio::Transport::Playing);
+      AO_INVARIANT(playback.snapshot().transport.nowPlaying.trackId == selectedId,
+                   "Remote Play must use the first projected selection in selection order");
+      executeRemote(session, {.command = MediaRemoteCommand::Stop});
+      waitForTransport(session, audio::Transport::Idle);
+      session.select({});
+      auto const emptyRes = runtime.views().setFilter(viewId, R"($title = "Missing Track")");
+      AO_INVARIANT(emptyRes);
+      requireWaitUntil([&] { return session.displayIndex().rowCount() == 0; },
+                       "The empty-projection filter must settle before checking remote availability");
+      AO_INVARIANT(
+        !media.isCommandAvailable(MediaRemoteCommand::Play) && !media.isCommandAvailable(MediaRemoteCommand::PlayPause),
+        "Remote Play and PlayPause must be unavailable when the projection is empty");
+      requireNativeCommandAvailability(media);
+      requireStatus(
+        handler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+
+      auto const clearRes = runtime.views().setFilter(viewId, "");
+      AO_INVARIANT(clearRes);
+      requireWaitUntil([&] { return session.displayIndexOf(hiddenId).has_value(); },
+                       "The rest of the media scenario must use the unfiltered fixture");
+      AO_INVARIANT(media.isCommandAvailable(MediaRemoteCommand::Play),
+                   "Clearing an empty filter must restore remote Play availability");
+      requireNativeCommandAvailability(media);
     }
 
     void exerciseMetadata(LibrarySession& session)
@@ -593,16 +716,16 @@ namespace ao::appkit::test
       requireWaitUntil([&] { return session.displayIndex().displayCount() == session.displayIndex().rowCount(); },
                        "The media sequence fixture must settle into its explicit flat presentation");
       exerciseIdle(session.mediaPlayer());
-      session.play(session.rowAt(0)->id);
-      waitForTransport(session, audio::Transport::Playing);
       [window orderOut:nil];
       AO_INVARIANT(window.visible == NO, "Media commands must work with the application window hidden");
+      exerciseEmptySelectionPlay(session);
       exerciseMetadata(session);
       exerciseForeignPause(session);
       exerciseTransport(session);
       exerciseConsecutiveNext(session);
       exerciseBackloggedSeek(session, session.mediaPlayer(), false);
       exerciseSeek(session);
+      exerciseFilteredRemotePlay(session);
       exerciseCommandAvailability(session);
       retiredHandler = exerciseRetirement(session);
       exerciseNowPlayingClock(session, window);
@@ -611,7 +734,8 @@ namespace ao::appkit::test
     requireStatus(retiredHandler, {.command = MediaRemoteCommand::Play}, MediaRemoteCommandStatus::CommandFailed);
     drainMediaCallbacks();
     [window close];
-    APP_LOG_INFO("MEDIA PLAYER PASS: metadata, hidden-window commands, stale seeks, and retirement");
+    APP_LOG_INFO(
+      "MEDIA PLAYER PASS: metadata, hidden-window commands, Play origins and targets, stale seeks, and retirement");
     return 0;
   }
 } // namespace ao::appkit::test

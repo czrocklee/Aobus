@@ -15,6 +15,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 
 #include <chrono>
 #include <cstdint>
@@ -96,12 +97,7 @@ namespace ao::rt
       SeekMode mode = SeekMode::Final;
     };
 
-    struct RevealTrackRequested final
-    {
-      TrackId trackId = kInvalidTrackId;
-      ListId preferredListId = kInvalidListId;
-      ViewId preferredViewId = kInvalidViewId;
-    };
+    using RevealTrackRequested = PlaybackRevealTrackRequest;
 
     struct PlaybackRequest final
     {
@@ -134,6 +130,7 @@ namespace ao::rt
     // turn. Like every public method below, must be called on the executor's
     // owning thread (see the affinity note above the subscription methods).
     PlaybackState const& state() const;
+    bool hasDeferredResume() const;
     std::chrono::milliseconds elapsed() const;
 
     // Subscription registration is part of the executor-affinity contract: these

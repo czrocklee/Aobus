@@ -18,10 +18,16 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
 1. Open a list or library view and select the track where playback should begin.
 2. Press Enter or activate the row to start a sequence from that view.
 3. Use the transport controls for play/pause, previous, next, shuffle, and repeat.
+   Play in the window or from system media controls continues a paused or restored track even if you have selected another row. With no track to resume, Play starts the first selected track that matches the current filter; it does not choose an unselected row.
    The default application shortcuts include Ctrl+P for play/pause, Ctrl+Left and Ctrl+Right for previous and next, Ctrl+U for shuffle, and Ctrl+R for repeat.
 4. Drag or click the seek control to change position.
 5. Use the volume button for precision control, scroll over it for two-percentage-point changes, or middle-click it to toggle mute.
 6. Open **Edit → Preferences... → Playback/Output** to choose an output device.
+
+### Reveal the current track in GTK
+
+Press Ctrl+L to select the playing track in the List where playback started, even if the track also appears in the List you're browsing. If a quick filter hides it there, Aobus shows an unfiltered view without clearing your filter. If the source List was deleted or no longer contains the track, Aobus looks in **All Tracks** instead.
+If reveal changes views, press the mouse Back button once to return to the view and filter you left.
 
 ### Choose what happens if a PipeWire device disappears
 

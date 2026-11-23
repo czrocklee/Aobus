@@ -24,6 +24,8 @@ GTK's `SelectionInfoLabel` and WinUI's `status.selectionInfo` read the runtime s
 
 A settled library change can change duration without changing the view or its selected ids. Both frontends recompute a nonempty selection's duration after a library reset or a committed insertion, mutation, or deletion touching one of those ids. For example, a rescan can replace a selected track's stored duration; a deleted track still in the selection contributes to the count but not the duration. Unrelated library changes and viewport updates do not trigger aggregation.
 
+The summary is not an admission check for playback: [primary Play](../playback/README.md#primary-play) needs a visible selected track when starting a new desktop selection.
+
 The summary is synchronous derived state with no independent persistence, identity, revision, retry, or cancellation operation.
 [Workspace restoration](../workspace/session.md) reconstructs views, not selection: the session does not persist selected ids.
 Any live selection supplied after restoration is aggregated against the current library snapshot under the same rules above.

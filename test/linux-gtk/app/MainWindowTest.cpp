@@ -17,6 +17,7 @@
 #include "portal/LibraryImportExportWorkflow.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
+#include "test/FilesystemTestSupport.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
@@ -26,6 +27,7 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -47,6 +49,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -63,6 +66,7 @@
 #include <glibmm/ustring.h>
 #include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/button.h>
+#include <gtkmm/columnview.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/menubutton.h>
@@ -1118,6 +1122,205 @@ namespace ao::gtk::test
     runStartup(fixed, allowed);
     runStartup(allowed, fixed);
     runStartup(fixed, std::nullopt);
+  }
+
+  TEST_CASE("MainWindow - primary Play requires a selected track unless the current track can resume")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto const uri = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const browsedTrack = addRuntimeTrack(runtime, {.title = "Browsed track", .uri = uri});
+    auto const playingTrack = addRuntimeTrack(runtime, {.title = "Selected track", .uri = uri});
+    auto const otherList =
+      ao::test::requireValue(runGtkTask(runtime,
+                                        runtime.library().commands().createListAsync(
+                                          {.name = "Other list", .expression = R"($title = "Browsed track")"})));
+    runtime.sources().reloadAllTracks();
+
+    auto storePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app.yaml");
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "modern";
+    storePtr->saveAppPrefs(prefs);
+    auto window = MainWindow{runtime,
+                             storePtr,
+                             std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
+                             ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return findWidgetByClass<Gtk::Button>(window, "ao-play-button-prominent") != nullptr; }));
+    auto& button = *findWidgetByClass<Gtk::Button>(window, "ao-play-button-prominent");
+    auto const actionPtr = window.lookup_action("playback.playPause");
+    REQUIRE(actionPtr);
+    auto* const page = findWidget<TrackViewPage>(window);
+    REQUIRE(page != nullptr);
+    REQUIRE(page->projection() != nullptr);
+    REQUIRE(page->projection()->size() == 2);
+    REQUIRE(page->selectionController().selectedTrackIds().empty());
+    auto& playback = runtime.playback();
+    REQUIRE(playback.snapshot().transport.ready);
+    CHECK_FALSE(button.get_sensitive());
+    CHECK_FALSE(actionPtr->get_enabled());
+    emitClicked(button);
+    drainGtkEvents();
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+
+    page->selectionController().selectTrack(playingTrack);
+    drainGtkEvents();
+    REQUIRE(button.get_sensitive());
+    REQUIRE(actionPtr->get_enabled());
+    auto const otherView = ao::test::requireValue(window.navigateToList(otherList));
+    drainGtkEvents();
+    CHECK_FALSE(button.get_sensitive());
+    REQUIRE(runtime.workspace().focusView(page->viewId()));
+    drainGtkEvents();
+    REQUIRE(button.get_sensitive());
+    emitClicked(button);
+    REQUIRE(tryWaitForPlaybackSettlement(runtime, playingTrack));
+    playback.commands().pause();
+    auto const offset = std::chrono::milliseconds{250};
+    playback.commands().seek(offset);
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
+    REQUIRE(playback.snapshot().transport.elapsed == offset);
+
+    REQUIRE(runtime.workspace().focusView(otherView));
+    REQUIRE(runtime.views().setSelection(otherView, {browsedTrack}));
+    drainGtkEvents();
+    REQUIRE(button.get_sensitive());
+    emitClicked(button);
+    drainGtkEvents();
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == playingTrack);
+    CHECK(playback.snapshot().transport.elapsed == offset);
+    CHECK(playback.snapshot().succession.sourceListId == rt::kAllTracksListId);
+  }
+
+  TEST_CASE("MainWindow - primary Play reports a selected track's synchronous start failure once")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto const path = runtime.musicRoot() / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), path);
+    auto const created =
+      ao::test::requireValue(runGtkTask(runtime, runtime.library().commands().createTrackFromFileAsync(path)));
+
+    auto storePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app.yaml");
+    auto window = MainWindow{runtime,
+                             storePtr,
+                             std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
+                             ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
+    REQUIRE(tryPumpGtkEventsUntil([&] { return findWidget<TrackViewPage>(window) != nullptr; }));
+    findWidget<TrackViewPage>(window)->selectionController().selectTrack(created.trackId);
+    drainGtkEvents();
+    auto const actionPtr = window.lookup_action("playback.playPause");
+    REQUIRE(actionPtr);
+    REQUIRE(actionPtr->get_enabled());
+    REQUIRE(runtime.notifications().feed().entries.empty());
+
+    // The row remains selected, but its stored path no longer resolves inside the library.
+    auto const relocated = fixture.tempDir().path() / "relocated.flac";
+    std::filesystem::rename(path, relocated);
+    auto const link = ao::test::SymlinkFixture{relocated, path, ao::test::SymlinkType::File};
+    actionPtr->activate();
+
+    auto const feed = runtime.notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == rt::NotificationSeverity::Error);
+    CHECK(feed.entries.front().lifetime == rt::NotificationLifetime::history());
+    CHECK(std::get<std::string>(feed.entries.front().message).contains("outside the library root"));
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("MainWindow - reveal of a missing playing track reports once without changing focus")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const removedTrack = addRuntimeTrack(runtime, {.title = "Removed track"});
+    auto const keptTrack = addRuntimeTrack(runtime, {.title = "Kept track"});
+    runtime.sources().reloadAllTracks();
+
+    auto storePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app.yaml");
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "modern";
+    storePtr->saveAppPrefs(prefs);
+    auto window = MainWindow{runtime,
+                             storePtr,
+                             std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
+                             ao::test::messageCatalog("fr")};
+    REQUIRE(window.prepareSession());
+    auto& commands = runtime.playback().commands();
+
+    // The label can submit a reveal even when the transport has no subject.
+    REQUIRE(runtime.playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+    commands.revealPlayingTrack();
+    drainGtkEvents();
+    CHECK(runtime.notifications().feed().entries.empty());
+
+    auto const sourceViewId = runtime.workspace().snapshot().activeViewId;
+    REQUIRE(sourceViewId != rt::kInvalidViewId);
+    {
+      auto const library = runtime.library().snapshot();
+      auto const optUri = library.trackUri(removedTrack);
+      REQUIRE(optUri);
+      auto const session = rt::PlaybackSessionState{.libraryId = library.libraryId(),
+                                                    .sourceListId = rt::kAllTracksListId,
+                                                    .currentTrackId = removedTrack,
+                                                    .currentTrackUri = *optUri};
+      REQUIRE(
+        runtime.workspaceConfigStore().save(rt::kPlaybackSessionConfigGroup, session, rt::PlaybackSessionYamlSchema{}));
+    }
+    REQUIRE(ao::test::requireValue(runtime.restorePlaybackSession()).restored);
+    auto const departureViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = R"($title = "Kept track")"},
+    }));
+    REQUIRE(runtime.workspace().closeView(sourceViewId));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteTrackAsync(removedTrack)));
+    REQUIRE_FALSE(runtime.library().snapshot().containsTrack(removedTrack));
+    REQUIRE(runtime.playback().snapshot().transport.nowPlaying.trackId == removedTrack);
+
+    window.present();
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        auto const* const page = findWidget<TrackViewPage>(window);
+        return page != nullptr && page->viewId() == departureViewId && page->get_mapped();
+      }));
+    auto& page = *findWidget<TrackViewPage>(window);
+    page.selectionController().selectTrack(keptTrack);
+    auto* const columnView = findWidget<Gtk::ColumnView>(page);
+    REQUIRE(columnView != nullptr);
+    REQUIRE(columnView->grab_focus());
+    drainGtkEvents();
+    auto const* const focusedWidget = window.get_focus();
+    REQUIRE(focusedWidget != nullptr);
+    auto const workspaceBefore = runtime.workspace().snapshot();
+    REQUIRE(workspaceBefore.activeViewId == departureViewId);
+
+    // A late explicit page event has no target and must not report a lookup failure.
+    commands.revealTrack(removedTrack, sourceViewId, rt::kAllTracksListId);
+    drainGtkEvents();
+    CHECK(runtime.notifications().feed().entries.empty());
+
+    auto const actionPtr = window.lookup_action(std::string{uimodel::kRevealCurrentTrackActionId});
+    REQUIRE(actionPtr);
+    REQUIRE(actionPtr->get_enabled());
+    actionPtr->activate();
+    drainGtkEvents();
+
+    auto const feed = runtime.notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == rt::NotificationSeverity::Error);
+    CHECK(feed.entries.front().lifetime == rt::NotificationLifetime::history());
+    CHECK(std::get<std::string>(feed.entries.front().message) ==
+          "Échec de navigation : Track is no longer in the library");
+    CHECK(runtime.workspace().snapshot() == workspaceBefore);
+    CHECK(runtime.views().trackListState(departureViewId).selection == std::vector{keptTrack});
+    CHECK(window.get_focus() == focusedWidget);
   }
 
   TEST_CASE("MainWindow - restores a playback session as idle sequence state")

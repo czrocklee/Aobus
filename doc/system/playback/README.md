@@ -103,6 +103,10 @@ Frontend composition obtains the platform provider set from Core audio and trans
 
 ## Cross-boundary protocols
 
+### Primary Play
+
+UIModel gives a track held by the transport priority over a new start from the browsed selection. See [primary Play](application-commit.md#primary-play) for command admission and the distinction from row activation and system media commands.
+
 ### Explicit start
 
 A view start captures a launch description and constructs a candidate cursor session before changing active state. Player performs decoder inspection and optional optimistic decoder preparation on runtime workers. Acceptance returns to the callback executor and revalidates the source, request, playback generation, route, and start context before Engine commits.

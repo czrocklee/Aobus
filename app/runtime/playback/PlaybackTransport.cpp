@@ -1927,6 +1927,11 @@ namespace ao::rt
     impl->playerPtr->cancelLookaheadPreparation();
   }
 
+  bool PlaybackTransport::hasDeferredResume() const
+  {
+    return checkedImpl()->hasDeferredPlayback();
+  }
+
   PlaybackState const& PlaybackTransport::state() const
   {
     auto* const impl = checkedImpl();
@@ -2384,14 +2389,16 @@ namespace ao::rt
   void PlaybackTransport::revealPlayingTrack()
   {
     auto* const impl = checkedImpl();
-    revealTrack(impl->state.nowPlaying.trackId, kInvalidViewId, impl->state.nowPlaying.sourceListId);
+    auto const& subject = impl->state.nowPlaying;
+    impl->enqueueOutbound(RevealTrackRequested{
+      .trackId = subject.trackId, .preferredListId = subject.sourceListId, .fromPlaybackSource = true});
   }
 
   void PlaybackTransport::revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId)
   {
     auto* const impl = checkedImpl();
     impl->enqueueOutbound(PlaybackTransport::RevealTrackRequested{
-      .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
+      .trackId = trackId, .preferredViewId = preferredViewId, .preferredListId = preferredListId});
   }
 
   PlaybackTransportSessionState PlaybackTransport::playbackTransportSessionState()

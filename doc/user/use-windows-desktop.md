@@ -55,7 +55,8 @@ The Windows frontend keeps its database beneath the selected music root. Network
    When the selected tracks have the same list of credits for a kind, the details pane shows every name and optional role. If the lists differ, it shows `<Multiple Values>` instead. The **Credits scope:** buttons open **Properties** directly at that scope.
    Missing artwork uses a monogram in group headings and a transparent vinyl placeholder in the details pane; these Windows choices are fixed in this version.
 6. Use the persistent Now Playing controls for previous, play/pause, next, shuffle, repeat, seeking, volume, and output.
-   Choose **Reveal Current Track** or press `Ctrl+L` to select and scroll the playing track into view when it is visible in its target presentation.
+   If a track is ready to resume, Play continues it even when another row is selected. If there's nothing to resume, select a visible track row and press Play.
+   Press `Ctrl+L`, or choose **Reveal Current Track** from the Now Playing menu in Modern or **Playback** in Classic. Aobus selects and scrolls to the track in the List where playback started, using **All Tracks** if that List no longer contains it. If reveal changes views, `Alt+Left` returns to the view you left with its filter intact.
    Aobus remembers your output backend, device, and profile. If the named output you requested is missing at launch, Aobus waits rather than playing through the default device. Reconnect it or choose another output, then press Play.
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.

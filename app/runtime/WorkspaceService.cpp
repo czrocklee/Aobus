@@ -27,6 +27,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/utility/Uuid.h>
 
@@ -36,6 +37,7 @@
 #include <exception>
 #include <expected>
 #include <format>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -177,19 +179,15 @@ namespace ao::rt
       return views.findTrackListState(viewId);
     }
 
-    std::optional<ViewId> reusableView(ResolvedNavigationTarget const& target) const
+    std::optional<TrackListViewState> findOpenView(ListId const listId, std::string_view const filterExpression) const
     {
-      if (!target.reusePlainView)
+      // Views being prepared or destroyed can still be registered with ViewService.
+      for (auto const viewId : currentSnapshot.openViews)
       {
-        return std::nullopt;
-      }
-
-      for (auto const viewId : views.listViews())
-      {
-        if (auto const state = views.trackListState(viewId);
-            state.listId == target.listId && state.filterExpression.empty())
+        if (auto stateRes = views.findTrackListState(viewId);
+            stateRes && stateRes->listId == listId && stateRes->filterExpression == filterExpression)
         {
-          return viewId;
+          return std::move(*stateRes);
         }
       }
 
@@ -223,16 +221,11 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    Result<ViewId> navigateToReusableView(ViewId const viewId, NavigationRequest const& request)
+    Result<ViewId> navigateToReusableView(TrackListViewState const& state,
+                                          NavigationRequest const& request,
+                                          NavigationHistory nextHistory)
     {
-      auto stateRes = liveViewState(viewId);
-
-      if (!stateRes)
-      {
-        return std::unexpected{stateRes.error()};
-      }
-
-      auto const& state = *stateRes;
+      auto const viewId = state.id;
       auto presentation = state.presentation;
 
       if (request.optPresentation && request.optPresentation->mode == NavigationPresentationMode::Override)
@@ -241,23 +234,9 @@ namespace ao::rt
       }
 
       auto nextSnapshot = currentSnapshot;
-      auto nextHistory = navigationHistory;
-      bool changed = false;
-
-      if (!std::ranges::contains(nextSnapshot.openViews, viewId))
-      {
-        nextSnapshot.openViews.push_back(viewId);
-        changed = true;
-      }
-
-      if (nextSnapshot.activeViewId != viewId)
-      {
-        nextSnapshot.activeViewId = viewId;
-        changed = true;
-      }
-
       auto const presentationChanged = state.presentation != presentation;
-      changed = changed || presentationChanged;
+      auto changed = nextSnapshot.activeViewId != viewId || presentationChanged;
+      nextSnapshot.activeViewId = viewId;
 
       if (request.recordHistory)
       {
@@ -283,26 +262,15 @@ namespace ao::rt
       return viewId;
     }
 
-    Result<ViewId> navigate(NavigationRequest const& request)
+    Result<ViewId> navigateToNewView(ResolvedNavigationTarget const& target,
+                                     NavigationRequest const& request,
+                                     NavigationHistory nextHistory)
     {
-      auto targetRes = resolveNavigationTarget(request.target);
-
-      if (!targetRes)
-      {
-        return std::unexpected{targetRes.error()};
-      }
-
-      if (auto const optViewId = reusableView(*targetRes); optViewId)
-      {
-        return navigateToReusableView(*optViewId, request);
-      }
-
       auto nextSnapshot = currentSnapshot;
       nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + 1);
-      auto nextHistory = navigationHistory;
       auto config = TrackListViewConfig{
-        .listId = targetRes->listId,
-        .filterExpression = targetRes->filterExpression,
+        .listId = target.listId,
+        .filterExpression = target.filterExpression,
       };
 
       if (request.optPresentation)
@@ -339,6 +307,115 @@ namespace ao::rt
       }
 
       return viewId;
+    }
+
+    Result<ViewId> navigate(NavigationRequest const& request)
+    {
+      auto targetRes = resolveNavigationTarget(request.target);
+
+      if (!targetRes)
+      {
+        return std::unexpected{targetRes.error()};
+      }
+
+      if (auto const optState = targetRes->reusePlainView ? findOpenView(targetRes->listId, {}) : std::nullopt;
+          optState)
+      {
+        return navigateToReusableView(*optState, request, navigationHistory);
+      }
+
+      return navigateToNewView(*targetRes, request, navigationHistory);
+    }
+
+    Result<ListId> trackSourceList(TrackId const trackId, ListId const sourceListId) const
+    {
+      if (sourceListId != kInvalidListId && sourceListId != kAllTracksListId)
+      {
+        auto const memberRes = views.listContainsTrack(sourceListId, trackId);
+
+        if (memberRes && *memberRes)
+        {
+          return sourceListId;
+        }
+
+        if (!memberRes && memberRes.error().code != Error::Code::NotFound)
+        {
+          return std::unexpected{memberRes.error()};
+        }
+      }
+
+      auto const memberRes = views.listContainsTrack(kAllTracksListId, trackId);
+
+      if (!memberRes)
+      {
+        return std::unexpected{memberRes.error()};
+      }
+
+      if (!*memberRes)
+      {
+        return makeError(Error::Code::NotFound, "Track is no longer in the library");
+      }
+
+      return kAllTracksListId;
+    }
+
+    Result<ViewId> navigateToTrackSource(TrackId const trackId,
+                                         ListId const sourceListId,
+                                         std::function<TrackPresentationSpec(ListId)> const& newViewPresentation)
+    {
+      auto const listRes = trackSourceList(trackId, sourceListId);
+
+      if (!listRes)
+      {
+        return std::unexpected{listRes.error()};
+      }
+
+      auto nextHistory = navigationHistory;
+
+      if (auto const active = currentSnapshot.activeViewId; active != kInvalidViewId)
+      {
+        auto const stateRes = liveViewState(active);
+
+        if (!stateRes)
+        {
+          return std::unexpected{stateRes.error()};
+        }
+
+        if (stateRes->listId == *listRes)
+        {
+          auto const projectionRes = views.findTrackListProjection(active);
+
+          if (!projectionRes)
+          {
+            return std::unexpected{projectionRes.error()};
+          }
+
+          if ((*projectionRes)->indexOf(trackId))
+          {
+            return active;
+          }
+        }
+
+        // A quick filter may have changed since the last history entry. Install both
+        // the live departure point and destination only after navigation succeeds.
+        std::ignore = nextHistory.tryCommit(navigationPoint(*stateRes, stateRes->presentation));
+      }
+
+      auto const target = ResolvedNavigationTarget{.listId = *listRes, .reusePlainView = true};
+      auto request = NavigationRequest{.target = *listRes};
+
+      if (auto const optState = findOpenView(target.listId, {}); optState)
+      {
+        return navigateToReusableView(*optState, request, std::move(nextHistory));
+      }
+
+      if (newViewPresentation)
+      {
+        request.optPresentation = NavigationPresentation{
+          .mode = NavigationPresentationMode::NewViewDefault, .spec = newViewPresentation(*listRes)};
+      }
+
+      return navigateToNewView(target, request, std::move(nextHistory));
     }
 
     Result<> focus(ViewId const viewId)
@@ -452,24 +529,13 @@ namespace ao::rt
 
     Result<> restoreNavigationPoint(NavigationPoint const& point, NavigationHistory nextHistory)
     {
-      auto matchingViewId = kInvalidViewId;
-
-      for (auto const viewId : views.listViews())
-      {
-        if (auto const state = views.trackListState(viewId);
-            state.listId == point.listId && state.filterExpression == point.filterExpression)
-        {
-          matchingViewId = viewId;
-          break;
-        }
-      }
-
+      auto const optState = findOpenView(point.listId, point.filterExpression);
+      auto viewId = optState ? optState->id : kInvalidViewId;
       auto nextSnapshot = currentSnapshot;
-      nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + 1);
-      bool createdView = false;
 
-      if (matchingViewId == kInvalidViewId)
+      if (!optState)
       {
+        nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + 1);
         auto res = views.createView(TrackListViewConfig{
           .listId = point.listId,
           .filterExpression = point.filterExpression,
@@ -481,26 +547,22 @@ namespace ao::rt
           return std::unexpected{res.error()};
         }
 
-        matchingViewId = *res;
-        createdView = true;
+        viewId = *res;
       }
 
       try
       {
-        auto const presentationChanged =
-          !createdView && views.trackListState(matchingViewId).presentation != point.presentation;
-
-        if (!std::ranges::contains(nextSnapshot.openViews, matchingViewId))
+        if (!optState)
         {
-          nextSnapshot.openViews.push_back(matchingViewId);
+          nextSnapshot.openViews.push_back(viewId);
         }
 
-        nextSnapshot.activeViewId = matchingViewId;
+        nextSnapshot.activeViewId = viewId;
         auto pending = prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
 
-        if (presentationChanged)
+        if (optState && optState->presentation != point.presentation)
         {
-          if (auto res = views.setPresentation(matchingViewId, point.presentation); !res)
+          if (auto res = views.setPresentation(viewId, point.presentation); !res)
           {
             return std::unexpected{res.error()};
           }
@@ -510,9 +572,9 @@ namespace ao::rt
       }
       catch (...)
       {
-        if (createdView)
+        if (!optState)
         {
-          views.destroyView(matchingViewId);
+          views.destroyView(viewId);
         }
 
         throw;
@@ -658,6 +720,15 @@ namespace ao::rt
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->navigate(request);
+  }
+
+  Result<ViewId> WorkspaceService::navigateToTrackSource(
+    TrackId const trackId,
+    ListId const sourceListId,
+    std::function<TrackPresentationSpec(ListId)> const& newViewPresentation)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->navigateToTrackSource(trackId, sourceListId, newViewPresentation);
   }
 
   Result<> WorkspaceService::closeView(ViewId const viewId)

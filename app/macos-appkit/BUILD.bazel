@@ -157,6 +157,7 @@ objc_library(
         # Reuse the existing media fixture owner; the smoke main keeps
         # Catch2Main unextracted while the WAV/TestId3v2 objects are pulled.
         "//test:media_test_support",
+        "//test:runtime_test_support",
     ],
     alwayslink = True,
 )

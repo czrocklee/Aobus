@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -39,7 +40,6 @@ namespace ao::audio
 
 namespace ao::rt
 {
-  class AppRuntime;
   class CompletionAliasPolicy;
   class ConfigStore;
   class TextOrderingPolicy;

@@ -679,8 +679,26 @@ bazel run //app/windows-winui:ao_winui_automation_probe -- --classic-output
 ```
 
 Classic activates the frame's playback adapters, including SMTC; the default
-run does not. Neither mode supplies playable files, issues Play, or changes
-the Windows default device.
+run does not. The ordinary audit writes a silent WAV to exercise Rescan;
+neither mode issues Play or changes the Windows default device.
+
+### Primary Play probe
+
+To exercise Modern's primary Play button with a decoder, supply a private PCM
+WAV of at least one second and at most 16 MiB. Use an absolute path to a
+regular file, not a symlink, with the lowercase `.wav` extension:
+
+```bat
+bazel run //app/windows-winui:ao_winui_automation_probe -- --primary-play "C:\fixtures\private.wav"
+```
+
+The probe copies the fixture into its disposable library and requires a ready
+discard-only route before invoking Play. A pass distinguishes starting a
+selected row from resuming the same paused track at its saved position while
+another List and row are selected. It also dispatches an SMTC Play button
+through the production command handler, checking that it uses the system-media
+origin and that a session with no target reports no error. This does not test
+OS button delivery, WASAPI rendering, audibility, or physical input.
 
 ## Native tests and sanitizers
 

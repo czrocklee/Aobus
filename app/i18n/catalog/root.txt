@@ -251,6 +251,8 @@ root:table {
     notification_grouped_info { "{count, plural, one {# notification} other {# notifications}}" }
     notification_grouped_warning { "{count, plural, one {# warning} other {# warnings}}" }
     notification_grouped_error { "{count, plural, one {# error} other {# errors}}" }
+    navigation_failed { "Navigation failed: {detail}" }
+    playback_failed { "Playback failed: {detail}" }
     library_busy_try_again { "Library is busy. Try again." }
     library_task_scanning { "Scanning" }
     library_task_updating { "Updating" }
@@ -828,10 +830,8 @@ root:table {
     winui_activity_notifications { "Notifications" }
     winui_activity_hide_notification { "Hide notification from status" }
     winui_library_ready_at { "Library ready: {root}" }
-    winui_navigation_failed { "Navigation failed: {detail}" }
     winui_list_status { "List: {list}" }
     winui_presentation_failed { "Presentation failed: {detail}" }
-    winui_playback_failed { "Playback failed: {detail}" }
     winui_column_resize_failed { "Column resize failed: {detail}" }
     winui_column_settings_failed { "Column settings failed: {detail}" }
     winui_column_move_failed { "Column move failed: {detail}" }

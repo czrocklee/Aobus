@@ -152,6 +152,8 @@ namespace ao::winui
       listPresentationsSub = listPresentations.signalChanged().connect(std::move(bindings.persistListPresentations));
       columnLayouts.restore(std::move(bindings.restoredColumnLayouts), bindings.knownListIds);
       columnLayoutsSub = columnLayouts.signalChanged().connect(std::move(bindings.persistColumnLayouts));
+
+      playbackActions.bindFocusedSelection(runtime.workspace(), runtime.views());
     }
 
     uimodel::TrackPresentationCatalog presentationCatalog;
@@ -919,7 +921,20 @@ namespace ao::winui
       return;
     }
 
-    std::ignore = storage.requireRuntimeGraph().runtime.playSelectionInFocusedView();
+    // PlaybackActions only requests a start when the focused projection has a selection.
+    auto const token = storage.ownerCallbackGate.token();
+    auto& runtime = storage.requireRuntimeGraph().runtime;
+
+    if (auto const playedRes = runtime.playSelectionInFocusedView(); !playedRes && token.accepts())
+    {
+      auto message = formatResource("playback_failed", playedRes.error().message);
+      runtime.notifications().post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
+
+      if (token.accepts())
+      {
+        reportStatus(std::move(message));
+      }
+    }
   }
 
   Result<> LibrarySession::playTrack(rt::ViewId const viewId, TrackId const trackId)

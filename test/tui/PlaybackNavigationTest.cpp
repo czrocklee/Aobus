@@ -11,9 +11,15 @@
 #include "tui/PlaybackPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/async/Task.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -25,10 +31,16 @@
 #include <ftxui/screen/color.hpp>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -44,6 +56,32 @@ namespace ao::tui::test
       }
 
       REQUIRE(events.tryHandleEvent(ftxui::Event::Return));
+    }
+
+    template<typename Reply, typename Inspect>
+    void inspectBeforeDeletionPublication(EventControllerFixture& fixture,
+                                          async::Task<Result<Reply>> deletion,
+                                          Inspect inspect)
+    {
+      auto& runtime = *fixture.runtimePtr;
+      auto& executor = *fixture.executor;
+      executor.drain();
+      auto const revision = runtime.library().snapshot().revision();
+      auto completedPtr = std::make_shared<std::atomic_bool>(false);
+      auto future = runtime.async().spawn(rt::test::flagCompletionAsync(completedPtr, std::move(deletion)));
+
+      // Publishing a committed revision queues an owner callback. Wait for that
+      // commit without running the owner (including any earlier queued work).
+      for (auto queued = executor.queuedCount(); runtime.library().snapshot().revision() == revision;
+           queued = executor.queuedCount())
+      {
+        REQUIRE(executor.tryWaitUntilQueuedCount(queued + 1));
+      }
+
+      inspect();
+      REQUIRE(executor.tryDrainUntil([&] { return completedPtr->load(); }));
+      REQUIRE(future.get());
+      executor.drain();
     }
 
     RenderedElement renderPlaybackMetadata(rt::PlaybackTransportSnapshot const& state,
@@ -368,6 +406,175 @@ namespace ao::tui::test
     REQUIRE(library.navigateHistory(false));
     CHECK(library.activeViewId() == previousView);
     CHECK(library.filterDraft() == previousFilter);
+  }
+
+  TEST_CASE("EventController - current returns to the playback list even when the track is visible elsewhere")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const source = fixture.addList("Source");
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    fixture.addReadyAudioProvider();
+    REQUIRE(library.openList(source));
+    REQUIRE(library.setPresentation("albums"));
+    REQUIRE(library.tracks().size() == 2);
+    auto const target = library.tracks().back().id;
+    auto const sourceView = library.activeViewId();
+    auto& playback = fixture.runtimePtr->playback();
+    REQUIRE(playback.commands().startFromView(sourceView, target));
+    REQUIRE(fixture.tryWaitForPlayback(target));
+    REQUIRE(library.openList(rt::kAllTracksListId));
+    library.setFilterDraft("Second");
+    REQUIRE(library.applyFilter());
+    REQUIRE(library.tracks().size() == 1);
+    REQUIRE(library.tracks().front().id == target);
+    auto const browsingView = library.activeViewId();
+    auto const filter = fixture.runtimePtr->views().trackListState(browsingView).filterExpression;
+
+    auto const revealCurrent = [&]
+    {
+      submitNavigation(events, "current");
+      fixture.executor->drain();
+    };
+
+    SECTION("Reuse the open source view")
+    {
+      revealCurrent();
+      CHECK(library.activeViewId() == sourceView);
+    }
+
+    SECTION("Reopen a closed source with its saved presentation")
+    {
+      REQUIRE(fixture.runtimePtr->workspace().closeView(sourceView));
+      revealCurrent();
+      CHECK(library.activeViewId() != sourceView);
+    }
+
+    CHECK(library.currentListId() == source);
+    CHECK(library.activePresentationId() == "albums");
+    REQUIRE_FALSE(library.sections().empty());
+    CHECK(library.tracks()[library.selectedTrack()].id == target);
+
+    // An in-place reveal should neither replace an unfinished filter draft nor
+    // put another copy of the source on Back.
+    library.setFilterDraft("unfinished");
+    revealCurrent();
+    CHECK(library.filterDraft() == "unfinished");
+    REQUIRE(library.navigateHistory(false));
+    CHECK(library.activeViewId() == browsingView);
+    CHECK(library.filterDraft() == filter);
+  }
+
+  TEST_CASE("EventController - revealing a source deleted before publication keeps the browsing view and pane focus")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const source = fixture.addList("Source");
+    auto const browsing = fixture.addList("Browsing");
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    fixture.addReadyAudioProvider();
+    auto& runtime = *fixture.runtimePtr;
+    REQUIRE(library.openList(source));
+    REQUIRE(library.tracks().size() == 2);
+    auto const target = library.tracks().back().id;
+    auto const sourceView = library.activeViewId();
+    REQUIRE(runtime.playback().commands().startFromView(sourceView, target));
+    REQUIRE(fixture.tryWaitForPlayback(target));
+    REQUIRE(library.openList(browsing));
+    auto const browsingView = library.activeViewId();
+    library.toggleFocusedMark();
+    auto const marked = library.tracks().front().id;
+    library.moveTrackSelection(1);
+    REQUIRE(library.selectedTrackView().track->id == target);
+    library.setFilterDraft("unfinished");
+    fixture.shell.focusNavigation();
+
+    inspectBeforeDeletionPublication(
+      fixture,
+      runtime.library().commands().deleteListAsync(source),
+      [&]
+      {
+        REQUIRE_FALSE(runtime.library().snapshot().listNode(source));
+        auto const projectionRes = runtime.views().findTrackListProjection(sourceView);
+        REQUIRE(projectionRes);
+        REQUIRE((*projectionRes)->indexOf(target));
+        runtime.playback().commands().revealPlayingTrack();
+
+        auto const feed = runtime.notifications().feed();
+        REQUIRE_FALSE(feed.entries.empty());
+        CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
+        auto const* message = std::get_if<std::string>(&feed.entries.back().message);
+        REQUIRE(message != nullptr);
+        CHECK(message->contains("unavailable library list"));
+        CHECK(fixture.shell.isNavigationFocused());
+        CHECK(runtime.workspace().snapshot().activeViewId == browsingView);
+        CHECK(library.activeViewId() == browsingView);
+        CHECK(library.filterDraft() == "unfinished");
+        REQUIRE(library.selectedTrackView().track != nullptr);
+        CHECK(library.selectedTrackView().track->id == target);
+        CHECK(library.markedIds() == std::unordered_set{marked});
+        CHECK(runtime.views().trackListState(browsingView).selection == std::vector{marked});
+      });
+
+    CHECK(runtime.workspace().snapshot().activeViewId == browsingView);
+    CHECK(library.activeViewId() == browsingView);
+    CHECK(library.filterDraft() == "unfinished");
+    CHECK(library.selectedTrackIds() == std::vector{marked});
+  }
+
+  TEST_CASE("LibraryController - a vanished reveal row publishes the actual cursor and selection immediately")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto& runtime = *fixture.runtimePtr;
+    auto const view = library.activeViewId();
+    REQUIRE(library.tracks().size() == 2);
+    auto const first = library.tracks().front().id;
+    auto const target = library.tracks().back().id;
+    library.moveTrackSelection(1);
+    library.toggleFocusedMark();
+    REQUIRE(runtime.views().trackListState(view).selection == std::vector{target});
+    auto remaining = std::vector<TrackId>{};
+
+    SECTION("Empty projection after materialization")
+    {
+      REQUIRE(runtime.views().setFilter(view, R"($title = "Second")"));
+    }
+
+    SECTION("A surviving row replaces the out-of-bounds cursor")
+    {
+      REQUIRE(runtime.views().setFilter(view, R"($title != "Absent")"));
+      remaining.push_back(first);
+    }
+
+    auto available = std::vector<bool>{};
+    auto sub = library.signalTrackCursorAvailable().connect([&](bool value) { available.push_back(value); });
+    inspectBeforeDeletionPublication(
+      fixture,
+      runtime.library().commands().deleteTrackAsync(target),
+      [&]
+      {
+        REQUIRE_FALSE(runtime.library().snapshot().containsTrack(target));
+        auto const res = library.revealPlayingTrack(target, rt::kAllTracksListId);
+        REQUIRE_FALSE(res);
+        CHECK(res.error().message == "Could not locate the current track in the library");
+        CHECK(library.activeViewId() == view);
+        CHECK(library.markedIds().empty());
+        CHECK(library.selectedTrackIds() == remaining);
+        CHECK(runtime.views().trackListState(view).selection == remaining);
+
+        if (remaining.empty())
+        {
+          CHECK(library.selectedTrackView().track == nullptr);
+          CHECK(available == std::vector<bool>{false});
+        }
+        else
+        {
+          REQUIRE(library.selectedTrackView().track != nullptr);
+          CHECK(library.selectedTrackView().track->id == first);
+          CHECK(available.empty());
+        }
+      });
   }
 
   TEST_CASE("EventController - stale playback identity or metadata cannot navigate")

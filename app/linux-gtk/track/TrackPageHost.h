@@ -10,16 +10,23 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 
 namespace Gtk
 {
   class Stack;
+}
+
+namespace ao
+{
+  struct Error;
 }
 
 namespace ao::rt
@@ -70,7 +77,9 @@ namespace ao::gtk
                   ListNavigationController& listNavigation,
                   uimodel::TrackColumnLayouts& columnLayouts,
                   i18n::MessageCatalog textCatalog,
-                  rt::ResourceByteMemoryCache& byteCache);
+                  rt::ResourceByteMemoryCache& byteCache,
+                  std::function<rt::TrackPresentationSpec(ListId)> newViewPresentation = {},
+                  std::function<void(Error const&)> onSourceRevealFailed = {});
     ~TrackPageHost();
 
     // Not copyable or movable
@@ -106,11 +115,11 @@ namespace ao::gtk
   private:
     void ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider);
     void bindTrackPage(TrackPageEntry& entry);
+    bool trySyncPageProjection(TrackPageEntry& entry);
     void handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId viewId);
     void syncLayout();
     void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev);
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
-    void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     async::Runtime& _asyncRuntime;
     rt::Library& _library;
@@ -121,6 +130,8 @@ namespace ao::gtk
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
     uimodel::TrackColumnLayouts& _columnLayouts;
+    std::function<rt::TrackPresentationSpec(ListId)> _newViewPresentation;
+    std::function<void(Error const&)> _onSourceRevealFailed;
     async::Subscription _revealSub;
     async::Subscription _snapshotSub;
     async::Subscription _focusSub;

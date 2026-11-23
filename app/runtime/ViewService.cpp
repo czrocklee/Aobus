@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/ViewService.h>
 
@@ -452,6 +452,25 @@ namespace ao::rt
     return {};
   }
 
+  TrackId ViewService::firstVisibleSelectedTrack(ViewId const viewId) const
+  {
+    _implPtr->ensureOnExecutor();
+
+    if (auto const it = _implPtr->views.find(viewId);
+        it != _implPtr->views.end() && it->second.projectionPtr->size() > 0)
+    {
+      for (auto const id : it->second.state.selection)
+      {
+        if (it->second.projectionPtr->indexOf(id))
+        {
+          return id;
+        }
+      }
+    }
+
+    return kInvalidTrackId;
+  }
+
   Result<PlaybackLaunchSpec> ViewService::capturePlaybackLaunchSpec(ViewId const viewId) const
   {
     _implPtr->ensureOnExecutor();
@@ -468,20 +487,6 @@ namespace ao::rt
       .quickFilterExpression = state.filterExpression,
       .order = TrackOrderSpec{.sortBy = state.sortBy},
     };
-  }
-
-  std::vector<ViewId> ViewService::listViews() const
-  {
-    _implPtr->ensureOnExecutor();
-    auto viewIds = std::vector<ViewId>{};
-    viewIds.reserve(_implPtr->views.size());
-
-    for (auto const& entry : _implPtr->views)
-    {
-      viewIds.push_back(entry.first);
-    }
-
-    return viewIds;
   }
 
   TrackListViewState ViewService::trackListState(ViewId viewId) const
@@ -570,6 +575,24 @@ namespace ao::rt
     }
 
     return projectionPtr;
+  }
+
+  Result<bool> ViewService::listContainsTrack(ListId const listId, TrackId const trackId) const
+  {
+    _implPtr->ensureOnExecutor();
+    auto sourceRes = _implPtr->sources.acquire(listId);
+
+    if (!sourceRes)
+    {
+      return std::unexpected{sourceRes.error()};
+    }
+
+    if (auto const optError = _implPtr->sources.sourceError(*sourceRes); optError)
+    {
+      return std::unexpected{*optError};
+    }
+
+    return (*sourceRes)->indexOf(trackId).has_value();
   }
 
   Result<TrackSourceState> ViewService::listSourceState(ViewId const viewId) const

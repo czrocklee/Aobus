@@ -249,6 +249,8 @@ zh_Hant:table {
     notification_grouped_info { "{count, plural, one {# 條通知} other {# 條通知}}" }
     notification_grouped_warning { "{count, plural, one {# 條警告} other {# 條警告}}" }
     notification_grouped_error { "{count, plural, one {# 個錯誤} other {# 個錯誤}}" }
+    navigation_failed { "導航失敗：{detail}" }
+    playback_failed { "播放失敗：{detail}" }
     library_busy_try_again { "音樂庫正忙。請再試一次。" }
     library_task_scanning { "掃描中" }
     library_task_updating { "更新中" }
@@ -826,10 +828,8 @@ zh_Hant:table {
     winui_activity_notifications { "通知" }
     winui_activity_hide_notification { "在狀態列中隱藏此通知" }
     winui_library_ready_at { "音樂庫已就緒：{root}" }
-    winui_navigation_failed { "導航失敗：{detail}" }
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "載入檢視失敗：{detail}" }
-    winui_playback_failed { "播放失敗：{detail}" }
     winui_column_resize_failed { "調整欄寬失敗：{detail}" }
     winui_column_settings_failed { "欄設定失敗：{detail}" }
     winui_column_move_failed { "移動欄失敗：{detail}" }

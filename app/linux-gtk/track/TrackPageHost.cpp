@@ -10,9 +10,11 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -36,6 +38,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -51,7 +54,9 @@ namespace ao::gtk
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
-                               rt::ResourceByteMemoryCache& byteCache)
+                               rt::ResourceByteMemoryCache& byteCache,
+                               std::function<rt::TrackPresentationSpec(ListId)> newViewPresentation,
+                               std::function<void(Error const&)> onSourceRevealFailed)
     : _stack{stack}
     , _asyncRuntime{asyncRuntime}
     , _library{library}
@@ -62,6 +67,8 @@ namespace ao::gtk
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _columnLayouts{columnLayouts}
+    , _newViewPresentation{std::move(newViewPresentation)}
+    , _onSourceRevealFailed{std::move(onSourceRevealFailed)}
     , _thumbnailLoader{byteCache, _thumbnailCache, _asyncRuntime}
   {
     _revealSub = _playback.events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
@@ -83,19 +90,9 @@ namespace ao::gtk
     _projectionChangedSub = _views.onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& ev)
       {
-        auto* entry = find(ev.viewId);
-
-        if (entry == nullptr || entry->modelPtr == nullptr)
+        if (auto* const entry = find(ev.viewId); entry != nullptr)
         {
-          return;
-        }
-
-        entry->modelPtr->bindProjection(ev.projectionPtr);
-        entry->pagePtr->applyPresentation(ev.projectionPtr->presentation());
-
-        if (_playingTrackId != kInvalidTrackId)
-        {
-          entry->pagePtr->setPlayingTrackId(_playingTrackId);
+          std::ignore = trySyncPageProjection(*entry);
         }
       });
 
@@ -126,6 +123,32 @@ namespace ao::gtk
         }
       });
   }
+
+  bool TrackPageHost::trySyncPageProjection(TrackPageEntry& entry)
+  {
+    auto const projectionRes = _views.findTrackListProjection(entry.viewId);
+
+    if (!projectionRes || !*projectionRes)
+    {
+      return false;
+    }
+
+    // Filter changes are posted. A reveal may already have bound the live
+    // projection, and rebinding even the same one resets GTK's selection.
+    if (auto const& projectionPtr = *projectionRes; entry.modelPtr->projection() != projectionPtr.get())
+    {
+      entry.modelPtr->bindProjection(projectionPtr);
+      entry.pagePtr->applyPresentation(projectionPtr->presentation());
+
+      if (_playingTrackId != kInvalidTrackId)
+      {
+        entry.pagePtr->setPlayingTrackId(_playingTrackId);
+      }
+    }
+
+    return true;
+  }
+
   rt::ViewId TrackPageHost::tryFindViewByPreferredList(ListId preferredListId)
   {
     for (auto const& [id, entry] : _trackPages)
@@ -139,46 +162,84 @@ namespace ao::gtk
     return rt::kInvalidViewId;
   }
 
-  void TrackPageHost::tryRevealTrackInView(rt::ViewId viewId, TrackId trackId)
-  {
-    if (auto const focusedRes = _workspace.focusView(viewId); !focusedRes)
-    {
-      APP_LOG_DEBUG("TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focusedRes.error().message);
-      return;
-    }
-
-    if (trackId == kInvalidTrackId)
-    {
-      return;
-    }
-
-    auto* const entry = find(viewId);
-
-    if (entry == nullptr)
-    {
-      return;
-    }
-
-    entry->pagePtr->selectionController().selectTrack(trackId);
-  }
-
   void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev)
   {
-    auto viewId = rt::ViewId{ev.preferredViewId};
-
-    if (viewId == rt::kInvalidViewId && ev.preferredListId != kInvalidListId)
+    if (ev.trackId == kInvalidTrackId)
     {
-      viewId = tryFindViewByPreferredList(ev.preferredListId);
+      return;
     }
 
-    if (viewId != rt::kInvalidViewId)
+    auto viewId = ev.preferredViewId;
+
+    if (ev.fromPlaybackSource)
     {
-      if (find(viewId) == nullptr)
+      auto const viewRes = _workspace.navigateToTrackSource(ev.trackId, ev.preferredListId, _newViewPresentation);
+
+      if (!viewRes)
       {
-        syncLayout();
+        APP_LOG_DEBUG("TrackPageHost: Could not reveal playing track: {}", viewRes.error().message);
+
+        if (_onSourceRevealFailed)
+        {
+          _onSourceRevealFailed(viewRes.error());
+        }
+
+        return;
       }
 
-      tryRevealTrackInView(viewId, ev.trackId);
+      viewId = *viewRes;
+    }
+    else
+    {
+      if (viewId == rt::kInvalidViewId && ev.preferredListId != kInvalidListId)
+      {
+        viewId = tryFindViewByPreferredList(ev.preferredListId);
+      }
+
+      if (viewId == rt::kInvalidViewId)
+      {
+        return;
+      }
+
+      if (auto const focusedRes = _workspace.focusView(viewId); !focusedRes)
+      {
+        APP_LOG_DEBUG(
+          "TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focusedRes.error().message);
+        return;
+      }
+    }
+
+    // Workspace changes are posted. Show the committed page now so selecting
+    // a row can scroll it even when the target page was hidden or not built.
+    auto* entry = find(viewId);
+
+    if (entry == nullptr || entry->pagePtr.get() != _stack.get_visible_child())
+    {
+      syncLayout();
+      entry = find(viewId);
+    }
+
+    if (entry == nullptr || !trySyncPageProjection(*entry))
+    {
+      return;
+    }
+
+    auto& selection = entry->pagePtr->selectionController();
+    selection.selectTrack(ev.trackId);
+
+    if (selection.selectedTrackCount() == 1 && selection.primarySelectedTrackId() == ev.trackId)
+    {
+      // Usually GTK publishes the new selection synchronously. A rebuilt page
+      // can already have only this row selected while the runtime still holds
+      // additional, absent IDs; GTK emits nothing when reselecting that row.
+      if (auto const stateRes = _views.findTrackListState(viewId);
+          stateRes && (stateRes->selection.size() != 1 || stateRes->selection.front() != ev.trackId))
+      {
+        if (auto selectedRes = _views.setSelection(viewId, {ev.trackId}); !selectedRes)
+        {
+          APP_LOG_ERROR("Failed to publish revealed track selection: {}", selectedRes.error().message);
+        }
+      }
     }
   }
 
