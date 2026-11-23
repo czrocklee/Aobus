@@ -2,6 +2,10 @@
 
 The AppKit application delegate coordinates the native presentation and library session for the macOS development slice. Closing the main window hides it without releasing the library session, after any editor close has been accepted and sheets have settled. On Quit or a different-root switch, the editor and sheets settle before MediaPlayer admission closes and presentation owners detach. See the [AppKit lifecycle](../session-lifecycle.md#appkit) for teardown ordering and the [desktop library lifecycle](../desktop-library-lifecycle.md) for release before a successor starts. [Track Properties and Credits](appkit-track-properties.md) describes the editor's draft and save boundary.
 
+## Opening and scanning
+
+When creating a session on startup restore or explicit library opening (including `--library`), AppKit starts an initial scan if the [database marker](../desktop-library-lifecycle.md#invariants) is absent; the marker alone does not trigger a scan. An empty or incompletely indexed database with the marker requires **Rescan Library**. Reselecting the current library retains the session without checking the marker or starting a scan, and does not cancel an in-flight scan. An accepted different-root open retires the old session and cancels its scan.
+
 ## Rescan admission
 
 The File menu checks the session's scanning flag when it validates **Rescan Library**. While a scan is active, the item is disabled and a direct request neither posts a busy notice nor queues another scan.

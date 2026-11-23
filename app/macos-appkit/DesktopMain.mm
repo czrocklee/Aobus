@@ -53,9 +53,7 @@ int main(int argc, char** argv)
       }
       else if (remaining[index] == "--library" && index + 1 < remaining.size() && !launch.optRequest)
       {
-        launch.optRequest = ao::desktop::LibrarySwitchRequest{
-          .libraryRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index])),
-          .scanAfterOpen = true};
+        launch.optRequest = ao::appkit::libraryOpenRequest(remaining[++index]);
       }
       else
       {

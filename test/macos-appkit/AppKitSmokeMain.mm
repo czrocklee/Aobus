@@ -46,9 +46,7 @@ int main(int argc, char** argv)
       }
       else if (remaining[index] == "--library" && index + 1 < remaining.size() && !launch.optRequest)
       {
-        launch.optRequest = ao::desktop::LibrarySwitchRequest{
-          .libraryRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index])),
-          .scanAfterOpen = true};
+        launch.optRequest = ao::appkit::libraryOpenRequest(remaining[++index]);
       }
       else if (remaining[index] == "--scenario" && index + 1 < remaining.size() && !successor)
       {
@@ -61,9 +59,9 @@ int main(int argc, char** argv)
     }
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
-        (scenario != "desktop" && scenario != "membership" && scenario != "authoring" && scenario != "presentation" &&
-         scenario != "media" && scenario != "credits-controls" && scenario != "credits-previews" &&
-         scenario != "quality-presentation"))
+        (scenario != "desktop" && scenario != "initial-index" && scenario != "membership" && scenario != "authoring" &&
+         scenario != "presentation" && scenario != "media" && scenario != "credits-controls" &&
+         scenario != "credits-previews" && scenario != "quality-presentation"))
     {
       return 2;
     }
@@ -71,6 +69,12 @@ int main(int argc, char** argv)
     if (!successor)
     {
       auto fixtureRes = ao::appkit::test::prepareAppKitFixtureRoots(launch.optRequest->libraryRoot, launch.stateRoot);
+
+      // Desktop and membership populate their fixtures in two phases around indexing.
+      if (fixtureRes && scenario != "desktop" && scenario != "membership")
+      {
+        fixtureRes = ao::appkit::test::prepareAppKitMediaLibrary(launch.optRequest->libraryRoot);
+      }
 
       if (!fixtureRes)
       {
@@ -105,6 +109,11 @@ int main(int argc, char** argv)
       AO_INVARIANT(launcher.length > 0, "Desktop scenarios require the process supervisor's launch bridge");
       launch.executable = ao::utility::pathFromNative(launcher.fileSystemRepresentation);
       return ao::appkit::test::runDesktopScenario(std::move(launch), std::move(*catalogRes), successor);
+    }
+
+    if (scenario == "initial-index")
+    {
+      return ao::appkit::test::runInitialIndexScenario(std::move(launch), std::move(*catalogRes));
     }
 
     if (scenario == "membership")

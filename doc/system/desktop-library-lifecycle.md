@@ -57,6 +57,15 @@ desktop lifecycle.
 - Same-root detection prefers filesystem identity, so aliases such as symlinks
   reuse the active graph. A normalized lexical comparison is the fallback when
   identity inspection fails.
+- Opening or restoring a library with an existing database marker, including
+  reselecting the active root, does not itself request a scan. The marker is a
+  nonzero-size `<root>/.aobus/library/data.mdb`; it does not prove the database
+  is valid or that indexing completed, and opening validates the database. Row
+  count does not trigger an automatic rescan. If indexing was interrupted after
+  database creation, or the TUI created an empty database, request a rescan
+  explicitly. Explicit scan intent in a successor request remains separate.
+  Initial indexing without the marker follows each frontend's startup and open
+  policy; an empty fallback does not universally imply a scan.
 - The parent neither constructs the target graph nor persists the requested
   root.
 - A different-root request is admitted once by the frontend and destructive
@@ -172,9 +181,11 @@ report on its status line, because the Classic preset has no activity surface;
 its [scan workflow](frontend/windows-library-workflows.md#scan) owns how that
 line is shared with the initial scan.
 
-The successor starts a scan when the request carries scan intent or the
-canonical database did not exist, according to the consuming frontend's scan
-policy.
+WinUI and AppKit successors start a scan when the request carries scan intent
+or the database marker was absent. GTK successors instead use the carried
+intent; its library picker constructs that intent from marker absence. These
+consumption rules do not imply every frontend has a producer of explicit
+successor scan intent.
 
 ## Failure and cancellation
 

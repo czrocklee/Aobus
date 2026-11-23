@@ -37,11 +37,12 @@ namespace
     WaitForWindow,
     ChooseTestOutput,
     WaitForLibrary,
+    VerifyIndexedReselection,
+    WaitForExplicitRescan,
     SelectAlbums,
     WaitForAlbums,
     SelectTrack,
-    WaitForSelection,
-    PlayTrack,
+    WaitForSelectionAndPlay,
     WaitForPlayback,
     WaitForPlaybackProgress,
     OccludeWindow,
@@ -121,6 +122,7 @@ namespace
   NSWindow* _window;
   NSWindow* _occluder;
   NSTableView* _table;
+  __weak id<NSTableViewDelegate> _scanBrowser;
   NSControl* _emptyAction;
   NSString* _pendingOutputStatus;
   NSString* _selectedIdentity;
@@ -137,11 +139,13 @@ namespace
   std::chrono::steady_clock::time_point _deadline;
   std::chrono::steady_clock::time_point _occlusionObservationDeadline;
   Stage _stage;
+  char const* _playWaitReason;
   std::int32_t _searchStep;
   std::int32_t _settleTicks;
   BOOL _successor;
   BOOL _completed;
   BOOL _checkingTestOutput;
+  BOOL _indexedReselectionMarkerReached;
 }
 - (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch
                      successor:(BOOL)successor
@@ -376,8 +380,18 @@ namespace
 
 - (NSMenuItem*)successorItem
 {
-  return findMenuItem(
-    NSApp.mainMenu, ::NSSelectorFromString(@"openRecentLibrary:"), false, 0, nativePath(_successorRoot));
+  return findRecentLibraryItem(_successorRoot);
+}
+
+- (void)requireScanSessionRetained
+{
+  auto* const open = [self menuItem:@"openLibrary:"];
+  [open.menu update];
+  // An admitted successor disables the Open command before it releases the old browser.
+  AO_INVARIANT(open.enabled != NO && _window.visible != NO && findDesktopWindow() == _window &&
+                 findTrackTable(_window.contentView) == _table && _scanBrowser != nil &&
+                 _table.delegate == _scanBrowser && hasSavedLibrary(_launch.stateRoot, _launch.optRequest->libraryRoot),
+               "Same-root Open Recent must retain the existing library session without admitting a successor");
 }
 
 - (void)activateControl:(NSControl*)control obligation:(NSString*)obligation
@@ -693,7 +707,8 @@ namespace
   auto* const seek = static_cast<NSSlider*>([self control:@"playback.seek"]);
   auto* const soul = [self control:@"playback.soul"];
 
-  if (selectableRowCount(_table) < 3 || seek == nil || soul == nil || seek.accessibilityValueDescription.length == 0 ||
+  if (selectableRowCount(_table) < kIndexedFixtureTrackCount || seek == nil || soul == nil ||
+      seek.accessibilityValueDescription.length == 0 ||
       !hasSavedLibrary(_launch.stateRoot, _launch.optRequest->libraryRoot))
   {
     return;
@@ -709,6 +724,7 @@ namespace
     }
   }
 
+  requireIndexedOpenWithoutScan(_table, "Opening a different indexed library from Open Recent");
   AO_INVARIANT(seek.enabled == 0 && std::abs(seek.doubleValue) < kControlTolerance,
                "The successor must start with idle native seek state");
   AO_INVARIANT([seek.accessibilityValueDescription isEqual:@"0:00 of 0:00"] != 0,
@@ -732,10 +748,25 @@ namespace
       return;
     }
 
-    AO_INVARIANT(std::chrono::steady_clock::now() <= _deadline,
-                 "Desktop scenario timed out at stage {} search step {}",
-                 static_cast<std::int32_t>(_stage),
-                 _searchStep);
+    if (auto const beforeDeadline = std::chrono::steady_clock::now() <= _deadline; !beforeDeadline)
+    {
+      char const* reason = "stage did not advance";
+
+      if (_stage == Stage::WaitForSelectionAndPlay)
+      {
+        reason = _playWaitReason;
+      }
+      else if (_stage == Stage::VerifyIndexedReselection && _indexedReselectionMarkerReached == NO)
+      {
+        reason = "waiting for the common-modes block after same-root Open Recent";
+      }
+
+      AO_INVARIANT(beforeDeadline,
+                   "Desktop scenario timed out at stage {} search step {}: {}",
+                   static_cast<std::int32_t>(_stage),
+                   _searchStep,
+                   reason);
+    }
 
     if (_stage == Stage::Complete)
     {
@@ -783,23 +814,62 @@ namespace
       }
       case Stage::WaitForLibrary:
       {
-        if (auto* const soul = [self control:@"playback.soul"];
-            selectableRowCount(_table) >= 3 && soul.enabled != NO &&
+        if ([self control:@"playback.soul"] != nil && selectableRowCount(_table) >= kIndexedFixtureTrackCount &&
             hasSavedLibrary(_launch.stateRoot, _launch.optRequest->libraryRoot))
         {
-          if (_optTestOutput)
-          {
-            requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
-
-            if ([self inspectTestOutputChoosingReplacement:NO] == NO)
-            {
-              break;
-            }
-          }
-
-          _idleTransportText = [soul.toolTip copy];
           [self requireSettingDefaults];
           [self verifyAppearanceActions];
+          requireIndexedOpenWithoutScan(_table, "Opening an indexed library with --library");
+          auto* const active = findRecentLibraryItem(_launch.optRequest->libraryRoot);
+          activateMenuItem(active, @"reselect the active indexed library");
+          requireIndexedOpenWithoutScan(_table, "Reselecting the active indexed library");
+          _stage = Stage::VerifyIndexedReselection;
+          // Queue behind any common-modes service block already scheduled by the action.
+          __weak AobusDesktopScenarioDriver* weakSelf = self;
+          ::CFRunLoopPerformBlock(::CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+            if (auto* const owner = weakSelf; owner != nil)
+            {
+              owner->_indexedReselectionMarkerReached = YES;
+            }
+          });
+          ::CFRunLoopWakeUp(::CFRunLoopGetMain());
+        }
+
+        break;
+      }
+      case Stage::VerifyIndexedReselection:
+      {
+        if (_indexedReselectionMarkerReached == NO)
+        {
+          break;
+        }
+
+        requireIndexedOpenWithoutScan(_table, "Reselecting the active indexed library after queued service work");
+        _scanBrowser = _table.delegate;
+        auto* const rescan = [self menuItem:@"rescan:"];
+        activateMenuItem(rescan, @"import the added track with explicit Rescan");
+        // Scan completion returns to the main executor, so it cannot race this same-turn reselection.
+        [rescan.menu update];
+        AO_INVARIANT(rescan.enabled == NO && trackRow(_table, kPendingFixtureTrack) < 0,
+                     "Explicit Rescan must be active before reselecting the same library");
+        auto* const active = findRecentLibraryItem(_launch.optRequest->libraryRoot);
+        activateMenuItem(active, @"reselect the active indexed library while scanning");
+        [self requireScanSessionRetained];
+        [rescan.menu update];
+        AO_INVARIANT(rescan.enabled == NO, "Same-root Open Recent must leave the original Rescan active");
+        _stage = Stage::WaitForExplicitRescan;
+        break;
+      }
+      case Stage::WaitForExplicitRescan:
+      {
+        [self requireScanSessionRetained];
+        auto* const rescan = [self menuItem:@"rescan:"];
+        [rescan.menu update];
+
+        if (rescan.enabled != NO && trackRow(_table, kPendingFixtureTrack) >= 0)
+        {
+          AO_INVARIANT(selectableRowCount(_table) == kIndexedFixtureTrackCount + 1,
+                       "The original Rescan must add the new track and preserve the existing tracks");
           _stage = Stage::SelectAlbums;
         }
 
@@ -866,24 +936,59 @@ namespace
         [_table selectRowIndexes:[NSIndexSet indexSetWithIndex:static_cast<NSUInteger>(row)] byExtendingSelection:NO];
         _selectedIdentity = [rowIdentity(_table, row) copy];
         AO_INVARIANT(_selectedIdentity.length > 0, "The selected native row must render track identity");
-        _stage = Stage::WaitForSelection;
+        _playWaitReason = "waiting for the intended selection and enabled primary Play";
+        _stage = Stage::WaitForSelectionAndPlay;
         break;
       }
-      case Stage::WaitForSelection:
-        if (_table.selectedRow >= 0 && [rowIdentity(_table, _table.selectedRow) isEqual:_selectedIdentity] != NO)
+      case Stage::WaitForSelectionAndPlay:
+      {
+        auto const readyToPlay = [&]
         {
-          _stage = Stage::PlayTrack;
+          if (auto const row = _table.selectedRow;
+              row < 0 || _table.numberOfSelectedRows != 1 || [rowIdentity(_table, row) isEqual:_selectedIdentity] == NO)
+          {
+            _playWaitReason = "the intended track is not the only selected row";
+            return false;
+          }
+
+          if ([self control:@"playback.soul"].enabled == NO)
+          {
+            _playWaitReason = "primary Play is disabled for the selected track";
+            return false;
+          }
+
+          return true;
+        };
+
+        if (!readyToPlay())
+        {
+          break;
         }
 
-        break;
-      case Stage::PlayTrack:
-      {
+        if (_optTestOutput)
+        {
+          requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
+
+          if ([self inspectTestOutputChoosingReplacement:NO] == NO)
+          {
+            _playWaitReason = "the native output menu has not confirmed the exact test route";
+            break;
+          }
+        }
+
         auto* const menu = _table.menu;
         auto const delegate = menu.delegate;
         AO_INVARIANT([delegate respondsToSelector:@selector(menuNeedsUpdate:)] != 0,
                      "The native track menu must have a public update delegate");
-        [delegate menuNeedsUpdate:menu];
         auto* const play = findMenuItem(menu, ::NSSelectorFromString(@"playSelection:"));
+
+        // Output-menu tracking pumps a nested run loop. Recheck before dispatching Play on this turn.
+        if (!readyToPlay())
+        {
+          break;
+        }
+
+        _idleTransportText = [[self control:@"playback.soul"].toolTip copy];
         activateMenuItem(play, @"play selected track");
         _stage = Stage::WaitForPlayback;
         break;
@@ -1334,9 +1439,16 @@ namespace ao::appkit::test
     AO_INVARIANT(runToken.length > 0, "The desktop scenario requires its isolated run token");
     auto* const markerContents = [runToken stringByAppendingString:@"\n"];
 
-    if (!successor)
+    AO_INVARIANT(launch.optRequest, "The desktop scenario requires an initial library request");
+
+    if (successor)
     {
-      std::filesystem::create_directories(launch.stateRoot);
+      AO_INVARIANT(!launch.optRequest->scanAfterOpen,
+                   "Opening a different library from Open Recent must not carry explicit scan intent");
+    }
+    else
+    {
+      preindexLibraryWithPendingTrack(launch.optRequest->libraryRoot, launch.stateRoot);
       preseedSettings(launch);
     }
 

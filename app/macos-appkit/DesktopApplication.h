@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 
 namespace ao::appkit
 {
@@ -18,6 +19,9 @@ namespace ao::appkit
     std::filesystem::path executable;
     std::optional<desktop::LibrarySwitchRequest> optRequest;
   };
+
+  // The public --library option selects a root without requesting a rescan.
+  desktop::LibrarySwitchRequest libraryOpenRequest(std::string_view path);
 
   // Call before creating NSApplication; desktop.plist owns native window state.
   void disableWindowRestoration();

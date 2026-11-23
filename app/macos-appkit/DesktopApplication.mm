@@ -51,6 +51,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -1394,7 +1395,7 @@ namespace ao::appkit
       }
 
       auto planRes = ao::desktop::planLibrarySwitch(
-        _sessionPtr->runtime().musicRoot(), ao::utility::pathFromNative(url.fileSystemRepresentation), true);
+        _sessionPtr->runtime().musicRoot(), ao::utility::pathFromNative(url.fileSystemRepresentation), false);
 
       if (!planRes)
       {
@@ -1402,14 +1403,11 @@ namespace ao::appkit
         return;
       }
 
-      if (planRes->disposition == ao::desktop::LibrarySwitchDisposition::ReuseActive)
+      if (planRes->disposition == ao::desktop::LibrarySwitchDisposition::Restart)
       {
-        _sessionPtr->rescan();
-        return;
+        _optPendingSuccessor = std::move(planRes->request);
+        [self requestService];
       }
-
-      _optPendingSuccessor = std::move(planRes->request);
-      [self requestService];
     });
 }
 
@@ -1855,6 +1853,11 @@ namespace ao::appkit
 
 namespace ao::appkit
 {
+  desktop::LibrarySwitchRequest libraryOpenRequest(std::string_view path)
+  {
+    return {.libraryRoot = std::filesystem::absolute(utility::pathFromUtf8(path)), .scanAfterOpen = false};
+  }
+
   std::int32_t runDesktopApplication(DesktopLaunch launch, i18n::MessageCatalog catalog)
   {
     auto* const app = NSApp;

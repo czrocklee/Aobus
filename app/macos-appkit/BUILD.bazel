@@ -151,6 +151,7 @@ objc_library(
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         ":appkit",
+        "//app/desktop:desktop_launch",
         # The test package owns the scenario headers and their local include root.
         "//test:appkit_smoke_headers",
         "//test:coreaudio_test_support",

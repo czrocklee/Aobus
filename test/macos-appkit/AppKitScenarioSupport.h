@@ -17,12 +17,16 @@
 
 namespace ao::appkit::test
 {
+  inline constexpr std::int32_t kFixtureTrackCount = 20;
+  inline constexpr std::int32_t kIndexedFixtureTrackCount = kFixtureTrackCount - 1;
+
   bool tryWaitUntil(std::function<bool()> predicate, std::chrono::seconds timeout = std::chrono::seconds{15});
   void requireWaitUntil(std::function<bool()> predicate,
                         char const* obligation,
                         std::chrono::seconds timeout = std::chrono::seconds{15});
   Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot);
   Result<> prepareAppKitFixtureRoots(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
+  void preindexLibraryWithPendingTrack(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   void settleNativeCallbacks();
   NSView* findView(NSView* view, NSString* identifier);
   NSControl* findControl(NSView* view, NSString* identifier);
@@ -56,6 +60,7 @@ namespace ao::appkit::test
   };
 
   std::int32_t runDesktopScenario(DesktopLaunch launch, i18n::MessageCatalog catalog, bool successor);
+  std::int32_t runInitialIndexScenario(DesktopLaunch launch, i18n::MessageCatalog catalog);
   std::int32_t runMembershipScenario(DesktopLaunch launch, i18n::MessageCatalog catalog);
   std::int32_t runMediaScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   std::int32_t runAuthoringScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
