@@ -225,7 +225,7 @@ new N  changed C  moved R  missing M  unchanged U  errors E  missing-segments S 
 Plain `scan --dry-run` lists relinks as `moved {oldUri} -> {uri}` or `spelling-changed {oldUri} -> {uri}`, followed by the message when present.
 A non-dry-run `scan` or `init` writes one `warning: {uri}: {message}` line to stderr for each warning, for plain and structured output alike.
 For plain output, apply lines after the plan summary report skipped, relinked, and missing-review counts, plus `N items failed to apply` (`1 item failed to apply` for one item) when items failed.
-The plain `Relinked N files` line (`Relinked 1 file` for one file) includes both moves and filename spelling updates. Structured output contains the plan summary only.
+The plain `Relinked N files` line (`Relinked 1 file` for one file) includes both moves and path spelling updates. Structured output contains the plan summary only.
 Any apply failure also fails the command with `scan apply failed: ...` on stderr and exit `1`, for plain and structured output alike.
 Warnings alone leave the exit status `0`.
 
@@ -253,7 +253,7 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 - `track show --format` is mutually exclusive with YAML/JSON.
 - `track create` of a CUE image emits every created id in `trackIds`. `trackId` is the first of those ids when the commit allocated one; a dry-run omits `trackId` and emits an empty `trackIds` array because allocation is not durable. Plain output prints one `added track` line per id.
 - Plain `scan` counts `missing-segments` separately from `new`. Structured output uses `missingSegments`, and a dry-run item of that class has `type: missing-segments`.
-- Plain `scan` counts `spelling-changed` separately from `moved`; structured output uses `spellingChanged`. Structured dry-run items include `oldUri` only when `type` is `moved` or `spelling-changed`; `uri` is the destination. A filename spelling pair resolved by the fingerprint fallback is `moved`. See [filename spelling reconciliation](../../system/library/scan-and-identity.md#plan-classification) for when it applies.
+- Plain `scan` counts `spelling-changed` separately from `moved`; structured output uses `spellingChanged`. Structured dry-run items include `oldUri` only when `type` is `moved` or `spelling-changed`; `uri` is the destination. A filename or directory spelling pair resolved by its constrained fingerprint fallback is `moved`. See [path spelling reconciliation](../../system/library/scan-and-identity.md#plan-classification) for the rules for filenames and directories.
 - A dry-run item list omits `Unchanged` items only when they have no accompanying diagnostic. Binding diagnostics preserve the file classification and remain visible.
   `errors` counts Error items, which were not applied. `warnings` counts every other item with a diagnostic, including report-only `notice` items, which are never applied.
 - `track update` applies field options and tag options as one atomic edit; the same tag in `--add-tag` and `--remove-tag` is rejected, and `--dry-run` is rejected when tag options are present.

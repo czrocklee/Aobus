@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 namespace ao::rt::test
@@ -46,6 +47,76 @@ namespace ao::rt::test
     CHECK(key != scanSpellingKey("Album/éa.flac"));
     CHECK(key != scanSpellingKey("Album/E\u0301a.flac"));
     CHECK(key != scanSpellingKey("album/Éa.flac"));
+  }
+
+  TEST_CASE("Scan directory spelling inspection - candidate keys and single component shape")
+  {
+    struct Sample final
+    {
+      std::string_view oldUri;
+      std::string_view newUri;
+      bool sameKey;
+      bool pair;
+    };
+
+    for (auto const& sample : {Sample{"Album/x.flac", "album/x.flac", true, true},
+                               Sample{"A/B/x.flac", "a/b/x.flac", true, false},
+                               Sample{"A/B/x.flac", "A/b/x.flac", true, true},
+                               Sample{"A/x.flac", "a/X.flac", false, false},
+                               Sample{"ÉA/x.flac", "Éa/x.flac", true, true},
+                               Sample{"É/x.flac", "é/x.flac", false, false},
+                               Sample{"x.flac", "X.flac", false, false},
+                               Sample{"A/x.flac", "a//x.flac", false, false}})
+    {
+      CAPTURE(sample.oldUri, sample.newUri);
+      CHECK((scanDirectorySpellingKey(sample.oldUri) == scanDirectorySpellingKey(sample.newUri)) == sample.sameKey);
+      CHECK(isScanDirectorySpellingPair(sample.oldUri, sample.newUri) == sample.pair);
+    }
+  }
+
+  TEST_CASE("Scan directory spelling inspection - simulated identity fallback and conflict")
+  {
+    auto const missing = detail::ScanFileIdUnavailable{.optVolume = 17};
+    auto const legacy = detail::ScanLegacyFileIndex{.volume = 17, .optFileIndex = 42};
+    auto const directory = ScanFileIdentity{.volume = 17, .fileId = {1}};
+    auto const file = ScanFileIdentity{.volume = 17, .fileId = {2}};
+    auto const noneRes = detail::reconcileScanDirectorySpelling(missing, missing, missing, missing);
+    REQUIRE(noneRes);
+    REQUIRE(std::holds_alternative<ScanDirectorySpellingNeedsFingerprint>(*noneRes));
+    auto const partialRes = detail::reconcileScanDirectorySpelling(directory, directory, legacy, legacy);
+    REQUIRE(partialRes);
+    REQUIRE(std::holds_alternative<ScanDirectorySpellingNeedsFingerprint>(*partialRes));
+    auto const planned = std::get<ScanDirectorySpellingNeedsFingerprint>(*partialRes);
+    CHECK(planned.optDirectory == directory);
+    CHECK_FALSE(planned.optFile);
+    CHECK(matchesScanDirectorySpellingFallback(planned, *partialRes));
+    auto const changedRes = detail::reconcileScanDirectorySpelling(file, file, legacy, legacy);
+    REQUIRE(changedRes);
+    CHECK_FALSE(matchesScanDirectorySpellingFallback(planned, *changedRes));
+    auto const upgraded = ScanSpellingObservation{ScanDirectorySpellingIdentity{.directory = directory, .file = file}};
+    CHECK(matchesScanDirectorySpellingFallback(planned, upgraded));
+    CHECK_FALSE(matchesScanDirectorySpellingFallback(planned, ScanDirectorySpellingNeedsFingerprint{}));
+    CHECK_FALSE(matchesScanDirectorySpellingFallback(planned, DistinctScanSpellings{}));
+    auto const fileOnly = ScanDirectorySpellingNeedsFingerprint{.optFile = file};
+    CHECK(matchesScanDirectorySpellingFallback(fileOnly, upgraded));
+    CHECK_FALSE(matchesScanDirectorySpellingFallback(fileOnly, *partialRes));
+    CHECK_FALSE(matchesScanDirectorySpellingFallback(
+      fileOnly, ScanDirectorySpellingIdentity{.directory = directory, .file = directory}));
+
+    auto const conflictRes = detail::reconcileScanDirectorySpelling(directory, file, missing, missing);
+    REQUIRE_FALSE(conflictRes);
+    CHECK(conflictRes.error().code == Error::Code::Conflict);
+    auto const wrongVolume = detail::ScanFileIdUnavailable{.optVolume = 23};
+    auto const volumeConflictRes = detail::reconcileScanDirectorySpelling(missing, wrongVolume, missing, missing);
+    REQUIRE_FALSE(volumeConflictRes);
+    CHECK(volumeConflictRes.error().code == Error::Code::Conflict);
+    auto const otherLegacy = detail::ScanLegacyFileIndex{.volume = 17, .optFileIndex = 43};
+    auto const legacyConflictRes = detail::reconcileScanDirectorySpelling(legacy, otherLegacy, missing, missing);
+    REQUIRE_FALSE(legacyConflictRes);
+    CHECK(legacyConflictRes.error().code == Error::Code::Conflict);
+    auto const mixedConflictRes = detail::reconcileScanDirectorySpelling(directory, legacy, missing, missing);
+    REQUIRE_FALSE(mixedConflictRes);
+    CHECK(mixedConflictRes.error().code == Error::Code::Conflict);
   }
 
   TEST_CASE("Scan spelling inspection - two unavailable file IDs require independent fingerprint evidence")

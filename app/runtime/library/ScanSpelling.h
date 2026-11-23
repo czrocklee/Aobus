@@ -37,7 +37,29 @@ namespace ao::rt
     bool operator==(ScanSpellingNeedsFingerprint const&) const noexcept = default;
   };
 
-  using ScanSpellingObservation = std::variant<DistinctScanSpellings, ScanFileIdentity, ScanSpellingNeedsFingerprint>;
+  struct ScanDirectorySpellingIdentity final
+  {
+    ScanFileIdentity directory;
+    ScanFileIdentity file;
+    bool operator==(ScanDirectorySpellingIdentity const&) const noexcept = default;
+  };
+
+  // Directory fallback still requires a unique audio match. Retain any agreed native ID across phases.
+  struct ScanDirectorySpellingNeedsFingerprint final
+  {
+    std::optional<ScanFileIdentity> optDirectory{};
+    std::optional<ScanFileIdentity> optFile{};
+    bool operator==(ScanDirectorySpellingNeedsFingerprint const&) const noexcept = default;
+  };
+
+  using ScanSpellingObservation = std::variant<DistinctScanSpellings,
+                                               ScanFileIdentity,
+                                               ScanSpellingNeedsFingerprint,
+                                               ScanDirectorySpellingIdentity,
+                                               ScanDirectorySpellingNeedsFingerprint>;
+
+  bool matchesScanDirectorySpellingFallback(ScanDirectorySpellingNeedsFingerprint const& planned,
+                                            ScanSpellingObservation const& live) noexcept;
 
   struct ScanSpellingEvidence final
   {
@@ -46,7 +68,7 @@ namespace ao::rt
 
   namespace detail
   {
-    // Preserve a known volume even when the regular file has no usable ID.
+    // Preserve a known volume even when the entry has no usable ID.
     struct ScanFileIdUnavailable final
     {
       std::optional<std::uint64_t> optVolume{};
@@ -59,17 +81,23 @@ namespace ao::rt
       std::optional<std::uint64_t> optFileIndex{};
       bool operator==(ScanLegacyFileIndex const&) const noexcept = default;
     };
-    using ScanRegularFile = std::variant<ScanFileIdentity, ScanFileIdUnavailable, ScanLegacyFileIndex>;
+    using ScanNativeIdentity = std::variant<ScanFileIdentity, ScanFileIdUnavailable, ScanLegacyFileIndex>;
 
 #ifdef _WIN32
-    Result<ScanRegularFile> recoverWindowsScanFileId(std::uint32_t code,
-                                                     std::function<Result<ScanLegacyFileIndex>()> const& readLegacy);
+    Result<ScanNativeIdentity> recoverWindowsScanFileId(std::uint32_t code,
+                                                        std::function<Result<ScanLegacyFileIndex>()> const& readLegacy);
 #endif
+
+    // Reconcile IDs only after the caller has proved a stable singleton and direct lookups.
+    Result<ScanSpellingObservation> reconcileScanDirectorySpelling(ScanNativeIdentity const& oldDirectory,
+                                                                   ScanNativeIdentity const& newDirectory,
+                                                                   ScanNativeIdentity const& oldFile,
+                                                                   ScanNativeIdentity const& newFile);
 
     struct ScanRegularFilePair final
     {
-      ScanRegularFile oldFile;
-      ScanRegularFile newFile;
+      ScanNativeIdentity oldFile;
+      ScanNativeIdentity newFile;
     };
     using ScanSpellingLookup = std::variant<DistinctScanSpellings, ScanRegularFilePair>;
 
@@ -77,8 +105,16 @@ namespace ao::rt
     {
     public:
       using NativeName = std::filesystem::path::string_type;
+      enum class NameMatch : std::uint8_t
+      {
+        BothExact,
+        Singleton,
+        Ambiguous,
+      };
+
       void add(NativeName const& name);
       void retainStableGroups(ScanSpellingDirectory const& second, std::stop_token stopToken);
+      Result<NameMatch> compareNames(NativeName const& oldName, NativeName const& newName) const;
       Result<ScanSpellingObservation> observe(NativeName const& oldName,
                                               NativeName const& newName,
                                               std::function<Result<ScanSpellingLookup>()> const& lookup) const;
@@ -91,8 +127,23 @@ namespace ao::rt
   // Fold ASCII letters in the leaf only. Equal keys are candidates, not proof.
   std::string scanSpellingKey(std::string_view uri);
 
+  // Fold ASCII letters in parent components, keeping the basename byte-exact.
+  std::string scanDirectorySpellingKey(std::string_view uri);
+  // Check the single-component shape of two canonical URIs, not filesystem identity.
+  bool isScanDirectorySpellingPair(std::string_view oldUri, std::string_view newUri) noexcept;
+
+  // For Missing scan items only: a verified direct regular ancestor makes its descendant absent.
+  // Throws async::OperationCancelled on a stop request.
+  bool hasExactRegularScanAncestor(std::filesystem::path const& root, std::string_view uri, std::stop_token stopToken);
+
+  enum class ScanDirectoryProbe : std::uint8_t
+  {
+    SpellingCandidate,
+    IndependentPeer,
+  };
+
   // Construct afresh for each planning, preparation or pretransaction phase.
-  // Only raw directory names are cached; file identities are always queried live.
+  // Only raw directory names are cached; identities are always queried live.
   class ScanSpellingInspection final
   {
   public:
@@ -102,9 +153,20 @@ namespace ao::rt
     // not proof of identity: both regular leaves lacked usable native IDs.
     Result<ScanSpellingObservation> inspect(std::string_view oldUri, std::string_view newUri);
 
+    // For one ASCII case-only parent component with the rest of the URI unchanged.
+    // A live alias needs reliable directory and file IDs or independent fingerprint evidence.
+    // An IndependentPeer proof also requires nonredirected suffixes on any traversable arm.
+    Result<ScanSpellingObservation> inspectDirectory(std::string_view oldUri,
+                                                     std::string_view newUri,
+                                                     ScanDirectoryProbe probe = ScanDirectoryProbe::SpellingCandidate);
+
   private:
     Result<detail::ScanSpellingDirectory> readNames(std::filesystem::path const& directory) const;
     Result<detail::ScanSpellingDirectory> readStableNames(std::filesystem::path const& directory) const;
+    Result<detail::ScanSpellingDirectory> const& stableNames(std::filesystem::path const& directory);
+    Result<> corroborateDirectorySingleton(std::filesystem::path const& parent,
+                                           std::filesystem::path const& oldName,
+                                           std::filesystem::path const& newName) const;
 
     std::filesystem::path _root;
     std::stop_token _stopToken;

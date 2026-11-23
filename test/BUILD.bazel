@@ -1437,6 +1437,21 @@ cc_test(
     ],
 )
 
+# Linux-only: direct lstat emulation must not enter the ordinary runtime executable.
+cc_test(
+    name = "scan_directory_spelling_fallback_test",
+    size = "small",
+    srcs = ["linux/runtime/ScanDirectorySpellingFallbackTest.cpp"],
+    linkopts = ["-Wl,--wrap=lstat"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = STORAGE_TEST_DEPS + [
+        ":common_test_support",
+        ":library_test_support",
+        ":runtime_test_support",
+        "//app/runtime:test_headers",
+    ],
+)
+
 # Shared application-runtime contracts retain ApplicationTestMain's fatal self-reentry.
 cc_test(
     name = "runtime_test",

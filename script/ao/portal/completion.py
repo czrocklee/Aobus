@@ -106,6 +106,7 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         "//bazel/header_share:sparse_headers_test",
         "//test:dictionary_publication_test",
         "//test:library_import_apply_cancellation_test",
+        "//test:scan_directory_spelling_fallback_test",
     }
     if platform == "linux":
         required.update(linux_only)

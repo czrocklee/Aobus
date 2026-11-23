@@ -194,6 +194,7 @@ namespace ao::rt
     std::uint64_t _libraryRevision = 0;
     std::vector<ScanItem> _items;
     // Sorted snapshot keys in the same spelling groups as possible new or moved destinations.
+    // Sorted snapshot shortlists, not proof that a directory peer is independent of any destination.
     std::vector<std::string> _knownSpellingPeers;
     std::unique_ptr<ScanSpellingEvidence> _spellingEvidencePtr;
     bool _executable = true;

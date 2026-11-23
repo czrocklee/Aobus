@@ -100,6 +100,47 @@ namespace ao::rt
              item.classification == ScanClassification::SpellingChanged;
     }
 
+    ScanSpellingObservation const* findPlannedSpelling(ScanSpellingEvidence const* evidence, std::string const& uri)
+    {
+      if (evidence == nullptr)
+      {
+        return nullptr;
+      }
+
+      auto const found = evidence->byDestination.find(uri);
+      return found == evidence->byDestination.end() ? nullptr : &found->second;
+    }
+
+    bool isDirectorySpelling(ScanSpellingObservation const& observation) noexcept
+    {
+      return std::holds_alternative<ScanDirectorySpellingIdentity>(observation) ||
+             std::holds_alternative<ScanDirectorySpellingNeedsFingerprint>(observation);
+    }
+
+    bool matchesPlannedSpelling(ScanSpellingObservation const& planned,
+                                ScanSpellingObservation const& live,
+                                ScanClassification const classification) noexcept
+    {
+      if (classification != ScanClassification::Moved)
+      {
+        return (std::holds_alternative<ScanFileIdentity>(planned) ||
+                std::holds_alternative<ScanDirectorySpellingIdentity>(planned)) &&
+               live == planned;
+      }
+
+      // Only planning can grant an audio fallback. A live native ID can
+      // support the pair but does not waive any audio-move checks.
+      if (auto const* const fallback = std::get_if<ScanDirectorySpellingNeedsFingerprint>(&planned);
+          fallback != nullptr)
+      {
+        return matchesScanDirectorySpellingFallback(*fallback, live);
+      }
+
+      return std::holds_alternative<ScanSpellingNeedsFingerprint>(planned) &&
+             (std::holds_alternative<ScanFileIdentity>(live) ||
+              std::holds_alternative<ScanSpellingNeedsFingerprint>(live));
+    }
+
     bool matchesPersistedEvidence(library::TrackWriter const& trackWriter,
                                   ScanItem const& item,
                                   std::string_view const manifestUri,
@@ -194,6 +235,8 @@ namespace ao::rt
     std::optional<TrackBuilderSnapshot> optBuilder;
     std::optional<library::AudioIdentity> optIdentity;
     std::vector<TrackBuilderSnapshot> segments;
+    // Views into the plan's sorted URI snapshot, certified only in final filesystem revalidation.
+    std::vector<std::string_view> independentDirectoryPeers;
   };
 
   ScanApplyOperation::ScanApplyOperation(library::MusicLibrary& ml,
@@ -621,8 +664,8 @@ namespace ao::rt
   bool ScanApplyOperation::needsSpellingProof(ScanItem const& item) const
   {
     return item.classification == ScanClassification::SpellingChanged ||
-           (item.classification == ScanClassification::Moved && _plan._spellingEvidencePtr &&
-            _plan._spellingEvidencePtr->byDestination.contains(item.uri));
+           (item.classification == ScanClassification::Moved &&
+            findPlannedSpelling(_plan._spellingEvidencePtr.get(), item.uri) != nullptr);
   }
 
   bool ScanApplyOperation::tryValidateSpelling(ScanItem const& item, InspectionPhase& phase)
@@ -632,11 +675,21 @@ namespace ao::rt
       return true;
     }
 
+    auto const* const planned = findPlannedSpelling(_plan._spellingEvidencePtr.get(), item.uri);
+
+    if (planned == nullptr)
+    {
+      reportFailure(item.uri, "validate spelling", "The relink has no planned filesystem spelling evidence");
+      _abortTransaction = true;
+      return false;
+    }
+
     auto observationRes = Result<ScanSpellingObservation>{};
 
     try
     {
-      observationRes = phase.spelling.inspect(item.oldUri, item.uri);
+      observationRes = isDirectorySpelling(*planned) ? phase.spelling.inspectDirectory(item.oldUri, item.uri)
+                                                     : phase.spelling.inspect(item.oldUri, item.uri);
     }
     catch (async::OperationCancelled const&)
     {
@@ -650,33 +703,9 @@ namespace ao::rt
       return false;
     }
 
-    if (observationRes)
+    if (observationRes && matchesPlannedSpelling(*planned, *observationRes, item.classification))
     {
-      auto const* const identity = std::get_if<ScanFileIdentity>(&*observationRes);
-
-      if (item.classification == ScanClassification::Moved)
-      {
-        // Planning alone can grant the fingerprint fallback. A live native
-        // identity also supports that pair, but does not waive any move checks.
-        if (identity != nullptr || std::holds_alternative<ScanSpellingNeedsFingerprint>(*observationRes))
-        {
-          return true;
-        }
-      }
-      else if (identity != nullptr && _plan._spellingEvidencePtr)
-      {
-        auto const& byDestination = _plan._spellingEvidencePtr->byDestination;
-
-        if (auto const found = byDestination.find(item.uri); found != byDestination.end())
-        {
-          auto const* const plannedIdentity = std::get_if<ScanFileIdentity>(&found->second);
-
-          if (plannedIdentity != nullptr && *plannedIdentity == *identity)
-          {
-            return true;
-          }
-        }
-      }
+      return true;
     }
 
     reportFailure(
@@ -720,6 +749,11 @@ namespace ao::rt
       }
     }
 
+    if (!_cancelled && !_abortTransaction)
+    {
+      revalidateKnownDirectoryPeers(phase);
+    }
+
     if (_cancelled)
     {
       finishCancelled();
@@ -742,7 +776,7 @@ namespace ao::rt
 
     if (item.classification == ScanClassification::Missing)
     {
-      revalidateMissingPath(itemIndex);
+      revalidateMissingPath(itemIndex, phase.stopToken);
       return;
     }
 
@@ -798,6 +832,74 @@ namespace ao::rt
     }
 
     revalidatePreparedCueSheets(itemIndex, *fullPathRes, phase);
+  }
+
+  void ScanApplyOperation::revalidateKnownDirectoryPeers(InspectionPhase& phase)
+  {
+    if (_plan._knownSpellingPeers.empty())
+    {
+      return;
+    }
+
+    try
+    {
+      auto peers = std::unordered_map<std::string, std::vector<std::string_view>>{};
+
+      for (auto const& uri : _plan._knownSpellingPeers)
+      {
+        async::throwIfStopRequested(phase.stopToken);
+
+        if (uri.contains('/'))
+        {
+          peers[scanDirectorySpellingKey(uri)].push_back(uri);
+        }
+      }
+
+      for (std::size_t index = 0; index < _plan.size(); ++index)
+      {
+        async::throwIfStopRequested(phase.stopToken);
+        auto const& item = _plan.items()[index];
+
+        if (_skippedItems[index] || !_preparedItems[index] || !item.uri.contains('/') ||
+            (item.classification != ScanClassification::New && !isRelink(item)))
+        {
+          continue;
+        }
+
+        auto const found = peers.find(scanDirectorySpellingKey(item.uri));
+
+        if (found == peers.end())
+        {
+          continue;
+        }
+
+        for (auto const peerUri : found->second)
+        {
+          auto const endpoint = directoryPeerEndpoint(item, peerUri);
+
+          if (endpoint.empty())
+          {
+            continue;
+          }
+
+          if (auto const proofRes =
+                phase.spelling.inspectDirectory(peerUri, endpoint, ScanDirectoryProbe::IndependentPeer);
+              proofRes && std::holds_alternative<DistinctScanSpellings>(*proofRes))
+          {
+            _preparedItems[index]->independentDirectoryPeers.push_back(peerUri);
+          }
+          else
+          {
+            // Decide against live rows inside preflight; an uncertified peer may have been removed.
+            _hasUnconfirmedDirectoryPeers = true;
+          }
+        }
+      }
+    }
+    catch (async::OperationCancelled const&)
+    {
+      _cancelled = true;
+    }
   }
 
   void ScanApplyOperation::revalidatePreparedCueSheets(std::size_t itemIndex,
@@ -878,29 +980,36 @@ namespace ao::rt
     }
   }
 
-  void ScanApplyOperation::revalidateMissingPath(std::size_t const itemIndex)
+  void ScanApplyOperation::revalidateMissingPath(std::size_t const itemIndex, std::stop_token stopToken)
   {
-    auto const& item = _plan.items()[itemIndex];
-    auto fullPathRes = resolveItemPath(item);
-
-    if (!fullPathRes)
+    try
     {
-      reportFailure(item.uri, "revalidate missing path", fullPathRes.error().message);
-      _skippedItems[itemIndex] = true;
-      return;
+      auto const& item = _plan.items()[itemIndex];
+      auto const fullPathRes = resolveItemPath(item);
+      auto existsEc = std::error_code{};
+      auto const exists = fullPathRes && std::filesystem::exists(*fullPathRes, existsEc);
+      async::throwIfStopRequested(stopToken);
+
+      if (exists)
+      {
+        skipStaleItem(itemIndex);
+      }
+      else if (!fullPathRes || existsEc)
+      {
+        auto const blocked = hasExactRegularScanAncestor(_ml.rootPath(), item.uri, stopToken);
+        async::throwIfStopRequested(stopToken);
+
+        if (!blocked)
+        {
+          reportFailure(
+            item.uri, "revalidate missing path", fullPathRes ? existsEc.message() : fullPathRes.error().message);
+          _skippedItems[itemIndex] = true;
+        }
+      }
     }
-
-    auto existsEc = std::error_code{};
-    auto const exists = std::filesystem::exists(*fullPathRes, existsEc);
-
-    if (existsEc)
+    catch (async::OperationCancelled const&)
     {
-      reportFailure(item.uri, "revalidate missing path", existsEc.message());
-      _skippedItems[itemIndex] = true;
-    }
-    else if (exists)
-    {
-      skipStaleItem(itemIndex);
+      _cancelled = true;
     }
   }
 
@@ -976,10 +1085,10 @@ namespace ao::rt
 
     admitItemsAgainstDatabase(trackWriter, stopToken);
 
-    // The writer exposes its candidate commit revision, one past the committed
-    // snapshot. Since this transaction has no staged writes yet, a matching
-    // revision means the spelling groups are unchanged since planning.
-    if (!_cancelled && !_abortTransaction && _ml.libraryRevision(write) != _plan._libraryRevision + 1U)
+    // A matching revision rules out new spelling peers, not a change to an existing peer's directory.
+    // The writer exposes its candidate commit revision, one past the committed snapshot.
+    if (!_cancelled && !_abortTransaction &&
+        (_hasUnconfirmedDirectoryPeers || _ml.libraryRevision(write) != _plan._libraryRevision + 1U))
     {
       admitSpellingGroups(write, stopToken);
     }
@@ -1100,17 +1209,26 @@ namespace ao::rt
     }
   }
 
-  void ScanApplyOperation::admitSpellingGroups(library::LibraryWrite const& write, std::stop_token stopToken)
+  struct ScanApplyOperation::SpellingAdmissions final
   {
-    auto spellingSources = std::unordered_map<std::string, std::size_t>{};
-    auto destinations = std::unordered_map<std::string, std::vector<std::size_t>>{};
+    std::unordered_map<std::string, std::size_t> spellingSources{};
+    std::unordered_map<std::string, std::vector<std::size_t>> destinations{};
+    std::unordered_map<std::string, std::vector<std::size_t>> directoryPeers{};
+
+    bool empty() const noexcept { return spellingSources.empty() && destinations.empty() && directoryPeers.empty(); }
+  };
+
+  ScanApplyOperation::SpellingAdmissions ScanApplyOperation::collectSpellingAdmissions(std::stop_token stopToken)
+  {
+    auto admissions = SpellingAdmissions{};
+    auto& [spellingSources, destinations, directoryPeers] = admissions;
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
       if (stopToken.stop_requested())
       {
         _cancelled = true;
-        return;
+        break;
       }
 
       if (_skippedItems[i] || !_preparedItems[i])
@@ -1120,18 +1238,47 @@ namespace ao::rt
 
       if (auto const& item = _plan.items()[i]; needsSpellingProof(item))
       {
-        spellingSources.emplace(scanSpellingKey(item.oldUri), i);
+        auto const* const planned = findPlannedSpelling(_plan._spellingEvidencePtr.get(), item.uri);
+        AO_INVARIANT(planned, "Prepared spelling relink lost its plan evidence");
+
+        if (isDirectorySpelling(*planned))
+        {
+          // A late filename variant at either end can contest a directory relink.
+          destinations[scanSpellingKey(item.oldUri)].push_back(i);
+          destinations[scanSpellingKey(item.uri)].push_back(i);
+          // The old and new URIs share this shortlist key by construction.
+          directoryPeers[scanDirectorySpellingKey(item.uri)].push_back(i);
+        }
+        else
+        {
+          // Retain the existing same-parent filename checks, including fallback.
+          spellingSources.emplace(scanSpellingKey(item.oldUri), i);
+        }
       }
       else if (item.classification == ScanClassification::New || item.classification == ScanClassification::Moved)
       {
         destinations[scanSpellingKey(item.uri)].push_back(i);
+
+        if (item.uri.contains('/'))
+        {
+          directoryPeers[scanDirectorySpellingKey(item.uri)].push_back(i);
+        }
       }
     }
 
-    if (spellingSources.empty() && destinations.empty())
+    return admissions;
+  }
+
+  void ScanApplyOperation::admitSpellingGroups(library::LibraryWrite const& write, std::stop_token stopToken)
+  {
+    auto admissions = collectSpellingAdmissions(stopToken);
+
+    if (_cancelled || admissions.empty())
     {
       return;
     }
+
+    auto& [spellingSources, destinations, directoryPeers] = admissions;
 
     // Exact source/destination checks already passed. Check every affected
     // group in one walk, before mutating any rows.
@@ -1156,22 +1303,85 @@ namespace ao::rt
         }
       }
 
-      auto const found = destinations.find(key);
+      auto const destination = destinations.find(key);
+      auto const directory =
+        directoryPeers.empty() ? directoryPeers.end() : directoryPeers.find(scanDirectorySpellingKey(row.first));
 
-      if (found == destinations.end() || std::ranges::binary_search(_plan._knownSpellingPeers, row.first))
+      if (destination != destinations.end() && !std::ranges::binary_search(_plan._knownSpellingPeers, row.first))
       {
-        continue;
+        rejectLateSpellingPeer(destination->second, stopToken);
+
+        if (_cancelled || _abortTransaction)
+        {
+          return;
+        }
+
+        destinations.erase(destination);
       }
 
-      rejectLateSpellingPeer(found->second, stopToken);
-
-      if (_cancelled || _abortTransaction)
+      if (directory != directoryPeers.end())
       {
+        rejectLateDirectoryPeer(row.first, directory->second, stopToken);
+
+        if (_cancelled || _abortTransaction)
+        {
+          return;
+        }
+      }
+    }
+  }
+
+  std::string_view ScanApplyOperation::directoryPeerEndpoint(ScanItem const& item, std::string_view peerUri) const
+  {
+    auto const* const planned = findPlannedSpelling(_plan._spellingEvidencePtr.get(), item.uri);
+
+    if (planned != nullptr && !isDirectorySpelling(*planned))
+    {
+      return {};
+    }
+
+    auto const isDirectoryRelink = !item.oldUri.empty() && planned != nullptr;
+
+    // A native or fallback spelling relink deliberately consumes this exact source.
+    if (isDirectoryRelink && peerUri == item.oldUri)
+    {
+      return {};
+    }
+
+    if (isScanDirectorySpellingPair(peerUri, item.uri))
+    {
+      return item.uri;
+    }
+
+    // Ordinary (including explicit) moves only guard the destination's directory group.
+    return isDirectoryRelink && isScanDirectorySpellingPair(peerUri, item.oldUri) ? std::string_view{item.oldUri}
+                                                                                  : std::string_view{};
+  }
+
+  void ScanApplyOperation::rejectLateDirectoryPeer(std::string_view const uri,
+                                                   std::span<std::size_t const> candidates,
+                                                   std::stop_token stopToken)
+  {
+    auto matches = std::vector<std::size_t>{};
+
+    for (auto const index : candidates)
+    {
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
         return;
       }
 
-      destinations.erase(found);
+      // The key is only an index. Unlike a filename group, not every
+      // folded peer is a candidate for every destination in this group.
+      if (!_skippedItems[index] && !directoryPeerEndpoint(_plan.items()[index], uri).empty() &&
+          !std::ranges::binary_search(_preparedItems[index]->independentDirectoryPeers, uri))
+      {
+        matches.push_back(index);
+      }
     }
+
+    rejectLateSpellingPeer(matches, stopToken);
   }
 
   void ScanApplyOperation::rejectLateSpellingPeer(std::span<std::size_t const> destinations, std::stop_token stopToken)
@@ -1184,10 +1394,17 @@ namespace ao::rt
         return;
       }
 
-      if (auto const& item = _plan.items()[index]; item.classification == ScanClassification::Moved)
+      if (_skippedItems[index])
       {
-        reportFailure(
-          item.uri, "validate library evidence", "another stored spelling now matches the moved destination");
+        continue;
+      }
+
+      if (auto const& item = _plan.items()[index]; isRelink(item))
+      {
+        auto const* const message = item.classification == ScanClassification::Moved
+                                      ? "another stored spelling now matches the moved destination"
+                                      : "another stored spelling now conflicts with the planned relink";
+        reportFailure(item.uri, "validate library evidence", message);
         _abortTransaction = true;
         return;
       }
