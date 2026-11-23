@@ -46,7 +46,7 @@ argument in original order. Consumers handle that remainder separately:
 
 - GTK passes it to its Aobus/GTK option partition.
 - WinUI accepts no remainder and reports its first unknown argument.
-- AppKit accepts `--state-root <path>` to select its native application-state root. Its parent appends that option to preserve the same state root in the successor. AppKit also accepts `--library <path>` only when no request has already been selected; it cannot override or accompany a parsed successor request. Other or incomplete native options fail startup.
+- AppKit accepts `--state-root <path>` to select its native application-state root. Its parent appends that option to preserve the same state root in the successor; if repeated, the last value wins. AppKit accepts `--library <path>` at most once, and not with a parsed successor request. Both split options require a nonempty next argument not starting with `-`; use `./-foo` for a relative path whose name starts with a dash. Other or incomplete native options fail startup.
 
 AppKit's native options are not shared protocol tokens. Their paths are resolved to absolute paths by the AppKit entry point; the shared `--library-root` still requires an absolute value at parsing.
 
@@ -58,7 +58,7 @@ AppKit's native options are not shared protocol tokens. Their paths are resolved
 - A split root requires a non-empty following argument that does not begin with
   `-`. An equals-form root requires a non-empty suffix.
 - The root value must be valid UTF-8 for the host path conversion and must be
-  absolute. Parsing makes it absolute/lexically normalized but does not require
+  absolute; `./-foo` is not valid for this private root. Parsing makes it absolute/lexically normalized but does not require
   it to exist; startup planning performs the directory check.
 - Encoding requires an absolute non-empty path, emits its normalized UTF-8
   native spelling, and does not emit `argv[0]`.

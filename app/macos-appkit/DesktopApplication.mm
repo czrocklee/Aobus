@@ -51,7 +51,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -1853,11 +1852,6 @@ namespace ao::appkit
 
 namespace ao::appkit
 {
-  desktop::LibrarySwitchRequest libraryOpenRequest(std::string_view path)
-  {
-    return {.libraryRoot = std::filesystem::absolute(utility::pathFromUtf8(path)), .scanAfterOpen = false};
-  }
-
   std::int32_t runDesktopApplication(DesktopLaunch launch, i18n::MessageCatalog catalog)
   {
     auto* const app = NSApp;

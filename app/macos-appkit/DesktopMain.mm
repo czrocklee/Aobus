@@ -3,7 +3,6 @@
 
 #include "DesktopApplication.h"
 #include <ao/Contract.h>
-#include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/utility/Path.h>
 
 #import <AppKit/AppKit.h>
@@ -26,7 +25,6 @@ int main(int argc, char** argv)
 {
   @autoreleasepool
   {
-    auto launch = ao::appkit::DesktopLaunch{};
     auto arguments = std::vector<std::string_view>{};
 
     for (std::int32_t index = 1; index < argc; ++index)
@@ -34,33 +32,15 @@ int main(int argc, char** argv)
       arguments.emplace_back(argv[index]);
     }
 
-    auto parseRes = ao::desktop::parseLibrarySuccessorProtocol(arguments);
+    auto startupRes = ao::appkit::parseDesktopStartupArguments(arguments);
 
-    if (!parseRes)
+    if (!startupRes)
     {
-      reportStartupError(parseRes.error().message);
+      reportStartupError(startupRes.error().message);
       return 2;
     }
 
-    launch.optRequest = std::move(parseRes->optRequest);
-    auto const& remaining = parseRes->remainingArguments;
-
-    for (std::size_t index = 0; index < remaining.size(); ++index)
-    {
-      if (remaining[index] == "--state-root" && index + 1 < remaining.size())
-      {
-        launch.stateRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index]));
-      }
-      else if (remaining[index] == "--library" && index + 1 < remaining.size() && !launch.optRequest)
-      {
-        launch.optRequest = ao::appkit::libraryOpenRequest(remaining[++index]);
-      }
-      else
-      {
-        reportStartupError("Invalid arguments: expected --state-root <path> or --library <path>.");
-        return 2;
-      }
-    }
+    auto launch = std::move(startupRes->launch);
 
     if (launch.stateRoot.empty())
     {

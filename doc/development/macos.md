@@ -226,6 +226,11 @@ bazel run //app/macos-appkit:aobus-appkit -- \
   --state-root "$appkit_root/state" --library "$appkit_root/library"
 ```
 
+Both `--library` and `--state-root` take a nonempty next argument that does not
+start with `-`; use `./-foo` for a relative path beginning with a dash. The
+last `--state-root` wins if repeated; `--library` may occur only once and cannot
+accompany a private successor request. See the [successor protocol](../reference/application/desktop-successor-protocol.md) for its stricter absolute-root requirement.
+
 The product requires `--library` to name an existing directory. It opens an
 existing database without automatically rescanning; without the [database marker](../system/desktop-library-lifecycle.md#invariants), it starts
 an initial scan. Use **Rescan Library** to index an empty or incomplete database

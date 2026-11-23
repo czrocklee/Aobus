@@ -4,7 +4,6 @@
 #include "AppKitPlaybackScenario.h"
 #include "AppKitScenarioSupport.h"
 #include <ao/Contract.h>
-#include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
 
@@ -25,38 +24,17 @@ int main(int argc, char** argv)
       arguments.emplace_back(argv[index]);
     }
 
-    auto parsedRes = ao::desktop::parseLibrarySuccessorProtocol(arguments);
+    auto startupRes = ao::appkit::parseDesktopStartupArguments(arguments, /*allowScenario=*/true);
 
-    if (!parsedRes)
+    if (!startupRes)
     {
+      std::println(stderr, "{}", startupRes.error().message);
       return 2;
     }
 
-    auto launch = ao::appkit::DesktopLaunch{};
-    auto const successor = parsedRes->optRequest.has_value();
-    launch.optRequest = std::move(parsedRes->optRequest);
-    auto scenario = std::string_view{"desktop"};
-    auto const& remaining = parsedRes->remainingArguments;
-
-    for (std::size_t index = 0; index < remaining.size(); ++index)
-    {
-      if (remaining[index] == "--state-root" && index + 1 < remaining.size())
-      {
-        launch.stateRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index]));
-      }
-      else if (remaining[index] == "--library" && index + 1 < remaining.size() && !launch.optRequest)
-      {
-        launch.optRequest = ao::appkit::libraryOpenRequest(remaining[++index]);
-      }
-      else if (remaining[index] == "--scenario" && index + 1 < remaining.size() && !successor)
-      {
-        scenario = remaining[++index];
-      }
-      else
-      {
-        return 2;
-      }
-    }
+    auto launch = std::move(startupRes->launch);
+    auto const successor = startupRes->successor;
+    auto const& scenario = startupRes->scenario;
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
         (scenario != "desktop" && scenario != "initial-index" && scenario != "membership" && scenario != "authoring" &&
