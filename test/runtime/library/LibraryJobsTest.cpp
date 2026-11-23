@@ -5,6 +5,7 @@
 
 #include "runtime/library/LibraryYamlImporter.h"
 #include "runtime/library/ScanApplyOperation.h"
+#include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
@@ -658,6 +659,53 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
+  TEST_CASE("LibraryJobs - caller stop before worker admission leaves the prepared restore unapplied", "[concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const existingTrackId =
+      libraryFixture.addTrack(library::test::TrackSpec{.title = "Existing", .uri = "existing.flac"});
+    auto& storage = libraryFixture.library();
+    auto executor = QueuedExecutor{};
+    auto stopSource = std::stop_source{};
+    auto changes = makeLibraryChanges(executor, storage);
+    auto runtimeFixture = LibraryCommandsFixture{storage, changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+    auto& jobs = library.jobs();
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Restored");
+    auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    REQUIRE(planRes);
+    auto const initialRevision = storage.libraryRevision(storage.readTransaction());
+
+    auto publishedRevisions = std::vector<std::uint64_t>{};
+    auto changeSub = changes.onChanged([&publishedRevisions](LibraryChangeSet const& change)
+                                       { publishedRevisions.push_back(change.libraryRevision); });
+    auto availabilitySub = library.onAuthoringAvailabilityChanged(
+      [&stopSource](LibraryAuthoringAvailability const& availability)
+      {
+        if (availability.state == LibraryAuthoringState::Maintenance)
+        {
+          std::ignore = stopSource.request_stop();
+        }
+      });
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future =
+      spawnFuture(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes), stopSource.get_token()), completedPtr);
+
+    REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
+    CHECK(stopSource.stop_requested());
+    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+    CHECK(library.authoringAvailability().state == LibraryAuthoringState::Available);
+    CHECK(publishedRevisions.empty());
+    auto const read = storage.readTransaction();
+    CHECK(storage.libraryRevision(read) == initialRevision);
+    CHECK_FALSE(storage.manifest().reader(read).get("imported.flac"));
+    auto const optExisting = storage.tracks().reader(read).get(existingTrackId);
+    REQUIRE(optExisting);
+    CHECK(optExisting->metadata().title() == "Existing");
+  }
+
   TEST_CASE("LibraryJobs - cancellation after import commit preserves mandatory completion", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -697,21 +745,81 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
-  TEST_CASE("LibraryJobs - exportLibraryAsync returns failure for invalid path")
+  TEST_CASE("LibraryJobs - export reports successful replacement when a finished observer requests stop",
+            "[concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    std::ignore = libraryFixture.addTrack(library::test::TrackSpec{.title = "Exported", .uri = "exported.flac"});
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& jobs = runtimeFixture.library().jobs();
+    auto const controlPath = libraryFixture.root() / "control.yaml";
+    auto const backupPath = libraryFixture.root() / "backup.yaml";
+    auto const previous = std::string{"# previous backup"};
+    std::ofstream{backupPath} << previous;
+    REQUIRE(ao::test::readFile(backupPath) == previous);
+    REQUIRE(runQueuedTask(runtime, executor, jobs.exportLibraryAsync(controlPath, ExportMode::Full)));
+    auto const expected = ao::test::readFile(controlPath);
+    REQUIRE(expected.contains("Exported"));
+
+    auto stopSource = std::stop_source{};
+    std::int32_t finishedCount = 0;
+    auto bytesAtFinish = std::string{};
+    auto finishedSub = jobs.onProgressFinished(
+      [&](LibraryTaskProgressFinished const&)
+      {
+        ++finishedCount;
+        bytesAtFinish = ao::test::readFile(backupPath);
+        std::ignore = stopSource.request_stop();
+      });
+    auto const res =
+      runQueuedTask(runtime, executor, jobs.exportLibraryAsync(backupPath, ExportMode::Full, stopSource.get_token()));
+
+    CHECK(res.has_value());
+    CHECK(stopSource.stop_requested());
+    CHECK(finishedCount == 1);
+    CHECK(bytesAtFinish == expected);
+    CHECK(ao::test::readFile(backupPath) == expected);
+  }
+
+  TEST_CASE("LibraryJobs - export reports IoError when a finished observer requests stop", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.library().jobs();
+    auto const directoryTarget = libraryFixture.root() / "backup.yaml";
+    REQUIRE(std::filesystem::create_directory(directoryTarget));
+    auto const priorPath = directoryTarget / "existing.yaml";
+    auto const previous = std::string{"# previous backup"};
+    std::ofstream{priorPath} << previous;
+    REQUIRE(ao::test::readFile(priorPath) == previous);
 
-    auto const res =
-      runQueuedTask(runtime, executor, jobs.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
+    auto const controlRes =
+      runQueuedTask(runtime, executor, jobs.exportLibraryAsync(directoryTarget, ExportMode::Full));
+    REQUIRE_FALSE(controlRes);
+    CHECK(controlRes.error().code == Error::Code::IoError);
+
+    auto stopSource = std::stop_source{};
+    std::int32_t finishedCount = 0;
+    auto finishedSub = jobs.onProgressFinished(
+      [&](LibraryTaskProgressFinished const&) noexcept
+      {
+        ++finishedCount;
+        std::ignore = stopSource.request_stop();
+      });
+    auto const res = runQueuedTask(
+      runtime, executor, jobs.exportLibraryAsync(directoryTarget, ExportMode::Full, stopSource.get_token()));
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::IoError);
+    CHECK(stopSource.stop_requested());
+    CHECK(finishedCount == 1);
+    CHECK(ao::test::readFile(priorPath) == previous);
   }
 
   TEST_CASE("LibraryJobs - YAML transfers publish coarse progress and one terminal pulse")

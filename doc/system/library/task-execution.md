@@ -87,19 +87,23 @@ Neither the finished pulse nor an awaited-task caller refreshes runtime replicas
 
 Tasks check caller cancellation at admission and at cancellable executor hops. Between files, an identity worker yields without throwing so it can return completed candidates to the coordinator. Only operations with a synchronous stop-token surface support cancellation during their core work.
 
-| Operation          | In-operation cancellation                                                                                            |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| YAML import/export | None after synchronous transfer work begins.                                                                         |
-| Scan plan build    | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
-| Scan plan apply    | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction.                          |
-| Identity backfill  | Cooperative between hash chunks; completed hash candidates in the current batch are submitted for revalidation.      |
+| Operation         | Caller cancellation                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| YAML preview      | No check during synchronous work; checks again after cleanup, before returning its result.                           |
+| YAML apply        | Last check on worker resume, before binding revalidation or lane entry.                                              |
+| YAML export       | Checks per record and [after serialization](yaml-transfer.md#export-modes), before writing; no cleanup check.        |
+| Scan plan build   | Cooperative while copying the manifest, walking entries, reporting progress, matching moves, and hashing candidates. |
+| Scan plan apply   | Cooperative between items and fingerprint chunks; cancellation aborts the plan transaction.                          |
+| Identity backfill | Cooperative between hash chunks; completed hash candidates in the current batch are submitted for revalidation.      |
+
+[YAML transfer](yaml-transfer.md#failure-and-cancellation) specifies the import checkpoints and their outcomes.
 
 Observing cooperative cancellation unwinds the task; requesting cancellation alone does not guarantee that work using a borrowed owner has stopped.
 Business code does not reinterpret cancellation as a generic recoverable error or encode it in a successful value.
 Pre-admission cancellation has no progress-channel side effect; post-admission cancellation follows the admitted conversation's cleanup contract.
 Once scan apply or identity backfill has acquired its background-task lease, task plumbing returns to the callback executor without consulting the stop token, finishes the lease, emits the status-free progress pulse, and then propagates `OperationCancelled`.
 The same cleanup occurs whether cancellation is observed as stop-token state or escapes from worker code as an exception.
-Closing separately requests stop from active pre-transaction work and retires queued command requests.
+Coordinated Closing retires every queued command request and uses a separate lane stop source to request stop from any active command in its pre-transaction or transaction phase.
 Once native commit succeeds, caller cancellation cannot replace `Published` or internal `RetiredByClosing` with an ordinary pre-commit outcome.
 While the runtime and write lane remain live, caller stop does not discard an accepted identity batch waiting for its turn.
 Terminal Closing need not flush uncommitted identity work; the [backfill contract](scan-and-identity.md#identity-backfill) describes its outcome.
@@ -111,8 +115,9 @@ If an unexpected exception escapes worker execution, task plumbing carries and r
 Failure before commit releases the owning guard or lease without advancing the library revision.
 An ordinary successful task return is a materialization barrier: every revision committed by that operation has reached revision settlement before its guard or lease is released.
 Failure from native commit through mandatory publication in a live runtime is an infrastructure fault and terminates; task code does not reinterpret durable mutation as an uncommitted `Result` failure.
-Coordinated Closing may retire a queued command, a not-yet-running publication, or an unclaimed Maintenance control delivery and produces no synthetic task outcome.
-It may likewise retire an admitted progress conversation before its callback-owner finalization; that owner-lifetime boundary emits no synthetic finished pulse.
+Coordinated Closing may also retire a not-yet-running publication or an unclaimed Maintenance control delivery.
+Retirement produces no synthetic task outcome.
+Closing may likewise retire an admitted progress conversation before its callback-owner finalization; that owner-lifetime boundary emits no synthetic finished pulse.
 Optional progress and per-item failure callbacks run inside task execution rather than an exception-containment boundary.
 If one throws, required cleanup completes before that exception propagates and replaces the task outcome; a per-item failure is logged before its optional callback runs.
 
@@ -126,6 +131,7 @@ If one throws, required cleanup completes before that exception propagates and r
 ## Test map
 
 - [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+  It also checks that caller stop requested by the export progress-finished observer preserves both successful replacement and `IoError` outcomes.
 - [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
 - [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
 - [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting, worker capacity reserved for unrelated work, single-worker service between files, and bounded write-back behavior.

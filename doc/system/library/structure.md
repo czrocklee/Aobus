@@ -252,7 +252,7 @@ A media rescan cannot preserve database-only curation, and a damaged database ca
 
 Before commit, recoverable storage and external-data failures use the operation's typed result channel and leave the previous committed state visible.
 After a live durable commit, publication admission or delivery failure is fatal because the runtime cannot safely report an uncommitted result or continue with stale replicas.
-Coordinated Closing is the sole retirement path: it seals command and task admission, retires queued work, requests stop from pre-transaction work, and waits for the lane and publication owner to quiesce.
+Coordinated Closing is the sole retirement path: it seals command and task admission, retires queued work, requests cooperative stop from active pre-transaction or transaction work, and waits for the lane and publication owner to quiesce. The request does not guarantee rollback.
 A synchronous publication observer must defer shutdown to a later callback-executor turn.
 
 `CoreRuntime::shutdown()` seals library mutation/publication before closing callback resumption, then stops and joins workers while library-backed collaborators remain alive.

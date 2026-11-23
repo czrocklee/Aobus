@@ -109,9 +109,18 @@ Every mode that emits track records also emits `segment` for a segment Track, in
 A `full` export opens no audio file and needs none to succeed, because a descriptor is a database fact.
 `delta` and `metadata` omit covers entirely: a mode whose consumer reconstructs the file baseline would otherwise overwrite the art that baseline just read with a sequence the exporting database may no longer agree with.
 
-The exporter constructs the complete YAML tree before writing anything, then installs it under the [atomic file replacement](../persistence/atomic-replacement.md) contract; a destination below a directory that does not exist fails with `IoError` and creates nothing, because naming the directory is the caller's part.
-The destination therefore holds its previous content, or nothing, until one complete document replaces it: an export that fails or is cancelled costs the user nothing, which matters because the path an export names is usually the backup it is replacing.
-An export observes cancellation between records and installs no file when it stops; that is a cancelled task rather than an export failure.
+The exporter builds and serializes the complete YAML document before writing, then installs it under the [atomic file replacement](../persistence/atomic-replacement.md) contract.
+The caller supplies an existing destination directory; if it is missing, export returns `IoError` without creating the directory or the file.
+A failure before replacement leaves the previous destination intact, or absent if it did not exist.
+Replacement installs a complete document without exposing a partial write.
+
+The exporter checks the caller token at record boundaries, including while collecting cover descriptors for `full`, and one last time after YAML serialization, immediately before starting the atomic write.
+A stop observed at a checkpoint throws `OperationCancelled` without changing the destination, preserving any backup at that path.
+Neither YAML serialization nor the atomic write polls the token while running.
+
+After the worker phase, `LibraryJobs` returns to the callback executor and emits the progress-finished pulse without checking the caller token again.
+It then returns the export result or rethrows the deferred exception. A stop requested during the atomic write or callback cleanup cannot replace success or an export error with `OperationCancelled`.
+
 For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values. For a segment Track, the baseline is the carrier audio file, not the external CUE sheet.
 An unsafe or otherwise unresolvable URI fails export; an error checking whether the resolved path exists fails with `IoError`.
 
@@ -271,10 +280,21 @@ Export iterator integrity faults likewise unwind without producing a partial YAM
 After a durable live-runtime commit, revision-admission, publication-admission, or delivery failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and a live runtime terminates rather than exposing a recovery state.
 Offline import has no runtime publication phase; its transaction commit result is its terminal outcome.
 
-`LibraryJobs` honors cancellation on executor transitions.
-Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
-Before commit, cancellation aborts or prevents the Maintenance mutation and the workflow still completes its sequenced Maintenance exit while the runtime remains live.
-After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
+Both live import operations check the caller token at initial callback-executor admission and at the worker transition after Maintenance entry.
+A stop observed at the worker transition prevents the Maintenance mutation.
+While the runtime remains live, `LibraryJobs` still awaits the sequenced Maintenance exit, releases the background-task lease, and emits the progress-finished pulse on the callback executor before propagating `OperationCancelled`.
+
+For prepared apply, the last caller-token checkpoint is when execution resumes on the worker, before revalidating the plan bindings or requesting the Maintenance mutation turn.
+Apply does not check the caller token at lane entry, during synchronous apply or commit, or during finalization.
+A stop request after that checkpoint can arrive before lane entry or during apply without preventing commit; the task can still return success.
+Preview does not check the caller token during synchronous preparation or preview.
+It aborts any preview transaction and checks the token again after Maintenance exit and callback-owner cleanup, before returning its result.
+
+Coordinated Closing is separate from a caller stop request.
+Closing retires every queued command request and can prevent an active command from starting a transaction.
+The current synchronous YAML apply kernel does not poll the lane's Closing token once the transaction starts.
+After a durable commit, the command must reach `Published` or `RetiredByClosing` before the caller can observe any `OperationCancelled` caused by Closing.
+A durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
 Version 1 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
@@ -341,10 +361,14 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`CueYamlBaselineTest.cpp`](../../../test/runtime/CueYamlBaselineTest.cpp) checks the file facts Restore seeds and when Merge preserves or invalidates the fingerprint of a whole file or CUE carrier.
 - [`CueYamlPreparationTest.cpp`](../../../test/runtime/CueYamlPreparationTest.cpp) checks prepared-import staleness and preservation of intervening writes.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
+  It also checks preservation of the destination under an already-requested stop, both with a track record and with an empty library, plus complete replacement on success and rejection of a missing destination directory without creating it.
 - [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves title-action, recording-date, and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
-- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
+- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) checks source/target binding, one-shot plans, cancellation before Maintenance, preview cleanup after a stop at worker admission, and mandatory callback completion after commit.
+  For prepared apply, it checks that a stop requested at the Maintenance notification, before worker admission, propagates `OperationCancelled` without changing the target or publishing.
+- The Linux [`LibraryImportApplyCancellationTest.cpp`](../../../test/linux/runtime/LibraryImportApplyCancellationTest.cpp) requests stop during a worker-side read after worker admission and before mutation submission, then checks that prepared apply commits, publishes, and returns success.
+  It also requests caller stop during prepared Restore, after a table clear is staged but before commit, and checks that readers still see the old revision before commit and that Restore commits, publishes one reset, and returns success.
 - [`LibraryTransferPresentationTest.cpp`](../../../test/uimodel/library/presentation/LibraryTransferPresentationTest.cpp) proves export-option order and the Full default, both restore scopes, complete report arguments, and stable payload-mode tokens.
 - [`LibraryTransferAdapterTest.cpp`](../../../test/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping and restore-only destructive admission.
 - [`LibraryImportExportWorkflowTest.cpp`](../../../test/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.

@@ -32,7 +32,11 @@ foreign-platform test available.
   probes are never linked into ordinary storage tests or product binaries.
 - Application tests cover runtime services and playback, UIModel, catalogs,
   desktop support, the portable WinUI model, performance reporting, media
-  fixtures, and runtime fatal-probe scenarios.
+  fixtures, and runtime fatal-probe scenarios. On Linux,
+  `//test:library_import_apply_cancellation_test` intercepts `mdb_txn_begin`
+  for prepared binding reads and `mdb_drop` during Restore to exercise
+  [cancellation](../../system/library/yaml-transfer.md#test-map).
+  The interceptions are linked only into this test executable.
 - CLI and TUI tests own their frontend contracts.
 - Linux `//test:systemmedia_test` owns shared MPRIS adapter contracts and real-TUI
   process cases on owned PTYs/private buses. It is available when system media

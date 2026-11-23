@@ -243,6 +243,8 @@ def _skipped(label, config, *, aspect=None):
 class CompletionEvidenceTest(unittest.TestCase):
     """One expanded suite, one permitted skip and one independently required test."""
 
+    LINUX_INTERPOSED_TESTS = ("//test:dictionary_publication_test", "//test:library_import_apply_cancellation_test")
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -406,35 +408,34 @@ class CompletionEvidenceTest(unittest.TestCase):
             },
         }
 
-    def test_dictionary_publication_requires_a_linux_pass_even_without_suite_discovery(self):
-        label = "//test:dictionary_publication_test"
+    def test_interposed_tests_require_a_linux_pass_even_without_suite_discovery(self):
         self.scope = completion._selection("linux", completion.Request())
-        for discovered in ((), (label,)):
-            expansions = self.expanded_check_suites(*discovered)
-            events = [
-                expansions,
-                self.policy_result([UNIT_TEST]),
-                _summary(),
-                *(_summary(item) for item in self.scope.required - {label}),
-            ]
-            for evidence in ([], [_skipped(label, "skip-cfg")], [_summary(label, status="FAILED")]):
-                with (
-                    self.subTest(discovered=discovered, evidence=evidence),
-                    self.assertRaises(bazel_native.BazelWorkspaceError),
-                ):
-                    self.verify([*events, *evidence, self.finish, self.last])
-            self.verify([*events, _summary(label), self.finish, self.last])
+        for label in self.LINUX_INTERPOSED_TESTS:
+            for discovered in ((), (label,)):
+                events = [
+                    self.expanded_check_suites(*discovered),
+                    self.policy_result([UNIT_TEST]),
+                    _summary(),
+                    *(_summary(item) for item in self.scope.required - {label}),
+                ]
+                for evidence in ([], [_skipped(label, "skip-cfg")], [_summary(label, status="FAILED")]):
+                    with (
+                        self.subTest(label=label, discovered=discovered, evidence=evidence),
+                        self.assertRaises(bazel_native.BazelWorkspaceError),
+                    ):
+                        self.verify([*events, *evidence, self.finish, self.last])
+                self.verify([*events, _summary(label), self.finish, self.last])
 
-    def test_foreign_dictionary_skip_does_not_hide_missing_or_skipped_required_checks(self):
-        label = "//test:dictionary_publication_test"
+    def test_foreign_linux_test_skips_do_not_hide_missing_or_skipped_required_checks(self):
+        labels = self.LINUX_INTERPOSED_TESTS
         for platform in ("macos", "windows"):
             with self.subTest(platform=platform):
                 self.scope = completion._selection(platform, completion.Request())
                 base = [
-                    self.expanded_check_suites(label),
+                    self.expanded_check_suites(*labels),
                     self.policy_result([UNIT_TEST]),
                     _summary(),
-                    _skipped(label, "skip-cfg"),
+                    *(_skipped(label, "skip-cfg") for label in labels),
                 ]
                 for gate in ("//:native_policy", "//test/lint:production_lint"):
                     others = [_summary(item) for item in self.scope.required - {gate}]

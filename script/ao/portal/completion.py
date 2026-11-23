@@ -102,7 +102,11 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     else:
         optional.update(windows_probes | windows_analysis)
     # The ordinary suite expands these Linux-only tests on every host.
-    linux_only = {"//test:dictionary_publication_test", "//bazel/header_share:sparse_headers_test"}
+    linux_only = {
+        "//bazel/header_share:sparse_headers_test",
+        "//test:dictionary_publication_test",
+        "//test:library_import_apply_cancellation_test",
+    }
     if platform == "linux":
         required.update(linux_only)
         suites.add("//:instrumentation_tests")
