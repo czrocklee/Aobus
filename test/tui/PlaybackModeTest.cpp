@@ -11,6 +11,8 @@
 #include "tui/PlaybackPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
+#include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -22,6 +24,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <list>
 #include <string>
 #include <string_view>
@@ -107,7 +110,11 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackMode - time and volume changes preserve adjacent button positions")
   {
-    auto state = rt::PlaybackTransportSnapshot{.duration = std::chrono::minutes{20}};
+    auto state = rt::PlaybackTransportSnapshot{
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::minutes{20},
+      .nowPlaying = {.trackId = TrackId{42}},
+    };
     state.volume.level = 0.99F;
     auto nextState = state;
     auto const elapsed = std::chrono::seconds{599};
@@ -177,6 +184,47 @@ namespace ao::tui::test
         CHECK(outputBox.x_max == beforeOutput.x_max);
         CHECK_FALSE(outputBox.Contain(beforeMode.x_max, beforeMode.y_min));
       }
+    }
+  }
+
+  TEST_CASE("PlaybackMode - unknown duration keeps adjacent targets still when elapsed gains digits")
+  {
+    constexpr std::int32_t kColumns = 140;
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .nowPlaying = {.trackId = TrackId{42}, .title = "Signal Path"},
+    };
+    auto const output = uimodel::OutputDeviceViewState{.outputBackendSummary = "PW", .hasActiveOutputDevice = true};
+    auto modeBox = kEmptyMouseBox;
+    auto outputBox = kEmptyMouseBox;
+    auto view = PlaybackBarViewState{.playbackState = &state,
+                                     .displayElapsed = std::chrono::seconds{599},
+                                     .outputView = &output,
+                                     .outputDeviceBox = &outputBox,
+                                     .playbackModeBox = &modeBox,
+                                     .terminalColumns = kColumns};
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const before = renderElement(playbackBar(catalog, view), kColumns, 1);
+    CHECK(before.text.contains("9:59"));
+    REQUIRE_FALSE(modeBox.IsEmpty());
+    REQUIRE_FALSE(outputBox.IsEmpty());
+    auto const firstModeBox = modeBox;
+    auto const firstOutputBox = outputBox;
+
+    for (auto const& [elapsed, label] : std::array{std::pair{std::chrono::seconds{600}, "10:00"},
+                                                   std::pair{std::chrono::seconds{3599}, "59:59"},
+                                                   std::pair{std::chrono::seconds{3600}, "1:00:00"},
+                                                   std::pair{std::chrono::seconds{359999}, "99:59:59"}})
+    {
+      CAPTURE(label);
+      view.displayElapsed = elapsed;
+      auto const frame = renderElement(playbackBar(catalog, view), kColumns, 1);
+      CHECK(frame.text.contains(label));
+      CHECK(modeBox.x_min == firstModeBox.x_min);
+      CHECK(modeBox.x_max == firstModeBox.x_max);
+      CHECK(outputBox.x_min == firstOutputBox.x_min);
+      CHECK(outputBox.x_max == firstOutputBox.x_max);
     }
   }
 

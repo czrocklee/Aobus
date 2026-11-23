@@ -113,6 +113,10 @@ On a focused desktop slider, unmodified Left and Right arrows seek in five-secon
 
 A drag belongs to the playback occurrence on which it began. If playback installs another occurrence (even of the same track) or the track stops being seekable, the slider and clock follow the live position and duration. The control still handles the old gesture until release, but sends no more previews or seeks from it. Seeking the replacement requires a new press.
 
+If a drag's final seek is rejected, the slider and clock return to live elapsed time unless a newer preview owns the display. They respond to the [preview-ended event](application-commit.md#observation), not a position change.
+
+For a track of unknown duration, show elapsed time and `--:--` for the total and disable seeking. For a track of known duration, show the total even at position zero or after its occurrence ends; without a current occurrence the slider is read-only. With no track to display, use the frontend's idle clock.
+
 ### Explicit start
 
 A view start captures a launch description and constructs a candidate cursor session before changing active state. Player performs decoder inspection and optional optimistic decoder preparation on runtime workers. Acceptance returns to the callback executor and revalidates the source, request, playback generation, route, and start context before Engine commits.

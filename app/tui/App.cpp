@@ -454,6 +454,27 @@ namespace ao::tui
       return uimodel::FrameClock::fromMicros(micros);
     }
 
+    void applyPlaybackPositionView(uimodel::PlaybackPositionViewState const& view,
+                                   uimodel::PlaybackPositionInterpolator& clock,
+                                   std::optional<std::chrono::milliseconds>& optPreviewElapsed)
+    {
+      if (view.isPreviewing)
+      {
+        optPreviewElapsed = view.elapsed;
+        return;
+      }
+
+      optPreviewElapsed.reset();
+
+      if (!view.hasTrack)
+      {
+        clock.reset();
+        return;
+      }
+
+      clock.updateState(view.elapsed, view.duration, view.isPlaying);
+    }
+
     struct WorkspaceLocale final
     {
       i18n::MessageCatalog catalog;
@@ -891,7 +912,9 @@ namespace ao::tui
         // Pause coasting and aura cross-fades outlive the transport clock tick.
         soulSettling.store(soulClock.isSettling());
 
-        auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
+        auto const clockElapsed = playbackClock.interpolateElapsed(frameTime);
+        auto const displayElapsed =
+          state.hasSeekableSubject() ? optPreviewElapsed.value_or(clockElapsed) : clockElapsed;
         auto const animationElapsed =
           preferences.reducedMotion
             ? std::chrono::milliseconds{0}
@@ -1476,31 +1499,15 @@ namespace ao::tui
     auto soulSettling = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
-    auto playbackTime = uimodel::PlaybackPositionViewModel{
-      playback,
-      [&](uimodel::PlaybackPositionViewState const& view)
-      {
-        clockTickActive.store(shouldTickTransportClock(playback.snapshot().transport.transport));
-
-        if (view.duration == std::chrono::milliseconds{0})
-        {
-          optPreviewElapsed.reset();
-          playbackClock.reset();
-          requestRefresh();
-          return;
-        }
-
-        if (view.isPreviewing)
-        {
-          optPreviewElapsed = view.elapsed;
-          requestRefresh();
-          return;
-        }
-
-        optPreviewElapsed.reset();
-        playbackClock.updateState(view.elapsed, view.duration, view.isPlaying);
-        requestRefresh();
-      }};
+    auto playbackTime =
+      uimodel::PlaybackPositionViewModel{playback,
+                                         [&](uimodel::PlaybackPositionViewState const& view)
+                                         {
+                                           auto const& state = playback.snapshot().transport;
+                                           clockTickActive.store(shouldTickTransportClock(state.transport));
+                                           applyPlaybackPositionView(view, playbackClock, optPreviewElapsed);
+                                           requestRefresh();
+                                         }};
     auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
       runtime.notifications(),
       textCatalog,

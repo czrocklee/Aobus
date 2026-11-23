@@ -60,6 +60,18 @@ namespace
     return field;
   }
 
+  std::string playbackBarTime(ao::uimodel::PlaybackTimeMode mode,
+                              ao::uimodel::PlaybackPositionViewState const& position,
+                              std::chrono::milliseconds elapsed)
+  {
+    if (!position.hasTrack)
+    {
+      return mode == ao::uimodel::PlaybackTimeMode::Combined ? "0:00 / 0:00" : "0:00";
+    }
+
+    return ao::uimodel::formatPlaybackTime(mode, elapsed, position.duration);
+  }
+
   void detachView(NSView* view)
   {
     if ([view.superview isKindOfClass:NSStackView.class] != NO)
@@ -681,8 +693,7 @@ namespace
                                 : @"repeat"
      accessibilityDescription:nil];
   auto const duration = state.position.duration;
-  _duration.stringValue = nativeText(
-    ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Duration, std::chrono::milliseconds{}, duration));
+  _duration.stringValue = nativeText(playbackBarTime(ao::uimodel::PlaybackTimeMode::Duration, state.position, {}));
   _seek.enabled = static_cast<BOOL>(state.position.seekable);
   [_seek presentSeekTarget:state.position.seekable
                              ? std::optional{ao::appkit::PlaybackSeekTarget{.occurrenceId = state.position.occurrenceId,
@@ -731,15 +742,23 @@ namespace
   auto const& play = state.transport[static_cast<std::size_t>(ao::uimodel::PlaybackCommand::PlayPause)];
   [_soul presentState:state.soul playing:static_cast<BOOL>(play.playing) modern:modern];
   auto const duration = state.position.duration;
-  _elapsed.stringValue = nativeText(ao::uimodel::formatPlaybackTime(
-    (modern != NO) ? ao::uimodel::PlaybackTimeMode::Elapsed : ao::uimodel::PlaybackTimeMode::Combined,
-    elapsed,
-    duration));
-  _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
-    *_optCatalog,
-    MessageId::AppKitPlaybackPositionValue,
-    {{"elapsed", ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Elapsed, elapsed, duration)},
-     {"duration", ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Duration, elapsed, duration)}});
+  auto const elapsedText = playbackBarTime(ao::uimodel::PlaybackTimeMode::Elapsed, state.position, elapsed);
+  _elapsed.stringValue = nativeText(
+    modern != NO ? elapsedText : playbackBarTime(ao::uimodel::PlaybackTimeMode::Combined, state.position, elapsed));
+
+  if (state.position.hasTrack && duration <= std::chrono::milliseconds::zero())
+  {
+    _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
+      *_optCatalog, MessageId::AppKitPlaybackPositionUnknownDurationValue, {{"elapsed", elapsedText}});
+  }
+  else
+  {
+    _seek.accessibilityValueDescription = ao::appkit::catalogFormat(
+      *_optCatalog,
+      MessageId::AppKitPlaybackPositionValue,
+      {{"elapsed", elapsedText},
+       {"duration", playbackBarTime(ao::uimodel::PlaybackTimeMode::Duration, state.position, elapsed)}});
+  }
 
   [_seek presentPlaybackFraction:duration.count() > 0
                                    ? static_cast<double>(elapsed.count()) / static_cast<double>(duration.count())

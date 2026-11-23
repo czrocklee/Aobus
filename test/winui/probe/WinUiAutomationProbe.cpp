@@ -1278,6 +1278,16 @@ namespace
       auto const& idle = runtime.playback().snapshot().transport;
       _primaryOccurrence = idle.occurrenceId;
 
+      if (_seekSteps)
+      {
+        auto const slider = findVisualById<Controls::Slider>(_root, L"modern-seek");
+        auto const elapsed = findVisualById<Controls::TextBlock>(_root, L"modern-elapsed");
+        auto const duration = findVisualById<Controls::TextBlock>(_root, L"modern-duration");
+        check(slider && !slider.IsEnabled() && elapsed && elapsed.Text() == L"00:00" && duration &&
+                duration.Text() == L"00:00",
+              "without a subject the seek strip must keep its idle clock template");
+      }
+
       if (!tryCheckDiscardRoute() ||
           !tryCheckPrimary(idle.transport == ao::audio::Transport::Idle &&
                              idle.nowPlaying.trackId == ao::kInvalidTrackId &&
@@ -1576,7 +1586,8 @@ namespace
 
     void awaitBackwardStep()
     {
-      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+      auto& runtime = _sessionPtr->runtime();
+      auto const& transport = runtime.playback().snapshot().transport;
 
       if (transport.elapsed != kBackwardOffset)
       {
@@ -1584,8 +1595,38 @@ namespace
         return;
       }
 
-      check(transport.occurrenceId == _primaryOccurrence && transport.transport == ao::audio::Transport::Paused,
-            "focused seek keys must preserve the paused occurrence");
+      if (!tryCheckPrimary(
+            transport.occurrenceId == _primaryOccurrence && transport.transport == ao::audio::Transport::Paused,
+            "focused seek keys must preserve the paused occurrence") ||
+          !tryCheckPrimary(runtime.savePlaybackSession().has_value(), "could not save the sought offset"))
+      {
+        return;
+      }
+
+      // The WAV has a decoded duration, but its catalog row has none. A deferred
+      // restore retains the offset without opening the decoder or deriving a total.
+      if (auto const restoredRes = runtime.restorePlaybackSession();
+          tryCheckPrimary(restoredRes && restoredRes->restored, "could not restore the unknown-duration cursor"))
+      {
+        afterFrame(&WinUiAutomationProbe::checkUnknownSeek);
+      }
+    }
+
+    void checkUnknownSeek()
+    {
+      _stage = "restored subject with unknown duration";
+      auto const& transport = _sessionPtr->runtime().playback().snapshot().transport;
+      auto const slider = findVisualById<Controls::Slider>(_root, L"modern-seek");
+      auto const elapsed = findVisualById<Controls::TextBlock>(_root, L"modern-elapsed");
+      auto const duration = findVisualById<Controls::TextBlock>(_root, L"modern-duration");
+      check(transport.nowPlaying.trackId == _seed.summaryTracks.front() && transport.occurrenceId.value != 0 &&
+              transport.occurrenceId != _primaryOccurrence && transport.hasDeferredResume &&
+              transport.duration == std::chrono::milliseconds{0} && transport.elapsed == kBackwardOffset,
+            "restore must install a new deferred occurrence of A at six seconds without a known total");
+      check(slider && !slider.IsEnabled() && !slider.Focus(FocusState::Keyboard),
+            "a subject without a duration must not admit focused seek keys");
+      check(elapsed && elapsed.Text() == L"0:06" && duration && duration.Text() == L"--:--",
+            "an unknown total must not erase the subject's elapsed clock");
       finish();
     }
 

@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 
 namespace ao::rt
 {
@@ -55,7 +56,7 @@ namespace ao::gtk
     bool _dirty = true;
     std::uint32_t _tickId = 0;
     std::chrono::seconds _lastElapsed{0};
-    std::chrono::seconds _lastDuration{0};
+    std::optional<std::chrono::seconds> _optLastDuration;
     // Constructed after every field touched by its synchronous initial-state callback.
     uimodel::PlaybackPositionViewModel _timeViewModel;
     sigc::scoped_connection _mapConnection;

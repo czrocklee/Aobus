@@ -32,6 +32,7 @@ aobus -C /music init
    With nothing to resume, Space starts playback only when the cursor is on a track, regardless of which rows are marked. [Linux system Play](#use-linux-system-media-controls) uses the same rule to resume or start a track.
    Use `s` to stop, `-`/`+` to change volume, and `<`/`>` for the previous or next track in the playback sequence.
    Press Left or `[` to seek back, or Right or `]` to seek forward. The default step is five seconds; change it under **Settings → Interaction → Keyboard seek step**.
+   If a track's total shows `--:--`, you can still read its elapsed time, but you can't seek.
 4. Press `l` to focus pinned Lists or open the List chooser. Press uppercase `L` to pin or unpin the Lists pane. Use `p` for presentations.
 5. Press `?` or F1 for the effective shortcut list. Shortcuts can be changed, so Help is the authority for the current session.
 

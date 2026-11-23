@@ -11,6 +11,7 @@
 #include "tui/PlaybackPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -45,8 +46,12 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
-    auto state =
-      rt::PlaybackTransportSnapshot{.elapsed = std::chrono::seconds{599}, .duration = std::chrono::minutes{20}};
+    auto state = rt::PlaybackTransportSnapshot{
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .elapsed = std::chrono::seconds{599},
+      .duration = std::chrono::minutes{20},
+      .nowPlaying = {.trackId = TrackId{42}},
+    };
     std::int32_t columns = 140;
     auto const nextColumns = columns;
     auto nextState = state;

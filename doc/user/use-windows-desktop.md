@@ -59,6 +59,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    When stopped with nothing to resume, Play starts the first selected track still visible in the current view, provided the output is available.
    With the seek slider focused, press Left or Right without modifiers to move five seconds per press. Repeated presses add up.
    If playback changes tracks or restarts the same track during a drag, release the slider and drag again to seek.
+   If the total shows `--:--`, the elapsed time remains visible, but the slider is disabled.
    Press `Ctrl+L`, or choose **Reveal Current Track** from the Now Playing menu in Modern or **Playback** in Classic. Aobus selects and scrolls to the track in the List where playback started, using **All Tracks** if that List no longer contains it. If reveal changes views, `Alt+Left` returns to the view you left with its filter intact.
    Aobus remembers your output backend, device, and profile. If the named output you requested is missing at launch, Aobus waits rather than playing through the default device. Reconnect it or choose another output, then press Play.
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.

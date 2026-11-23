@@ -24,6 +24,14 @@ namespace ao::rt
     Preview,
   };
 
+  /** One pointer gesture's previews share an identity, not a committed position. */
+  struct PlaybackPointerSeek final
+  {
+    PlaybackOccurrenceId occurrenceId{};
+    std::uint64_t serial = 0;
+    bool operator==(PlaybackPointerSeek const&) const = default;
+  };
+
   enum class PlaybackRelativeSeekEndBehavior : std::uint8_t
   {
     Clamp,
@@ -85,6 +93,15 @@ namespace ao::rt
                       std::chrono::milliseconds elapsed,
                       PlaybackSeekMode mode = PlaybackSeekMode::Final,
                       compat::MoveOnlyFunction<void()> onSettled = {}) = 0;
+
+    /** A pointer Final ends only the preview it owns if transport rejects the seek. */
+    virtual PlaybackPointerSeek beginPointerSeek(PlaybackOccurrenceId occurrenceId) = 0;
+    /** End this gesture's preview without seeking. A newer preview keeps ownership. */
+    virtual void cancelPointerSeek(PlaybackPointerSeek gesture) = 0;
+    virtual void seekPointer(PlaybackPointerSeek gesture,
+                             std::chrono::milliseconds elapsed,
+                             PlaybackSeekMode mode,
+                             compat::MoveOnlyFunction<void()> onSettled = {}) = 0;
 
     /**
      * Queues a guarded final seek relative to the execution-time live position.

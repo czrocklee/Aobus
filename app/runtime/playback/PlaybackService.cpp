@@ -157,6 +157,12 @@ namespace ao::rt
       return seekPreviewSignal.connect(std::move(handler));
     }
 
+    async::Subscription onSeekPreviewEnded(compat::MoveOnlyFunction<void(PlaybackOccurrenceId)> handler) override
+    {
+      ensureOnExecutor();
+      return seekPreviewEndedSignal.connect(std::move(handler));
+    }
+
     async::Subscription onRevealTrackRequested(
       compat::MoveOnlyFunction<void(PlaybackRevealTrackRequest const&)> handler) override
     {
@@ -278,13 +284,54 @@ namespace ao::rt
               PlaybackSeekMode const mode,
               compat::MoveOnlyFunction<void()> onSettled) override
     {
+      seekPointer({.occurrenceId = expectedOccurrenceId}, elapsed, mode, std::move(onSettled));
+    }
+
+    PlaybackPointerSeek beginPointerSeek(PlaybackOccurrenceId const occurrenceId) override
+    {
+      ensureOnExecutor();
+      return {.occurrenceId = occurrenceId, .serial = ++pointerSeekSerial};
+    }
+
+    void endOwnedPreview(PlaybackPointerSeek const gesture)
+    {
+      if (gesture.serial != 0 && gesture == activePreview)
+      {
+        pendingPreviewEnd = std::exchange(activePreview, {}).occurrenceId;
+      }
+    }
+
+    void cancelPointerSeek(PlaybackPointerSeek const gesture) override
+    {
+      submitVoid([this, gesture] { endOwnedPreview(gesture); }, false, false);
+    }
+
+    void seekPointer(PlaybackPointerSeek const gesture,
+                     std::chrono::milliseconds const elapsed,
+                     PlaybackSeekMode const mode,
+                     compat::MoveOnlyFunction<void()> onSettled) override
+    {
       std::ignore = submitCommand(
         QueuedCommand{
-          .operation = [this, expectedOccurrenceId, elapsed, mode] -> Result<bool>
+          .operation = [this, gesture, elapsed, mode] -> Result<bool>
           {
-            auto const transportMode = mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
-                                                                         : PlaybackTransport::SeekMode::Final;
-            std::ignore = transport.trySeek(expectedOccurrenceId, elapsed, transportMode);
+            auto const isPreview = mode == PlaybackSeekMode::Preview;
+            auto const transportMode =
+              isPreview ? PlaybackTransport::SeekMode::Preview : PlaybackTransport::SeekMode::Final;
+
+            if (transport.trySeek(gesture.occurrenceId, elapsed, transportMode))
+            {
+              if (isPreview)
+              {
+                activePreview = gesture;
+              }
+            }
+            else if (!isPreview)
+            {
+              // A rejected Final has no clock publication to replace its preview.
+              endOwnedPreview(gesture);
+            }
+
             return false;
           },
           .onSettled = std::move(onSettled),
@@ -688,6 +735,8 @@ namespace ao::rt
 
     void onSeekUpdate(PlaybackTransport::SeekUpdate const& update)
     {
+      activePreview = {};
+
       if (update.mode == PlaybackTransport::SeekMode::Preview)
       {
         if (commitDepth != 0)
@@ -836,6 +885,8 @@ namespace ao::rt
       latestInvalidatingGeneration = ++commandGenerationCounter;
       queuedCommands.clear();
       pendingSeekPreviews.clear();
+      activePreview = {};
+      pendingPreviewEnd = {};
       pendingRevealRequests.clear();
       subscriptions.clear();
       deferredControlPtr->owner = nullptr;
@@ -872,6 +923,12 @@ namespace ao::rt
     {
       auto seekPreviews = std::exchange(pendingSeekPreviews, {});
       auto revealRequests = std::exchange(pendingRevealRequests, {});
+      auto const endedPreview = std::exchange(pendingPreviewEnd, {});
+
+      if (endedPreview != PlaybackOccurrenceId{} && endedPreview == lastSnapshot.transport.occurrenceId)
+      {
+        emitInsideBoundary(seekPreviewEndedSignal, endedPreview);
+      }
 
       for (auto const elapsed : seekPreviews)
       {
@@ -1007,6 +1064,10 @@ namespace ao::rt
 
     async::Signal<PlaybackSnapshot const&> snapshotSignal;
     async::Signal<std::chrono::milliseconds> seekPreviewSignal;
+    async::Signal<PlaybackOccurrenceId> seekPreviewEndedSignal;
+    PlaybackPointerSeek activePreview{};
+    PlaybackOccurrenceId pendingPreviewEnd{};
+    std::uint64_t pointerSeekSerial = 0;
     async::Signal<PlaybackRevealTrackRequest const&> revealTrackSignal;
 
     std::vector<async::Subscription> subscriptions;

@@ -319,7 +319,8 @@ so contract-fulfilling observers run synchronously in connection order.
 An escaping exception enters AO fatal handling at that boundary and provides no later-observer guarantee.
 Observer-issued commands join the queue.
 
-Seek previews carry only their elapsed position and do not alter the snapshot.
+A seek preview carries an elapsed position without changing the snapshot. Canceling a gesture never issues a seek. On cancellation or a rejected Final, the service notifies `onSeekPreviewEnded` subscribers only if that gesture still owns the preview on the current occurrence. The slider and clock can then resample live elapsed without changing either seek revision or clearing a newer preview.
+
 Playing-track reveal requests carry the subject's track and source List ids. GTK, TUI and WinUI use [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source) before selecting or scrolling to the row. AppKit does not handle this playback reveal; its Reveal in Finder action locates a file instead.
 
 Explicit reveals, such as album navigation or GTK startup restore, carry the track and optional preferred view and List ids (invalid when unspecified). GTK and WinUI prefer the view, use the supplied List as a fallback, and do not weaken the target view's filter to expose a hidden row.

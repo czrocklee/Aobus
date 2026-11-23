@@ -23,6 +23,7 @@ For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [U
    The default application shortcuts include Ctrl+P for play/pause, Ctrl+Left and Ctrl+Right for previous and next, Ctrl+U for shuffle, and Ctrl+R for repeat.
 4. Drag or click the seek slider, or focus it and press Left or Right without modifiers to move five seconds per press. Repeated presses add up.
    If a different track starts or the same track starts again during a drag, the slider and clock show the new playback position. Release and drag again to seek.
+   If the total shows `--:--`, you can still read the elapsed time, but you can't seek.
 5. Use the volume button for precision control, scroll over it for two-percentage-point changes, or middle-click it to toggle mute.
 6. Open **Edit → Preferences... → Playback/Output** to choose an output device.
 

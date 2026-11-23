@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -31,15 +33,17 @@ namespace ao::uimodel
     rt::PlaybackOccurrenceId occurrenceId{};
     std::chrono::milliseconds duration{0};
     std::chrono::milliseconds elapsed{0};
+    bool hasTrack = false;
     bool isPlaying = false;
-    // Whether a position can be chosen at all: false for a track with no known
-    // duration, such as a stream.
+    // A retained track can still display its clock after seek ownership ends.
     bool seekable = false;
     // True for a transient seek preview: `elapsed` then carries the preview
     // position rather than the transport's own clock.
     bool isPreviewing = false;
     bool immediateUpdate = false;
   };
+
+  PlaybackPositionViewState playbackPositionView(rt::PlaybackTransportSnapshot const& state) noexcept;
 
   /**
    * Publishes the current playback position and accepts new ones.
@@ -62,6 +66,7 @@ namespace ao::uimodel
 
     void seekPreview(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
     void seekFinal(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
+    void cancelPointerSeek();
     // Discrete steps hold their displayed target until the guarded Final settles.
     // A pointer release finishes its existing shared preview instead.
     void commitSliderUpdate(SeekSliderUpdate const& update);
@@ -69,6 +74,9 @@ namespace ao::uimodel
     void seekBy(std::chrono::milliseconds delta);
 
   private:
+    void submitFinal(rt::PlaybackOccurrenceId occurrenceId,
+                     std::chrono::milliseconds elapsed,
+                     compat::MoveOnlyFunction<void()> onSettled);
     void refresh(bool immediateUpdate,
                  bool isPreviewing = false,
                  std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
@@ -86,12 +94,15 @@ namespace ao::uimodel
     std::function<void(PlaybackPositionViewState const&)> _onRender;
 
     audio::Transport _clockTransport = audio::Transport::Idle;
+    TrackId _clockTrackId = kInvalidTrackId;
     rt::PlaybackOccurrenceId _clockOccurrenceId{};
     rt::PlaybackPositionRevision _clockPositionRevision{};
     std::chrono::milliseconds _clockDuration{0};
 
     std::shared_ptr<rt::PlaybackOccurrenceId const> _pendingSliderOccurrencePtr;
     async::Subscription _snapshotSub;
+    rt::PlaybackPointerSeek _pointerSeek{};
     async::Subscription _seekPreviewSub;
+    async::Subscription _seekPreviewEndedSub;
   };
 } // namespace ao::uimodel

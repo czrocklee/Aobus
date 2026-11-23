@@ -437,8 +437,9 @@ namespace ao::winui
 
     if (end == PointerEnd::Cancel)
     {
-      // Do not dispatch the canceled drag's pending Final.
+      // Drop the pending Final; only the owner of the shared preview may restore the clock.
       updateRenderingRegistration();
+      _viewModelPtr->cancelPointerSeek();
       return;
     }
 

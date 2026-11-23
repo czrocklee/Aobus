@@ -14,7 +14,9 @@ On completion, the session clears the flag and calls the library invalidation ca
 
 Unmodified Left and Right on the focused slider queue relative steps against the presented occurrence and use live elapsed at execution. Other discrete value actions submit absolute seeks.
 
-The `presentation` scenario's [playback checks](../../../test/macos-appkit/AppKitPlaybackScenario.mm) cover repeated previews followed by one final seek, replacement including same-track replay, and relative key steps. They use generated AppKit events and native target/action callbacks, not physical input.
+When the track has an unknown duration, the slider's accessibility value gives elapsed time and says the duration is unknown instead of using `--:--`.
+
+The `presentation` scenario's [playback checks](../../../test/macos-appkit/AppKitPlaybackScenario.mm) cover repeated previews followed by one final seek, replacement including same-track replay, and relative key steps. They use generated AppKit events and native target/action callbacks, not physical input. They also inspect the unknown-duration accessibility value, not VoiceOver delivery.
 
 ## Text completion
 

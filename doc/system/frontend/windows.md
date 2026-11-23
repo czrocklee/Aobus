@@ -164,7 +164,7 @@ The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume
 
 Modern Soul handles right-click, hold, and hover like Classic Soul. Its click instead follows [primary Play policy](../playback/application-commit.md#primary-play), as does Classic's separate Play/Pause button.
 
-Both shells bind a [seek drag](../playback/README.md#position-and-keyboard-seeking) to the pointer captured by the slider or its template part. A release or capture loss from another pointer cannot end it. If the owner is canceled or the slider detaches mid-drag, the control does not commit a position.
+Both shells bind a [seek drag](../playback/README.md#position-and-keyboard-seeking) to the pointer captured by the slider or its template part. A release or capture loss from another pointer cannot end it. If the owner is canceled or the slider detaches mid-drag, the control discards its preview rather than committing a position.
 
 Enabled, engaged shuffle and repeat icons use a live accent theme resource in
 their element's resource scope. The icon style keeps the accent independent of

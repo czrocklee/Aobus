@@ -13,6 +13,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
@@ -84,9 +85,15 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar renders idle fallback state")
   {
-    auto const state = rt::PlaybackTransportSnapshot{};
+    auto const state = rt::PlaybackTransportSnapshot{.duration = std::chrono::seconds{125}};
 
-    auto const text = renderText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state}), 96);
+    auto seekRailBox = ftxui::Box{.x_min = 30, .x_max = 53, .y_min = 0, .y_max = 0};
+    auto const text = renderText(englishPlaybackBar(PlaybackBarViewState{
+                                   .playbackState = &state,
+                                   .displayElapsed = std::chrono::seconds{65},
+                                   .seekRailBox = &seekRailBox,
+                                 }),
+                                 96);
 
     CHECK_FALSE(text.contains("Aobus"));
     CHECK_FALSE(text.contains("Library"));
@@ -94,9 +101,12 @@ namespace ao::tui::test
     CHECK(containsBrailleGlyph(text));
     CHECK(text.contains("No active track"));
     CHECK(text.contains('-'));
-    CHECK(text.contains("0:00"));
+    CHECK(text.contains("0:00 ─"));
+    CHECK_FALSE(text.contains("1:05"));
     CHECK(text.contains("--:--"));
+    CHECK_FALSE(text.contains("2:05"));
     CHECK(text.contains("Vol 100%"));
+    CHECK(seekRailBox.IsEmpty());
   }
 
   TEST_CASE("PlaybackPanel - playback bar uses localized copy without changing track data")
@@ -141,12 +151,14 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume")
   {
-    auto state =
-      rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
-                                    .duration = std::chrono::seconds{125},
-                                    .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Artist"},
-                                    .volume = rt::VolumeState{.level = 0.42F},
-                                    .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{125},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path", .artist = "Artist"},
+      .volume = rt::VolumeState{.level = 0.42F},
+      .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat},
+    };
 
     auto const text = renderText(
       englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}),
@@ -160,6 +172,86 @@ namespace ao::tui::test
     CHECK(text.contains("1:05"));
     CHECK(text.contains("2:05"));
     CHECK(text.contains("Vol 42%"));
+  }
+
+  TEST_CASE("PlaybackPanel - current track of unknown duration shows elapsed with a disabled rail")
+  {
+    for (auto const transport : {audio::Transport::Playing, audio::Transport::Paused, audio::Transport::Idle})
+    {
+      CAPTURE(transport);
+      auto const state = rt::PlaybackTransportSnapshot{
+        .transport = transport,
+        .ready = transport != audio::Transport::Idle,
+        .hasDeferredResume = transport == audio::Transport::Idle,
+        .occurrenceId = rt::PlaybackOccurrenceId{7},
+        .elapsed = std::chrono::seconds{65},
+        .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+      };
+      auto seekRailBox = ftxui::Box{.x_min = 30, .x_max = 53, .y_min = 0, .y_max = 0};
+      auto const text = renderText(englishPlaybackBar(PlaybackBarViewState{
+                                     .playbackState = &state,
+                                     .displayElapsed = state.elapsed,
+                                     .seekRailBox = &seekRailBox,
+                                   }),
+                                   96);
+
+      CHECK(text.contains("Signal Path"));
+      CHECK(text.contains("1:05"));
+      CHECK(text.contains("──────────────────────── --:--"));
+      CHECK_FALSE(text.contains("●"));
+      CHECK_FALSE(text.contains("━"));
+      CHECK(seekRailBox.IsEmpty());
+    }
+  }
+
+  TEST_CASE("PlaybackPanel - retained track without an occurrence keeps timing with a disabled rail")
+  {
+    auto state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .elapsed = std::chrono::seconds{65},
+      .duration = std::chrono::seconds{125},
+      .nowPlaying = {.trackId = TrackId{42}, .title = "Signal Path"},
+    };
+    auto seekRailBox = ftxui::Box{};
+    auto const view = PlaybackBarViewState{
+      .playbackState = &state,
+      .displayElapsed = state.elapsed,
+      .seekRailBox = &seekRailBox,
+    };
+
+    CHECK(renderText(englishPlaybackBar(view), 96).contains("●"));
+    REQUIRE_FALSE(seekRailBox.IsEmpty());
+
+    state.transport = audio::Transport::Idle;
+    state.occurrenceId = {};
+    auto const text = renderText(englishPlaybackBar(view), 96);
+
+    CHECK(text.contains("Signal Path"));
+    CHECK(text.contains("1:05"));
+    CHECK(text.contains("──────────────────────── 2:05"));
+    CHECK_FALSE(text.contains("●"));
+    CHECK(seekRailBox.IsEmpty());
+  }
+
+  TEST_CASE("PlaybackPanel - a narrow dock shows elapsed beyond the unknown clock reservation")
+  {
+    constexpr std::int32_t kColumns = 48;
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
+    auto const text = renderText(englishPlaybackBar(PlaybackBarViewState{
+                                   .playbackState = &state,
+                                   .displayElapsed = std::chrono::hours{100},
+                                   .terminalColumns = kColumns,
+                                 }),
+                                 kColumns);
+
+    CHECK(text.contains("100:00:00"));
+    CHECK(text.contains("--:--"));
+    CHECK(text.contains("Vol 100%"));
   }
 
   TEST_CASE("PlaybackPanel - paused soul draws the supplied visual frame at any animation time")
@@ -216,9 +308,12 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar previews seek position without percent text")
   {
-    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
-                                               .duration = std::chrono::seconds{100},
-                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{100},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
 
     auto const text = renderText(
       englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}),
@@ -231,9 +326,12 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail")
   {
-    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
-                                               .duration = std::chrono::seconds{100},
-                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{100},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
     auto seekRailBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
@@ -250,8 +348,11 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar places output selector before elapsed time")
   {
-    auto state = rt::PlaybackTransportSnapshot{
-      .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto const state = rt::PlaybackTransportSnapshot{
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{100},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
     auto output = uimodel::OutputDeviceViewState{
       .outputBackendSummary = "PW",
       .outputDeviceStatus = "PipeWire: Studio DAC",
@@ -278,7 +379,10 @@ namespace ao::tui::test
   TEST_CASE("PlaybackPanel - playback bar expands seek rail on wide terminals")
   {
     auto const state = rt::PlaybackTransportSnapshot{
-      .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{100},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
     auto narrowRailBox = ftxui::Box{};
     auto wideRailBox = ftxui::Box{};
 
@@ -299,9 +403,12 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback dock stays on one row")
   {
-    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
-                                               .duration = std::chrono::seconds{100},
-                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto const state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Playing,
+      .occurrenceId = rt::PlaybackOccurrenceId{7},
+      .duration = std::chrono::seconds{100},
+      .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{42}, .title = "Signal Path"},
+    };
     auto seekRailBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));

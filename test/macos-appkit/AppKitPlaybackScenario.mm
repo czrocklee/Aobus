@@ -987,6 +987,7 @@ namespace ao::appkit::test
     auto state = session.state();
     state.nowPlaying.title = "Presentation scenario title";
     state.nowPlaying.artist = "Presentation scenario artist";
+    state.position.hasTrack = true;
     state.position.duration = 4min;
     state.position.elapsed = 1min;
     state.position.seekable = true;
@@ -1098,16 +1099,44 @@ namespace ao::appkit::test
                  "playing artwork must expose label and availability accessibility text");
 
     auto zeroState = state;
-    zeroState.position.duration = 0ms;
-    zeroState.position.elapsed = 0ms;
-    zeroState.position.seekable = false;
+    zeroState.position = {};
     [playback renderState:zeroState modern:YES];
     [playback renderFrameForState:zeroState elapsed:0ms modern:YES];
     auto* const modernElapsed = requireControl<NSTextField>(playback.modernView, @"playback.elapsed");
     auto* const modernDuration = requireControl<NSTextField>(playback.modernView, @"playback.duration");
     AO_INVARIANT([modernElapsed.stringValue isEqualToString:@"0:00"] != 0 &&
-                   [modernDuration.stringValue isEqualToString:@"0:00"] != 0,
-                 "zero playback time must remain readable in Modern mode");
+                   [modernDuration.stringValue isEqualToString:@"0:00"] != 0 &&
+                   [modernSeek.accessibilityValueDescription isEqualToString:@"0:00 of 0:00"] != NO,
+                 "Idle playback must keep its zero clocks in Modern mode");
+
+    auto retainedState = zeroState;
+    retainedState.position.hasTrack = true;
+    retainedState.position.duration = 4min;
+    [playback renderState:retainedState modern:YES];
+    [playback renderFrameForState:retainedState elapsed:0ms modern:YES];
+    AO_INVARIANT([modernElapsed.stringValue isEqualToString:@"0:00"] != NO &&
+                   [modernDuration.stringValue isEqualToString:@"4:00"] != NO && modernSeek.enabled == NO &&
+                   [modernSeek.accessibilityValueDescription isEqualToString:@"0:00 of 4:00"] != NO,
+                 "A retained track without an occurrence must show its known total without enabling seek");
+
+    auto shortState = retainedState;
+    shortState.position.duration = 500ms;
+    [playback renderState:shortState modern:YES];
+    [playback renderFrameForState:shortState elapsed:0ms modern:YES];
+    AO_INVARIANT([modernDuration.stringValue isEqualToString:@"0:00"] != NO &&
+                   [modernSeek.accessibilityValueDescription isEqualToString:@"0:00 of 0:00"] != NO,
+                 "A positive subsecond duration is known even though the displayed total rounds down to zero");
+
+    auto unknownState = retainedState;
+    unknownState.position.occurrenceId = {.value = 1};
+    unknownState.position.duration = 0ms;
+    unknownState.position.elapsed = 17s;
+    [playback renderState:unknownState modern:YES];
+    [playback renderFrameForState:unknownState elapsed:unknownState.position.elapsed modern:YES];
+    AO_INVARIANT([modernElapsed.stringValue isEqualToString:@"0:17"] != NO &&
+                   [modernDuration.stringValue isEqualToString:@"--:--"] != NO && modernSeek.enabled == NO &&
+                   [modernSeek.accessibilityValueDescription isEqualToString:@"0:17 elapsed, duration unknown"] != NO,
+                 "Unknown duration must be described in words without changing the visual clock or enabling seek");
     [playback renderState:state modern:YES];
     [playback renderFrameForState:state elapsed:state.position.elapsed modern:YES];
 
@@ -1221,7 +1250,12 @@ namespace ao::appkit::test
     [playback renderState:zeroState modern:NO];
     [playback renderFrameForState:zeroState elapsed:0ms modern:NO];
     AO_INVARIANT([classicElapsed.stringValue isEqualToString:@"0:00 / 0:00"] != 0,
-                 "zero playback time must remain readable in Classic mode");
+                 "Idle playback must keep its zero clocks in Classic mode");
+    [playback renderState:unknownState modern:NO];
+    [playback renderFrameForState:unknownState elapsed:unknownState.position.elapsed modern:NO];
+    AO_INVARIANT([classicElapsed.stringValue isEqualToString:@"0:17 / --:--"] != NO &&
+                   [classicSeek.accessibilityValueDescription isEqualToString:@"0:17 elapsed, duration unknown"] != NO,
+                 "Classic playback must distinguish unknown duration from idle in both clocks and accessibility text");
     [playback renderState:state modern:NO];
     [playback renderFrameForState:state elapsed:state.position.elapsed modern:NO];
     AO_INVARIANT([classicVolume.accessibilityValueDescription isEqualToString:@"Volume 72%"] != 0,

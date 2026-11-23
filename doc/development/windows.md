@@ -729,6 +729,11 @@ Expect exit code 0. The probes require the ready discard-only route.
 Left arrow to its own focused Modern input window, not system-wide. It checks
 1 → 11 → 6 seconds for the same paused occurrence.
 
+The steps probe also checks the disabled slider and two `00:00` clocks before
+playback. Restoring the saved six-second position for the track without a
+catalog duration must yield a new deferred occurrence, elapsed `0:06`, total
+`--:--`, and a slider that is disabled and refuses keyboard focus.
+
 `--seek-range` reads the shipping slider's UI Automation `RangeValue` bounds
 (zero to decoded duration, in milliseconds) and current position. Paired
 `SetValue` calls coalesce to one committed seek at each of the minimum,

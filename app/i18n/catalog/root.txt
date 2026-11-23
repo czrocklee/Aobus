@@ -1277,6 +1277,7 @@ root:table {
     appkit_clear_recent_menu { "Clear Menu" }
     appkit_unknown_folder { "Unknown folder" }
     appkit_playback_position_value { "{elapsed} of {duration}" }
+    appkit_playback_position_unknown_duration_value { "{elapsed} elapsed, duration unknown" }
     appkit_selection_total { "{selected, number} selected / {total, plural, one {# track} other {# tracks}}" }
     appkit_tracks_selected { "{count, plural, one {# track selected} other {# tracks selected}}" }
     appkit_track_of_total { "{track, number} of {total, number}" }

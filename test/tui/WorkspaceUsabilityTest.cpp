@@ -12,6 +12,7 @@
 #include "tui/TrackTable.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -113,22 +114,24 @@ namespace ao::tui::test
     for (auto const* locale : {"en", "de", "zh-Hans"})
     {
       INFO(locale);
-      auto state = rt::PlaybackTransportSnapshot{};
-      state.nowPlaying.title = "Sample song";
-      state.volume.level = 1.0F;
+      auto const state = rt::PlaybackTransportSnapshot{
+        .occurrenceId = rt::PlaybackOccurrenceId{7},
+        .nowPlaying = {.trackId = TrackId{42}, .title = "Sample song"},
+        .volume = {.level = 1.0F},
+      };
       auto volumeBox = ftxui::Box{};
-      auto railBox = ftxui::Box{};
-      auto const rendered = renderElement(
-        playbackBar(ao::test::messageCatalog(locale),
-                    {.playbackState = &state, .seekRailBox = &railBox, .volumeBox = &volumeBox, .terminalColumns = 48}),
-        48,
-        1);
+      auto const rendered =
+        renderElement(playbackBar(ao::test::messageCatalog(locale),
+                                  {.playbackState = &state, .volumeBox = &volumeBox, .terminalColumns = 48}),
+                      48,
+                      1);
       CHECK(rendered.text.contains("Sample"));
       CHECK(rendered.text.contains("0:00"));
       CHECK(rendered.text.contains("100%"));
-      CHECK(!railBox.IsEmpty());
-      CHECK(!volumeBox.IsEmpty());
-      CHECK(railBox.x_max < volumeBox.x_min);
+      auto const optRail = findTextCells(rendered.screen, "─");
+      REQUIRE(optRail);
+      CHECK_FALSE(volumeBox.IsEmpty());
+      CHECK(optRail->x_max < volumeBox.x_min);
       CHECK(volumeBox.x_max < 48);
     }
   }

@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 
 namespace ao::rt
 {
@@ -65,7 +66,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::TextBlock::Unloaded_revoker _unloadedRevoker{};
     winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering_revoker _renderingRevoker{};
     std::chrono::seconds _lastElapsed{0};
-    std::chrono::seconds _lastDuration{0};
+    std::optional<std::chrono::seconds> _optLastDuration;
     bool _loaded = false;
     bool _presentationActive = true;
     bool _hasState = false;

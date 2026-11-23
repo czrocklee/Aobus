@@ -6,6 +6,7 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include "test/media/wav/TestWav.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
@@ -90,6 +91,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <optional>
@@ -3293,21 +3295,38 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.finalSeekRevision == stabilized.finalSeekRevision);
   }
 
-  TEST_CASE("EventController - disabled seek rail ignores mouse clicks")
+  TEST_CASE("EventController - a stale seek target cannot seek a current track of unknown duration")
   {
     auto fixture = EventControllerFixture{};
+    // A one-frame whole file has a zero-millisecond duration.
+    auto const bytes = ao::test::wav::makeWav(ao::test::wav::Spec{
+      .sampleRate = 44100,
+      .audioData = std::vector<std::uint8_t>(2, 0x21),
+    });
+    auto const file = ao::test::TempFile{bytes, ".wav"};
+    std::filesystem::copy_file(file.path, fixture.runtimePtr->musicRoot() / "unknown.wav");
+    auto const trackId = fixture.addTrack(library::test::TrackSpec{.title = "Unknown duration", .uri = "unknown.wav"});
     auto library = fixture.makeLibrary();
-    auto& hitRegions = fixture.hitRegions;
-    hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
+    fixture.addReadyAudioProvider();
+    auto& playback = fixture.runtimePtr->playback();
+    REQUIRE(playback.commands().startFromView(library.activeViewId(), trackId));
+    REQUIRE(fixture.tryWaitForPlayback(trackId));
+    auto const before = playback.snapshot().transport;
+    REQUIRE(before.occurrenceId.value != 0);
+    REQUIRE(before.duration == std::chrono::milliseconds::zero());
+
+    fixture.hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
-    auto previewSub = fixture.runtimePtr->playback().events().onSeekPreview(
-      [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
+                                                      { seekPreviews.push_back(elapsed); });
     auto controller = fixture.makeEvents(library);
 
-    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
-
-    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Mouse("", press)));
+    CHECK_FALSE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1})));
+    CHECK_FALSE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 25, .y = 1})));
     CHECK(seekPreviews.empty());
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
   TEST_CASE("EventController - modal overlays block seek rail mouse clicks")

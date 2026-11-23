@@ -15,6 +15,7 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
@@ -38,6 +39,7 @@ namespace ao::tui
     constexpr std::int32_t kMaximumSeekRailColumns = 48;
     constexpr std::int32_t kPlaybackRows = 1;
     constexpr std::int32_t kMinimumMetadataFieldColumns = 4;
+    constexpr std::int32_t kUnknownElapsedColumns = 8; // 99:59:59
 
     std::string playbackTitle(i18n::MessageCatalog const& textCatalog, rt::NowPlayingInfo const& track)
     {
@@ -165,30 +167,6 @@ namespace ao::tui
       return hbox(std::move(elements));
     }
 
-    std::chrono::milliseconds clampedElapsed(std::chrono::milliseconds const elapsed,
-                                             std::chrono::milliseconds const duration)
-    {
-      if (duration <= std::chrono::milliseconds{0})
-      {
-        return std::chrono::milliseconds{0};
-      }
-
-      return std::clamp(elapsed, std::chrono::milliseconds{0}, duration);
-    }
-
-    float seekFraction(std::chrono::milliseconds const elapsed, std::chrono::milliseconds const duration)
-    {
-      if (duration <= std::chrono::milliseconds{0})
-      {
-        return 0.0F;
-      }
-
-      return std::clamp(
-        static_cast<float>(clampedElapsed(elapsed, duration).count()) / static_cast<float>(duration.count()),
-        0.0F,
-        1.0F);
-    }
-
     std::int32_t seekRailColumns(std::int32_t const terminalColumns) noexcept
     {
       if (terminalColumns <= 0)
@@ -197,6 +175,18 @@ namespace ao::tui
       }
 
       return std::clamp(terminalColumns / 3, kMinimumSeekRailColumns, kMaximumSeekRailColumns);
+    }
+
+    std::int32_t unknownElapsedColumns(bool const hasTrack,
+                                       std::int32_t const terminalColumns,
+                                       std::int32_t const availableColumns) noexcept
+    {
+      if (!hasTrack)
+      {
+        return 0;
+      }
+
+      return terminalColumns <= 0 ? kUnknownElapsedColumns : std::clamp(availableColumns, 0, kUnknownElapsedColumns);
     }
 
     ftxui::Element seekRail(std::chrono::milliseconds const elapsed,
@@ -210,7 +200,7 @@ namespace ao::tui
         return text(repeatGlyph("─", columns)) | dim | size(WIDTH, EQUAL, columns);
       }
 
-      auto const fraction = seekFraction(elapsed, duration);
+      auto const fraction = static_cast<float>(elapsed.count()) / static_cast<float>(duration.count());
       auto const thumbColumn =
         std::clamp(static_cast<std::int32_t>(std::round(fraction * static_cast<float>(columns - 1))), 0, columns - 1);
       auto const inactiveColumns = std::max(0, columns - thumbColumn - 1);
@@ -298,17 +288,19 @@ namespace ao::tui
     }
 
     modePtr->ComputeRequirement();
-    auto const effectiveElapsed = clampedElapsed(view.displayElapsed, state.duration);
+    auto const position = uimodel::playbackPositionView(state);
+    auto const hasKnownDuration = position.hasTrack && position.duration > std::chrono::milliseconds::zero();
+    auto const displayElapsed = position.hasTrack ? std::max(view.displayElapsed, std::chrono::milliseconds::zero())
+                                                  : std::chrono::milliseconds::zero();
+    auto const effectiveElapsed = hasKnownDuration ? std::min(displayElapsed, position.duration) : displayElapsed;
     auto const elapsed = formatDuration(effectiveElapsed);
-    auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
+    auto const duration = hasKnownDuration ? formatDuration(position.duration) : std::string{"--:--"};
     constexpr std::int32_t kMaximumVolumePercent = 100;
     auto const mutedVolume = i18n::requiredText(textCatalog, i18n::MessageId::AudioFindingMuted);
     auto const levelVolume =
       playbackVolume(textCatalog, static_cast<std::int32_t>(std::round(state.volume.level * kMaximumVolumePercent)));
     auto const volume = state.volume.muted ? std::string{mutedVolume} : levelVolume;
-    // Keep adjacent controls stationary while time ticks or normalized volume changes.
     auto const durationColumns = cellWidth(duration);
-    auto const elapsedColumns = std::max(cellWidth(elapsed), state.duration.count() > 0 ? durationColumns : 0);
     auto const minimumVolumeColumns =
       std::max(cellWidth(levelVolume), cellWidth(playbackVolume(textCatalog, kMaximumVolumePercent)));
     auto volumeColumns = std::max(minimumVolumeColumns, cellWidth(mutedVolume));
@@ -316,22 +308,27 @@ namespace ao::tui
     auto soulButtonElementPtr = soulButtonElement(state.transport, view.soulVisual, view.animationElapsed);
     outputElementPtr->ComputeRequirement();
     soulButtonElementPtr->ComputeRequirement();
-    auto const fixedColumnsWithoutVolume = outputElementPtr->requirement().min_x +
-                                           soulButtonElementPtr->requirement().min_x + elapsedColumns +
-                                           durationColumns + 5 + modePtr->requirement().min_x;
+    auto const fixedColumns = outputElementPtr->requirement().min_x + soulButtonElementPtr->requirement().min_x +
+                              durationColumns + 5 + modePtr->requirement().min_x;
     // Keep readable metadata fragments before assigning the remaining space to the seek rail.
     constexpr std::int32_t kTitleReadabilityColumns = 12;
     constexpr std::int32_t kLinkedFieldReadabilityColumns = 9;
 
+    // Reserve room for time and volume without crowding out the title or the last rail cell.
+    auto const elapsedAndVolumeBudget = view.terminalColumns - fixedColumns - kTitleReadabilityColumns - 1;
+    auto const reservedElapsedColumns =
+      hasKnownDuration
+        ? durationColumns
+        : unknownElapsedColumns(position.hasTrack, view.terminalColumns, elapsedAndVolumeBudget - minimumVolumeColumns);
+    auto const elapsedColumns = std::max(cellWidth(elapsed), reservedElapsedColumns);
+
     if (view.terminalColumns > 0)
     {
-      // Preserve the numeric volume and title before reserving a longer mute label.
-      volumeColumns = std::clamp(view.terminalColumns - fixedColumnsWithoutVolume - kTitleReadabilityColumns - 1,
-                                 minimumVolumeColumns,
-                                 volumeColumns);
+      // Preserve the numeric volume before reserving a longer mute label.
+      volumeColumns = std::clamp(elapsedAndVolumeBudget - elapsedColumns, minimumVolumeColumns, volumeColumns);
     }
 
-    auto const freeColumns = std::max(0, view.terminalColumns - fixedColumnsWithoutVolume - volumeColumns);
+    auto const freeColumns = std::max(0, view.terminalColumns - fixedColumns - elapsedColumns - volumeColumns);
     auto const metadataColumns = kTitleReadabilityColumns +
                                  (state.nowPlaying.artist.empty() ? 0 : kLinkedFieldReadabilityColumns) +
                                  (state.nowPlaying.album.empty() ? 0 : kLinkedFieldReadabilityColumns);
@@ -339,7 +336,8 @@ namespace ao::tui
                                ? seekRailColumns(0)
                                : std::min(seekRailColumns(view.terminalColumns),
                                           freeColumns - std::min(metadataColumns, std::max(0, freeColumns - 1)));
-    auto seekRailElementPtr = railColumns > 0 ? seekRail(effectiveElapsed, state.duration, railColumns) : text("");
+    auto const seekDuration = position.seekable ? position.duration : std::chrono::milliseconds::zero();
+    auto seekRailElementPtr = railColumns > 0 ? seekRail(effectiveElapsed, seekDuration, railColumns) : text("");
 
     auto metadataPtr = playbackMetadata(textCatalog,
                                         state.nowPlaying,
@@ -359,7 +357,12 @@ namespace ao::tui
 
     if (view.seekRailBox != nullptr)
     {
-      seekRailElementPtr = std::move(seekRailElementPtr) | reflect(*view.seekRailBox);
+      *view.seekRailBox = kEmptyMouseBox;
+
+      if (position.seekable && railColumns > 0)
+      {
+        seekRailElementPtr = std::move(seekRailElementPtr) | reflect(*view.seekRailBox);
+      }
     }
 
     auto volumePtr =

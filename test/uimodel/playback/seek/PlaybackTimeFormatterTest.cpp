@@ -18,6 +18,15 @@ namespace ao::uimodel::test
       CHECK(describeTimeTemplate(PlaybackTimeMode::Combined) == "00:00 / 00:00");
     }
 
+    SECTION("unknown total is distinct from zero elapsed for a current track")
+    {
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Combined, {}, {}) == "0:00 / --:--");
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Combined, std::chrono::milliseconds{4035}, {}) == "0:04 / --:--");
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Duration, std::chrono::seconds{4}, {}) == "--:--");
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Elapsed, std::chrono::seconds{4}, {}) == "0:04");
+      CHECK(formatPlaybackTime(PlaybackTimeMode::Duration, {}, std::chrono::milliseconds{1}) == "0:00");
+    }
+
     SECTION("playback time text matches selected label mode")
     {
       auto const elapsed = std::chrono::seconds{65};

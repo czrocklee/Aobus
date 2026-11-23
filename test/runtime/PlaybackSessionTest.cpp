@@ -54,6 +54,8 @@
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>

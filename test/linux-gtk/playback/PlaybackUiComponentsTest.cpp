@@ -6,6 +6,7 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
+#include "test/audio/BackendTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkNativeInputTestSupport.h"
@@ -13,7 +14,12 @@
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/media/wav/TestWav.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -28,6 +34,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <fakeit.hpp>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtk/gtk.h>
@@ -42,10 +49,12 @@
 #include <sigc++/scoped_connection.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -411,6 +420,51 @@ namespace ao::gtk::test
     windowFixture.mount(timeLabel.widget());
     windowFixture.present();
     CHECK(timeLabel.isTickActive());
+  }
+
+  TEST_CASE("TimeLabel - active occurrence without a duration is not rendered as idle")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& runtime = env.runtime();
+    auto& playback = runtime.playback();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
+
+    // One PCM frame is playable but its duration floors to zero milliseconds.
+    constexpr std::uint32_t kSampleRate = 44100;
+    auto const unknownMedia = ao::test::TempFile{ao::test::wav::makeWav({.sampleRate = kSampleRate}), ".wav"};
+    auto const shortMedia = ao::test::TempFile{
+      ao::test::wav::makeWav(
+        {.sampleRate = kSampleRate, .audioData = std::vector<std::uint8_t>(std::size_t{kSampleRate} * 2U / 10U, 0)}),
+      ".wav"};
+    auto const unknownTrackId = addRuntimeTrack(
+      runtime, library::test::TrackSpec{.title = "Unknown Duration", .uri = unknownMedia.path.string()});
+    auto const shortTrackId =
+      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Short Track", .uri = shortMedia.path.string()});
+    startPlayback(runtime, unknownTrackId);
+    auto const transport = playback.snapshot().transport;
+    REQUIRE(transport.occurrenceId.value != 0);
+    REQUIRE(transport.duration == std::chrono::milliseconds{0});
+
+    auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
+    auto const* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+    REQUIRE(label != nullptr);
+    CHECK(label->get_text() == "0:00 / --:--");
+
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
+    CHECK_FALSE(seekControl.widget().get_sensitive());
+
+    // Both totals floor to the same seconds; availability must still refresh the label.
+    startPlayback(runtime, shortTrackId);
+    REQUIRE(playback.snapshot().transport.duration == std::chrono::milliseconds{100});
+    CHECK(label->get_text() == "0:00 / 0:00");
+    CHECK(seekControl.widget().get_sensitive());
+
+    startPlayback(runtime, unknownTrackId);
+    REQUIRE(playback.snapshot().transport.duration == std::chrono::milliseconds{0});
+    CHECK(label->get_text() == "0:00 / --:--");
+    CHECK_FALSE(seekControl.widget().get_sensitive());
   }
 
   TEST_CASE("SeekControlWidget - construction during playback keeps live state")
@@ -845,6 +899,95 @@ namespace ao::gtk::test
     CHECK(playback.snapshot().transport.finalSeekRevision.value == replacement.finalSeekRevision.value + 1);
     CHECK(playback.snapshot().transport.occurrenceId == replacement.occurrenceId);
     checkFrameAlignedElapsed(playback.snapshot().transport.elapsed, targetElapsed);
+  }
+
+  TEST_CASE("SeekControlWidget - silently rejected pointer seek restores the thumb and time label")
+  {
+    requireOwnedGtkDisplay();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = rt::test::playback_succession::PlaybackSuccessionTransportFixture{};
+    auto& transport = fixture.transport;
+    auto const original = transport.status.devices.front();
+    auto const failedOutput = audio::Device{.id = audio::DeviceId{"failed-output"}, .backendId = original.backendId};
+    transport.onDevicesChangedCb({original, failedOutput});
+    transport.executor.drain();
+
+    auto const media = ao::test::TempFile{seekPcmWave(12), ".wav"};
+    auto const trackId =
+      fixture.commandsFixture.addTrack({.title = "Rejected Pointer Seek", .uri = media.path.string()});
+    fixture.openManualView(std::array{trackId});
+    auto playback = fixture.createPlayback();
+    REQUIRE(playback.commands().startFromView(fixture.viewId, trackId));
+    REQUIRE(transport.executor.tryDrainUntil(
+      [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    auto const playing = playback.snapshot().transport;
+
+    fakeit::When(Method(transport.spyBackendPtr->mock(), open))
+      .AlwaysReturn(std::unexpected{audio::BackendOpenFailure{
+        .error = Error{.code = Error::Code::DeviceNotFound, .message = "Output disconnected"},
+        .cause = audio::BackendOpenFailure::Cause::OutputFailure,
+      }});
+    // Reopening on the listed output fails synchronously. Leave its terminal
+    // notification queued while GTK runs so the failure does not retire the occurrence.
+    playback.commands().setOutputDevice(failedOutput.backendId, failedOutput.id, audio::kProfileShared);
+    auto const before = playback.snapshot().transport;
+    REQUIRE(before.transport == audio::Transport::Error);
+    REQUIRE(before.hasSeekableSubject());
+    REQUIRE(before.occurrenceId == playing.occurrenceId);
+
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
+    auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
+    auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+    auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+    REQUIRE(scale != nullptr);
+    REQUIRE(label != nullptr);
+    auto mouse = NativeScaleMouseFixture{*scale, 1U, label};
+    auto const timeText = [&](std::chrono::milliseconds const elapsed)
+    { return uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Combined, elapsed, before.duration); };
+    auto const realElapsed = playback.elapsed();
+    REQUIRE(mouse.scaleElapsed() == realElapsed);
+    REQUIRE(label->get_text() == timeText(realElapsed));
+
+    auto optPreview = std::optional<std::chrono::milliseconds>{};
+    auto const previewSub = playback.events().onSeekPreview([&](auto const elapsed) { optPreview = elapsed; });
+    mouse.pressThumb();
+    auto const targetElapsed = mouse.moveHeldToPosition(0.65);
+    REQUIRE(targetElapsed > realElapsed + std::chrono::seconds{1});
+    REQUIRE(targetElapsed < before.duration);
+    REQUIRE(optPreview == targetElapsed);
+    REQUIRE(label->get_text() == timeText(targetElapsed));
+
+    auto finalElapsed = targetElapsed;
+
+    SECTION("release without further input")
+    {
+      mouse.release();
+    }
+
+    SECTION("a discrete change before debounce replaces the released pointer target")
+    {
+      finalElapsed = targetElapsed / 2;
+      REQUIRE(finalElapsed > realElapsed);
+      REQUIRE(finalElapsed < targetElapsed);
+
+      mouse.release();
+      REQUIRE(label->get_text() == timeText(targetElapsed));
+      scale->set_value(static_cast<double>(finalElapsed.count()));
+      REQUIRE(mouse.scaleElapsed() == finalElapsed);
+      CHECK(optPreview == targetElapsed);
+    }
+
+    drainGtkEventsFor(std::chrono::milliseconds{75});
+    auto const after = playback.snapshot().transport;
+    CHECK(after.occurrenceId == before.occurrenceId);
+    CHECK(after.positionRevision == before.positionRevision);
+    CHECK(after.finalSeekRevision == before.finalSeekRevision);
+    CHECK(playback.elapsed() == realElapsed);
+    CHECK(mouse.scaleElapsed() == realElapsed);
+    CHECK(label->get_text() == timeText(realElapsed));
+
+    // Probe the selected in-range Final only after reading the release's effects.
+    CHECK_FALSE(playback.commands().trySeek(before.occurrenceId, finalElapsed));
   }
 
   TEST_CASE("SeekControlWidget - native range arbitration does not retarget a held seek")

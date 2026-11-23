@@ -4,7 +4,6 @@
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
-#include <algorithm>
 #include <chrono>
 
 namespace ao::uimodel
@@ -42,8 +41,8 @@ namespace ao::uimodel
     }
 
     auto const delta = std::chrono::duration_cast<std::chrono::milliseconds>(frameTime - *_optFirstFrameTime);
-    auto const displayElapsed = _lastElapsed + delta;
-
-    return std::min(displayElapsed, _lastDuration);
+    auto const maximumElapsed =
+      _lastDuration > std::chrono::milliseconds::zero() ? _lastDuration : std::chrono::milliseconds::max();
+    return _lastElapsed >= maximumElapsed - delta ? maximumElapsed : _lastElapsed + delta;
   }
 } // namespace ao::uimodel
