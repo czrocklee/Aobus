@@ -31,23 +31,23 @@ of truth. A resolved version becomes project policy only through an explicit
 
 Use the owner for the question being asked:
 
-| Question                                                                                          | Owner                                                                                                       |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions          | `dependency-contract.json`                                                                                  |
-| Linux package-set revision and source hash                                                        | `nixpkgs.json`                                                                                              |
-| vcpkg registry snapshots                                                                          | `vcpkg-configuration.json`                                                                                  |
-| vcpkg ports, features, and exact overrides                                                        | `vcpkg.json`                                                                                                |
-| macOS compiler, deployment target, and vcpkg tool archive                                         | `script/ao/macos-toolchain.json`                                                                            |
-| Windows tidy LLVM SDK version, archive SHA-256, and required files                                | `script/ao/windows-llvm-sdk.json`                                                                           |
-| CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json`                                                                               |
-| Bazel version                                                                                     | `script/ao/bazel-toolchain.json`, `.bazelversion`                                                           |
-| Buildifier formatter/linter version and native artifact SHA-256                                   | `script/ao/buildifier.json`                                                                                 |
-| Prettier formatter, Node runtime, and managed artifact SHA-256                                    | `script/ao/prettier.json`                                                                                   |
-| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux)           | `nixpkgs.json`                                                                                              |
-| WinUI NuGet closure and trusted source                                                            | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config`                                       |
-| Python, Ruff, mypy, and documentation-parser policy                                               | `script/ao/toolchain.json`                                                                                  |
-| Accepted Python tooling and documentation-parser artifacts                                        | `script/ao/docs-requirements.txt`, `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
-| Installed native and test SDK manifests and hash inputs                                           | validated and reported by `./ao check deps`                                                                 |
+| Question                                                                                          | Owner                                                                                      |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions          | `dependency-contract.json`                                                                 |
+| Linux package-set revision and source hash                                                        | `nixpkgs.json`                                                                             |
+| vcpkg registry snapshots                                                                          | `vcpkg-configuration.json`                                                                 |
+| vcpkg ports, features, and exact overrides                                                        | `vcpkg.json`                                                                               |
+| macOS compiler, deployment target, and vcpkg tool archive                                         | `script/ao/macos-toolchain.json`                                                           |
+| Windows tidy LLVM SDK version, archive SHA-256, and required files                                | `script/ao/windows-llvm-sdk.json`                                                          |
+| CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json`                                                              |
+| Bazel version                                                                                     | `script/ao/bazel-toolchain.json`, `.bazelversion`                                          |
+| Buildifier formatter/linter version and native artifact SHA-256                                   | `script/ao/buildifier.json`                                                                |
+| Prettier formatter, Node runtime, and managed artifact SHA-256                                    | `script/ao/prettier.json`                                                                  |
+| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux)           | `nixpkgs.json`                                                                             |
+| WinUI NuGet closure and trusted source                                                            | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config`                      |
+| Python, Ruff, mypy, and documentation-parser policy                                               | `script/ao/toolchain.json`                                                                 |
+| Accepted Python tooling and documentation-parser artifacts                                        | `script/ao/python-wheels.json`; the three `*-requirements.txt` files are generated from it |
+| Installed native and test SDK manifests and hash inputs                                           | validated and reported by `./ao check deps`                                                |
 
 Do not copy a current version from this guide. Read the owning file or a verified
 build report.
@@ -56,7 +56,7 @@ disposable imports and adds no independent version authority.
 Its repository-time bootstrap enters the pinned Nix shell on Linux, allowing
 Nix to realize missing pinned outputs. Native macOS and Windows discovery
 instead validates ready, explicitly selected SDKs; repository fetch does not
-install their producers, ports, Python or SDKs. Its `config/bazel/dependencies.json` holds only
+install their producers, ports, base Python or SDKs. Its `config/bazel/dependencies.json` holds only
 structural import contracts — static header and archive interface fallbacks,
 exact library spellings and closure order, metadata-token preconditions, ABI
 defines, and native repair entries — with no per-package accepted-version
@@ -122,10 +122,10 @@ and formatter Node pins. One package set supplies both the native dependencies a
 so the native pin and the exact tool contracts are coupled: a package-set
 change that moves a tool version must update the corresponding contract in
 the same change, and a tool upgrade needs a package set that supplies it.
-The `check lint` workflow stage selects pinned actionlint — with the packaged
-ShellCheck and Pyflakes — through `AO_NIX_ACTIONLINT`; `nixpkgs.json` is its
-sole version authority, with no separate manifest, native installer, or setup
-command.
+The standalone `check lint` workflow stage selects pinned actionlint through
+`AO_NIX_ACTIONLINT`; the graph declares the same Nix provider. The package
+includes ShellCheck and Pyflakes. `nixpkgs.json` is the sole version authority,
+with no separate manifest, native installer, or setup command.
 
 ### macOS and Windows vcpkg
 
@@ -210,10 +210,10 @@ contracted Homebrew Python major/minor rather than an exact patch.
 Linux uses the pinned Nix environment. Windows uses Visual Studio's vcpkg to
 fetch the NuGet tool, then NuGet's `python` package for portal CPython; the
 manifest's `python3` host port is separate dependency-build tooling. macOS uses
-Homebrew base Python and selects a managed tool venv on demand. Native Ruff/mypy
-come from the hashed requirements locks, not ambient tools. See the
+Homebrew base Python. Bazel tests use the governed base on both native hosts;
+the portal can independently prepare a managed tooling venv. See the
 [Windows](windows.md#prerequisites) and [macOS](macos.md#host-setup) guides for
-setup and local-state requirements.
+host prerequisites.
 
 Buildifier is governed separately by `script/ao/buildifier.json`: an exact
 version and hash-pinned official macOS/Windows artifacts. Linux selects the
@@ -237,29 +237,57 @@ trusted hashes. Formatting requires a ready bundle. If it is missing, run
 `./ao setup prettier` (`ao.bat setup prettier` on Windows). See
 [authored-text formatting](linting.md#authored-text-formatting) for scope and options.
 
-The native requirements files are artifact locks with hashes, not alternative
-policy files. Python checks and formatting derive their language target from
-the Python major/minor in `script/ao/toolchain.json`: Ruff uses
-`--target-version` and mypy uses `--python-version`. `pyproject.toml` owns
-formatting, lint and type-checking policy, not another Python version selection.
+Python checks and formatting derive their language target from the Python
+major/minor in `script/ao/toolchain.json`; `pyproject.toml` owns formatting,
+lint and type-checking policy, not another Python version selection.
 
-A `py3-none-any` wheel is still a hash-locked wheel accepted by pip's
-`--only-binary` selection, not a source distribution or a compiled-native
-claim. Selecting one explicitly — for example when a platform lacks a
-compiled CPython wheel for the contracted mypy release — keeps the lock
-hash-verified but does not establish native-compiled performance; verify the
-selected wheel at runtime on that platform.
+#### Python wheel sources and fetches
 
-The documentation parser follows the same split: `script/ao/toolchain.json`
-pins the exact markdown-it-py and mdurl versions, and
-`script/ao/docs-requirements.txt` is their shared hash-verified artifact lock.
-The native requirement locks include the parser lock, so the native bootstrap
-and documentation-only CI use the same wheels. The managed-environment
-fingerprint covers the included lock, so a changed or missing parser pin
-rebuilds the native environment instead of reusing a stale one. Runtime identity uses the canonical
-base installation path (`realpath(sys.base_prefix)`) and actual Python version,
-not the current venv executable, so bootstrap and managed callers reuse the same
-environment even when Homebrew exposes the installation through a symlink.
+[`script/ao/python-wheels.json`](../../script/ao/python-wheels.json) is the
+artifact catalog: reviewed wheel filenames, PyPI URLs, SHA-256 digests and
+platform selections. Standalone portal commands and documentation-only CI use
+its [generated pip locks](dependency-upgrade.md#updating-python-ruff-mypy-or-the-documentation-parser),
+not a second set of pins. The native locks include the shared documentation
+lock; the managed venv fingerprint includes those locks, the canonical base
+installation and the actual Python version. An explicit pure-Python wheel is
+still hash-locked; it does not imply compiled-native performance.
+
+Bazel reads the catalog directly. The documentation check needs only the two
+parser wheels as runfiles. Linux Ruff and mypy use the pinned Nix wrappers. On
+macOS and Windows, Bazel selects checker wheels for the admitted interpreter's
+process architecture and includes the parser wheels so mypy can check the
+portal's imports. Bazel's downloader verifies their hashes and stages
+an on-disk wheelhouse. Pip checks wheel compatibility and installs from that
+wheelhouse with no index, no dependency downloads and required hashes; an
+offline `pip check` then validates the installed dependencies. The checker
+payload is separate from the portal venv.
+
+A cold Bazel fetch may need network access. Before disconnecting, populate
+Bazel's repository cache or pass `--distdir=/path/to/wheels` to native Bazel
+with the required wheels under their original filenames. Configure proxies
+for the Bazel process and mirror rewrites through `--downloader_config`;
+mirrored bytes must match the pinned hashes. Bazel's offline pip stage does
+not make an uncached Bazel fetch, Nix realization or host setup offline.
+Native portal bootstrap uses its own
+pip cache and pip index/proxy configuration, not Bazel's downloader. To reuse
+an explicitly prefetched directory, give Bazel `--distdir`. For the native
+portal, set `PIP_NO_INDEX=1` and point `PIP_FIND_LINKS` at the same absolute
+directory. Keep the original wheel filenames. Pip still requires the
+locked hashes; this covers wheel installation only, not base Python or SDK
+setup.
+
+#### Ready host tools in Bazel
+
+Formatter and workflow repositories publish `command.json` with admitted
+absolute executable paths or an unavailable diagnostic. They watch the host
+inputs used to admit each tool, including selected files and any relevant
+directories or tool trees; they do not copy or declare the installed formatter
+trees as runfiles. The checks run against the live checkout on the local
+host, not on a remote executor. A missing optional tool can leave the
+repository loadable, but a check that needs it fails rather than installing
+or repairing it. The actionlint repository can also load on non-Linux hosts
+without an executable; the workflow check itself remains Linux-only.
+Keep the selected tools, SDK and runtime available while checks run.
 
 ## Enforcement
 

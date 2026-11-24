@@ -82,7 +82,7 @@ def _profile_facts(ctx, root, host, data):
         return {"deployment": deployment}
     return {}
 
-def _write_build(ctx, facts):
+def _write_build(ctx, facts, host):
     """Declare profile platforms lazily in this existing repository."""
     lines = [
         'load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")',
@@ -99,6 +99,8 @@ def _write_build(ctx, facts):
         "",
         'exports_files(["environment.json"])',
     ])
+    if host == "linux":
+        lines.append('exports_files(["check-tool-test-launcher.json"], visibility = ["@aobus//test/script:__pkg__"])')
     ctx.file("BUILD.bazel", "\n".join(lines) + "\n")
 
 def _host(ctx):
@@ -148,6 +150,7 @@ def _environment_impl(ctx):
         ctx.watch(nix)
         for name in ["shell.nix", "nixpkgs.json", "script/ao/toolchain.json", "script/ao/bazel-toolchain.json"]:
             ctx.watch(root.get_child(name))
+        arguments.extend(["--test-launcher", str(ctx.path("check-tool-test-launcher.json"))])
         interpreter = _quote(python) if python else '"$AO_NIX_PORTAL_PYTHON"'
         command = "exec " + interpreter + " -I -S -B -X utf8 -X "
         command += _quote("pycache_prefix=" + str(ctx.path("_tmp/pycache"))) + " " + _quote(helper)
@@ -221,7 +224,7 @@ def _environment_impl(ctx):
             directory.readdir(watch = "yes")
         else:
             ctx.watch(directory)
-    _write_build(ctx, _profile_facts(ctx, root, host, data))
+    _write_build(ctx, _profile_facts(ctx, root, host, data), host)
 
 environment_repository = repository_rule(
     implementation = _environment_impl,

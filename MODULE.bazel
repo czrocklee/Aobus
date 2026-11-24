@@ -55,6 +55,36 @@ register_execution_platforms(
 # declared by the host-tools repository; tests run on the installed SDK.
 register_toolchains("@aobus_native_tools//:python3_toolchain")
 
+docs_wheels = use_repo_rule("//bazel:docs_wheels.bzl", "docs_wheels")
+
+docs_wheels(name = "aobus_docs_wheels")
+
+python_checks_repository = use_repo_rule("//bazel:python_checks_repository.bzl", "python_checks_repository")
+
+python_checks_repository(name = "aobus_python_checks")
+
+check_tool_repository = use_repo_rule("//bazel:check_tools.bzl", "check_tool_repository")
+
+check_tool_repository(
+    name = "aobus_actionlint",
+    tool = "actionlint",
+)
+
+check_tool_repository(
+    name = "aobus_buildifier",
+    tool = "buildifier",
+)
+
+check_tool_repository(
+    name = "aobus_clang_format",
+    tool = "clang-format",
+)
+
+check_tool_repository(
+    name = "aobus_prettier",
+    tool = "prettier",
+)
+
 # Loading lint packages imports the existing native LLVM/Clang SDK; bounded
 # product targets do not load that dependency.
 lint_sdk = use_extension("//bazel/lint:sdk.bzl", "lint_sdk")

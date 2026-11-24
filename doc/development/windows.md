@@ -48,14 +48,16 @@ still apply.
 
 Do not install a separate Python for the normal path. `ao.bat` obtains the
 NuGet tool through the Visual Studio vcpkg installation, uses NuGet's `python`
-package for the exact CPython release from `script/ao/toolchain.json`, and
-creates a checkout-specific environment from the hashed Windows requirements lock. It does not use the Windows Store
-alias or ambient `PATH` Python. The manifest's `python3` host port serves
-dependency builds; it is not the portal interpreter or the Ruff/mypy provider.
+package for the exact CPython release from `script/ao/toolchain.json`. It does
+not use the Windows Store alias or ambient `PATH` Python. The manifest's
+`python3` host port serves dependency builds; it is not the portal interpreter
+or the Ruff/mypy provider.
 
 `AOBUS_PYTHON` is an advanced override for an explicit interpreter. It must
-match the exact policy version and provide `venv` and `ensurepip`; the portal
-still creates and validates the locked checkout environment.
+match the exact policy version. The governed base must provide `venv` and
+`ensurepip` for wheel installation: the portal uses them for standalone
+`check docs` and Python formatting/lint scopes, while Bazel prepares its own
+checker payload without using the checkout's managed environment.
 
 ## Native Bazel and project commands
 
@@ -768,8 +770,10 @@ assertions for fixtures produced with the governed LLVM SDK and Visual Studio
 includes; the action cache can still supply Clang fixture outputs.
 Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
-Use `ao.bat check lint` for native source findings and `ao.bat check format` for
-formatting. The managed environment owns Ruff and mypy; ambient tools are not used.
+Use `ao.bat check lint` for scoped source findings and `ao.bat check format` for
+formatting. The portal uses its managed environment for scoped Python checks;
+Bazel tests use the governed base interpreter and the
+[separate repository tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
 
 `ao.bat check --asan` runs the full normal fastbuild completion first, then a
 separate managed MSVC AddressSanitizer profile in the same selected

@@ -1,3 +1,4 @@
+# Generated from python-wheels.json; run python3 script/ao/generate_python_requirements.py.
 markdown-it-py==4.2.0 \
     --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
 mdurl==0.1.2 \

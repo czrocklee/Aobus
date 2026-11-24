@@ -5,14 +5,12 @@ from __future__ import annotations
 import sys
 
 from ao.core.paths import PROJECT_ROOT
-from ao.portal.source_scope import SourceScope
+from ao.portal.source_scope import SourceScope, discover_markdown
 
 
 def markdown_scope() -> SourceScope:
-    """Discover the global documentation format scope without native SDK work."""
-    from ao.portal import doc_check
-
-    return SourceScope(tuple(path.relative_to(PROJECT_ROOT).as_posix() for path in doc_check.discover_markdown()))
+    """Discover the global documentation format scope without a parser or native SDK."""
+    return SourceScope(tuple(path.relative_to(PROJECT_ROOT).as_posix() for path in discover_markdown(PROJECT_ROOT)))
 
 
 def check() -> int:
@@ -25,5 +23,5 @@ def check() -> int:
     if issues:
         print(f"Documentation check failed: {len(issues)} issue(s).", file=sys.stderr)
         return 1
-    print(f"Documentation check passed ({len(doc_check.discover_markdown())} Markdown files).")
+    print(f"Documentation check passed ({len(discover_markdown(PROJECT_ROOT))} Markdown files).")
     return 0

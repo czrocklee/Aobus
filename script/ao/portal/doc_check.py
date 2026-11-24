@@ -17,6 +17,7 @@ from markdown_it.token import Token
 
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.portal import name_audit
+from ao.portal.source_scope import discover_markdown
 
 VALID_STATUSES = frozenset(
     {
@@ -56,17 +57,6 @@ class Document:
     lines: tuple[str, ...]
     metadata: dict[str, str]
     body_line: int
-
-
-def discover_markdown(root: Path = PROJECT_ROOT) -> list[Path]:
-    doc_root = root / "doc"
-    files = {path for path in doc_root.rglob("*.md") if path.relative_to(doc_root).parts[:1] != ("plan",)}
-    files.update(path for path in (root / ".agents" / "skills").rglob("*.md"))
-    files.update(path for name in ("README.md", "AGENTS.md", "CONTRIBUTING.md") if (path := root / name).is_file())
-    for folder in ("tool", "app", "asset"):
-        if (root / folder).is_dir():
-            files.update((root / folder).rglob("*.md"))
-    return sorted(files)
 
 
 def check_tree(root: Path = PROJECT_ROOT) -> list[Issue]:

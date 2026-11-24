@@ -15,9 +15,8 @@ def python_runtime_toolchain(data):
 
     Args:
         data: Python runtime facts produced by materialize_host_tools: the
-            installed interpreter location, the pinned version and
-            implementation name, and the honest runtime contract of the
-            selected native SDK.
+            governed base interpreter location, the admitted version and
+            the implementation name.
     """
     version_info = {}
     for key, value in zip(("major", "minor", "micro"), data["version"].split(".")):
@@ -25,7 +24,7 @@ def python_runtime_toolchain(data):
     py_runtime(
         name = "python3_runtime",
         # rules_python exec tools split paths with Bazel's slash-based helpers,
-        # even on Windows. Preserve the lexical venv path, not native separators.
+        # even on Windows.
         interpreter_path = data["executable"].replace("\\", "/"),
         python_version = "PY3",
         implementation_name = data["implementation"],

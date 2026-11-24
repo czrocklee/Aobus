@@ -89,9 +89,9 @@ For the desktop app, use the [isolated AppKit launch](#bazel-appkit-product).
 `./ao check` runs the same wildcard `bazel test //...` graph as every host, so
 it includes live documentation, formatting, source guardrails, the native-policy
 audit and the whole-graph lint test, but it does not run fixture-dependent
-AppKit GUI scenarios. The macOS tooling selection covers AppKit SDK imports
-(`test_bazel_appkit_deps`), native environment selection (`test_bazel_environment`),
-and the remote-cache helper (`test_bazel_remote_cache`). Workflow lint and the
+AppKit GUI scenarios. The macOS tooling selection includes SDK and native
+environment tests, the remote-cache helper and generated wheel-lock checks.
+Workflow lint and the
 representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks,
 and lint fixtures; the wildcard graph is broader.
 `./ao check --tsan` runs the full normal fastbuild completion first — which builds
@@ -104,13 +104,12 @@ behavior. Use
 an explicitly configured native smoke target with `--config=tsan` when an
 AppKit scenario needs TSan; that raw run and its runtime are caller-owned.
 
-The portal starts with Homebrew Python and selects the managed environment
-on demand for completion, documentation semantics, and Python formatting/lint scopes.
-Other commands can use the base
-interpreter; `/usr/bin/python3` only reads initial bootstrap JSON fields.
-The managed environment matches Ruff and mypy pins, but macOS does not claim
-exact Python patch parity. Full `check`
-requires the managed Python tools, including documentation parser dependencies.
+The portal starts with the governed Homebrew Python major/minor;
+`/usr/bin/python3` only reads initial bootstrap JSON fields. Standalone
+`check docs` and Python formatting/lint scopes select the managed environment
+on demand. It matches the Ruff and mypy pins without requiring an exact Python
+patch. Full `check` and `check --ci` use the base interpreter without preparing
+that environment; the graph uses its [own tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
 Markdown/JSON/YAML/CSS-only formatting instead uses the governed Prettier/Node
 bundle without a C++ SDK, managed Python tools, or a system Node installation;
 see [formatter setup](linting.md#authored-text-formatting).

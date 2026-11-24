@@ -29,6 +29,7 @@ from ao.portal import (
     test_audit,
     tidy_engine,
 )
+from ao.portal.ready_tool import ReadyTool
 from ao.portal.source_scope import SourceScope
 
 
@@ -111,7 +112,32 @@ def audit_names(paths: Sequence[str] = (), *, report_only: bool = False, sink: T
     return int(bool(issues) and not report_only)
 
 
-def check_workflows(files: Sequence[str], *, report_only: bool = False, sink: TextIO | None = None) -> int:
+def actionlint_executable() -> str:
+    """Select the Nix wrapper that supplies the workflow linter and its helpers."""
+    tool = Path(os.environ.get("AO_NIX_ACTIONLINT", ""))
+    try:
+        available = (
+            tool.is_absolute()
+            and tool.is_relative_to("/nix/store")
+            and tool.resolve(strict=True).is_relative_to("/nix/store")
+            and tool.is_file()
+            and os.access(tool, os.X_OK)
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        raise ValueError(f"cannot inspect AO_NIX_ACTIONLINT selection {str(tool)!r}: {error}") from error
+    if not available:
+        raise ValueError("actionlint is unavailable in AO_NIX_ACTIONLINT from the pinned Nix shell; re-enter ./ao")
+    return str(tool)
+
+
+def ready_actionlint() -> ReadyTool:
+    tool = actionlint_executable()
+    return ReadyTool((tool,), (Path(tool),))
+
+
+def check_workflows(
+    files: Sequence[str], *, report_only: bool = False, sink: TextIO | None = None, tool: str | None = None
+) -> int:
     workflows = [name for name in files if git_files.is_workflow_file(name) and source_scope.file_exists(name)]
     if not workflows:
         return 0
@@ -119,15 +145,10 @@ def check_workflows(files: Sequence[str], *, report_only: bool = False, sink: Te
     if sys.platform != "linux":
         print("Skipping workflow lint: the pinned Linux Nix environment owns this repository check.")
         return 0
-    tool = os.environ.get("AO_NIX_ACTIONLINT")
-    if not tool:
-        print(
-            "actionlint is unavailable in AO_NIX_ACTIONLINT from the pinned Nix shell; re-enter ./ao", file=sys.stderr
-        )
-        return 2
     try:
-        result = subprocess.run([tool, "-no-color", *workflows], cwd=PROJECT_ROOT, stdout=sink, stderr=sink)
-    except OSError as error:
+        selected = actionlint_executable() if tool is None else tool
+        result = subprocess.run([selected, "-no-color", *workflows], cwd=PROJECT_ROOT, stdout=sink, stderr=sink)
+    except (OSError, ValueError) as error:
         print(f"cannot execute pinned actionlint: {error}", file=sys.stderr)
         return 2
     if result.returncode == 0:

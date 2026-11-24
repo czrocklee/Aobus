@@ -42,6 +42,7 @@ _MACOS_TOOLING_MODULES = [
     "test_bazel_appkit_deps",
     "test_bazel_environment",
     "test_bazel_remote_cache",
+    "test_python_wheel_lock",
 ]
 
 _UNIT_ENTRY = "ao.graph.bazel_unittest"
@@ -125,6 +126,7 @@ _DATA_MODULES = [
     "test_bazel_appkit_deps",
     "test_bazel_audio_deps",
     "test_bazel_catalog",
+    "test_bazel_check_tools",
     "test_bazel_frontend_deps",
     "test_bazel_gtk_deps",
     "test_bazel_windows_linkage",
@@ -132,6 +134,7 @@ _DATA_MODULES = [
     "test_ci_cache_gates",
     "test_dependency_policy",
     "test_nix_output_metadata",
+    "test_python_wheel_lock",
 ]
 
 # Host-process modules stay local and non-cacheable: the audit observed real
@@ -246,6 +249,11 @@ _DEPS = {
     "test_bazel_bootstrap": [_COMMANDS],
     "test_bazel_catalog": [_FOUNDATIONS],
     "test_bazel_check": [_COMMANDS],
+    "test_bazel_check_tools": [
+        _PORTAL,
+        _LIVE_CHECKOUT,
+        "@rules_python//python/runfiles",
+    ],
     "test_bazel_ci_summary": [_PORTAL],
     "test_bazel_compile_contract": [_VALIDATION],
     "test_bazel_concepts": [_PORTAL],
@@ -341,6 +349,7 @@ _DEPS = {
     "test_proc": [],
     "test_python_check": [_PORTAL],
     "test_python_env": [_PORTAL],
+    "test_python_wheel_lock": [_FOUNDATIONS],
     "test_r2_credentials": [_PORTAL],
     "test_setup": [_COMMANDS],
     "test_test_audit": [_PORTAL],
@@ -390,6 +399,13 @@ _REPO_DATA = {
     "test_bazel_appkit_deps": _CONTRACT_DATA,
     "test_bazel_audio_deps": _CONTRACT_DATA,
     "test_bazel_catalog": ["//tool/catalog:build_catalog.py"],
+    "test_bazel_check_tools": [
+        "//bazel:check_tools.bzl",
+        "//bazel:environment.bzl",
+    ] + select({
+        "@platforms//os:linux": ["@aobus_environment//:check-tool-test-launcher.json"],
+        "//conditions:default": [],
+    }),
     "test_bazel_frontend_deps": [
         "//:VERSION.txt",
         "//:cmake/vcpkg-ports/stb/vcpkg.json",
@@ -411,6 +427,13 @@ _REPO_DATA = {
         "//:vcpkg.json",
     ],
     "test_nix_output_metadata": ["//:shell.nix"],
+    "test_python_wheel_lock": [
+        "//:script/ao/docs-requirements.txt",
+        "//:script/ao/macos-requirements.txt",
+        "//:script/ao/python-wheels.json",
+        "//:script/ao/toolchain.json",
+        "//:script/ao/windows-requirements.txt",
+    ],
 }
 
 # The glob is the authority: a new test module must be added to exactly one
@@ -438,6 +461,25 @@ _LIVE_CHECKOUT_ARGS = [
 _LIVE_CHECKOUT_DATA = ["//:VERSION.txt"]
 
 _LIVE_CHECKOUT_DEPS = ["@rules_python//python/runfiles"]
+
+_DOC_WHEELS = [
+    "@aobus_docs_wheels//:markdown_it_py.whl",
+    "@aobus_docs_wheels//:mdurl.whl",
+]
+
+_DOC_WHEEL_ARGS = [arg for wheel in _DOC_WHEELS for arg in [
+    "--python-wheel",
+    "$(rlocationpath %s)" % wheel,
+]]
+
+_DOC_WHEEL_MODULES = [
+    "test_bazel_live_checkout",
+    "test_doc_check",
+    "test_doc_check_boundaries",
+    "test_doc_check_markdown",
+    "test_docs_format",
+    "test_naming_doc",
+]
 
 # These host-backed modules repeatedly start Windows shells/interpreters. Both
 # reached the 60s short deadline alongside cold native CI actions. Give only
@@ -469,10 +511,10 @@ _WINDOWS_MODULE_ENV = {
     py_test(
         name = module,
         size = "small",
-        timeout = "moderate" if module in _WINDOWS_PROCESS_MODULES else "short",
+        timeout = "moderate" if module in _WINDOWS_PROCESS_MODULES or module == "test_bazel_check_tools" else "short",
         srcs = [module + ".py"] + _SUPPORT.get(module, []),
-        args = [module] + (_LIVE_CHECKOUT_ARGS if module in _HOST_BACKED_MODULES else []),
-        data = _REPO_DATA.get(module, []) + (_LIVE_CHECKOUT_DATA if module in _HOST_BACKED_MODULES else []),
+        args = [module] + (_LIVE_CHECKOUT_ARGS if module in _HOST_BACKED_MODULES else []) + (_DOC_WHEEL_ARGS if module in _DOC_WHEEL_MODULES else []),
+        data = _REPO_DATA.get(module, []) + (_LIVE_CHECKOUT_DATA if module in _HOST_BACKED_MODULES else []) + (_DOC_WHEELS if module in _DOC_WHEEL_MODULES else []),
         # Missing host tools can turn a live probe into an unnoticed skip.
         env_inherit = (["PATH"] if module in _HOST_BACKED_MODULES else []) + select({
             "@platforms//os:windows": _WINDOWS_MODULE_ENV.get(module, []),
@@ -481,12 +523,12 @@ _WINDOWS_MODULE_ENV = {
         imports = ["."],
         main_module = _UNIT_ENTRY,
         precompile = "disabled",
-        tags = _HOST_BACKED_TAGS if module in _HOST_BACKED_MODULES else [],
-        target_compatible_with = select({
+        tags = _HOST_BACKED_TAGS if module in _HOST_BACKED_MODULES or module == "test_bazel_check_tools" else [],
+        target_compatible_with = ["@platforms//os:linux"] if module == "test_bazel_check_tools" else select({
             "@platforms//os:macos": [] if module in _MACOS_TOOLING_MODULES else ["@platforms//:incompatible"],
             "//conditions:default": [],
         }),
-        deps = [_ENTRY] + _DEPS.get(module, []) + (_LIVE_CHECKOUT_DEPS if module in _HOST_BACKED_MODULES else []),
+        deps = [_ENTRY] + _DEPS.get(module, []) + (_LIVE_CHECKOUT_DEPS if module in _HOST_BACKED_MODULES or module in _DOC_WHEEL_MODULES else []) + ([_LIVE_CHECKOUT] if module in _DOC_WHEEL_MODULES and _LIVE_CHECKOUT not in _DEPS.get(module, []) else []),
     )
     for module in _ALL_UNIT_MODULES
 ]
@@ -500,11 +542,46 @@ _CHECK_DEPS = [
     "@rules_python//python/runfiles",
 ]
 
-# Ruff and mypy reuse the existing command builders and never provision a
-# tool. The declared data enumerates the governed source scopes from
-# python_check.DEFAULT_TARGETS plus the configuration and toolchain pins, so
-# the boundary is explicit even though the tool closure cannot be: caching
-# stays off until the tools themselves can be declared.
+_RUFF = "@aobus_python_checks//:ruff"
+
+_MYPY = "@aobus_python_checks//:mypy"
+
+_RUFF_ARGS = [
+    "--ruff",
+    "$(rlocationpath %s)" % _RUFF,
+]
+
+_MYPY_ARGS = [
+    "--mypy",
+    "$(rlocationpath %s)" % _MYPY,
+]
+
+_CHECK_TOOL_REPOS = {
+    "format_sources": [
+        "aobus_clang_format",
+        "aobus_buildifier",
+        "aobus_prettier",
+    ],
+    "format_docs": ["aobus_prettier"],
+    "bazel_lint": ["aobus_buildifier"],
+    "workflows": ["aobus_actionlint"],
+}
+
+_CHECK_TOOL_ARGS = {
+    check: [arg for repo in repos for arg in [
+        "--check-tool-manifest",
+        "$(rlocationpath @%s//:command.json)" % repo,
+    ]]
+    for check, repos in _CHECK_TOOL_REPOS.items()
+}
+
+_CHECK_TOOL_DATA = {
+    check: ["@%s//:command.json" % repo for repo in repos]
+    for check, repos in _CHECK_TOOL_REPOS.items()
+}
+
+# The declared data enumerates the governed source scopes and tool inputs;
+# caching stays off because the checks read the physical checkout.
 _PYTHON_CHECK_DATA = [
     "//:VERSION.txt",
     "//:ao_python_sources",
@@ -512,15 +589,13 @@ _PYTHON_CHECK_DATA = [
     "//bazel/coverage:collect.py",
     "//:pyproject.toml",
     "//:script/ao/toolchain.json",
-    "//:script/ao/windows-requirements.txt",
-    "//:script/ao/macos-requirements.txt",
 ]
 
 py_test(
     name = "ruff",
     size = "medium",
-    args = _LIVE_CHECKOUT_ARGS + ["ruff"],
-    data = _PYTHON_CHECK_DATA + glob(["*.py"]),
+    args = _LIVE_CHECKOUT_ARGS + _RUFF_ARGS + ["ruff"],
+    data = _PYTHON_CHECK_DATA + [_RUFF] + glob(["*.py"]),
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -529,8 +604,8 @@ py_test(
 py_test(
     name = "mypy",
     size = "medium",
-    args = _LIVE_CHECKOUT_ARGS + ["mypy"],
-    data = _PYTHON_CHECK_DATA,
+    args = _LIVE_CHECKOUT_ARGS + _MYPY_ARGS + ["mypy"],
+    data = _PYTHON_CHECK_DATA + [_MYPY],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -539,8 +614,8 @@ py_test(
 py_test(
     name = "docs",
     size = "medium",
-    args = _LIVE_CHECKOUT_ARGS + ["docs"],
-    data = _LIVE_CHECKOUT_DATA,
+    args = _LIVE_CHECKOUT_ARGS + _DOC_WHEEL_ARGS + ["docs"],
+    data = _LIVE_CHECKOUT_DATA + _DOC_WHEELS,
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -557,36 +632,13 @@ py_test(
     deps = _CHECK_DEPS,
 )
 
-# Native Buildifier and Prettier use the selected managed state. Windows
-# Buildifier uses platform.machine(), whose non-WMI fallback reads the host
-# architecture; state lookup can fall back to USERPROFILE via Path.home().
-_NATIVE_FORMAT_ENV = select({
-    "@platforms//os:macos": ["AOBUS_STATE_ROOT"],
-    "@platforms//os:windows": _WINDOWS_MANAGED_STATE + [
-        "PROCESSOR_ARCHITECTURE",
-        "USERPROFILE",
-    ],
-    "//conditions:default": [],
-})
-
 py_test(
     name = "format_sources",
     size = "large",
-    args = _LIVE_CHECKOUT_ARGS + ["format-sources"],
-    data = _LIVE_CHECKOUT_DATA,
-    env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
-        "@platforms//os:linux": [
-            "AO_NIX_BUILDIFIER",
-            "AO_NIX_PRETTIER",
-        ],
-        # Bare Windows Bazel can use the ready SDK in %LOCALAPPDATA%\\Aobus
-        # without either an explicit SDK selection or a portal state override.
-        "@platforms//os:windows": [
-            "AOBUS_LLVM_SDK_CACHE_ROOT",
-            "AOBUS_LLVM_SDK_ROOT",
-        ],
-        "//conditions:default": [],
-    }),
+    args = _LIVE_CHECKOUT_ARGS + _RUFF_ARGS + _CHECK_TOOL_ARGS["format_sources"] + ["format-sources"],
+    data = _LIVE_CHECKOUT_DATA + [_RUFF] + _CHECK_TOOL_DATA["format_sources"],
+    # The source inventory uses the live checkout's Git metadata.
+    env_inherit = ["PATH"],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -595,12 +647,8 @@ py_test(
 py_test(
     name = "format_docs",
     size = "medium",
-    args = _LIVE_CHECKOUT_ARGS + ["format-docs"],
-    data = _LIVE_CHECKOUT_DATA,
-    env_inherit = _NATIVE_FORMAT_ENV + select({
-        "@platforms//os:linux": ["AO_NIX_PRETTIER"],
-        "//conditions:default": [],
-    }),
+    args = _LIVE_CHECKOUT_ARGS + _CHECK_TOOL_ARGS["format_docs"] + ["format-docs"],
+    data = _LIVE_CHECKOUT_DATA + _CHECK_TOOL_DATA["format_docs"],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -612,12 +660,9 @@ py_test(
 py_test(
     name = "bazel_lint",
     size = "medium",
-    args = _LIVE_CHECKOUT_ARGS + ["bazel-lint"],
-    data = _LIVE_CHECKOUT_DATA,
-    env_inherit = ["PATH"] + _NATIVE_FORMAT_ENV + select({
-        "@platforms//os:linux": ["AO_NIX_BUILDIFIER"],
-        "//conditions:default": [],
-    }),
+    args = _LIVE_CHECKOUT_ARGS + _CHECK_TOOL_ARGS["bazel_lint"] + ["bazel-lint"],
+    data = _LIVE_CHECKOUT_DATA + _CHECK_TOOL_DATA["bazel_lint"],
+    env_inherit = ["PATH"],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     deps = _CHECK_DEPS,
@@ -644,9 +689,8 @@ py_test(
 
 py_test(
     name = "workflows",
-    args = _LIVE_CHECKOUT_ARGS + ["workflow-lint"],
-    data = _LIVE_CHECKOUT_DATA,
-    env_inherit = ["AO_NIX_ACTIONLINT"],
+    args = _LIVE_CHECKOUT_ARGS + _CHECK_TOOL_ARGS["workflows"] + ["workflow-lint"],
+    data = _LIVE_CHECKOUT_DATA + _CHECK_TOOL_DATA["workflows"],
     main_module = _CHECK_ENTRY,
     tags = _HOST_BACKED_TAGS,
     target_compatible_with = ["@platforms//os:linux"],
@@ -682,6 +726,7 @@ _CI_REPOSITORY_CHECKS = [
     ":name_audit",
     ":ruff",
     ":test_audit",
+    ":test_python_wheel_lock",
     ":workflows",
 ]
 

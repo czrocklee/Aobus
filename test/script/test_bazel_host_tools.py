@@ -29,7 +29,7 @@ class PythonRuntimeTests(unittest.TestCase):
             mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(self.state), "AOBUS_CHECKOUT_ID": "test"})
         )
 
-    def publish_venv(self, host, *, stale=False):
+    def publish_venv(self, host):
         macos = host == "macos"
         requirements = python_env.MACOS_REQUIREMENTS_FILE if macos else python_env.REQUIREMENTS_FILE
         fingerprint = python_env.environment_fingerprint(
@@ -41,7 +41,7 @@ class PythonRuntimeTests(unittest.TestCase):
         python = destination / ("bin/python" if macos else "Scripts/python.exe")
         python.parent.mkdir(parents=True)
         python.touch()
-        (destination / python_env.COMPLETE_MARKER).write_text("stale" if stale else fingerprint, encoding="utf-8")
+        (destination / python_env.COMPLETE_MARKER).write_text(fingerprint, encoding="utf-8")
         return python
 
     def wheel_probe(self, python, *, mdurl):
@@ -55,26 +55,51 @@ class PythonRuntimeTests(unittest.TestCase):
 
         return mock.patch.object(subprocess, "run", side_effect=run)
 
-    def test_a_macos_venv_publishes_the_admitted_patch_and_executable(self):
+    def test_native_runtime_is_independent_of_a_ready_portal_venv(self):
         major, minor, patch = map(int, self.versions["python"].split("."))
-        with mock.patch.object(sys, "version_info", (major, minor, patch + 1)):
-            venv = self.publish_venv("macos")
-            with self.wheel_probe(venv, mdurl=self.versions["mdurl"]):
-                runtime, _, _ = tools._python_runtime("macos")
-        self.assertEqual(runtime["version"], f"{major}.{minor}.{patch + 1}")
-        self.assertEqual(runtime["executable"], str(venv))
+        for host, admitted_patch in (("macos", patch + 1), ("windows", patch)):
+            with (
+                self.subTest(host=host),
+                mock.patch.object(sys, "version_info", (major, minor, admitted_patch)),
+                mock.patch.object(subprocess, "run", side_effect=AssertionError("native base needs no package probe")),
+            ):
+                runtime, inputs = tools._python_runtime(host)
+                venv = self.publish_venv(host)
+                with mock.patch.object(sys, "executable", str(venv)):
+                    self.assertEqual(tools._python_runtime(host), (runtime, inputs))
+                self.assertEqual(
+                    runtime,
+                    {
+                        "version": f"{major}.{minor}.{admitted_patch}",
+                        "implementation": "cpython",
+                        "executable": str(self.base),
+                    },
+                )
+                self.assertEqual(inputs, [python_env.TOOLCHAIN_FILE, self.base])
 
-    def test_a_stale_completion_marker_does_not_admit_a_windows_venv(self):
-        self.publish_venv("windows", stale=True)
-        with mock.patch.object(subprocess, "run", side_effect=AssertionError("must not run the stale interpreter")):
-            runtime, _, _ = tools._python_runtime("windows")
+    def test_native_runtime_rejects_versions_outside_host_policy(self):
+        major, minor, patch = map(int, self.versions["python"].split("."))
+        for host, version in (("windows", (major, minor, patch + 1)), ("macos", (major, minor + 1, patch))):
+            with (
+                self.subTest(host=host),
+                mock.patch.object(sys, "version_info", version),
+                self.assertRaisesRegex(RuntimeError, "Aobus requires Python"),
+            ):
+                tools._python_runtime(host)
+
+    def test_linux_runtime_retains_the_nix_package_version_check(self):
+        version = tuple(map(int, self.versions["python"].split(".")))
+        with mock.patch.object(sys, "version_info", version), self.wheel_probe(self.base, mdurl=self.versions["mdurl"]):
+            runtime, inputs = tools._python_runtime("linux")
         self.assertEqual(runtime["executable"], str(self.base))
-        self.assertEqual(runtime["tooling_python"], "")
+        self.assertEqual(inputs, [python_env.TOOLCHAIN_FILE, self.base])
 
-    def test_the_selected_runtime_cannot_publish_a_mismatched_docs_dependency(self):
-        venv = self.publish_venv("windows")
-        with self.wheel_probe(venv, mdurl="0.0.0"), self.assertRaises(native.BazelWorkspaceError):
-            tools._python_runtime("windows")
+        with (
+            mock.patch.object(sys, "version_info", version),
+            self.wheel_probe(self.base, mdurl="0.0.0"),
+            self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the pinned toolchain"),
+        ):
+            tools._python_runtime("linux")
 
 
 if __name__ == "__main__":

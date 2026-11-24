@@ -39,17 +39,19 @@ class CheckCommandTest(unittest.TestCase):
             with self.subTest(flags=flags), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 parse_arguments(make_parser(), ["check", *flags])
 
-    def test_repository_requires_linux_and_both_tool_environments(self):
+    def test_repository_requires_linux_build_environment_but_not_portal_python_tools(self):
         args = parse_arguments(make_parser(), ["check", "repository"])
         with mock.patch.object(bazel_native, "native_platform", return_value="linux"):
             self.assertTrue(check_command.requires_build_environment(args))
-            self.assertTrue(check_command.requires_python_tools(args))
-        with (
-            mock.patch.object(bazel_native, "native_platform", return_value="windows"),
-            self.assertRaises(SystemExit),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            check_command.requires_build_environment(args)
+            self.assertFalse(check_command.requires_python_tools(args))
+        with mock.patch.object(bazel_native, "native_platform", return_value="windows"):
+            for policy in (check_command.requires_build_environment, check_command.requires_python_tools):
+                with (
+                    self.subTest(policy=policy.__name__),
+                    self.assertRaises(SystemExit),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    policy(args)
 
     def test_sampling_and_non_fastbuild_ci_are_not_admitted_as_completion(self):
         with mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE):

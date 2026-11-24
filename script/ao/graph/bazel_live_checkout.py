@@ -27,6 +27,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 ANCHOR_FLAG = "--live-checkout"
+WHEEL_FLAG = "--python-wheel"
 VERSION_ANCHOR = "VERSION.txt"
 PROJECT_ROOT_ENV = "AOBUS_BAZEL_TEST_PROJECT_ROOT"
 # bzlmod names the main repository _main; other layouts use the workspace name.
@@ -55,6 +56,14 @@ def _official_path(location: str, environ: Mapping[str, str]) -> Path | None:
     if resolved and Path(resolved).is_file():
         return Path(resolved).resolve()
     return None
+
+
+def declared_file(location: str, environ: Mapping[str, str]) -> Path | None:
+    """Resolve a Bazel runfile, or retain an absolute path after re-execution."""
+    candidate = Path(location)
+    if candidate.is_absolute():
+        return candidate if candidate.is_file() else None
+    return _official_path(location, environ)
 
 
 def physical_root(anchor: str, environ: Mapping[str, str]) -> Path | None:
@@ -106,6 +115,23 @@ def take_anchor(arguments: Sequence[str]) -> tuple[str | None, list[str]]:
     return None, remaining
 
 
+def import_wheel_runfiles(arguments: Sequence[str], environ: Mapping[str, str]) -> tuple[list[str], list[str]]:
+    """Resolve explicit pure-wheel runfiles without relying on a runfiles directory tree."""
+    remaining = []
+    wheels = []
+    tokens = iter(arguments)
+    for argument in tokens:
+        if argument != WHEEL_FLAG:
+            remaining.append(argument)
+            continue
+        key = next(tokens, "")
+        wheel = _official_path(key, environ) if key.endswith(".whl") else None
+        if wheel is None:
+            raise ValueError(f"cannot resolve the declared Python wheel runfile: {key!r}")
+        wheels.append(str(wheel))
+    return wheels, remaining
+
+
 def reexec(
     root: Path,
     entry: str,
@@ -136,14 +162,15 @@ def reexec(
     if not script.is_file():
         print(f"live checkout entry script not found: {script}", file=sys.stderr)
         return 1
-    search = [str(root / "script"), str(root / "test" / "script")]
-    inherited = child_environment.get("PYTHONPATH")
-    if inherited:
-        search.append(inherited)
-    child_environment["PYTHONPATH"] = os.pathsep.join(search)
     try:
-        completed = subprocess.run([sys.executable, str(script), *arguments], cwd=root, env=child_environment)
-    except OSError as error:
+        wheels, remaining = import_wheel_runfiles(arguments, child_environment)
+        search = [str(root / "script"), str(root / "test" / "script"), *wheels]
+        inherited = child_environment.get("PYTHONPATH")
+        if inherited:
+            search.append(inherited)
+        child_environment["PYTHONPATH"] = os.pathsep.join(search)
+        completed = subprocess.run([sys.executable, str(script), *remaining], cwd=root, env=child_environment)
+    except (OSError, ValueError) as error:
         print(f"live checkout re-execution failed: {error}", file=sys.stderr)
         return 1
     return completed.returncode

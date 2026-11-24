@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import json
 import os
 import re
 import shutil
@@ -11,12 +12,14 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping, MutableMapping, Sequence
+from functools import partial
 from pathlib import Path
 
-TOOL_PYTHON_ENV = "AOBUS_TOOLING_PYTHON"
 TEST_MODULE_DIR = Path("test/script")
 _LIVE_FLAG = "--live-checkout"
+_TOOL_MANIFEST_FLAG = "--check-tool-manifest"
 _ENTRY_PATH = "script/ao/portal/bazel_repository_checks.py"
+type _ToolSelection = tuple[str, ...] | str  # Command or a provider's unavailability diagnostic.
 
 # A direct script invocation has no package context; add the checkout's script
 # directory so the ao package resolves without a caller-provided PYTHONPATH.
@@ -100,22 +103,6 @@ def _declared_outputs_dir(environ: Mapping[str, str] | None = None) -> Path:
     return Path(tempfile.gettempdir()) / "aobus-guardrails"
 
 
-def tool_python(*, python: Path | None = None) -> Path:
-    """Select the interpreter that provides Ruff and mypy.
-
-    Bazel's Python toolchain owns the interpreter and its declared modules; a
-    caller may name another verified interpreter explicitly. This function
-    never provisions or repairs an environment, so a missing tool fails the
-    target instead of installing one.
-    """
-    if python is not None:
-        return Path(python)
-    selected = os.environ.get(TOOL_PYTHON_ENV)
-    if selected:
-        return Path(selected)
-    return Path(sys.executable)
-
-
 def _is_tooling_test(target: str) -> bool:
     """Match the tooling tests that the project mypy configuration excludes."""
     return target == TEST_MODULE_DIR.as_posix() or target.startswith(TEST_MODULE_DIR.as_posix() + "/")
@@ -172,31 +159,18 @@ def run_guardrails(*, root: Path | None = None, output_dir: Path | None = None, 
     return result.exit_code
 
 
-def _python_targets() -> tuple[str, str]:
-    """Return Ruff's pyXY target and mypy's X.Y target from the governed pin."""
-    from ao.portal import python_env
-
-    major, minor, _ = python_env.tool_versions()["python"].split(".")
-    return f"py{major}{minor}", f"{major}.{minor}"
-
-
-def run_ruff(targets: Sequence[str] | None = None, *, root: Path | None = None, python: Path | None = None) -> int:
+def run_ruff(targets: Sequence[str] | None = None, *, tool: Path, root: Path | None = None) -> int:
     """Run Ruff check over the repository tooling scope."""
     from ao.portal import python_check
 
     base = project_root() if root is None else Path(root)
     selected = list(targets) if targets else list(python_check.DEFAULT_TARGETS)
     _prepare_runtime()
-    # module_command adds no host cache flag, so RUFF_CACHE_DIR from
-    # _prepare_runtime keeps the test out of the managed environment.
-    ruff_target, _ = _python_targets()
-    argv = python_check.module_command(
-        "ruff", "check", "--target-version", ruff_target, *selected, python=tool_python(python=python)
-    )
+    argv = (str(tool), "check", "--target-version", python_check.ruff_target_version(), *selected)
     return _run_tool("Ruff", argv, base)
 
 
-def run_mypy(targets: Sequence[str] | None = None, *, root: Path | None = None, python: Path | None = None) -> int:
+def run_mypy(targets: Sequence[str] | None = None, *, tool: Path, root: Path | None = None) -> int:
     """Run mypy over the repository tooling scope, excluding tooling tests."""
     from ao.portal import python_check
 
@@ -204,16 +178,22 @@ def run_mypy(targets: Sequence[str] | None = None, *, root: Path | None = None, 
     selected = list(targets) if targets else list(python_check.DEFAULT_TARGETS)
     selected = [target for target in selected if not _is_tooling_test(target)]
     _prepare_runtime()
-    # MYPY_CACHE_DIR from _prepare_runtime owns the cache location instead of
-    # the managed environment, matching the Ruff target.
-    _, mypy_target = _python_targets()
-    argv = python_check.module_command(
-        "mypy", "--python-version", mypy_target, *selected, python=tool_python(python=python)
-    )
+    if not selected:
+        return 0
+    # The Nix wrapper owns its immutable closure. On Windows and macOS the
+    # declared interpreter runs only the repository's hash-locked wheels.
+    prefix = (str(tool),) if sys.platform == "linux" else (str(tool), "-I", "-B", "-m", "mypy")
+    argv = (*prefix, "--python-version", python_check.governed_python_version(), *selected)
     return _run_tool("mypy", argv, base)
 
 
-def run_format(*, docs: bool, root: Path | None = None, python: Path | None = None) -> int:
+def run_format(
+    *,
+    docs: bool,
+    root: Path | None = None,
+    commands: Mapping[str, _ToolSelection],
+    ruff: Path | None = None,
+) -> int:
     """Check the docs inventory or its complement in whole-source formatting."""
     from ao.portal import documentation_checks, source_format, source_scope
 
@@ -226,7 +206,7 @@ def run_format(*, docs: bool, root: Path | None = None, python: Path | None = No
         whole = source_scope.resolve(source_scope.Selection(all=True))
         scope = source_scope.SourceScope(tuple(name for name in whole.files if name not in doc_paths))
     _prepare_runtime()
-    return source_format.check(scope, python=tool_python(python=python))
+    return source_format.check(scope, command_for=partial(_command_for, commands), ruff=ruff)
 
 
 def _physical_root(root: Path | None, label: str) -> Path | None:
@@ -272,17 +252,17 @@ def _workflow_files(root: Path) -> list[str]:
     )
 
 
-def run_workflow_lint(*, root: Path | None = None) -> int:
+def run_workflow_lint(*, tool: str, root: Path | None = None) -> int:
     """Lint the repository GitHub workflows with the pinned actionlint."""
     from ao.portal import source_lint
 
     expected = _physical_root(root, "workflow-lint")
     if expected is None:
         return 1
-    return source_lint.check_workflows(_workflow_files(expected))
+    return source_lint.check_workflows(_workflow_files(expected), tool=tool)
 
 
-def run_bazel_lint(*, root: Path | None = None) -> int:
+def run_bazel_lint(*, tool: str, root: Path | None = None) -> int:
     """Lint the full Bazel/Starlark scope with the pinned Buildifier.
 
     The formatter pass and the Buildifier lint verdict are independent: the
@@ -298,14 +278,51 @@ def run_bazel_lint(*, root: Path | None = None) -> int:
     scope = source_scope.resolve(source_scope.Selection(all=True))
     bazel_files = [name for name in scope.files if git_files.is_bazel_file(name) and source_scope.file_exists(name)]
     try:
-        return buildifier.lint_paths(bazel_files, provision=False)
+        return buildifier.lint_paths(bazel_files, provision=False, tool=tool)
     except buildifier.BuildifierError as error:
         print(f"Bazel lint failed: {error}", file=sys.stderr)
         return 1
 
 
+def _declared_commands(paths: Sequence[str], *names: str) -> dict[str, _ToolSelection]:
+    commands: dict[str, _ToolSelection] = {}
+    for path in paths:
+        with Path(path).open(encoding="utf-8") as stream:
+            fact = json.load(stream)
+        if not isinstance(fact, dict):
+            raise ValueError(f"invalid declared check tool: {path}")
+        name = fact.get("name")
+        if name not in names or name in commands:
+            raise ValueError(f"invalid declared check tool: {path}")
+        command, reason = fact.get("command"), fact.get("unavailable")
+        if set(fact) == {"name", "unavailable"} and isinstance(reason, str) and reason.strip():
+            commands[name] = reason
+        elif (
+            set(fact) == {"name", "command"}
+            and isinstance(command, list)
+            and len(command) in ({1, 2} if name == "prettier" else {1})
+            and all(isinstance(item, str) and "\0" not in item and Path(item).is_absolute() for item in command)
+        ):
+            commands[name] = tuple(command)
+        else:
+            raise ValueError(f"invalid declared check tool: {path}")
+    if missing := set(names) - commands.keys():
+        raise ValueError(f"missing declared check tools: {', '.join(sorted(missing))}")
+    return commands
+
+
+def _command_for(commands: Mapping[str, _ToolSelection], name: str) -> tuple[str, ...]:
+    selected = commands[name]
+    if isinstance(selected, str):
+        raise ValueError(selected)
+    return selected
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(_TOOL_MANIFEST_FLAG, action="append", default=[])
+    parser.add_argument("--ruff", type=Path)
+    parser.add_argument("--mypy", type=Path)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("docs", help="check documentation integrity")
     guardrails = commands.add_parser("guardrails", help="run the lexical source audits")
@@ -354,6 +371,14 @@ def _live_reexec(arguments: Sequence[str]) -> tuple[int | None, list[str]]:
     # flag is the only guard.
     environment = dict(os.environ)
     environment[PROJECT_ROOT_ENV] = str(root)
+    for index, value in enumerate(remaining[:-1]):
+        if value in (_TOOL_MANIFEST_FLAG, "--ruff", "--mypy"):
+            location = remaining[index + 1]
+            path = bazel_live_checkout.declared_file(location, environment)
+            if path is None:
+                print(f"declared {value} runfile could not be resolved: {location}", file=sys.stderr)
+                return 1, remaining
+            remaining[index + 1] = str(path)
     return bazel_live_checkout.reexec(root, _ENTRY_PATH, remaining, environment=environment), remaining
 
 
@@ -368,19 +393,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_docs()
     if arguments.command == "guardrails":
         return run_guardrails(platform=arguments.platform)
-    if arguments.command == "ruff":
-        return run_ruff(arguments.targets)
-    if arguments.command == "mypy":
-        return run_mypy(arguments.targets)
+    if arguments.command in ("ruff", "mypy"):
+        tool = arguments.ruff if arguments.command == "ruff" else arguments.mypy
+        if tool is None or not tool.is_absolute():
+            print(f"A declared {arguments.command} executable is required", file=sys.stderr)
+            return 1
+        run = run_ruff if arguments.command == "ruff" else run_mypy
+        return run(arguments.targets, tool=tool)
     if arguments.command == "test-audit":
         return run_test_audit()
     if arguments.command == "name-audit":
         return run_name_audit()
-    if arguments.command == "workflow-lint":
-        return run_workflow_lint()
-    if arguments.command == "bazel-lint":
-        return run_bazel_lint()
-    return run_format(docs=arguments.command == "format-docs")
+    manifests = arguments.check_tool_manifest
+    docs = arguments.command == "format-docs"
+    try:
+        if arguments.command == "workflow-lint":
+            return run_workflow_lint(tool=_command_for(_declared_commands(manifests, "actionlint"), "actionlint")[0])
+        if arguments.command == "bazel-lint":
+            return run_bazel_lint(tool=_command_for(_declared_commands(manifests, "buildifier"), "buildifier")[0])
+        tools = ("prettier",) if docs else ("clang-format", "buildifier", "prettier")
+        commands = _declared_commands(manifests, *tools)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        print(f"Repository check tool selection failed: {error}", file=sys.stderr)
+        return 1
+    if not docs and (arguments.ruff is None or not arguments.ruff.is_absolute()):
+        print("An absolute declared Ruff executable is required for source formatting", file=sys.stderr)
+        return 1
+    return run_format(docs=docs, commands=commands, ruff=arguments.ruff)
 
 
 if __name__ == "__main__":

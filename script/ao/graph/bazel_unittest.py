@@ -33,9 +33,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-USAGE = "usage: bazel_unittest [--live-checkout ANCHOR] MODULE"
+USAGE = "usage: bazel_unittest [--live-checkout ANCHOR] [--python-wheel KEY]... MODULE"
 
 _LIVE_FLAG = "--live-checkout"
+_WHEEL_FLAG = "--python-wheel"
 # The physical child is this entry, fully specified from the checkout root.
 _ENTRY_PATH = "script/ao/graph/bazel_unittest.py"
 
@@ -114,12 +115,29 @@ def _export_search_path() -> None:
     os.environ["PYTHONPATH"] = os.pathsep.join(search)
 
 
+def _import_wheels(arguments: list[str]) -> list[str]:
+    from ao.graph import bazel_live_checkout
+
+    wheels, remaining = bazel_live_checkout.import_wheel_runfiles(arguments, os.environ)
+    # Also make the package available to any Python child launched by the test.
+    sys.path[:0] = wheels
+    inherited = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = os.pathsep.join([*wheels, *([inherited] if inherited else [])])
+    return remaining
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one test module and return a process status."""
     arguments = sys.argv[1:] if argv is None else list(argv)
     live_status = _live_reexec(arguments)
     if live_status is not None:
         return live_status
+    if _WHEEL_FLAG in arguments:
+        try:
+            arguments = _import_wheels(arguments)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
     if len(arguments) != 1:
         print(USAGE, file=sys.stderr)
         return 2

@@ -85,10 +85,13 @@ to avoid an interrupt-sensitive Python wait lock; an unavailable exit status is
 an error, never a successful installation.
 Follow [macOS setup](macos.md) or [Windows setup](windows.md) for native SDK
 prerequisites and the [native source and storage requirements](#native-hosts-and-caching).
-Native Windows Bazel uses governed base Python without provisioning Ruff,
-mypy, or documentation packages. `ao check` requires the ready admitted Python
-tools on every host; no graph target installs or repairs one, and standalone
-scoped checks retain their own managed-tool admission.
+On Windows and macOS, Bazel tests use the governed base Python whether or not
+the checkout has a portal tooling venv. Linux tests use the pinned Nix Python
+environment. Ordinary product targets need no repository-check tools. The
+[repository checks](test/test-suite.md#tooling-and-lint-fixtures) receive
+Bazel-selected wheel inputs and local tool commands. This does not replace the
+portal's own bootstrap, the managed tools used by standalone source commands,
+or the native SDK prerequisites.
 
 `./ao setup bazel` prepares the pinned executable, `./ao setup deps`
 explicitly provisions vcpkg/NuGet/LLVM, and `./ao check contracts` runs
@@ -247,11 +250,14 @@ explicit prefix fails; there is no fallback. Export it or pass it through a
 standard local Bazel `--repo_env` configuration; the repository tracks no
 absolute-path configuration.
 
-On macOS, bare `bazel test //test/script:format_docs` and `//test/script:format`
-need the state root where `./ao setup prettier` installed the formatter. For
-the default location, run `export AOBUS_STATE_ROOT="$HOME/Library/Caches/Aobus"`
-in the invoking shell; use your configured location otherwise. `--repo_env`
-alone does not reach tests. Managed `./ao check` sets the state root for you.
+On macOS and Windows, prepare a ready Prettier/Node bundle for
+`//test/script:format_docs`. `//test/script:format_sources` also needs
+Buildifier and the selected LLVM formatter; `//test/script:bazel_lint` needs
+Buildifier. Use `./ao setup prettier` and `./ao setup buildifier` (`ao.bat` on
+Windows); `ao.bat setup deps` or `ao.bat setup llvm-sdk` prepares Windows LLVM.
+Select a custom `AOBUS_STATE_ROOT` in the invoking environment or through
+`--repo_env`, not with `--test_env`. See [wheel fetches and ready host tools](dependency-governance.md#python-wheel-sources-and-fetches)
+for cache, network and local execution requirements.
 
 On Windows, bare commands resolve C++ through rules_cc's official default MSVC
 auto-configuration ([Windows compiler
@@ -696,9 +702,10 @@ guards are never shared by this comparison. It does not rehash header contents.
 WinUI remains independent and lazy, using the same Starlark mode selection.
 The resolver returns no generated-file, destination-link or alias program.
 
-Native discovery never installs/builds dependencies. Bazel owns materialization,
-watched-input invalidation and repository failure handling; the launcher does
-not stage and compare whole Python-owned artifact trees.
+Native SDK discovery never installs or builds native dependencies. Bazel
+owns materialization, watched-input invalidation and repository failure
+handling; the launcher does not stage and compare whole Python-owned artifact
+trees. Repository-check fetches separately prepare [wheel inputs and local tool selections](dependency-governance.md#python-wheel-sources-and-fetches).
 
 The read inventory includes source/policy inputs, provider metadata, directory
 membership, negative probes and declared tools. Python audit events supplement
@@ -1948,17 +1955,19 @@ no CMake, provisioning, or Visual Studio environment is needed for formatting.
 Python-only, Bazel-only, YAML-only, and empty scopes need no LLVM SDK lookup.
 Bazel-only formatting selects the ready governed Buildifier tool;
 `./ao setup buildifier` (`ao.bat setup buildifier`) prepares it explicitly.
-The formatter never installs a missing tool or SDK. On macOS and Windows,
-checks stay on base Python and use the managed tooling environment only for
-Ruff/mypy, preserving Bazel interpreter and cache identity. See
+Standalone formatters never install a missing tool or SDK. Scoped portal
+checks retain their own tool admission; Bazel's repository checks run with
+declared tools and keep the governed Bazel interpreter. See
 [validation](test/validation-and-review.md) for stage boundaries.
 
 ## Completion gate
 
 Use `./ao check` (`ao.bat check` on Windows) for full local validation. To
 reproduce a [daily CI lane](test/validation-and-review.md#continuous-integration)
-locally, select its command explicitly. Each command runs one Bazel test graph
-and verifies the required suite expansions in the Build Event Protocol (BEP):
+locally, select its command explicitly. Each command runs a Bazel test graph
+and verifies the required suite expansions in the Build Event Protocol (BEP).
+The portal does not prepare a tooling venv for these commands; the graph uses
+its [own Python tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
 
 | Command                 | Bazel test selection                               | Required BEP suite expansions                                 |
 | ----------------------- | -------------------------------------------------- | ------------------------------------------------------------- |

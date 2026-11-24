@@ -87,7 +87,9 @@ All discovered Markdown locations exclude a closed leading front-matter block fr
 
 Run `./ao check docs` from the repository root for documentation semantics, then
 `./ao check format --docs` for read-only formatting verification of the global Markdown inventory.
-The semantics check accepts no paths or commit scope and needs no native SDK.
+The semantics check needs the Markdown parser and accepts no paths or commit scope.
+The formatting check uses the ready Prettier/Node bundle and needs neither the
+parser nor a managed Python tooling environment. Neither check needs a native SDK.
 For formatter policy, see [authored-text formatting](linting.md#authored-text-formatting).
 Both commands discover Markdown under `doc/` (excluding `doc/plan/`), `.agents/skills/`, `tool/`, `app/`, and `asset/`, plus root `README.md`, `AGENTS.md`, and `CONTRIBUTING.md`; Markdown under other trees such as `lib/`, `test/`, `bazel/`, or `script/` is not checked.
 The semantics check validates optional metadata and ids, inline and reference-style links, Markdown anchors, and the ban on links to local plans. Under `doc/` it checks reachability from the documentation home and the direct entry-page links described above. In every discovered document it checks that a Related documents section contains a link list and no other rendered blocks through the end of the page.

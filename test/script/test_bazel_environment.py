@@ -178,8 +178,13 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         )
 
     def test_linux_is_mode_neutral_and_preserves_lazy_sdk_selectors_without_credentials(self):
+        check_tools = {
+            f"AO_NIX_{name}": f"/selected/{name.lower()}"
+            for name in ("ACTIONLINT", "BUILDIFIER", "CLANG_FORMAT", "PRETTIER")
+        }
         self.environment.update(
             {
+                **check_tools,
                 "AOBUS_LINT_CLANGXX": "/selected/clang++",
                 "NIXPKGS_CMAKE_PREFIX_PATH": "/selected/metadata",
                 "AOBUS_LLVM_SDK_ROOT": "/ready/lazy/sdk",
@@ -202,6 +207,7 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
             "AOBUS_LLVM_SDK_ROOT",
             "AOBUS_CHECKOUT_ID",
             "BAZEL_SH",
+            *check_tools,
         ):
             self.assertEqual(first["environment"][key], self.environment[key])
         for key in ("SECRET_TOKEN", "CXXFLAGS", "PYTHONPATH"):
@@ -209,6 +215,40 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.assertIn(str(self.report), first["watch_files"])
         self.assertIn(str(self.source / "script/ao/toolchain.json"), first["watch_files"])
         self.assertFalse(self.output.exists(), "the discovery API does not publish")
+
+    def test_changing_linux_test_launcher_leaves_shared_metadata_byte_identical(self):
+        launcher = self.output.with_name("check-tool-test-launcher.json")
+        shared = []
+        bazel, jdk = "AO_NIX_BAZEL", "AOBUS_BAZEL_SERVER_JAVABASE"
+        for supplied, expected in (
+            ({bazel: "/first/bazel", jdk: "/first/jdk"}, {"bazel": "/first/bazel", "server_javabase": "/first/jdk"}),
+            ({bazel: "/next/bazel", jdk: "/next/jdk"}, {"bazel": "/next/bazel", "server_javabase": "/next/jdk"}),
+            ({jdk: "private-jdk"}, {"unavailable": f"Missing Linux test launcher selection: {bazel}"}),
+            ({bazel: "private-bazel"}, {"unavailable": f"Missing Linux test launcher selection: {jdk}"}),
+            ({bazel: "private-bazel", jdk: ""}, {"unavailable": f"Missing Linux test launcher selection: {jdk}"}),
+            ({}, {"unavailable": f"Missing Linux test launcher selection: {bazel}, {jdk}"}),
+        ):
+            environment = {**self.environment, **supplied}
+            with self.subTest(expected=expected), patch.object(bootstrap.sys, "platform", "linux"):
+                self.assertEqual(
+                    bootstrap.main(
+                        [
+                            "--output",
+                            str(self.output),
+                            "--test-launcher",
+                            str(launcher),
+                            "--environment-json",
+                            json.dumps(environment),
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(json.loads(launcher.read_bytes()), {"schema": 1, **expected})
+                shared.append(self.output.read_bytes())
+        self.assertEqual(len(set(shared)), 1)
+        public = json.loads(shared[0])["environment"]
+        self.assertNotIn("AO_NIX_BAZEL", public)
+        self.assertNotIn("AOBUS_BAZEL_SERVER_JAVABASE", public)
 
     def test_explicit_mapping_never_inherits_ambient_selection(self):
         with patch.dict(os.environ, {"AOBUS_NIX_DEPENDENCY_REPORT": str(self.report), "AOBUS_LINT_CLANG": "/ambient"}):

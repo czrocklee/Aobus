@@ -261,24 +261,24 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
    tests require them to match the major/minor selected by
    `script/ao/toolchain.json`; a patch-only Python update leaves the Homebrew
    lock unchanged.
-3. Rebuild `script/ao/docs-requirements.txt` with hashes for the selected
-   markdown-it-py and mdurl wheels when the documentation parser versions
-   change. Compute every hash from the actual wheel bytes downloaded from the
-   official package index, not from an unverified listing.
-4. Rebuild `script/ao/windows-requirements.txt` with hashes for every selected
-   Windows wheel and transitive package. The file includes the documentation
-   parser lock with a pip `-r` line, so a parser change updates that shared
-   file rather than duplicating its hashes.
-5. Rebuild `script/ao/macos-requirements.txt` with hashes for the x86_64 and
-   arm64 wheels used by macOS documentation, formatting, and lint checks, with
-   the same shared `-r` include.
-6. Ensure the pinned Linux Nixpkgs set — or a targeted Nix derivation —
+3. Update `script/ao/python-wheels.json` with the required parser and native
+   checker wheels, including the native transitive dependencies. Use the
+   [maintainer resolution workflow](#resolving-wheel-candidates-with-uv) to
+   identify candidates for Windows x86_64 and macOS x86_64 and arm64. Record each
+   original filename, official PyPI URL and SHA-256 computed from the wheel
+   bytes, not from an unverified listing. Keep the selected wheels compatible
+   with the contracted Python ABI and target platform.
+4. Run `python3 script/ao/generate_python_requirements.py` with the governed
+   Python and review all three generated `*-requirements.txt` files. Do not
+   edit them by hand. Add `--check` to compare the checked-in files without
+   rewriting them; the repository tooling tests verify the catalog and locks.
+5. Ensure the pinned Linux Nixpkgs set — or a targeted Nix derivation —
    supplies the same exact versions. Because one package set feeds the native
    dependencies too, this may couple the tool upgrade to a native pin move,
    which then follows the [Nixpkgs update](#updating-nixpkgs) validation.
    macOS must match Ruff and mypy but remains outside the exact Python
    patch-level contract.
-7. Run the complete check, including each host's compatible tooling tests:
+6. Run the complete check, including each host's compatible tooling tests:
 
 ```bash
 ./ao check
@@ -288,11 +288,11 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
 ao.bat check
 ```
 
-Use the [standalone tooling runner](test/test-suite.md#tooling-and-lint-fixtures)
-while iterating. On macOS the suite runs only the native SDK selection and
-remote-cache modules.
+Use the [standalone tooling suite](test/test-suite.md#tooling-and-lint-fixtures)
+while iterating. A lock check does not prove that wheels install and run on
+all affected hosts.
 
-8. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
+7. Review new Ruff diagnostics and mypy behavior as policy changes. Keep the
    pin change and any large mechanical cleanup in distinct, understandable
    commits.
 
@@ -300,10 +300,61 @@ Do not change Ruff `target-version` or mypy `python_version` merely because the
 managed interpreter patch release changed. Those settings express the minimum
 Python language target.
 
-The tooling environment fingerprint reads every nested lock reached through a
-single-token `-r <path>` line. Keep lock includes to that spelling: other pip
-include or constraint forms are not followed, so a change in a file they name
-would not invalidate the cached managed environment.
+The generator keeps the shared parser lock as a single `-r docs-requirements.txt`
+include in each native lock. The portal fingerprints such includes when
+selecting a managed environment. See [wheel fetches](dependency-governance.md#python-wheel-sources-and-fetches)
+for downloader and cache boundaries.
+
+### Resolving wheel candidates with uv
+
+Use the governed Python and uv (tested with 0.11.26) from the repository root.
+uv is only a maintainer tool; the generator's normal mode and `--check` do
+not call it.
+
+1. **Discover online.** Ask uv for a candidate report from public PyPI. For
+   example, in Bash with no `UV_*` overrides:
+
+   ```bash
+   roots=$(mktemp)
+   python_version=$(python3 -c 'import json; print(json.load(open("script/ao/toolchain.json"))["python"])')
+   python3 script/ao/generate_python_requirements.py --uv-input native > "$roots" &&
+     uv --no-config --no-cache --no-python-downloads pip compile "$roots" \
+       --python "$(command -v python3)" --python-version "$python_version" \
+       --python-platform x86_64-pc-windows-msvc --default-index https://pypi.org/simple \
+       --only-binary :all: --format pylock.toml
+   ```
+
+   Use `x86_64-apple-darwin` or `aarch64-apple-darwin` for the macOS reports.
+   For docs, use `--uv-input docs` with the same representative Windows
+   platform. Inspect each `wheels` list. If uv lists both a native and a pure
+   wheel, choose intentionally for that target; do not admit both. Use the
+   exact wheel filename version spelling in `toolchain.json` for governed pins.
+
+2. **Match the staged bytes.** Download reviewed wheels under their original
+   filenames. Save the official PyPI Simple JSON for each new artifact's
+   project (`https://pypi.org/simple/<normalized-name>/`, request header
+   `Accept: application/vnd.pypi.simple.v1+json`). Run locally:
+
+   ```bash
+   python3 script/ao/generate_python_requirements.py --match-wheel "$wheel" "$metadata"
+   ```
+
+   This prints the filename, official URL and SHA-256 only when exactly one
+   metadata record matches the local bytes and filename. Review the target
+   groups and edit `python-wheels.json` yourself.
+
+3. **Reconcile offline.** Keep all catalog wheels in `$wheelhouse`, a local
+   directory. Run:
+
+   ```bash
+   python3 script/ao/generate_python_requirements.py --verify-wheelhouse "$wheelhouse"
+   ```
+
+   This verifies archive hashes and asks uv to resolve each of the four groups
+   with only the catalog's approved candidates. It fails on ambiguous,
+   missing or extra selections without fetching wheels, installing packages
+   or editing the catalog. It cannot discover an unstaged release or prove
+   a native install works.
 
 ## When vcpkg does not carry the contracted version
 

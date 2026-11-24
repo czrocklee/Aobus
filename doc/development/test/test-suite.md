@@ -129,16 +129,15 @@ Tests with only declared inputs can reuse cached results. Host-backed units
 and live checks resolve the declared `VERSION.txt` anchor and re-execute
 from the physical checkout under the installed native `py_runtime`; their
 `local` and `external` tags keep them unsandboxed and force fresh results.
-Tests opt into `PATH` only when needed for host tools. The Markdown formatter
-uses pinned Prettier without inheriting `PATH`. The Linux-only workflow check
-gets pinned actionlint through `AO_NIX_ACTIONLINT`. Graph tests require ready
-tools; they do not install or repair them. See the [macOS guide](../macos.md)
-for host-compatible tooling selection.
+Declaring tools does not change this live-checkout boundary. See the
+[macOS guide](../macos.md) for host-compatible tooling selection.
 
-Tooling validates pinned versions and the Windows hash
-lock, and tests the document checker against isolated fixtures. The `docs`
-target validates the live documentation tree; `ao check docs` remains its
-standalone entry.
+The BUILD file owns each check's tool selection. The [tooling dependency
+contract](../dependency-governance.md#repository-tooling) explains wheel
+fetches, ready host tools and why live checks still run locally. The tooling
+suite checks that the generated pip locks match the catalog and exercises the
+document checker with isolated fixtures. `ao check docs` and
+`ao check format --docs` remain standalone checks and do not require Bazel.
 
 Tooling's real LLVM diagnostic-filter controls supplement, not replace, the
 custom-checker fixtures. Prepare the Windows LLVM SDK explicitly with

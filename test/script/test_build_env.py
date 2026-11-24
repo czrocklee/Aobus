@@ -78,7 +78,7 @@ class BuildEnvSelectionTest(unittest.TestCase):
             timeout=15,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "0\n1\n")
+        self.assertEqual(result.stdout, "0\n0\n")
 
     def test_invalid_requests_fail_before_environment_selection(self):
         for argv in (
@@ -106,9 +106,12 @@ class BuildEnvSelectionTest(unittest.TestCase):
 
     def test_python_tools_follow_actual_python_sources_and_documentation_semantics(self):
         for argv, expected in (
-            (["check"], True),
+            (["check"], False),
+            (["check", "--ci"], False),
             (["check", "docs"], True),
-            (["check", "format", "--docs"], True),
+            (["check", "format", "--docs"], False),
+            (["check", "format", "README.md"], False),
+            (["check", "format", "script/ao/core/proc.py"], True),
             (["check", "deps"], False),
             (["format", "script/ao/core/proc.py"], True),
             (["format", "README.md"], False),
@@ -128,6 +131,7 @@ class BuildEnvSelectionTest(unittest.TestCase):
         for arguments, expected in (
             (["check", "docs"], False),
             (["--python-tools", "check", "docs"], True),
+            (["--python-tools", "check", "format", "--docs"], False),
             (["--provider-tools", "setup", "deps"], True),
         ):
             with self.subTest(arguments=arguments), contextlib.redirect_stdout(io.StringIO()) as output:
@@ -177,7 +181,7 @@ class SourceScopeHandoffTest(unittest.TestCase):
                 mock.patch.object(check.documentation_checks, "markdown_scope", return_value=scope) as discover,
             ):
                 self.assertFalse(check.requires_build_environment(args))
-                self.assertTrue(check.requires_python_tools(args))
+                self.assertFalse(check.requires_python_tools(args))
                 discover.assert_not_called()
                 self.assertEqual(options.resolved_scope(args), scope)
                 self.assertEqual(options.resolved_scope(self.parse("check", "format", "--docs")), scope)
