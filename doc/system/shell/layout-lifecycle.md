@@ -66,7 +66,7 @@ A missing custom file selects the matching built-in document; a rejected custom 
 When a newer version saved the rejected file, the workflow posts the newer-layout warning after it resumes on the callback executor; the editor's preset loader does the same.
 The selected authored document is prepared before the worker returns, and matching component state is loaded or replaced by an empty state document.
 
-The workflow resumes on the callback executor, prepares a detached GTK tree against the candidate preset and component state, and only then installs the session/state and commits the tree.
+The workflow resumes on the callback executor, prepares a detached GTK tree against the candidate preset and component state, and only then installs the session/state and commits the tree. If GTK preparation of a custom startup layout fails, it retries once with the matching built-in layout and the same preset state and generation; it does not rewrite the custom file. If the built-in candidate also fails, no candidate is installed.
 
 Cancellation before callback resumption installs nothing.
 An internal exception is logged and leaves the previous shell generation unchanged.

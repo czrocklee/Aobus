@@ -141,7 +141,8 @@ namespace ao::gtk
     void applyLoadedLayout(std::string presetId,
                            uimodel::LayoutDocument document,
                            uimodel::PreparedLayout preparedLayout,
-                           uimodel::LayoutComponentStateDocument componentState);
+                           uimodel::LayoutComponentStateDocument componentState,
+                           bool usingCustomLayout);
     static async::Task<void> loadLayoutWorkflowAsync(
       async::Runtime* asyncRuntime,
       std::shared_ptr<ShellLayoutStore> layoutStorePtr,
@@ -152,6 +153,7 @@ namespace ao::gtk
                          uimodel::LayoutDocument,
                          uimodel::PreparedLayout,
                          uimodel::LayoutComponentStateDocument,
+                         bool,
                          bool)> present,
       std::stop_token stopToken);
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
