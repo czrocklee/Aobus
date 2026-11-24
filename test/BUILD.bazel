@@ -596,7 +596,10 @@ cc_test(
     copts = TEST_WARNING_COPTS,
     data = [
         "//test/data/audio:audio_fixtures",
-    ],
+    ] + select({
+        "@platforms//os:macos": [":ao_track_field_local_time_probe"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":audio_fixture_support",
         ":common_test_support",
@@ -613,7 +616,21 @@ cc_test(
         "//lib/query",
         "//lib/utility:unicode_text",
         "@aobus_test_deps//:catch2",
-    ],
+    ] + select({
+        "@platforms//os:macos": [":fatal_probe_support"],
+        "//conditions:default": [],
+    }),
+)
+
+# Only the macOS chrono fallback needs a separate libc oracle. Build it beside
+# uimodel_test so siblingProbeExecutablePath can find it.
+cc_binary(
+    name = "ao_track_field_local_time_probe",
+    testonly = True,
+    srcs = ["uimodel/field/TrackFieldLocalTimeProbeMacos.cpp"],
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//test:__pkg__"],
+    deps = [":fatal_probe_support"],
 )
 
 # One owner for encoded fixture paths/assertions, shared by media and audio.

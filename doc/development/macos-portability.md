@@ -220,15 +220,32 @@ and shifts the instant by the zone's offset, so the display code is identical
 for either database and formats only standard types.
 
 On the fallback path, the [formatter test](../../test/uimodel/field/TrackFieldFormatterTest.cpp)
-derives its expected text from the C library's `localtime_r`, independently of
-`date`. The test temporarily sets `TZ=:/etc/localtime` and calls `tzset()` so
-that the expectation uses the same operating-system zone file as `date`
-regardless of the incoming `TZ`. It restores the prior `TZ` (or unsets it if
-absent) and calls `tzset()` again when the lookup scope exits.
+gets its expected text from a separate probe using the C library's `localtime_r`,
+independently of `date`. Only the probe sets `TZ=:/etc/localtime` and calls
+`tzset()` so the expectation uses the same operating-system zone file as `date`.
+The formatter runs in the test process with its inherited environment unchanged.
+
+To check both inherited settings on macOS, prepare the [native Bazel environment](macos.md#host-setup),
+then use the pinned Bazel executable printed by setup (or Bazelisk pinned to
+`.bazelversion`):
+
+```bash
+bazel test //test:uimodel_test --nocache_test_results --test_env=TZ=UTC \
+  --test_filter='TrackFieldFormatter*'
+bazel test //test:uimodel_test --nocache_test_results --test_env=TZ=UTC+7 \
+  --test_filter='TrackFieldFormatter*'
+```
+
+Both runs must pass. They exercise the formatter under both inherited settings;
+separate process isolation, not a before-and-after environment comparison, keeps
+probe changes out of the formatter process.
 
 To retire it: remove the alias and the conditional include, the `date` entry from
-`vcpkg.json`, its imported interface, and its link from `app/uimodel`, then run
-the full macOS check.
+`vcpkg.json`, its imported interface, and its link from `app/uimodel`. Keep only
+the standard chrono branch in the formatter test. Delete `TrackFieldLocalTimeProbeMacos.cpp`
+and its `ao_track_field_local_time_probe` target, and remove the macOS-only probe
+data and `fatal_probe_support` dependency from `uimodel_test`. Run the full macOS
+check.
 
 ## Permanent platform differences
 
