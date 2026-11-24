@@ -15,6 +15,7 @@
 #include "tag/TagEditController.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
@@ -22,19 +23,27 @@
 #include "test/linux-gtk/layout/components/ContainerTestHelpers.h"
 #include "test/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
 #include "track/TrackPageHost.h"
+#include "track/TrackRowCache.h"
+#include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/revealer.h>
 #include <gtkmm/stack.h>
+#include <gtkmm/togglebutton.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -220,9 +229,10 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("LayoutHost - shared track stack handoff is atomic across layout replacement")
   {
-    [[maybe_unused]] auto const appPtr = Gtk::Application::create("io.github.aobus.layout_handoff_test");
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto runtimeFixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = runtimeFixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
     auto themeCoordinator = ThemeCoordinator{};
@@ -254,7 +264,14 @@ namespace ao::gtk::layout::test
     registerContainerComponents(registry, ao::test::englishMessageCatalog());
     registerTracksTableComponent(registry, &trackPageHost);
     registerWorkspaceWithDetailPaneComponent(registry, &trackPageHost, ao::test::englishMessageCatalog());
-    registry.registerComponent({.id = "test.fail", .displayName = "Fail"}, makeFailingComponent);
+    registerLabelComponent(registry);
+    bool reachedFailure = false;
+    registry.registerComponent({.id = "test.fail", .displayName = "Fail"},
+                               [&](LayoutBuildContext& context, LayoutNode const& node)
+                               {
+                                 reachedFailure = true;
+                                 return makeFailingComponent(context, node);
+                               });
 
     auto actions = ActionRegistry{registry.schema()};
     auto session = uimodel::LayoutSession{};
@@ -265,55 +282,188 @@ namespace ao::gtk::layout::test
                                       .session = session,
                                       .buildSnapshot = std::move(buildSnapshot)};
     auto host = LayoutHost{registry};
-    auto install = [&](LayoutDocument const& document)
+    auto prepare = [&](LayoutDocument const& document)
     {
-      context.buildSnapshot = session.buildSnapshot().value();
+      auto optSnapshot = session.buildSnapshot();
+      REQUIRE(optSnapshot);
+      context.buildSnapshot = std::move(*optSnapshot);
       auto prepared = ao::test::requireValue(prepareLayout(document));
-      auto tree = ao::test::requireValue(host.prepare(context, prepared));
+      return host.prepare(context, prepared);
+    };
+    auto commit = [&](LayoutDocument const& document, LayoutHost::PreparedTree tree)
+    {
       session.apply(document, {}, tree.generation());
       host.commit(std::move(tree));
     };
+    auto checkPreparationFailure = [&](LayoutNode const& candidate)
+    {
+      auto rejected = LayoutDocument{};
+      rejected.root.type = "box";
+      rejected.root.children = {candidate, LayoutNode{.type = "test.fail"}};
+      auto res = prepare(rejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InitFailed);
+      CHECK(reachedFailure);
+    };
 
+    using Style = CoverArtPlaceholderStyle;
     auto tableDocument = LayoutDocument{};
     tableDocument.root.type = "track.table";
-    install(tableDocument);
+    tableDocument.root.props["groupCoverPlaceholderStyle"] = LayoutValue{"vinyl"};
+    commit(tableDocument, ao::test::requireValue(prepare(tableDocument)));
     auto* const tableParent = stack.get_parent();
     REQUIRE(tableParent != nullptr);
-    CHECK(tableParent->get_parent() == &host);
+    REQUIRE(host.get_first_child() == tableParent);
+    auto const activeGeneration = session.generation();
 
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+    trackPageHost.rebuild(cache);
+    ao::gtk::test::drainGtkEvents();
+    auto const* const activePage = trackPageHost.find(viewId);
+    REQUIRE(activePage != nullptr);
+    auto const* const initialPage = activePage->pagePtr.get();
+    REQUIRE(initialPage != nullptr);
+    auto checkStyle = [&](Style style)
+    {
+      CHECK(trackPageHost.groupCoverPlaceholderStyle() == style);
+      auto const* const page = trackPageHost.find(viewId);
+      REQUIRE(page != nullptr);
+      REQUIRE(page->pagePtr.get() == initialPage);
+      CHECK(page->pagePtr->groupCoverPlaceholderStyle() == style);
+    };
+    checkStyle(Style::Vinyl);
+
+    bool parentChanged = false;
+    auto const parentConnection = sigc::scoped_connection{
+      stack.property_parent().signal_changed().connect([&parentChanged] { parentChanged = true; })};
+    auto checkActiveTree = [&]
+    {
+      CHECK(session.generation() == activeGeneration);
+      CHECK(host.get_first_child() == tableParent);
+      CHECK(stack.get_parent() == tableParent);
+      CHECK_FALSE(parentChanged);
+    };
+
+    auto styledTable = tableDocument;
+    styledTable.root.props["groupCoverPlaceholderStyle"] = LayoutValue{"soul"};
     auto workspaceDocument = LayoutDocument{};
     workspaceDocument.root.type = "workspace.withDetailPane";
-    install(workspaceDocument);
-    auto* const workspaceParent = stack.get_parent();
-    REQUIRE(workspaceParent != nullptr);
-    CHECK(workspaceParent != tableParent);
-    CHECK(workspaceParent->get_parent() == &host);
+    auto detail = LayoutNode{.type = "label"};
+    detail.props["text"] = LayoutValue{"Track details"};
+    workspaceDocument.root.children.push_back(std::move(detail));
 
-    install(tableDocument);
-    auto* const restoredTableParent = stack.get_parent();
-    REQUIRE(restoredTableParent != nullptr);
-    CHECK(restoredTableParent != workspaceParent);
-    CHECK(restoredTableParent->get_parent() == &host);
+    SECTION("a later component failure does not change the live table style")
+    {
+      checkPreparationFailure(styledTable.root);
+      checkActiveTree();
+      checkStyle(Style::Vinyl);
+    }
 
-    auto rejectedDocument = LayoutDocument{};
-    rejectedDocument.root.type = "box";
-    rejectedDocument.root.children = {
-      LayoutNode{.type = "workspace.withDetailPane"},
-      LayoutNode{.type = "test.fail"},
-    };
-    context.buildSnapshot = session.buildSnapshot().value();
-    auto const generationBeforeFailure = session.generation();
-    auto* const activeRootBeforeFailure = host.get_first_child();
-    auto rejectedPrepared = ao::test::requireValue(prepareLayout(rejectedDocument));
+    SECTION("a pending table keeps the live style until committed")
+    {
+      auto candidate = ao::test::requireValue(prepare(styledTable));
+      checkActiveTree();
+      checkStyle(Style::Vinyl);
+      commit(styledTable, std::move(candidate));
+      CHECK(host.get_first_child() != tableParent);
+      CHECK(stack.get_parent() == host.get_first_child());
+      CHECK(session.generation() == activeGeneration + 1);
+      checkStyle(Style::Soul);
+    }
 
-    CHECK_FALSE(host.prepare(context, rejectedPrepared));
-    CHECK(session.generation() == generationBeforeFailure);
-    CHECK(host.get_first_child() == activeRootBeforeFailure);
-    CHECK(stack.get_parent() == restoredTableParent);
-    CHECK(restoredTableParent->get_parent() == &host);
+    SECTION("discarding a table candidate preserves the live style and parent")
+    {
+      {
+        auto const candidate = ao::test::requireValue(prepare(styledTable));
+        CHECK(candidate.generation() == activeGeneration + 1);
+        checkActiveTree();
+        checkStyle(Style::Vinyl);
+      }
+      checkActiveTree();
+      checkStyle(Style::Vinyl);
+    }
 
-    install(workspaceDocument);
-    REQUIRE(stack.get_parent() != nullptr);
-    CHECK(stack.get_parent()->get_parent() == &host);
+    SECTION("an abandoned workspace preserves stack expansion and explicit-set flags")
+    {
+      // Exercise each axis with both a changed value and a changed explicit-set bit.
+      auto const expandHorizontally = GENERATE(false, true);
+      stack.set_hexpand(expandHorizontally);
+      stack.set_vexpand(!expandHorizontally);
+      stack.set_hexpand_set(!expandHorizontally);
+      stack.set_vexpand_set(expandHorizontally);
+
+      SECTION("a later component throws")
+      {
+        checkPreparationFailure(workspaceDocument.root);
+      }
+
+      SECTION("a prepared tree is discarded")
+      {
+        auto const candidate = ao::test::requireValue(prepare(workspaceDocument));
+        CHECK(candidate.generation() == activeGeneration + 1);
+        checkActiveTree();
+      }
+
+      checkActiveTree();
+      checkStyle(Style::Vinyl);
+      CHECK(stack.get_hexpand() == expandHorizontally);
+      CHECK(stack.get_hexpand_set() == !expandHorizontally);
+      CHECK(stack.get_vexpand() == !expandHorizontally);
+      CHECK(stack.get_vexpand_set() == expandHorizontally);
+    }
+
+    SECTION("a table replacement preserves expansion from an accepted workspace")
+    {
+      stack.set_hexpand(false);
+      stack.set_vexpand(false);
+      auto candidate = ao::test::requireValue(prepare(workspaceDocument));
+      checkActiveTree();
+      commit(workspaceDocument, std::move(candidate));
+      auto* const workspaceParent = stack.get_parent();
+      REQUIRE(workspaceParent != nullptr);
+      CHECK(workspaceParent != tableParent);
+      CHECK(workspaceParent == host.get_first_child());
+
+      // The track stack precedes the functional detail controls in the horizontal workspace.
+      Gtk::ToggleButton* handle = nullptr;
+      Gtk::Revealer* revealer = nullptr;
+
+      for (auto* sibling = stack.get_next_sibling(); sibling != nullptr; sibling = sibling->get_next_sibling())
+      {
+        if (auto* const toggle = dynamic_cast<Gtk::ToggleButton*>(sibling); toggle != nullptr)
+        {
+          handle = toggle;
+        }
+
+        if (auto* const candidateRevealer = dynamic_cast<Gtk::Revealer*>(sibling);
+            candidateRevealer != nullptr &&
+            ao::gtk::test::findLabelByText(*candidateRevealer, "Track details") != nullptr)
+        {
+          revealer = candidateRevealer;
+        }
+      }
+
+      REQUIRE(handle != nullptr);
+      REQUIRE(revealer != nullptr);
+      CHECK_FALSE(revealer->get_reveal_child());
+      handle->set_active(true);
+      CHECK(revealer->get_reveal_child());
+
+      CHECK(stack.get_hexpand());
+      CHECK(stack.get_hexpand_set());
+      CHECK(stack.get_vexpand());
+      CHECK(stack.get_vexpand_set());
+      checkStyle(Style::Vinyl);
+
+      // track.table changes the placeholder style, not the shared stack's expansion.
+      commit(styledTable, ao::test::requireValue(prepare(styledTable)));
+      CHECK(stack.get_parent() != workspaceParent);
+      CHECK(stack.get_parent() == host.get_first_child());
+      CHECK(stack.get_hexpand());
+      CHECK(stack.get_hexpand_set());
+      CHECK(stack.get_vexpand());
+      CHECK(stack.get_vexpand_set());
+      checkStyle(Style::Soul);
+    }
   }
 } // namespace ao::gtk::layout::test

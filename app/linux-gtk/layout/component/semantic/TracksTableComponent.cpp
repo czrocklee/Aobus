@@ -55,18 +55,18 @@ namespace ao::gtk::layout
                        uimodel::coverArtPlaceholderStyleId(defaultStyle));
         }
 
-        trackPageHost->setGroupCoverPlaceholderStyle(style);
-
         _stack = &trackPageHost->stack();
 
         if (ctx.sharedWidgetHandoff != nullptr)
         {
-          ctx.sharedWidgetHandoff->transfer(*_stack, _container);
+          ctx.sharedWidgetHandoff->transferTrackStack(
+            *trackPageHost, _container, {.optGroupCoverPlaceholderStyle = style});
         }
         else
         {
           AO_EXPECTS(_stack->get_parent() == nullptr,
                      "track.table cannot attach an already-parented TrackPageHost stack outside a build");
+          trackPageHost->setGroupCoverPlaceholderStyle(style);
           _container.append(*_stack);
         }
 

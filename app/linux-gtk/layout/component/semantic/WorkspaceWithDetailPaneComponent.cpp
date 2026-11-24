@@ -55,17 +55,17 @@ namespace ao::gtk::layout
         _container.set_vexpand(true);
 
         _stack = &trackPageHost->stack();
-        _stack->set_hexpand(true);
-        _stack->set_vexpand(true);
 
         if (ctx.sharedWidgetHandoff != nullptr)
         {
-          ctx.sharedWidgetHandoff->transfer(*_stack, _container);
+          ctx.sharedWidgetHandoff->transferTrackStack(*trackPageHost, _container, {.forceExpand = true});
         }
         else
         {
           AO_EXPECTS(_stack->get_parent() == nullptr,
                      "workspace.withDetailPane cannot attach an already-parented TrackPageHost stack outside a build");
+          _stack->set_hexpand(true);
+          _stack->set_vexpand(true);
           _container.append(*_stack);
         }
 
