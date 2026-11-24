@@ -264,7 +264,8 @@ namespace ao::winui::layout
         return found == _acceleratorPlans.end() ? std::string{} : found->displayText;
       },
       _session.textCatalog(),
-      std::move(report));
+      std::move(report),
+      _config.commands.chooseColumns);
   }
 
   PaneSettingsAccess ShellBuilder::paneSettings()

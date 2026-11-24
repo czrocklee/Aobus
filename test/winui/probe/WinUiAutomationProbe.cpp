@@ -559,6 +559,68 @@ namespace
     return *applyRes;
   }
 
+  ao::Result<std::filesystem::path> createProbeScratch(std::string_view const prefix)
+  {
+    auto error = std::error_code{};
+    auto const parent = std::filesystem::temp_directory_path(error);
+
+    if (error)
+    {
+      return ao::makeError(ao::Error::Code::IoError, error.message());
+    }
+
+    auto const tick = std::chrono::steady_clock::now().time_since_epoch().count();
+    auto scratch = parent / std::format("{}-{}-{}", prefix, ::GetCurrentProcessId(), tick);
+
+    // An existing file or directory is never ours, even if its name matches.
+    if (!std::filesystem::create_directory(scratch, error))
+    {
+      return ao::makeError(
+        ao::Error::Code::IoError, error ? error.message() : "WinUI probe scratch directory already exists");
+    }
+
+    return scratch;
+  }
+
+  // Hand off the fixture only after successful seeding and reporting. It lives
+  // across separate launches of the shipping app, unlike an in-process audit.
+  std::int32_t seedAlbumColumnsFixture()
+  {
+    auto const scratchRes = createProbeScratch("aobus-uia-album-columns");
+
+    if (!scratchRes)
+    {
+      std::cerr << scratchRes.error().message << '\n';
+      return 2;
+    }
+
+    bool handedOff = false;
+    auto const cleanup = ao::utility::ScopedRegistration{
+      [&scratchRes, &handedOff]
+      {
+        if (!handedOff)
+        {
+          auto error = std::error_code{};
+          std::filesystem::remove_all(*scratchRes, error);
+
+          if (error)
+          {
+            std::cerr << std::format("Album Columns fixture cleanup failed: {}\n", error.message());
+          }
+        }
+      }};
+
+    if (auto const seededRes = seedLibrary(*scratchRes / "library", std::nullopt); !seededRes)
+    {
+      std::cerr << seededRes.error().message << '\n';
+      return 2;
+    }
+
+    std::cout << ao::utility::pathToUtf8(*scratchRes) << '\n' << std::flush;
+    handedOff = static_cast<bool>(std::cout);
+    return handedOff ? 0 : 2;
+  }
+
   class WinUiAutomationProbe : public ApplicationT<WinUiAutomationProbe, Markup::IXamlMetadataProvider>
   {
   public:
@@ -602,8 +664,16 @@ namespace
 
       _orderingPtr = std::move(*orderingRes);
       _aliasesPtr = ao::i18n::createIcuCompletionAliasPolicy();
-      _scratch = std::filesystem::temp_directory_path() /
-                 std::format("aobus-uia-audit-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+      auto scratchRes = createProbeScratch("aobus-uia-audit");
+
+      if (!scratchRes)
+      {
+        fail(scratchRes.error().message);
+        finish();
+        return;
+      }
+
+      _scratch = std::move(*scratchRes);
       auto const libraryRoot = _scratch / "library";
 
       auto const seedRes = seedLibrary(libraryRoot, _optPrimaryFixture);
@@ -3274,6 +3344,7 @@ int main(int argc, char** argv)
 {
   auto optListPreviewLocale = std::optional<std::string_view>{};
 
+  auto const seedAlbumColumns = argc == 2 && std::string_view{argv[1]} == "--seed-album-columns";
   auto const classicOutput = argc == 2 && std::string_view{argv[1]} == "--classic-output";
   auto optPrimaryFixture = std::optional<std::filesystem::path>{};
 
@@ -3293,7 +3364,7 @@ int main(int argc, char** argv)
     }
   }
 
-  if (argc != 1 && !classicOutput && !optPrimaryFixture)
+  if (argc != 1 && !seedAlbumColumns && !classicOutput && !optPrimaryFixture)
   {
     if (argc == 3 && std::string_view{argv[1]} == "--list-preview")
     {
@@ -3306,18 +3377,20 @@ int main(int argc, char** argv)
 
     if (!optListPreviewLocale)
     {
-      std::cerr
-        << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale> | "
-           "--primary-play <absolute private .wav> | --seek-steps <private PCM .wav> | "
-           "--seek-range <classic|modern> <private PCM .wav>]\n"
-           "Seek modes require an absolute private PCM .wav longer than 11s, at most 16 MiB.\n"
-           "The List preview mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n";
+      std::cerr << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale> | "
+                   "--primary-play <absolute private .wav> | --seek-steps <private PCM .wav> | "
+                   "--seek-range <classic|modern> <private PCM .wav> | --seed-album-columns]\n"
+                   "Seek modes require an absolute private PCM .wav longer than 11s, at most 16 MiB.\n"
+                   "The List preview mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n"
+                   "--seed-album-columns prints a new temporary fixture root for process-restart checks; the caller "
+                   "owns cleanup.\n";
       return 2;
     }
   }
 
-  if (::DWORD session = 0; ::ProcessIdToSessionId(::GetCurrentProcessId(), &session) == 0 || session == 0 ||
-                           session != ::WTSGetActiveConsoleSessionId() || !hasInteractiveUserToken())
+  if (::DWORD session = 0;
+      !seedAlbumColumns && (::ProcessIdToSessionId(::GetCurrentProcessId(), &session) == 0 || session == 0 ||
+                            session != ::WTSGetActiveConsoleSessionId() || !hasInteractiveUserToken()))
   {
     std::cerr << "WinUI naming audit requires the active authenticated interactive console; no GUI was started.\n";
     return 2;
@@ -3325,6 +3398,11 @@ int main(int argc, char** argv)
 
   try
   {
+    if (seedAlbumColumns)
+    {
+      return seedAlbumColumnsFixture();
+    }
+
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
     Application::Start(

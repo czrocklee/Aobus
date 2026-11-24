@@ -116,7 +116,9 @@ namespace ao::tui::test
     auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
     columnLayouts[ListId{10}] = {
       uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75},
-      uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17, .visible = true},
+      uimodel::TrackColumnState{
+        .field = rt::TrackField::Duration, .width = 17, .visibility = uimodel::TrackColumnVisibility::Show},
+      uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Hide},
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
@@ -140,11 +142,13 @@ namespace ao::tui::test
                         "        - field: \"artist\"\n"
                         "          width: -1\n"
                         "          weight: 1.75\n"
-                        "          visible: true\n"
+                        "          visibility: \"default\"\n"
                         "        - field: \"duration\"\n"
                         "          width: 17\n"
                         "          weight: -1\n"
-                        "          visible: true\n"
+                        "          visibility: \"show\"\n"
+                        "        - field: \"album\"\n"
+                        "          visibility: \"hide\"\n"
                         "trackView.presentations:\n"
                         "  version: 1\n"
                         "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
@@ -235,7 +239,7 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
-  TEST_CASE("LayoutStateStore - valid columns load when presentation preferences are rejected")
+  TEST_CASE("LayoutStateStore - checkpoints earlier boolean columns with visibility tokens without losing state")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -250,26 +254,45 @@ namespace ao::tui::test
                                     "        - field: duration\n"
                                     "          width: 17\n"
                                     "          weight: -1\n"
+                                    "          visible: false\n"
+                                    "        - field: artist\n"
+                                    "          width: -1\n"
+                                    "          weight: 1.75\n"
                                     "          visible: true\n"
                                     "trackView.presentations:\n"
                                     "  version: 99\n"
                                     "  preferences: []\n"};
     std::ofstream{configPath, std::ios::binary} << stored;
-    auto const store = LayoutStateStore{libraryPath, kLibraryId};
+    auto store = LayoutStateStore{libraryPath, kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    auto const expectedColumns = uimodel::TrackColumnLayouts::Snapshot{
+      {ListId{42},
+       {uimodel::TrackColumnState{
+          .field = rt::TrackField::Duration, .width = 17, .visibility = uimodel::TrackColumnVisibility::Hide},
+        uimodel::TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.75}}},
+    };
 
     auto widths = PanelWidths{};
     bool navigationEnabled = true;
     store.load(columns, presentations, navigationEnabled, widths);
 
-    REQUIRE(columns.size() == 1);
-    REQUIRE(columns.contains(ListId{42}));
-    REQUIRE(columns.at(ListId{42}).size() == 1);
-    CHECK(columns.at(ListId{42})[0].width == 17);
-    REQUIRE(presentations.size() == 1);
-    CHECK(presentations.at(ListId{7}) == "songs");
+    CHECK(columns == expectedColumns);
+    CHECK(presentations == uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}});
     CHECK(ao::test::readFile(configPath) == stored);
+
+    REQUIRE(store.save(columns, presentations, false, widths));
+    auto const checkpoint = ao::test::readFile(configPath);
+    CHECK(checkpoint.contains("trackView.columnLayouts:\n  version: 1\n"));
+    CHECK(checkpoint.contains("visibility: \"hide\""));
+    CHECK(checkpoint.contains("visibility: \"default\""));
+    CHECK_FALSE(checkpoint.contains("visible:"));
+
+    auto const reopened = LayoutStateStore{libraryPath, kLibraryId};
+    auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
+    reopened.load(loadedColumns, presentations, navigationEnabled, widths);
+
+    CHECK(loadedColumns == expectedColumns);
   }
 
   TEST_CASE("LayoutStateStore - serialization failure preserves state and permits a later retry")

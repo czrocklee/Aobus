@@ -11,9 +11,12 @@ alignment, sizing, visibility, ordering, and user resize behavior.
 It defines start/end alignment, fixed and flexible column roles, minimums,
 weighted allocation, canonical per-list frontend state, and terminal adaptation.
 
-The presentation supplies the available fields and their initial semantic order.
-A persisted layout may hide or reorder those fields without making a field outside
-the active presentation available.
+The authored presentation supplies the default columns and their initial
+semantic order. It may also declare a field redundant with a group heading;
+if the heading presents the same fact, that field is available to show but is
+hidden by default unless the authored field list already includes it.
+A persisted layout can show, hide, or reorder available fields without making
+unrelated fields available.
 This specification does not own exact widget geometry, terminal hit testing, or
 library data.
 The [persisted presentation-state reference](../../reference/presentation/persisted-state.md) owns the versioned document.
@@ -56,15 +59,19 @@ TUI adapts the same solver through `app/tui/TerminalTrackColumnLayout`, renders 
 - A missing, invalid, or pre-layout viewport uses preferred widths instead of producing zero-width columns.
 - A resize never changes field identity, source membership, sort order, or grouping.
 - Hidden columns retain their canonical order and sizing.
-- GTK and WinUI visibility interaction keeps at least one field visible; TUI currently consumes persisted visibility but exposes no reorder/visibility editor.
+- A visibility-only change does not establish sizing or order. Geometry changes preserve each field's visibility choice; a field without an explicit choice inherits the presentation default.
+- WinUI's Columns command keeps at least one field visible. GTK and TUI consume persisted per-list visibility but do not expose per-list visibility or reorder commands. GTK's custom presentation editor changes the presentation's field list instead.
 - TUI fixed widths, preferred widths, minimums, pointer deltas, and viewport measurements are all terminal-cell counts. Restored fixed widths and explicit pointer targets are bounded to the supported 8 through 160 cells before solving. No pixel-to-cell conversion participates in restore or save.
 - A TUI drag changes only preview state until normal pointer release commits one per-list canonical update.
 
 ## State model
 
 `TrackColumnSolveSpec` is the pure solver input.
-`TrackColumnState` is the canonical UI-local order, sizing, and visibility state
-for a field.
+`TrackColumnState` holds canonical sizing and order, an explicit visibility
+choice, or both. An entry without geometry supplies no position; only entries
+with geometry participate in saved order. Visibility can inherit the
+presentation default or record an explicit show or hide. These choices do not
+change which fields the active presentation makes available.
 `TrackColumnLayouts` maps `ListId` to an ordered vector of column states and emits the affected list id after a real change.
 When constructed with `LibraryChanges`, it removes every layout named by a committed list deletion and emits each removed id only after the complete deletion set has been pruned.
 A full library reset carries no incremental List ids, so it clears the complete layout map and emits every removed key.
@@ -81,11 +88,16 @@ The invalid list id cannot receive an update.
 
 ### Initial solve
 
-The adapter combines visible runtime fields with stored state.
-Fixed fields take a stored positive width when available; flexible fields take a stored positive weight.
-Absent state falls back to field presentation policy.
-Stored fields marked hidden are excluded from the solve while retaining their
-canonical state for later restoration.
+GTK, WinUI, and TUI use the authored view spec, not the projection's inferred
+redundant metadata, to resolve available and default columns. Inherited
+visibility follows the presentation. A List's explicit show or hide takes
+precedence in every presentation that offers the field. An override for an
+unavailable field is retained but does not make that field available.
+
+The solver uses the resulting visible fields in the List's stored order,
+followed by fields without stored positions in presentation order. Fixed fields take a
+stored positive width when available; flexible fields take a stored positive
+weight. Absent sizing falls back to field presentation policy.
 
 The solver allocates fixed widths, reserves flexible minimums, and distributes the remaining width by normalized weight.
 Flexible shares that fall below their minimum are pinned and the rest is redistributed until all active shares are representable.
@@ -109,10 +121,16 @@ TUI clamps explicit pointer targets to 8 through 160 terminal cells before the s
 
 ### User reorder and visibility
 
-Desktop adapters may move an active presentation field left or right and may
-toggle its visibility. Reordering changes only the stored field order.
-Hiding a field retains its sizing state, and showing it restores the field into
-that order. An adapter rejects an attempt to hide the last visible field.
+WinUI can move a visible field left or right and can toggle any available
+field, including one omitted by default because it is in a group heading. In
+Albums, **Album** starts unchecked; checking it shows the album name both in
+the group heading and in each track row. Reordering changes only the stored
+field order. Hiding or showing a field retains any existing dimensions and
+position. If the field has no saved position, a toggle does not create one;
+resize or reorder can establish it. The choice persists when the List is reopened. Checking
+a column again records an explicit show even if the current presentation
+would show it by default; it does not reset the choice. WinUI rejects an
+attempt to hide the last visible field.
 
 ## Failure and cancellation
 
@@ -133,13 +151,14 @@ Persistence I/O failures belong to the [persistence and managed-state architectu
 Column state is UI-local per-library managed state keyed by list id.
 GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in `winui_layout.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
 All three are per-library documents that record the id of the library they were saved for, so a list id keyed in one is never read back against another library's lists.
-The `trackView.columnLayouts` group carries required `version: 1` and
-`libraryId`, and stores field id, canonical dimensions, and visibility.
+The `trackView.columnLayouts` group requires `version: 1` and `libraryId`.
+The writer stores the field id and a `visibility` choice of `default`, `show`, or `hide`.
+It includes canonical dimensions only for positioned columns.
 The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
 
 Loading uses strict recursive structure plus semantic validation and never installs a partial column vector.
-Unversioned numeric layouts and unsupported versions are rejected without an automatic rewrite.
-The explicit schema returns `NotSupported` for a future version before interpreting its layouts.
+Version 1 also accepts the earlier boolean `visible` member in place of `visibility`: `true` inherits the presentation default and `false` explicitly hides the field. Either form preserves the stored order and dimensions. Loading does not rewrite the group.
+Unversioned layouts are rejected. The schema returns `NotSupported` for versions other than 1 before interpreting their layouts.
 GTK suppresses layout/preference persistence callbacks while installing deserialized startup candidates, so a valid sibling group cannot rewrite a rejected layout merely because bulk state changed.
 WinUI loads a complete typed candidate before installing it, once the library that gives its list ids meaning is open, and saves the group by itself from the store's persist port.
 TUI loads each group independently before connecting save observers, and its single store writer saves column layouts and presentation preferences through one atomic `saveTogether()` candidate.
@@ -166,10 +185,10 @@ Persisted field order and visibility are merged with the active presentation bef
 
 - [`TrackColumnDefaults.cpp`](../../../app/uimodel/library/presentation/TrackColumnDefaults.cpp) classifies field alignment and sizing and supplies defaults and minimums.
 - [`TrackColumnWidthSolver.cpp`](../../../app/uimodel/library/presentation/TrackColumnWidthSolver.cpp) implements allocation, conversion, resize, and canonicalization.
-- [`TrackColumnLayouts.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayouts.cpp) owns per-list UI-local state, change signals, and stored-layout merging.
-- [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) owns explicit YAML mapping, versioned persistence conversion, and validation.
-- [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) adapts GTK viewport and drag events.
-- [`TrackListController.cpp`](../../../app/windows-winui/track/TrackListController.cpp) adapts WinUI headers, rows, viewport, reordering, and visibility.
+- [`TrackColumnLayouts.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayouts.cpp) owns per-list UI-local state, resolves field availability and visibility against the authored presentation, and merges stored order with the current fields.
+- [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) owns YAML mapping and validation.
+- [`TrackPageHost.cpp`](../../../app/linux-gtk/track/TrackPageHost.cpp) supplies the authored presentation when a GTK page opens or its projection is replaced. [`TrackViewPage.cpp`](../../../app/linux-gtk/track/TrackViewPage.cpp) resolves the visible fields before attaching the model; [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) applies that order and visibility, solves desktop widths, and observes native width changes. [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns the GTK file boundary.
+- [`TrackListController.cpp`](../../../app/windows-winui/track/TrackListController.cpp) adapts WinUI headers, rows, viewport, reordering, and visibility; [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI file boundary.
 - [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) adapts shared state and the solver to terminal geometry; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) renders the projected result; [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp) owns the TUI file boundary.
 
 ## Test map
@@ -179,7 +198,7 @@ Persisted field order and visibility are merged with the active presentation bef
 - [`TrackColumnLayoutsTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state, cascade deletion, notification behavior, and deletion-callback lifetime.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
 - [`TrackColumnLayoutMergingTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
-- [`TrackColumnControllerTest.cpp`](../../../test/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
+- [`TrackColumnControllerTest.cpp`](../../../test/linux-gtk/track/TrackColumnControllerTest.cpp) checks native GTK layout application and resize. [`TrackViewPageTest.cpp`](../../../test/linux-gtk/track/TrackViewPageTest.cpp) checks stored visibility across GTK page rebuilds. [`TrackPageHostTest.cpp`](../../../test/linux-gtk/track/TrackPageHostTest.cpp) checks that replacing the projection does not make an inferred redundant field available.
 - [`TerminalTrackColumnLayoutTest.cpp`](../../../test/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp), and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
 
 ## Related documents

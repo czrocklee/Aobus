@@ -56,12 +56,6 @@ namespace ao::winui
   /// presentation; the presentation label resolves it to localized copy.
   inline constexpr std::string_view kColumnSortPresentationId = "windows-column-sort";
 
-  struct TrackColumnChoice final
-  {
-    rt::TrackField field = rt::TrackField::Title;
-    bool visible = true;
-  };
-
   class TrackListController final
   {
   public:
@@ -93,7 +87,7 @@ namespace ao::winui
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);
     Result<> moveColumn(std::string_view fieldId, std::int32_t offset);
     Result<> setColumnVisible(std::string_view fieldId, bool visible);
-    std::vector<TrackColumnChoice> columnChoices() const;
+    std::vector<uimodel::TrackColumnChoice> columnChoices() const;
     ListId activeListId() const;
     std::string activePresentationId() const;
 

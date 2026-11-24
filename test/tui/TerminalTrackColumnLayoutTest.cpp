@@ -30,7 +30,7 @@ namespace ao::tui::test
     };
     auto const stored = std::vector{
       uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 13},
-      uimodel::TrackColumnState{.field = rt::TrackField::Album, .visible = false},
+      uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Hide},
       uimodel::TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.0},
     };
 
@@ -51,6 +51,51 @@ namespace ao::tui::test
     CHECK(trackTableChromeColumns(0) == 3);
     CHECK(trackTableChromeColumns(1) == 6);
     CHECK(trackTableChromeColumns(3) == 12);
+  }
+
+  TEST_CASE("TerminalTrackColumnLayout - projects a stored show for the suppressed Album column")
+  {
+    auto const* preset = rt::builtinTrackPresentationPreset("albums");
+    REQUIRE(preset != nullptr);
+    auto const stored = std::vector{uimodel::TrackColumnState{
+      .field = rt::TrackField::Album, .weight = 1.75, .visibility = uimodel::TrackColumnVisibility::Show}};
+
+    auto const layout = projectTerminalTrackColumnLayout(preset->spec, stored, 100);
+
+    REQUIRE_FALSE(layout.columns.empty());
+    CHECK(layout.columns.front().field == rt::TrackField::Album);
+  }
+
+  TEST_CASE("TerminalTrackColumnLayout - a no-op resize leaves visibility-only overrides without geometry")
+  {
+    auto const* preset = rt::builtinTrackPresentationPreset("albums");
+    REQUIRE(preset != nullptr);
+    auto const shownAlbum =
+      uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Show};
+    auto const hiddenArtist =
+      uimodel::TrackColumnState{.field = rt::TrackField::Artist, .visibility = uimodel::TrackColumnVisibility::Hide};
+    auto const stored = std::vector{shownAlbum, hiddenArtist};
+
+    auto const layout = projectTerminalTrackColumnLayout(preset->spec, stored, 100);
+    REQUIRE(layout.columns.size() == 4);
+    CHECK(layout.columns.front().field == rt::TrackField::DisplayTrackNumber);
+    CHECK(layout.columns.back().field == rt::TrackField::Album);
+    CHECK_FALSE(std::ranges::contains(layout.columns, rt::TrackField::Artist, &TerminalTrackColumn::field));
+    auto const duration = std::ranges::find(layout.columns, rt::TrackField::Duration, &TerminalTrackColumn::field);
+    REQUIRE(duration != layout.columns.end());
+    CHECK(resizeTerminalTrackColumnLayout(preset->spec, stored, rt::TrackField::Duration, duration->columns, 100) ==
+          stored);
+    CHECK(resizeTerminalTrackColumnLayout(preset->spec, stored, rt::TrackField::Artist, 20, 100) == stored);
+
+    auto const resized = resizeTerminalTrackColumnLayout(preset->spec, stored, rt::TrackField::Duration, 20, 100);
+    auto const album = std::ranges::find(resized, rt::TrackField::Album, &uimodel::TrackColumnState::field);
+    REQUIRE(album != resized.end());
+    CHECK(album->visibility == uimodel::TrackColumnVisibility::Show);
+    CHECK(album->hasPosition());
+    CHECK(std::ranges::contains(resized, hiddenArtist));
+    auto const resizedLayout = projectTerminalTrackColumnLayout(preset->spec, resized, 100);
+    CHECK(std::ranges::contains(
+      resizedLayout.columns, TerminalTrackColumn{.field = rt::TrackField::Duration, .columns = 20}));
   }
 
   TEST_CASE("TerminalTrackColumnLayout - bounds restored fixed widths in terminal cells")
@@ -78,8 +123,10 @@ namespace ao::tui::test
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration},
     };
     auto const stored = std::vector{
-      uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.5, .visible = false},
-      uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 12, .visible = false},
+      uimodel::TrackColumnState{
+        .field = rt::TrackField::Title, .weight = 2.5, .visibility = uimodel::TrackColumnVisibility::Hide},
+      uimodel::TrackColumnState{
+        .field = rt::TrackField::Duration, .width = 12, .visibility = uimodel::TrackColumnVisibility::Hide},
     };
 
     CHECK(projectTerminalTrackColumnLayout(presentation, stored, 80).columns.empty());
@@ -92,8 +139,8 @@ namespace ao::tui::test
       .id = "terminal",
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album, rt::TrackField::Duration},
     };
-    auto const hiddenAlbum =
-      uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.75, .visible = false};
+    auto const hiddenAlbum = uimodel::TrackColumnState{
+      .field = rt::TrackField::Album, .weight = 1.75, .visibility = uimodel::TrackColumnVisibility::Hide};
     auto const stored = std::vector{
       uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 11},
       hiddenAlbum,

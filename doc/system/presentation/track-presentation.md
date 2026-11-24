@@ -24,7 +24,7 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 - Sorts are stable for equal keys relative to the current source order.
 - Every group identity occupies one contiguous row range, including when a
   custom sort omits its grouping field.
-- A redundant field is suppressed only when the group header presents the same fact.
+- Fields that repeat a group heading may be omitted by default. An authored visible field stays in the default field list, and an explicit per-list show overrides suppression as specified in [track-column layout](track-column-layout.md).
 - Every materialized group section has a nonempty primary display value after UIModel formatting.
 - Album groups use `(album artist, album)` identity; Work groups use `(composer, work)` identity.
 - An Album group whose tracks have no album artist keeps that empty identity, but its heading names the artist that more than half of its tracks with an artist name, by group identity and with that artist's first row's text, or Various Artists when no artist has such a majority. A guest artist on one track of an album therefore leaves the album's own artist in the heading, while two artists with equal track counts make Various Artists. Tracks without an artist do not count, and with none the heading shows the missing-artist value. Two albums with the same title and no album artist share that empty identity and form one group, so the vote covers the tracks of both: 10 Queen tracks and 3 ABBA tracks under one title show Queen, which hides the merge.
@@ -123,7 +123,7 @@ Album precedes Movement so different performances do not interleave movement-by-
 Movement name is the visible row label, while movement number controls order.
 All three classical presets show RecordingDate; none uses full RecordingDate as a preset sort term.
 
-Classical Works groups by Work and suppresses composer/work fields already represented by its header.
+Classical Works groups by Work and omits composer and work columns by default because its heading already shows them.
 Classical Composers groups by Composer and keeps Work visible because multiple works occur in the section.
 Classical Conductors groups by Conductor and keeps Composer, Work, Ensemble, and Movement visible.
 

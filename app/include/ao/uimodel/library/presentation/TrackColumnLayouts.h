@@ -17,18 +17,34 @@
 namespace ao::rt
 {
   class LibraryChanges;
+  struct TrackPresentationSpec;
 }
 
 namespace ao::uimodel
 {
+  enum class TrackColumnVisibility : std::uint8_t
+  {
+    Default,
+    Show,
+    Hide,
+  };
+
   struct TrackColumnState final
   {
     rt::TrackField field = rt::TrackField::Title;
     std::int32_t width = -1;
     double weight = -1.0;
-    bool visible = true;
+    TrackColumnVisibility visibility = TrackColumnVisibility::Default;
 
+    // A visibility-only override has neither geometry nor a stored position.
+    bool hasPosition() const noexcept { return width != -1 || weight != -1.0; }
     bool operator==(TrackColumnState const&) const = default;
+  };
+
+  struct TrackColumnChoice final
+  {
+    rt::TrackField field = rt::TrackField::Title;
+    bool visible = true;
   };
 
   class TrackColumnLayouts final
@@ -72,8 +88,9 @@ namespace ao::uimodel
 
   std::vector<rt::TrackField> visibleTrackFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields,
                                                               std::span<rt::TrackField const> storedOrder);
-  std::vector<rt::TrackField> visibleTrackFieldsInStoredLayout(std::span<rt::TrackField const> presentationFields,
+  // Pass the authored view spec, not a projection snapshot that may infer redundant fields.
+  std::vector<TrackColumnChoice> trackColumnChoices(rt::TrackPresentationSpec const& presentation,
+                                                    std::span<TrackColumnState const> storedLayout);
+  std::vector<rt::TrackField> visibleTrackFieldsInStoredLayout(rt::TrackPresentationSpec const& presentation,
                                                                std::span<TrackColumnState const> storedLayout);
-  std::vector<TrackColumnState> mergeVisibleTrackColumnLayout(std::span<TrackColumnState const> storedLayout,
-                                                              std::span<TrackColumnState const> visibleLayout);
 } // namespace ao::uimodel

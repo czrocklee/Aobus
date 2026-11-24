@@ -6,8 +6,8 @@ id: presentation.persisted-state
 
 ## Scope and version
 
-This reference owns the exact version-1 `trackView.columnLayouts` payload and
-version-1 `trackView.presentations` payload stored by interactive frontends.
+This reference owns the version-1 `trackView.columnLayouts` and
+`trackView.presentations` payloads stored by interactive frontends.
 GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them per library in `winui_layout.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
@@ -56,11 +56,13 @@ trackView.columnLayouts:
         - field: artist
           width: -1
           weight: 1.75
-          visible: true
+          visibility: default
         - field: duration
           width: 200
           weight: -1
-          visible: false
+          visibility: hide
+        - field: album
+          visibility: show
 ```
 
 ### Root fields
@@ -73,24 +75,35 @@ trackView.columnLayouts:
 
 ### Layout fields
 
-| Field     | Type                                 | Requirement                                            |
-| --------- | ------------------------------------ | ------------------------------------------------------ |
-| `listId`  | Unsigned 32-bit integer.             | Required, nonzero, and unique in the document.         |
-| `columns` | Ordered sequence of column mappings. | Required; field ids must be unique within this layout. |
+| Field     | Type                         | Requirement                                            |
+| --------- | ---------------------------- | ------------------------------------------------------ |
+| `listId`  | Unsigned 32-bit integer.     | Required, nonzero, and unique in the document.         |
+| `columns` | Sequence of column mappings. | Required; field ids must be unique within this layout. |
 
 ### Column fields
 
-| Field     | Type                   | Requirement                                                                                                                                                                                                                   |
-| --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `field`   | Stable track-field id. | Required and known.                                                                                                                                                                                                           |
-| `width`   | Signed 32-bit integer. | Fixed state uses a positive value in the containing frontend document's geometry unit; flexible state uses `-1`. GTK and WinUI interpret positive widths as desktop pixel units, while TUI interprets them as terminal cells. |
-| `weight`  | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value.                                                                                                                                                           |
-| `visible` | Boolean.               | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it.                                                                                                                        |
+| Field        | Type                          | Requirement                                                                                                                                                                                                                   |
+| ------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `field`      | Stable track-field id.        | Required and known.                                                                                                                                                                                                           |
+| `width`      | Signed 32-bit integer.        | Fixed state uses a positive value in the containing frontend document's geometry unit; flexible state uses `-1`. GTK and WinUI interpret positive widths as desktop pixel units, while TUI interprets them as terminal cells. |
+| `weight`     | Floating-point number.        | Fixed state uses `-1`; flexible state uses a finite positive value.                                                                                                                                                           |
+| `visibility` | `default`, `show`, or `hide`. | `default` follows the presentation; `show` and `hide` record an explicit choice. Writers always emit this field.                                                                                                              |
 
-Exactly one canonical dimension form is accepted, and it must match the field's sizing role from `TrackColumnDefaults`:
+A column either includes both dimensions or omits both. A column with
+neither dimension must use `show` or `hide`; it records only visibility and
+has no saved position. The order of entries with dimensions defines the saved
+column order. When supplied, dimensions must match the field's sizing role
+from `TrackColumnDefaults`:
 
 - a fixed field uses `width > 0` and `weight == -1`;
 - a flexible field uses `width == -1` and finite `weight > 0`.
+
+A column must have exactly one visibility key. The reader also accepts `visible`
+with a boolean value from earlier version-1 writers, in place of `visibility`.
+The earlier boolean form requires both dimensions.
+`true` means `default`: a visible column may have been stored by a resize or
+reorder, so it does not prove an explicit show. `false` means `hide`. Each column
+is checked independently; using both keys in one column rejects the group.
 
 A fixed field's shared payload accepts every positive signed 32-bit width. When this payload is contained by `tui_layout.yaml`, the terminal adapter projects fixed values into its supported 8-through-160-cell range; desktop adapters retain their own geometry policy. A document that assigns the fixed form to a flexible field, or the flexible form to a fixed field, rejects the complete group.
 
@@ -137,7 +150,7 @@ It is not a complete workspace root schema version.
 ## Validation rules
 
 - Both groups use explicit UIModel schemas that validate each mapping and sequence recursively.
-- Every declared field is required; unknown fields, missing fields, wrong node kinds, malformed vector elements, and unsupported versions reject the complete containing group.
+- Unknown fields, missing required fields, duplicate keys, wrong node kinds, malformed vector elements, and unsupported versions reject the complete containing group.
 - Semantic conversion occurs into a temporary candidate; no column or preference entry is installed before the whole group succeeds.
 - A valid group whose `libraryId` differs from the schema's library is not rejected: deserialization keeps only its virtual-list entries, because another library's list ids may name unrelated lists here.
 - A missing or rejected group leaves the caller's seeded state unchanged.
@@ -152,10 +165,18 @@ It is not a complete workspace root schema version.
 
 ## Compatibility and versioning
 
-Writers emit column-layout version 1 and list-presentation version 1 with stable
-text ids and canonical member names.
-Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
-Future versions return `NotSupported` before version-specific sibling fields are interpreted.
+Both groups read and write only version 1, with stable text ids and canonical
+member names. Earlier boolean columns retain widths, weights, and order.
+Loading does not rewrite the file; the next normal save writes `visibility`
+tokens under the same version.
+Unversioned legacy state, numeric field values, unknown closed tokens, and unsupported versions are rejected on load without rewriting the file.
+Unsupported versions return `NotSupported` before version-specific sibling fields are interpreted.
+
+Column layouts are [losable state](../../system/persistence/versioning.md#losable-state-and-caches), not protected configuration.
+An earlier development build that expects `visible` cannot read columns written
+with `visibility`, even though the version number is the same. When a build
+rejects a layout, it keeps its seeded state and a later checkpoint can replace
+the rejected group.
 
 This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. The playback-session schema separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
 

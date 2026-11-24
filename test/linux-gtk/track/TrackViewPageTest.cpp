@@ -57,6 +57,7 @@
 #include <glibmm/value.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
+#include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/dragsource.h>
 #include <gtkmm/droptarget.h>
 #include <gtkmm/entry.h>
@@ -257,6 +258,62 @@ namespace ao::gtk::test
       CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().monogram == "23");
     }
+  }
+
+  TEST_CASE("TrackViewPage - honors restored visibility for an Album column suppressed by grouping")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), textCatalog};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto const* const preset = rt::builtinTrackPresentationPreset("albums");
+    REQUIRE(preset);
+    auto const showAlbum = uimodel::TrackColumnState{
+      .field = rt::TrackField::Album, .weight = 1.75, .visibility = uimodel::TrackColumnVisibility::Show};
+    columnLayouts.restore({{rt::kAllTracksListId, {showAlbum}}}, {});
+
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              TrackListModel::create(cache),
+                              columnLayouts,
+                              textCatalog,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader,
+                              preset->spec};
+    auto const isAlbumVisible = [&page]
+    {
+      auto* const columnView = findWidget<Gtk::ColumnView>(page);
+      REQUIRE(columnView);
+      auto const columnsPtr = columnView->get_columns();
+      REQUIRE(columnsPtr);
+
+      for (std::uint32_t index = 0; index < columnsPtr->get_n_items(); ++index)
+      {
+        auto const columnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
+
+        if (columnPtr && columnPtr->get_id().raw() == "album")
+        {
+          return columnPtr->get_visible();
+        }
+      }
+
+      FAIL("The track page did not register an Album column");
+      return false;
+    };
+
+    CHECK(isAlbumVisible());
+    columnLayouts.updateLayout(rt::kAllTracksListId, {});
+    page.applyPresentation(preset->spec);
+    CHECK_FALSE(isAlbumVisible());
+
+    columnLayouts.updateLayout(rt::kAllTracksListId, {showAlbum});
+    page.applyPresentation(preset->spec);
+    CHECK(isAlbumVisible());
   }
 
   TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window")

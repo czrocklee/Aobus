@@ -812,6 +812,7 @@ root:table {
     winui_track_move_column_left { "Move left" }
     winui_track_move_column_right { "Move right" }
     winui_track_resize_column { "Resize {column} column" }
+    winui_track_no_visible_columns { "No track columns are visible in this presentation." }
     winui_playback_options { "Playback options" }
     winui_more_menu { "More" }
     winui_error { "Error: {detail}" }

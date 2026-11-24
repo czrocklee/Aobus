@@ -58,6 +58,8 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::SizeChangedEventArgs;
     using winrt::Microsoft::UI::Xaml::Style;
     using winrt::Microsoft::UI::Xaml::Thickness;
+    using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::Grid;
     using winrt::Microsoft::UI::Xaml::Controls::ItemsControl;
     using winrt::Microsoft::UI::Xaml::Controls::ItemsPanelTemplate;
@@ -74,6 +76,8 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Controls::ScrollMode;
     using winrt::Microsoft::UI::Xaml::Controls::ScrollViewer;
     using winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs;
+    using winrt::Microsoft::UI::Xaml::Controls::StackPanel;
+    using winrt::Microsoft::UI::Xaml::Controls::TextBlock;
     using winrt::Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper;
@@ -88,6 +92,8 @@ namespace ao::winui::layout
 
     constexpr double kHeaderRowHeight = 32.0;
     constexpr double kFallbackScrollBarSize = 12.0;
+    constexpr double kRecoveryMargin = 12.0;
+    constexpr double kRecoverySpacing = 8.0;
 
     /// The horizontal panel the header strip lays its cells out in.
     constexpr auto kHeaderPanelMarkup =
@@ -137,6 +143,7 @@ namespace ao::winui::layout
                           std::function<std::string(std::string_view)> shortcutHint,
                           i18n::MessageCatalog textCatalog,
                           std::function<void(std::string)> reportStatus,
+                          std::function<void()> chooseColumns,
                           DataTemplate const& headerTemplate,
                           DataTemplate const& rowTemplate,
                           Style const& rowContainerStyle,
@@ -158,6 +165,31 @@ namespace ao::winui::layout
         _headers.ItemsPanel(winrt::Microsoft::UI::Xaml::Markup::XamlReader::Load(winrt::to_hstring(kHeaderPanelMarkup))
                               .as<ItemsPanelTemplate>());
         _headers.BorderThickness(Thickness{.Left = 0.0, .Top = 0.0, .Right = 0.0, .Bottom = 1.0});
+        _headers.Height(kHeaderRowHeight);
+
+        auto message = TextBlock{};
+        message.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackNoVisibleColumns)));
+        message.TextWrapping(winrt::Microsoft::UI::Xaml::TextWrapping::Wrap);
+        _columnsRecovery.Margin(Thickness{
+          .Left = kRecoveryMargin, .Top = kRecoveryMargin, .Right = kRecoveryMargin, .Bottom = kRecoveryMargin});
+        _columnsRecovery.Spacing(kRecoverySpacing);
+        _columnsRecovery.Children().Append(message);
+
+        if (chooseColumns)
+        {
+          _chooseColumns.Content(
+            winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiShellColumns))));
+          _chooseColumnsRevoker = _chooseColumns.Click(
+            winrt::auto_revoke,
+            [gatePtr = _gatePtr, chooseColumns = std::move(chooseColumns)](auto const&, auto const&)
+            {
+              if (uimodel::isGenerationActive(gatePtr))
+              {
+                chooseColumns();
+              }
+            });
+          _columnsRecovery.Children().Append(_chooseColumns);
+        }
 
         _rows.ItemTemplate(rowTemplate);
         _rows.SelectionMode(ListViewSelectionMode::Extended);
@@ -174,13 +206,14 @@ namespace ao::winui::layout
         }
 
         auto headerRow = RowDefinition{};
-        headerRow.Height(GridLength{.Value = kHeaderRowHeight, .GridUnitType = GridUnitType::Pixel});
+        headerRow.Height(GridLength{.Value = 1.0, .GridUnitType = GridUnitType::Auto});
         auto rowsRow = RowDefinition{};
         rowsRow.Height(GridLength{.Value = 1.0, .GridUnitType = GridUnitType::Star});
         _surface.RowDefinitions().Append(headerRow);
         _surface.RowDefinitions().Append(rowsRow);
         Grid::SetRow(_rows, 1);
         _surface.Children().Append(_headers);
+        _surface.Children().Append(_columnsRecovery);
         _surface.Children().Append(_rows);
 
         // The surface is wider than the viewport whenever the solved columns are,
@@ -258,7 +291,11 @@ namespace ao::winui::layout
           }
         }
 
-        _headers.ItemsSource(_trackList.headers());
+        auto const headers = _trackList.headers();
+        auto const showRecovery = _trackList.rowCount() != 0 && headers.Size() == 0;
+        _headers.ItemsSource(headers);
+        _headers.Visibility(showRecovery ? Visibility::Collapsed : Visibility::Visible);
+        _columnsRecovery.Visibility(showRecovery ? Visibility::Visible : Visibility::Collapsed);
         _surface.Width(_trackList.contentWidth());
 
         if (optTopIndex)
@@ -563,6 +600,8 @@ namespace ao::winui::layout
       ScrollViewer _viewport{};
       Grid _surface{};
       ItemsControl _headers{};
+      StackPanel _columnsRecovery{};
+      Button _chooseColumns{};
       ListView _rows{};
       TrackListController& _trackList;
       std::function<Result<>(rt::ViewId, TrackId)> _playTrack;
@@ -582,6 +621,7 @@ namespace ao::winui::layout
       ListView::SelectionChanged_revoker _selectionChangedRevoker{};
       ListView::DoubleTapped_revoker _doubleTappedRevoker{};
       ListView::RightTapped_revoker _rightTappedRevoker{};
+      Button::Click_revoker _chooseColumnsRevoker{};
       FrameworkElement::SizeChanged_revoker _sizeChangedRevoker{};
       MenuFlyout _contextFlyout{nullptr};
       std::vector<MenuFlyoutItem::Click_revoker> _contextClickRevokers;
@@ -598,7 +638,8 @@ namespace ao::winui::layout
                                    ActionRegistry const& actions,
                                    std::function<std::string(std::string_view)> shortcutHint,
                                    i18n::MessageCatalog textCatalog,
-                                   std::function<void(std::string)> reportStatus)
+                                   std::function<void(std::string)> reportStatus,
+                                   std::function<void()> chooseColumns)
   {
     registry.registerComponent(
       "track.table",
@@ -611,7 +652,8 @@ namespace ao::winui::layout
        &actions,
        shortcutHint = std::move(shortcutHint),
        textCatalog = std::move(textCatalog),
-       reportStatus = std::move(reportStatus)](
+       reportStatus = std::move(reportStatus),
+       chooseColumns = std::move(chooseColumns)](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         auto const headerTemplate = lookupResource(ctx.resources, kHeaderTemplateKey).try_as<DataTemplate>();
@@ -641,6 +683,7 @@ namespace ao::winui::layout
           shortcutHint,
           textCatalog,
           reportStatus,
+          chooseColumns,
           headerTemplate,
           rowTemplate,
           lookupResource(ctx.resources, kRowContainerStyleKey).try_as<Style>(),

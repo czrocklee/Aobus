@@ -811,6 +811,7 @@ zh_Hans:table {
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "调整列 {column} 的宽度" }
+    winui_track_no_visible_columns { "此视图未显示任何曲目列。" }
     winui_playback_options { "播放选项" }
     winui_more_menu { "更多" }
     winui_error { "错误：{detail}" }

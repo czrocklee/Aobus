@@ -10,6 +10,7 @@
 #include <ryml.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -23,9 +24,9 @@ namespace ao::uimodel
   struct StoredTrackColumn final
   {
     std::string field{};
-    std::int32_t width = -1;
-    double weight = -1.0;
-    bool visible = true;
+    std::optional<std::int32_t> optWidth{};
+    std::optional<double> optWeight{};
+    std::string visibility = "default";
   };
 
   struct StoredTrackColumnLayout final

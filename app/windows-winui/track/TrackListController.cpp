@@ -89,7 +89,7 @@ namespace ao::winui
                         return std::nullopt;
                       }
 
-                      return library->snapshot().trackRow(projection->trackIdAt(index));
+                      return reader.read(library->snapshot(), projection->trackIdAt(index));
                     });
       }
 
@@ -154,55 +154,8 @@ namespace ao::winui
     std::vector<uimodel::TrackColumnSolveSpec> visibleColumnSpecs(rt::TrackPresentationSpec const& presentation,
                                                                   std::span<uimodel::TrackColumnState const> stored)
     {
-      auto const fields = uimodel::visibleTrackFieldsInStoredLayout(presentation.visibleFields, stored);
+      auto const fields = uimodel::visibleTrackFieldsInStoredLayout(presentation, stored);
       return uimodel::pixelTrackColumnSpecs(fields, stored);
-    }
-
-    bool tryMaterializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
-                                     std::span<rt::TrackField const> const presentationFields)
-    {
-      auto order = std::vector<rt::TrackField>{};
-      order.reserve(stored.size());
-
-      for (auto const& column : stored)
-      {
-        order.push_back(column.field);
-      }
-
-      auto const presentationOrder = uimodel::visibleTrackFieldsInStoredOrder(presentationFields, order);
-      auto const specs = uimodel::pixelTrackColumnSpecs(presentationOrder, stored);
-
-      if (specs.empty())
-      {
-        return false;
-      }
-
-      auto complete = std::vector<uimodel::TrackColumnState>{};
-      complete.reserve(stored.size() + specs.size());
-
-      for (auto const& spec : specs)
-      {
-        auto column = uimodel::canonicalTrackColumnState(spec);
-
-        if (auto const prior = std::ranges::find(stored, spec.field, &uimodel::TrackColumnState::field);
-            prior != stored.end())
-        {
-          column.visible = prior->visible;
-        }
-
-        complete.push_back(column);
-      }
-
-      for (auto const& column : stored)
-      {
-        if (!std::ranges::contains(complete, column.field, &uimodel::TrackColumnState::field))
-        {
-          complete.push_back(column);
-        }
-      }
-
-      stored = std::move(complete);
-      return true;
     }
   } // namespace
 
@@ -516,40 +469,19 @@ namespace ao::winui
     return {};
   }
 
-  std::vector<TrackColumnChoice> TrackListController::columnChoices() const
+  std::vector<uimodel::TrackColumnChoice> TrackListController::columnChoices() const
   {
-    auto choices = std::vector<TrackColumnChoice>{};
-
     if (_viewId == rt::kInvalidViewId)
     {
-      return choices;
+      return {};
     }
 
-    auto const stateRes = _views.findTrackListState(_viewId);
-
-    if (!stateRes)
+    if (auto const stateRes = _views.findTrackListState(_viewId); stateRes)
     {
-      return choices;
+      return uimodel::trackColumnChoices(stateRes->presentation, _columnLayouts.layoutForList(stateRes->listId));
     }
 
-    auto const& state = *stateRes;
-    auto const& stored = _columnLayouts.layoutForList(state.listId);
-
-    choices.reserve(state.presentation.visibleFields.size());
-
-    for (auto const field : state.presentation.visibleFields)
-    {
-      bool visible = true;
-
-      if (auto const it = std::ranges::find(stored, field, &uimodel::TrackColumnState::field); it != stored.end())
-      {
-        visible = it->visible;
-      }
-
-      choices.push_back({.field = field, .visible = visible});
-    }
-
-    return choices;
+    return {};
   }
 
   Result<> TrackListController::setColumnVisible(std::string_view const fieldId, bool const visible)
@@ -575,51 +507,38 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    if (!std::ranges::contains(state.presentation.visibleFields, *optField))
+    auto stored = _columnLayouts.layoutForList(state.listId);
+    auto const choices = uimodel::trackColumnChoices(state.presentation, stored);
+    auto const choice = std::ranges::find(choices, *optField, &uimodel::TrackColumnChoice::field);
+
+    if (choice == choices.end())
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnOutsidePresentation"));
     }
 
-    auto stored = _columnLayouts.layoutForList(state.listId);
-    auto existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
-    auto const currentlyVisible = existing == stored.end() || existing->visible;
-
-    if (currentlyVisible == visible)
+    if (choice->visible == visible)
     {
       return {};
     }
 
-    if (!visible)
+    if (!visible && std::ranges::count(choices, true, &uimodel::TrackColumnChoice::visible) <= 1)
     {
-      std::size_t visibleCount = 0;
-
-      for (auto const choice : columnChoices())
-      {
-        visibleCount += choice.visible ? 1U : 0U;
-      }
-
-      if (visibleCount <= 1)
-      {
-        return makeError(Error::Code::InvalidState, resourceString("OneVisibleColumnRequired"));
-      }
+      return makeError(Error::Code::InvalidState, resourceString("OneVisibleColumnRequired"));
     }
+
+    auto const visibility = visible ? uimodel::TrackColumnVisibility::Show : uimodel::TrackColumnVisibility::Hide;
+    auto const existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
 
     if (existing == stored.end())
     {
-      if (!tryMaterializeStoredColumns(stored, state.presentation.visibleFields))
-      {
-        return makeError(Error::Code::InvalidState, resourceString("ColumnLayoutPolicyMissing"));
-      }
-
-      existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
-
-      if (existing == stored.end())
-      {
-        return makeError(Error::Code::InvalidState, resourceString("ColumnLayoutPolicyMissing"));
-      }
+      // Visibility alone must not give the field a position in another preset.
+      stored.push_back({.field = *optField, .visibility = visibility});
+    }
+    else
+    {
+      existing->visibility = visibility;
     }
 
-    existing->visible = visible;
     _columnLayouts.updateLayout(state.listId, stored);
     refreshRows();
     return {};

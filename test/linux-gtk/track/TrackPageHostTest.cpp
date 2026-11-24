@@ -14,12 +14,14 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -37,10 +39,16 @@
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <giomm/listmodel.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -123,6 +131,68 @@ namespace ao::gtk::test
       CHECK(current->viewId == viewId);
       CHECK(current->pagePtr->listId() == rt::kAllTracksListId);
       CHECK(host.activeListId() == rt::kAllTracksListId);
+    }
+
+    SECTION("authored columns stay authoritative when a filter replaces the projection")
+    {
+      auto const trackId = addRuntimeTrack(runtime, {.title = "Authored columns track", .album = "Album A"});
+      auto const showAlbum =
+        uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Show};
+      columnLayouts.restore({{rt::kAllTracksListId, {showAlbum}}}, {});
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+        .target = rt::kAllTracksListId,
+        .optPresentation =
+          rt::NavigationPresentation{
+            .spec = {.id = "custom-album-group",
+                     .groupBy = rt::TrackGroupKey::Album,
+                     .visibleFields = {rt::TrackField::Title}},
+          },
+      }));
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto const* const entry = host.find(viewId);
+      REQUIRE(entry);
+      REQUIRE(entry->pagePtr);
+      auto const isAlbumVisible = [entry]
+      {
+        auto* const view = findWidget<Gtk::ColumnView>(*entry->pagePtr);
+        REQUIRE(view);
+        auto const columnsPtr = view->get_columns();
+        REQUIRE(columnsPtr);
+
+        for (std::uint32_t index = 0; index < columnsPtr->get_n_items(); ++index)
+        {
+          auto const columnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
+
+          if (columnPtr && columnPtr->get_id().raw() == rt::trackFieldId(rt::TrackField::Album))
+          {
+            return columnPtr->get_visible();
+          }
+        }
+
+        FAIL("The track page did not register an Album column");
+        return false;
+      };
+      auto const initialProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+      REQUIRE(runtime.views().trackListState(viewId).presentation.redundantFields.empty());
+      REQUIRE(std::ranges::contains(initialProjectionPtr->presentation().redundantFields, rt::TrackField::Album));
+      CHECK_FALSE(isAlbumVisible());
+
+      REQUIRE(runtime.views().setFilter(viewId, R"($title = "Authored columns track")"));
+      drainGtkEvents();
+      auto const filteredProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+      REQUIRE(filteredProjectionPtr != initialProjectionPtr);
+      REQUIRE(entry->pagePtr->projection() == filteredProjectionPtr.get());
+      REQUIRE(filteredProjectionPtr->indexOf(trackId));
+      REQUIRE(std::ranges::contains(filteredProjectionPtr->presentation().redundantFields, rt::TrackField::Album));
+      CHECK_FALSE(isAlbumVisible());
+
+      auto presentation = runtime.views().trackListState(viewId).presentation;
+      presentation.redundantFields = {rt::TrackField::Album};
+      REQUIRE(runtime.views().setPresentation(viewId, presentation));
+      drainGtkEvents();
+      CHECK(isAlbumVisible());
     }
 
     SECTION("rebuild restores the runtime selection into the new page generation")

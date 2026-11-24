@@ -6,6 +6,7 @@
 #include "RetainKnownLists.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
@@ -17,6 +18,26 @@
 
 namespace ao::uimodel
 {
+  namespace
+  {
+    bool matchesGroupHeading(rt::TrackGroupKey const key, rt::TrackField const field)
+    {
+      // A credit heading gives one name, not the row's additional-credit count.
+      if (key == rt::TrackGroupKey::None || rt::creditKindForTrackField(field))
+      {
+        return false;
+      }
+
+      // TrackListProjection builds Album and Work headings around compound
+      // group identities. Only equivalent row facts qualify, not Album's
+      // fallback artist or representative year.
+      auto const* definition = rt::trackFieldDefinition(field);
+      return (definition != nullptr && definition->optGroupKey == key) ||
+             (key == rt::TrackGroupKey::Album && field == rt::TrackField::AlbumArtist) ||
+             (key == rt::TrackGroupKey::Work && field == rt::TrackField::Composer);
+    }
+  } // namespace
+
   TrackColumnLayouts::TrackColumnLayouts(rt::LibraryChanges const& changes)
   {
     _changesSubscription = changes.onChanged(
@@ -135,19 +156,54 @@ namespace ao::uimodel
     return ordered;
   }
 
-  std::vector<rt::TrackField> visibleTrackFieldsInStoredLayout(std::span<rt::TrackField const> const presentationFields,
+  std::vector<TrackColumnChoice> trackColumnChoices(rt::TrackPresentationSpec const& presentation,
+                                                    std::span<TrackColumnState const> const storedLayout)
+  {
+    auto choices = std::vector<TrackColumnChoice>{};
+    choices.reserve(presentation.visibleFields.size() + presentation.redundantFields.size());
+    auto const appendChoice = [&choices, storedLayout](rt::TrackField const field, bool const defaultVisible)
+    {
+      if (std::ranges::contains(choices, field, &TrackColumnChoice::field))
+      {
+        return;
+      }
+
+      auto const stored = std::ranges::find(storedLayout, field, &TrackColumnState::field);
+      auto const visible = stored == storedLayout.end() || stored->visibility == TrackColumnVisibility::Default
+                             ? defaultVisible
+                             : stored->visibility == TrackColumnVisibility::Show;
+      choices.push_back({.field = field, .visible = visible});
+    };
+
+    // The authored list is authoritative, including a field that also appears in the heading.
+    for (auto const field : presentation.visibleFields)
+    {
+      appendChoice(field, true);
+    }
+
+    for (auto const field : presentation.redundantFields)
+    {
+      if (matchesGroupHeading(presentation.groupBy, field))
+      {
+        appendChoice(field, false);
+      }
+    }
+
+    return choices;
+  }
+
+  std::vector<rt::TrackField> visibleTrackFieldsInStoredLayout(rt::TrackPresentationSpec const& presentation,
                                                                std::span<TrackColumnState const> const storedLayout)
   {
+    auto const choices = trackColumnChoices(presentation, storedLayout);
     auto enabled = std::vector<rt::TrackField>{};
-    enabled.reserve(presentationFields.size());
+    enabled.reserve(choices.size());
 
-    for (auto const field : presentationFields)
+    for (auto const choice : choices)
     {
-      auto const stored = std::ranges::find(storedLayout, field, &TrackColumnState::field);
-
-      if (stored == storedLayout.end() || stored->visible)
+      if (choice.visible)
       {
-        enabled.push_back(field);
+        enabled.push_back(choice.field);
       }
     }
 
@@ -156,37 +212,12 @@ namespace ao::uimodel
 
     for (auto const& column : storedLayout)
     {
-      order.push_back(column.field);
+      if (column.hasPosition())
+      {
+        order.push_back(column.field);
+      }
     }
 
     return visibleTrackFieldsInStoredOrder(enabled, order);
-  }
-
-  std::vector<TrackColumnState> mergeVisibleTrackColumnLayout(std::span<TrackColumnState const> const storedLayout,
-                                                              std::span<TrackColumnState const> const visibleLayout)
-  {
-    auto merged = std::vector<TrackColumnState>{};
-    merged.reserve(storedLayout.size() + visibleLayout.size());
-    auto nextVisible = visibleLayout.begin();
-
-    for (auto const& stored : storedLayout)
-    {
-      auto const participates = std::ranges::contains(visibleLayout, stored.field, &TrackColumnState::field);
-
-      if (!participates)
-      {
-        merged.push_back(stored);
-        continue;
-      }
-
-      if (nextVisible != visibleLayout.end())
-      {
-        merged.push_back(*nextVisible);
-        ++nextVisible;
-      }
-    }
-
-    merged.insert(merged.end(), nextVisible, visibleLayout.end());
-    return merged;
   }
 } // namespace ao::uimodel

@@ -124,5 +124,6 @@ namespace ao::winui::layout
                                    ActionRegistry const& actions,
                                    std::function<std::string(std::string_view)> shortcutHint,
                                    i18n::MessageCatalog textCatalog,
-                                   std::function<void(std::string)> reportStatus);
+                                   std::function<void(std::string)> reportStatus,
+                                   std::function<void()> chooseColumns);
 } // namespace ao::winui::layout
