@@ -80,7 +80,8 @@ namespace ao::tui::test
                              runtimePtr->views(),
                              runtimePtr->workspace(),
                              ao::test::englishMessageCatalog(),
-                             listPresentations};
+                             listPresentations,
+                             trackColumnLayouts};
   }
 
   EventController EventControllerFixture::makeEvents(LibraryController& library,

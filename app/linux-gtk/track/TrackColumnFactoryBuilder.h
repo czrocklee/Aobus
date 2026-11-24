@@ -4,6 +4,7 @@
 #pragma once
 
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -40,9 +41,13 @@ namespace ao::gtk
    * @param beginEditSession A callback to capture an authoring session for the bound row.
    * @param commitFn A callback to handle metadata changes if the column is editable.
    * @param model The model that supplies display fields and now-playing state.
+   * @param viewPathDemand The view generation's demand for non-FilePath cells.
+   * FilePath cells always require a path attempt, even if the row is cached.
    */
-  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
-                                                              MetadataEditSessionFn const& beginEditSession,
-                                                              MetadataCommitFn const& commitFn,
-                                                              TrackListModel& model);
+  Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(
+    rt::TrackField field,
+    MetadataEditSessionFn const& beginEditSession,
+    MetadataCommitFn const& commitFn,
+    TrackListModel& model,
+    TrackRowPathDemand viewPathDemand = TrackRowPathDemand::NoRequest);
 } // namespace ao::gtk

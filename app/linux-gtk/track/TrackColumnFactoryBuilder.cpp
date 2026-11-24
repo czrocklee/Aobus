@@ -8,6 +8,7 @@
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/async/Subscription.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
@@ -239,7 +240,10 @@ namespace ao::gtk
       }
     }
 
-    void handleTextColumnBind(Gtk::ListItem& item, rt::TrackField field, TrackListModel const& model)
+    void handleTextColumnBind(Gtk::ListItem& item,
+                              rt::TrackField field,
+                              TrackListModel const& model,
+                              TrackRowPathDemand const pathDemand)
     {
       auto const trackItemPtr = std::dynamic_pointer_cast<TrackListItem>(item.get_item());
 
@@ -250,7 +254,8 @@ namespace ao::gtk
 
       auto& bindingState = cellBindingState(item);
       auto const trackId = trackItemPtr->trackId();
-      auto const rowPtr = model.trackRow(trackId);
+      auto const isFilePath = field == rt::TrackField::FilePath;
+      auto const rowPtr = model.trackRow(trackId, pathDemand);
       // GTK unbinds before reuse; unbind retires the prior field observer and row together.
       bindingState.boundRowPtr = rowPtr;
 
@@ -265,9 +270,10 @@ namespace ao::gtk
 
       if (rowPtr != nullptr)
       {
-        bindingState.fieldsChangedConnection = rowPtr->signalFieldsChanged().connect(
-          [itemRaw = &item, bindingStateRaw = &bindingState, field, rowRaw = rowPtr.get()]
-          { refreshCellDisplay(*itemRaw, *bindingStateRaw, field, rowRaw); });
+        auto& changed = isFilePath ? rowPtr->signalFilePathChanged() : rowPtr->signalFieldsChanged();
+        bindingState.fieldsChangedConnection =
+          changed.connect([itemRaw = &item, bindingStateRaw = &bindingState, field, rowRaw = rowPtr.get()]
+                          { refreshCellDisplay(*itemRaw, *bindingStateRaw, field, rowRaw); });
       }
     }
 
@@ -504,7 +510,8 @@ namespace ao::gtk
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
                                                               MetadataEditSessionFn const& beginEditSession,
                                                               MetadataCommitFn const& commitFn,
-                                                              TrackListModel& model)
+                                                              TrackListModel& model,
+                                                              TrackRowPathDemand const viewPathDemand)
   {
     auto factoryPtr = Gtk::SignalListItemFactory::create();
 
@@ -519,8 +526,9 @@ namespace ao::gtk
       [field, editable, beginEditSession, commitFn, modelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       { setupTextColumnCell(*listItemPtr, field, editable, beginEditSession, commitFn, *modelRaw); });
 
-    factoryPtr->signal_bind().connect([field, modelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
-                                      { handleTextColumnBind(*listItemPtr, field, *modelRaw); });
+    auto const pathDemand = field == rt::TrackField::FilePath ? TrackRowPathDemand::Required : viewPathDemand;
+    factoryPtr->signal_bind().connect([field, modelRaw, pathDemand](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                      { handleTextColumnBind(*listItemPtr, field, *modelRaw, pathDemand); });
     factoryPtr->signal_unbind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
                                         { handleTextColumnUnbind(*listItemPtr); });
 

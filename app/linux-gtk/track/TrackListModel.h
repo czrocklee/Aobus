@@ -4,6 +4,7 @@
 #pragma once
 
 #include "track/TrackListItem.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -42,7 +43,8 @@ namespace ao::gtk
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
     // Resolving fields is explicit: GTK also requests items just to compare identity.
-    Glib::RefPtr<TrackRowObject> trackRow(TrackId trackId) const;
+    Glib::RefPtr<TrackRowObject> trackRow(TrackId trackId,
+                                          TrackRowPathDemand pathDemand = TrackRowPathDemand::NoRequest) const;
 
     /// Update the track rendered as now-playing. This emits signalPlayingChanged()
     /// instead of items_changed(); visible cells restyle from playingTrackId(), and

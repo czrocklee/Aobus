@@ -31,6 +31,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -127,7 +128,7 @@ namespace ao::gtk
 
   private:
     void configureHeaderFactory();
-    TrackColumnViewHost::FactoryProvider columnFactoryProvider();
+    TrackColumnViewHost::FactoryProvider columnFactoryProvider(std::span<rt::TrackField const> visibleFields);
     void buildStatusBar();
     void applyColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();

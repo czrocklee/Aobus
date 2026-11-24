@@ -13,6 +13,7 @@
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,11 +37,13 @@ namespace ao::tui::test
     auto const empty = rt::test::addRuntimeTrack(*runtimePtr, {.title = "B"});
     auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
     auto controller = LibraryController{runtimePtr->library(),
                                         runtimePtr->views(),
                                         runtimePtr->workspace(),
                                         ao::test::englishMessageCatalog(),
-                                        presentations};
+                                        presentations,
+                                        columnLayouts};
     std::ignore = controller.setPresentation("songs");
     controller.setSelectedTrackIndex(0);
     REQUIRE(controller.selectedTrackView().track->id == credited);
@@ -82,11 +85,13 @@ namespace ao::tui::test
       rt::test::addRuntimeTrack(*runtimePtr, {.title = "A", .credits = {{"Before", CreditKind::Conductor, "Piano"}}});
     auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
     auto controller = LibraryController{runtimePtr->library(),
                                         runtimePtr->views(),
                                         runtimePtr->workspace(),
                                         ao::test::englishMessageCatalog(),
-                                        presentations};
+                                        presentations,
+                                        columnLayouts};
     CHECK(controller.focusedCredits()[0].optValue ==
           std::vector<library::Credit>{{"Before", CreditKind::Conductor, "Piano"}});
     rt::test::updateRuntimeTrack(
@@ -126,11 +131,13 @@ namespace ao::tui::test
       *runtimePtr, {.title = "Before", .credits = {{"Before", CreditKind::Performer, "Piano"}}});
     auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
     auto controller = LibraryController{runtimePtr->library(),
                                         runtimePtr->views(),
                                         runtimePtr->workspace(),
                                         ao::test::englishMessageCatalog(),
-                                        presentations};
+                                        presentations,
+                                        columnLayouts};
     CHECK(controller.focusedCredits()[3].optValue ==
           std::vector<library::Credit>{{"Before", CreditKind::Performer, "Piano"}});
     auto const path = tempDir.path() / "restore.yaml";

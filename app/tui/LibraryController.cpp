@@ -30,6 +30,7 @@
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
@@ -70,12 +71,14 @@ namespace ao::tui
                                        rt::ViewService& views,
                                        rt::WorkspaceService& workspace,
                                        i18n::MessageCatalog textCatalog,
-                                       uimodel::ListPresentations& listPresentations)
+                                       uimodel::ListPresentations& listPresentations,
+                                       uimodel::TrackColumnLayouts const& trackColumnLayouts)
     : _library{library}
     , _views{views}
     , _workspace{workspace}
     , _textCatalog{std::move(textCatalog)}
     , _listPresentations{listPresentations}
+    , _trackColumnLayouts{trackColumnLayouts}
   {
     auto const attachedRes = attachActiveWorkspaceView();
 
@@ -1259,7 +1262,19 @@ namespace ao::tui
 
   Result<LibraryController::TrackItemsSnapshot> LibraryController::materializeView(rt::ViewId const viewId)
   {
-    auto const foundProjectionRes = _views.findTrackListProjection(viewId);
+    auto const stateRes = _views.findTrackListState(viewId);
+
+    if (!stateRes)
+    {
+      return std::unexpected{stateRes.error()};
+    }
+
+    return materializeView(*stateRes);
+  }
+
+  Result<LibraryController::TrackItemsSnapshot> LibraryController::materializeView(rt::TrackListViewState const& state)
+  {
+    auto const foundProjectionRes = _views.findTrackListProjection(state.id);
 
     if (!foundProjectionRes)
     {
@@ -1271,6 +1286,11 @@ namespace ao::tui
       return makeError(Error::Code::InvalidState, "TUI track view has no projection");
     }
 
+    // The destination can belong to a different list than the one still on screen.
+    auto const fields =
+      uimodel::visibleTrackFieldsInStoredLayout(state.presentation, _trackColumnLayouts.layoutForList(state.listId));
+    auto const pathMode = std::ranges::contains(fields, rt::TrackField::FilePath) ? rt::TrackRowPathMode::Resolve
+                                                                                  : rt::TrackRowPathMode::IfUntitled;
     auto const& projectionPtr = *foundProjectionRes;
     auto const reader = _library.snapshot();
     auto snapshot = TrackItemsSnapshot{.projectionPtr = projectionPtr};
@@ -1283,7 +1303,7 @@ namespace ao::tui
     {
       auto const trackId = projectionPtr->trackIdAt(index);
 
-      if (auto optRow = reader.trackRow(trackId); optRow)
+      if (auto optRow = reader.trackRow(trackId, pathMode); optRow)
       {
         auto const optGroupIndex = projectionPtr->groupIndexAt(index);
 
@@ -1348,7 +1368,7 @@ namespace ao::tui
       return makeError(Error::Code::NotFound, "TUI track view refers to an unavailable library list");
     }
 
-    auto snapshotRes = materializeView(_activeViewId);
+    auto snapshotRes = materializeView(*stateRes);
 
     if (!snapshotRes)
     {
@@ -1381,7 +1401,7 @@ namespace ao::tui
       return std::unexpected{stateRes.error()};
     }
 
-    auto snapshotRes = materializeView(viewId);
+    auto snapshotRes = materializeView(*stateRes);
 
     if (!snapshotRes)
     {

@@ -162,6 +162,8 @@ namespace
   constexpr auto kAlphaFilter = R"($title = "Audit Alpha")";
   constexpr auto kExpectedMissing = kProbeTrackCount - 1; // Only the rescan target has a physical file.
   constexpr std::size_t kRescanTrackIndex = 2;            // Neither named Bach landmark.
+  constexpr std::size_t kUntitledTrackIndex = 4;
+  constexpr auto kUntitledTrackUri = "probe/untitled-filename.flac";
   constexpr auto kRescanUri = "probe/selected.wav";
   constexpr auto kPreviewStatusId = L"list-editor-preview-status";
   constexpr auto kSelectionSummaryId = L"modern-selection-info";
@@ -474,7 +476,7 @@ namespace
           auto builder = ao::library::TrackBuilder::makeEmpty();
           // Keep the two existing named landmarks first in both the flat and album views.
           builder.metadata()
-            .title(title)
+            .title(index == kUntitledTrackIndex ? std::string_view{} : std::string_view{title})
             .artist("Audit Artist")
             .album("Audit Album")
             .composer(isNamedTrack ? "Bach" : "Debussy")
@@ -488,9 +490,17 @@ namespace
           {
             uri = std::format("primary-{}.wav", index);
           }
+          else if (index == kRescanTrackIndex)
+          {
+            uri = kRescanUri;
+          }
+          else if (index == kUntitledTrackIndex)
+          {
+            uri = kUntitledTrackUri;
+          }
           else
           {
-            uri = index == kRescanTrackIndex ? std::string{kRescanUri} : std::format("probe/{}.flac", title);
+            uri = std::format("probe/{}.flac", title);
           }
 
           builder.property().uri(uri);
@@ -2568,6 +2578,10 @@ namespace
     void modernGrouped()
     {
       auditShell("Modern grouped tracks");
+      auto const result = audit(_root, "Modern untitled track");
+      requireControl(result, AutomationControlType::ListItem, "modern-track-table", "untitled-filename.flac");
+      check(!hasControl(result, AutomationControlType::Button, "modern-track-table", "File Path"),
+            "the untitled row's filename must name it even with no File Path column");
       _sessionPtr->runtime().notifications().post(
         ao::rt::NotificationSeverity::Info, "Audit info", ao::rt::NotificationLifetime::history());
       afterFrame(&WinUiAutomationProbe::modernInfo);

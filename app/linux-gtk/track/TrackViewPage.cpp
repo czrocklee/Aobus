@@ -19,6 +19,7 @@
 #include "track/TrackOrderActions.h"
 #include "track/TrackOrderDragController.h"
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -68,6 +69,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -291,7 +293,7 @@ namespace ao::gtk
     // 1. Configure columns and layout first (Off-tree)
     auto const visibleFields =
       uimodel::visibleTrackFieldsInStoredLayout(presentation, _columnLayouts.layoutForList(_listId));
-    _viewHostPtr->configureColumns(columnFactoryProvider());
+    _viewHostPtr->configureColumns(columnFactoryProvider(visibleFields));
 
     installOrderDragController();
     _viewHostPtr->columnController().applyColumnLayout(visibleFields);
@@ -492,9 +494,14 @@ namespace ao::gtk
     updateSectionHeaders();
   }
 
-  TrackColumnViewHost::FactoryProvider TrackViewPage::columnFactoryProvider()
+  TrackColumnViewHost::FactoryProvider TrackViewPage::columnFactoryProvider(
+    std::span<rt::TrackField const> const visibleFields)
   {
-    return [this](rt::TrackField field)
+    // Capture the effective demand of this generation, not the active page or model.
+    auto const pathDemand = std::ranges::contains(visibleFields, rt::TrackField::FilePath)
+                              ? TrackRowPathDemand::OnLoad
+                              : TrackRowPathDemand::NoRequest;
+    return [this, pathDemand](rt::TrackField field)
     {
       return buildColumnFactory(
         field,
@@ -504,7 +511,8 @@ namespace ao::gtk
           return uimodel::TrackAuthoringSession::begin(_library, trackIds);
         },
         std::bind_front(&TrackViewPage::commitMetadataChange, this),
-        *_modelPtr);
+        *_modelPtr,
+        pathDemand);
     };
   }
 
@@ -512,7 +520,7 @@ namespace ao::gtk
   {
     auto const visibleFields =
       uimodel::visibleTrackFieldsInStoredLayout(presentation, _columnLayouts.layoutForList(_listId));
-    auto const factoryProvider = columnFactoryProvider();
+    auto const factoryProvider = columnFactoryProvider(visibleFields);
 
     // 1. Detach UI from Model and Tree immediately.
     _orderDragControllerPtr.reset();

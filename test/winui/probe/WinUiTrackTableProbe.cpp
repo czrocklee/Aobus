@@ -30,6 +30,7 @@
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
+#include "track/TrackRowItem.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -1047,11 +1048,60 @@ namespace
         return;
       }
 
-      afterNextLayoutStep(&WinUiTrackTableProbeApplication::beginRecordedColumnOrder);
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::beginFilePathTransitions);
     }
 
-    void beginRecordedColumnOrder()
+    void checkFilePathCell(std::optional<std::wstring_view> const optExpected)
     {
+      auto const track = _seededTrackIds.front();
+      auto const optIndex = _trackListPtr->displayIndexOfTrack(track);
+      auto const items = _trackListPtr->items();
+      auto const row = optIndex && *optIndex < items.Size()
+                         ? items.GetAt(static_cast<std::uint32_t>(*optIndex)).try_as<ProjectedTrackRow>()
+                         : nullptr;
+
+      if (!row || row.TrackId() != track.raw())
+      {
+        _report.record("the named fixture did not materialize after the column projection changed");
+        return;
+      }
+
+      _report.check(row.Title() == L"Probe Title 00", "the titled row retains its metadata title");
+      auto optCellText = std::optional<winrt::hstring>{};
+
+      for (auto const& item : row.Cells())
+      {
+        if (auto const cell = item.as<winrt::Aobus::TrackCellItem>(); cell.FieldId() == L"file-path")
+        {
+          optCellText = cell.Text();
+          break;
+        }
+      }
+
+      _report.check(optExpected ? optCellText && *optCellText == *optExpected : !optCellText,
+                    optExpected ? "the visible File Path cell contains the absolute path in generic form"
+                                : "the row has no File Path cell when the column is not visible");
+    }
+
+    void beginFilePathTransitions()
+    {
+      _report.beginScenario("File Path visibility changes reproject cells from the same track id");
+      {
+        auto const snapshot = _runtimePtr->library().snapshot();
+        auto const track = _seededTrackIds.front();
+        using ao::rt::TrackField;
+        using ao::winui::TrackColumnCellSpec;
+        using ao::winui::detail::TrackTableRowReader;
+        auto const hidden = std::array{TrackColumnCellSpec{.field = TrackField::Title}};
+        auto const shown = std::array{hidden.front(), TrackColumnCellSpec{.field = TrackField::FilePath}};
+        auto const optHidden = TrackTableRowReader{hidden}.read(snapshot, track);
+        auto const optShown = TrackTableRowReader{shown}.read(snapshot, track);
+        _report.check(optHidden && !optHidden->title.empty() && !optHidden->optUriPath,
+                      "the materializer reader omits the path of a titled track without File Path");
+        _report.check(optShown && optShown->optUriPath && optShown->optUriPath->filename() == L"track-00.flac",
+                      "the same reader resolves that track path with File Path");
+      }
+      checkFilePathCell(std::nullopt);
       changeColumnTestPreset("library", &WinUiTrackTableProbeApplication::recordYearColumn);
     }
 
@@ -1101,6 +1151,11 @@ namespace
         "Year retains the deliberately resized fixed width");
     }
 
+    std::wstring expectedPathCell() const
+    {
+      return (std::filesystem::canonical(_optTempRoot->root()) / "probe/album-a/track-00.flac").generic_wstring();
+    }
+
     void hideUnstoredFilePath()
     {
       using ao::rt::TrackField;
@@ -1109,7 +1164,9 @@ namespace
       _report.check(!std::ranges::contains(fields, "year") &&
                       !std::ranges::contains(stored, TrackField::FilePath, &ao::uimodel::TrackColumnState::field),
                     "Technical cannot display stored Year and File Path has no stored slot yet");
+      checkFilePathCell(expectedPathCell());
       _report.check(_trackListPtr->setColumnVisible("file-path", false).has_value(), "hide default-visible File Path");
+      checkFilePathCell(std::nullopt);
 
       if (tryReloadColumnLayout("after-file-path.yaml"))
       {
@@ -1125,14 +1182,17 @@ namespace
 
     void showFilePathColumn()
     {
+      checkFilePathCell(std::nullopt);
       _report.check(_trackListPtr->setColumnVisible("file-path", true).has_value(), "show File Path in Technical");
+      checkFilePathCell(expectedPathCell());
       _columnLayoutsPtr->restore({}, {});
-      changeColumnTestPreset("albums", &WinUiTrackTableProbeApplication::finishRecordedColumnOrder);
+      changeColumnTestPreset("albums", &WinUiTrackTableProbeApplication::finishFilePathTransitions);
     }
 
-    void finishRecordedColumnOrder()
+    void finishFilePathTransitions()
     {
       _report.check(_trackListPtr->activePresentationId() == "albums", "the original Albums presentation is restored");
+      checkFilePathCell(std::nullopt);
       clearSelectionPublications();
       enqueueStep(&WinUiTrackTableProbeApplication::listFeedbackSetupStep);
     }

@@ -373,6 +373,107 @@ namespace ao::gtk::test
     CHECK(groupedRows < kMaximumPrefetchedRows);
   }
 
+  TEST_CASE("TrackViewPage - layout generations load paths once and keep demand local")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const firstId = addRuntimeTrack(runtime, {.title = "First library track"});
+    auto const secondId = addRuntimeTrack(runtime, {.title = "Second library track"});
+    auto const thirdId = addRuntimeTrack(runtime, {.title = "Third library track"});
+    auto const optFirstUri = runtime.library().snapshot().trackUri(firstId);
+    auto const optSecondUri = runtime.library().snapshot().trackUri(secondId);
+    REQUIRE(optFirstUri);
+    REQUIRE(optSecondUri);
+    auto const firstPath = (runtime.musicRoot() / *optFirstUri).string();
+    auto const secondPath = (runtime.musicRoot() / *optSecondUri).string();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const cache = TrackRowCache{runtime.library(), textCatalog};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto const* const technicalPreset = rt::builtinTrackPresentationPreset("technical");
+    REQUIRE(technicalPreset);
+    auto const& technical = technicalPreset->spec;
+    auto const hiddenPath =
+      uimodel::TrackColumnState{.field = rt::TrackField::FilePath, .visibility = uimodel::TrackColumnVisibility::Hide};
+    constexpr auto kShownList = rt::kAllTracksListId;
+    auto const hiddenList = ListId{198};
+    columnLayouts.updateLayout(hiddenList, {hiddenPath});
+
+    auto const makeModel = [&](std::shared_ptr<rt::test::MutableTrackSource> const& sourcePtr)
+    {
+      auto modelPtr = TrackListModel::create(cache);
+      modelPtr->bindProjection(runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr}));
+      return modelPtr;
+    };
+    auto const shownSourcePtr = rt::test::makeMutableTrackSource(std::array{firstId});
+    auto const hiddenSourcePtr = rt::test::makeMutableTrackSource(std::array{firstId, secondId});
+    auto shownPage = TrackViewPage{kShownList,
+                                   makeModel(shownSourcePtr),
+                                   columnLayouts,
+                                   textCatalog,
+                                   runtime.async(),
+                                   runtime.library(),
+                                   runtime.views(),
+                                   thumbnailLoader,
+                                   technical};
+    auto shownWindow = Gtk::Window{};
+    shownWindow.set_default_size(800, 300);
+    shownWindow.set_child(shownPage);
+    shownWindow.set_visible(true);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return findLabelByText(shownPage, firstPath) != nullptr; }));
+    CHECK(findLabelByText(shownPage, "First library track") != nullptr);
+    CHECK(cache.rowLoadCount() == 1);
+    auto const firstRowPtr = cache.trackRow(firstId);
+    REQUIRE(firstRowPtr);
+
+    auto hiddenPage = TrackViewPage{hiddenList,
+                                    makeModel(hiddenSourcePtr),
+                                    columnLayouts,
+                                    textCatalog,
+                                    runtime.async(),
+                                    runtime.library(),
+                                    runtime.views(),
+                                    thumbnailLoader,
+                                    technical};
+    auto hiddenWindow = Gtk::Window{};
+    hiddenWindow.set_default_size(800, 300);
+    hiddenWindow.set_child(hiddenPage);
+    hiddenWindow.set_visible(true);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return findLabelByText(hiddenPage, "Second library track") != nullptr; }));
+    CHECK(findLabelByText(hiddenPage, firstPath) == nullptr);
+    CHECK(cache.rowLoadCount() == 2);
+    auto const secondRowPtr = cache.trackRow(secondId);
+    REQUIRE(secondRowPtr);
+    CHECK(secondRowPtr->fieldText(rt::TrackField::FilePath).empty());
+    CHECK(firstRowPtr->fieldText(rt::TrackField::FilePath) == firstPath);
+
+    columnLayouts.updateLayout(hiddenList, {});
+    hiddenPage.applyPresentation(technical);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return findLabelByText(hiddenPage, secondPath) != nullptr; }));
+    CHECK(cache.trackRow(secondId) == secondRowPtr);
+    CHECK(cache.rowLoadCount() == 3);
+    CHECK_FALSE(secondRowPtr->signalFilePathChanged().empty());
+
+    columnLayouts.updateLayout(hiddenList, {hiddenPath});
+    hiddenPage.applyPresentation(technical);
+    hiddenSourcePtr->reset(std::array{firstId, secondId, thirdId});
+    REQUIRE(tryPumpGtkEventsUntil([&] { return findLabelByText(hiddenPage, "Third library track") != nullptr; }));
+    CHECK(findLabelByText(hiddenPage, secondPath) == nullptr);
+    CHECK(secondRowPtr->signalFilePathChanged().empty());
+    CHECK(cache.rowLoadCount() == 4);
+    auto const thirdRowPtr = cache.trackRow(thirdId);
+    REQUIRE(thirdRowPtr);
+    CHECK(thirdRowPtr->fieldText(rt::TrackField::FilePath).empty());
+    CHECK(findLabelByText(shownPage, firstPath) != nullptr);
+    CHECK_FALSE(firstRowPtr->signalFilePathChanged().empty());
+
+    shownWindow.unset_child();
+    hiddenWindow.unset_child();
+    drainGtkEvents();
+  }
+
   TEST_CASE("TrackViewPage - drag handle follows the shared List order capability")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

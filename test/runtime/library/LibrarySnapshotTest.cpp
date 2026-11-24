@@ -47,6 +47,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <span>
 #include <string>
@@ -245,6 +246,24 @@ namespace ao::rt::test
     CHECK(*row.optModifiedTime == FileTimestamp{.seconds = 987654321, .nanoseconds = 500000000});
     CHECK(row.status == library::FileStatus::Missing);
 
+    auto const optResolved = scope.trackRow(seeded.trackId, TrackRowPathMode::Resolve);
+    REQUIRE(optResolved);
+    CHECK(optResolved->optUriPath == row.optUriPath);
+
+    for (auto const mode : {TrackRowPathMode::Omit, TrackRowPathMode::IfUntitled})
+    {
+      auto const optProjected = scope.trackRow(seeded.trackId, mode);
+      REQUIRE(optProjected);
+      CHECK_FALSE(optProjected->optUriPath);
+      CHECK(optProjected->id == row.id);
+      CHECK(optProjected->title == row.title);
+      CHECK(optProjected->tags == row.tags);
+      CHECK(optProjected->coverArtId == row.coverArtId);
+      CHECK(optProjected->fileSize == row.fileSize);
+      CHECK(optProjected->optModifiedTime == row.optModifiedTime);
+      CHECK(optProjected->status == row.status);
+    }
+
     // The other track's empty manifest records no modification time: absence,
     // not the epoch-zero instant.
     auto const optOtherRow = scope.trackRow(seeded.otherTrackId);
@@ -275,6 +294,7 @@ namespace ao::rt::test
     auto const missingField = scope.trackField(TrackId{999999}, TrackField::Title);
     CHECK(std::holds_alternative<std::monostate>(missingField));
     CHECK_FALSE(scope.trackRow(TrackId{999999}).has_value());
+    CHECK_FALSE(scope.trackRow(TrackId{999999}, TrackRowPathMode::Omit));
     CHECK(scope.trackCoverArtId(TrackId{999999}) == kInvalidResourceId);
 
     CHECK(scope.resolve(seeded.artistId) == "An Artist");
@@ -314,26 +334,68 @@ namespace ao::rt::test
     STATIC_CHECK_FALSE(std::is_move_assignable_v<Library>);
   }
 
-  TEST_CASE("LibrarySnapshot - URI paths reject symlinks escaping the library root")
+  TEST_CASE("LibrarySnapshot - untitled rows resolve only admitted display paths")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
-    auto const outsideRoot = temp.path() / "outside";
+    auto const alias = musicRoot / "alias.flac";
     std::filesystem::create_directories(musicRoot);
-    std::filesystem::create_directories(outsideRoot);
-    auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
     auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    auto const trackId =
-      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
+    auto const trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("alias.flac"));
 
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
     auto changes = makeStateOnlyLibraryChanges(ml);
     auto runtimeLibrary = Library{asyncRuntime, ao::test::requireValue(Library::prepare(ml)), changes};
-    auto reader = runtimeLibrary.snapshot();
-    auto const optRow = reader.trackRow(trackId);
-    REQUIRE(optRow);
-    CHECK_FALSE(optRow->optUriPath);
+    auto const reader = runtimeLibrary.snapshot();
+
+    SECTION("An in-root alias yields the physical filename within the same snapshot")
+    {
+      auto const optBefore = reader.trackRow(trackId, TrackRowPathMode::IfUntitled);
+      REQUIRE(optBefore);
+      CHECK(optBefore->optUriPath == alias);
+
+      auto const target = musicRoot / "target.flac";
+      REQUIRE(std::ofstream{target}.good());
+      auto const symlink = ao::test::SymlinkFixture{target, alias, ao::test::SymlinkType::File};
+
+      auto const optOmitted = reader.trackRow(trackId, TrackRowPathMode::Omit);
+      REQUIRE(optOmitted);
+      CHECK_FALSE(optOmitted->optUriPath);
+      CHECK(optOmitted->title.empty());
+
+      auto const optResolved = reader.trackRow(trackId, TrackRowPathMode::IfUntitled);
+      REQUIRE(optResolved);
+      CHECK(optResolved->optUriPath == target);
+      CHECK(optResolved->title.empty());
+      CHECK(reader.trackUri(trackId) == "alias.flac");
+    }
+
+    SECTION("An escaping alias leaves the row present without a path")
+    {
+      auto const target = temp.path() / "outside.flac";
+      REQUIRE(std::ofstream{target}.good());
+      auto const symlink = ao::test::SymlinkFixture{target, alias, ao::test::SymlinkType::File};
+
+      for (auto const mode : {TrackRowPathMode::IfUntitled, TrackRowPathMode::Resolve})
+      {
+        auto const optRow = reader.trackRow(trackId, mode);
+        REQUIRE(optRow);
+        CHECK_FALSE(optRow->optUriPath);
+      }
+    }
+
+    SECTION("A dangling alias leaves the row present without a path")
+    {
+      auto const symlink = ao::test::SymlinkFixture{musicRoot / "missing.flac", alias, ao::test::SymlinkType::File};
+
+      for (auto const mode : {TrackRowPathMode::IfUntitled, TrackRowPathMode::Resolve})
+      {
+        auto const optRow = reader.trackRow(trackId, mode);
+        REQUIRE(optRow);
+        CHECK_FALSE(optRow->optUriPath);
+      }
+    }
   }
 
   TEST_CASE("LibrarySnapshot - snapshots list tree DTOs")

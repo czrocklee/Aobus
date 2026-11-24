@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
@@ -35,13 +36,15 @@
 namespace ao::rt
 {
   class Library;
+  class LibrarySnapshot;
+  enum class TrackRowPathMode : std::uint8_t;
   class TrackListProjection;
   class ViewService;
   class WorkspaceService;
   struct NavigationPresentation;
   struct PlaybackRevealTrackRequest;
   struct TrackListProjectionDeltaBatch;
-}
+} // namespace ao::rt
 
 namespace ao::uimodel
 {
@@ -51,6 +54,20 @@ namespace ao::uimodel
 namespace ao::winui
 {
   struct TrackColumnCellSpec;
+
+  namespace detail
+  {
+    // Bind path demand once when creating an item view; its cache reads many rows.
+    class TrackTableRowReader final
+    {
+    public:
+      explicit TrackTableRowReader(std::span<TrackColumnCellSpec const> columns) noexcept;
+      std::optional<rt::TrackRow> read(rt::LibrarySnapshot const& snapshot, TrackId id) const;
+
+    private:
+      rt::TrackRowPathMode _pathMode;
+    };
+  } // namespace detail
 
   /// Stable presentation id stamped when a column-header sort replaces the active
   /// presentation; the presentation label resolves it to localized copy.

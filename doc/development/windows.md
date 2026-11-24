@@ -584,6 +584,8 @@ changes use the controller API and the body uses representative row templates.
 The column tests save and reload an Album visibility change on a fresh layout,
 then switch the same List to Library and verify its authored header order. They
 also check that changing visibility preserves saved positions and widths.
+The File Path tests check both the reader's path demand for a titled track and
+the projected cell through show/hide transitions.
 The filter cases check that header-only gestures preserve partly or fully hidden
 runtime selection without a new publication and that clearing the filter restores
 the native rows. History replay checks the presentation label before the table

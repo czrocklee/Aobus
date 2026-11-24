@@ -23,6 +23,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -49,6 +50,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
@@ -449,6 +451,94 @@ namespace ao::gtk::test
       drainGtkEvents();
     }
 
+    drainGtkEvents();
+  }
+
+  TEST_CASE("TrackColumnFactoryBuilder - FilePath demand follows bindings across shared views")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const firstId = addRuntimeTrack(runtime, {.title = "Shared Title"});
+    auto const secondId = addRuntimeTrack(runtime, {.title = "Replacement Title"});
+    auto const optFirstUri = runtime.library().snapshot().trackUri(firstId);
+    auto const optSecondUri = runtime.library().snapshot().trackUri(secondId);
+    REQUIRE(optFirstUri);
+    REQUIRE(optSecondUri);
+    auto const firstPath = runtime.musicRoot() / *optFirstUri;
+    auto const secondPath = runtime.musicRoot() / *optSecondUri;
+    auto const movedPath = firstPath.parent_path() / "relocated.flac";
+    auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto const makeModel = [&](std::shared_ptr<rt::test::MutableTrackSource> const& sourcePtr)
+    {
+      auto modelPtr = TrackListModel::create(cache);
+      modelPtr->bindProjection(runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr}));
+      return modelPtr;
+    };
+    auto titleSourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+    titleSourcePtr->addInitial(firstId);
+    auto pathSourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+    pathSourcePtr->addInitial(firstId);
+    auto const titleModelPtr = makeModel(titleSourcePtr);
+    auto const pathModelPtr = makeModel(pathSourcePtr);
+    auto titleView = Gtk::ColumnView{};
+    auto pathView = Gtk::ColumnView{};
+    auto titleWindow = Gtk::Window{};
+    auto pathWindow = Gtk::Window{};
+    titleWindow.set_child(titleView);
+    pathWindow.set_child(pathView);
+    titleView.append_column(
+      Gtk::ColumnViewColumn::create("Title", buildColumnFactory(rt::TrackField::Title, {}, {}, *titleModelPtr)));
+    auto const hiddenPathColumnPtr =
+      Gtk::ColumnViewColumn::create("File Path", buildColumnFactory(rt::TrackField::FilePath, {}, {}, *titleModelPtr));
+    hiddenPathColumnPtr->set_visible(false);
+    titleView.append_column(hiddenPathColumnPtr);
+    titleView.set_model(Gtk::SingleSelection::create(titleModelPtr));
+    realizeColumnView(titleWindow, titleView);
+    REQUIRE(findLabelByText(titleView, "Shared Title") != nullptr);
+    auto const firstRowPtr = cache.trackRow(firstId);
+    REQUIRE(firstRowPtr);
+    CHECK(firstRowPtr->fieldText(rt::TrackField::FilePath).empty());
+
+    pathView.append_column(
+      Gtk::ColumnViewColumn::create("File Path", buildColumnFactory(rt::TrackField::FilePath, {}, {}, *pathModelPtr)));
+    pathView.set_model(Gtk::SingleSelection::create(pathModelPtr));
+    realizeColumnView(pathWindow, pathView);
+    REQUIRE(findLabelByText(pathView, firstPath.string()) != nullptr);
+    CHECK(cache.trackRow(firstId) == firstRowPtr);
+    CHECK(firstRowPtr->fieldText(rt::TrackField::FilePath) == firstPath.string());
+
+    std::filesystem::rename(firstPath, movedPath);
+    std::filesystem::create_symlink(movedPath, firstPath);
+    updateRuntimeTrack(runtime, firstId, [](library::test::TrackSpec& spec) { spec.title = "Edited Shared Title"; });
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        auto const* const titleLabel = findLabelByText(titleView, "Edited Shared Title");
+        auto const* const pathLabel = findLabelByText(pathView, movedPath.string());
+        return titleLabel && titleLabel->get_mapped() && pathLabel && pathLabel->get_mapped();
+      }));
+
+    pathSourcePtr->reset(std::array{secondId});
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        return findLabelByText(pathView, secondPath.string()) != nullptr &&
+               firstRowPtr->signalFilePathChanged().empty();
+      }));
+    updateRuntimeTrack(runtime, firstId, [](library::test::TrackSpec& spec) { spec.title = "Title Only"; });
+    CHECK(findLabelByText(titleView, "Title Only") != nullptr);
+    CHECK(firstRowPtr->fieldText(rt::TrackField::FilePath).empty());
+    CHECK(findLabelByText(pathView, secondPath.string()) != nullptr);
+
+    auto const secondRowPtr = cache.trackRow(secondId);
+    REQUIRE(secondRowPtr);
+    CHECK_FALSE(secondRowPtr->signalFilePathChanged().empty());
+    pathView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+    REQUIRE(tryPumpGtkEventsUntil([&] { return secondRowPtr->signalFilePathChanged().empty(); }));
+    titleView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+    pathWindow.unset_child();
+    titleWindow.unset_child();
     drainGtkEvents();
   }
 } // namespace ao::gtk::test

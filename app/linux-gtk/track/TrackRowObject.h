@@ -28,6 +28,8 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  class TrackRowCache;
+
   class TrackRowObject final : public Glib::Object
   {
   public:
@@ -73,12 +75,21 @@ namespace ao::gtk
     // Emitted once after populate has replaced all fields and invalidated computed text.
     sigc::signal<void()>& signalFieldsChanged() noexcept { return _fieldsChanged; }
 
+    // Only a bound FilePath cell connects here. Its scoped connection keeps
+    // requesting path resolution when this shared row is refreshed.
+    sigc::signal<void()>& signalFilePathChanged() noexcept { return _filePathChanged; }
+
     void populate(rt::TrackRow row);
 
   protected:
     explicit TrackRowObject(i18n::MessageCatalog textCatalog);
 
   private:
+    friend class TrackRowCache;
+
+    void setFilePathText(rt::TrackRow const& row);
+    void updateFilePath(rt::TrackRow const& row);
+
     TrackId _id;
     i18n::MessageCatalog _textCatalog;
 
@@ -111,5 +122,6 @@ namespace ao::gtk
     library::FileStatus _status = library::FileStatus::Available;
 
     sigc::signal<void()> _fieldsChanged;
+    sigc::signal<void()> _filePathChanged;
   };
 } // namespace ao::gtk

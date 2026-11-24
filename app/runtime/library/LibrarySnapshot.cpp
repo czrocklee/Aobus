@@ -102,11 +102,14 @@ namespace ao::rt
     TrackRow rowDataFromView(TrackId id,
                              library::MusicLibrary const& library,
                              library::TrackView const& view,
-                             library::ReadTransaction const& transaction)
+                             library::ReadTransaction const& transaction,
+                             TrackRowPathMode const pathMode)
     {
       auto const& dictionary = library.dictionary();
       auto const metadata = view.metadata();
+      auto const title = metadata.title();
       auto const property = view.property();
+      auto const uri = property.uri();
       auto const work = view.work();
       auto const performance = view.performance();
       auto const conductors = performance.credits(library::CreditKind::Conductor);
@@ -117,7 +120,7 @@ namespace ao::rt
       auto optModifiedTime = std::optional<FileTimestamp>{};
       auto status = library::FileStatus::Available;
 
-      if (auto const uri = property.uri(); !uri.empty())
+      if (!uri.empty())
       {
         auto const manifestReader = library.manifest().reader(transaction);
 
@@ -129,14 +132,17 @@ namespace ao::rt
         }
       }
 
+      auto const resolvePath =
+        pathMode == TrackRowPathMode::Resolve || (pathMode == TrackRowPathMode::IfUntitled && title.empty());
+
       return TrackRow{
         .id = id,
         .coverArtId = view.coverArt()
                         .primary()
                         .transform([](library::CoverArt cover) { return cover.resourceId; })
                         .value_or(kInvalidResourceId),
-        .optUriPath = resolveLibraryPath(library.rootPath(), property.uri()),
-        .title = std::string{metadata.title()},
+        .optUriPath = resolvePath ? resolveLibraryPath(library.rootPath(), uri) : std::nullopt,
+        .title = std::string{title},
         .artist = resolveDictionaryId(dictionary, metadata.artistId()),
         .album = resolveDictionaryId(dictionary, metadata.albumId()),
         .albumArtist = resolveDictionaryId(dictionary, metadata.albumArtistId()),
@@ -279,6 +285,11 @@ namespace ao::rt
 
   std::optional<TrackRow> LibrarySnapshot::trackRow(TrackId id) const
   {
+    return trackRow(id, TrackRowPathMode::Resolve);
+  }
+
+  std::optional<TrackRow> LibrarySnapshot::trackRow(TrackId const id, TrackRowPathMode const pathMode) const
+  {
     auto const& library = _implPtr->library;
     auto const& transaction = _implPtr->transaction;
     auto const reader = library.tracks().reader(transaction);
@@ -289,7 +300,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    return rowDataFromView(id, library, *optView, transaction);
+    return rowDataFromView(id, library, *optView, transaction, pathMode);
   }
 
   std::optional<std::string> LibrarySnapshot::formatTrack(TrackId const id, query::FormatPlan const& plan) const

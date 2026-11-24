@@ -4,6 +4,7 @@
 #include "track/TrackRowCache.h"
 
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
@@ -67,41 +68,59 @@ namespace ao::gtk
       });
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::trackRow(TrackId id, TrackRowPathDemand const pathDemand) const
   {
     auto it = _rowCache.find(id);
+    auto const isCached = it != _rowCache.end();
+    auto const isFresh = isCached && !it->second.stale;
 
-    if (it != _rowCache.end() && !it->second.stale)
+    if (isFresh && (pathDemand != TrackRowPathDemand::Required || it->second.pathAttempted))
     {
       return it->second.rowPtr;
     }
 
+    // A stale row may be bound on a different page than the requesting cell.
+    auto const resolvePath =
+      pathDemand != TrackRowPathDemand::NoRequest || (isCached && !it->second.rowPtr->signalFilePathChanged().empty());
     auto optRow = std::optional<rt::TrackRow>{};
+    std::uint64_t revision = 0;
     {
-      auto scope = _reads.snapshot();
-      auto const revision = scope.revision();
-
+      auto const scope = _reads.snapshot();
+      revision = scope.revision();
       ++_rowLoadCount;
-      optRow = scope.trackRow(id);
-
-      if (!optRow)
-      {
-        _rowCache.erase(id);
-        return nullptr;
-      }
-
-      if (it == _rowCache.end())
-      {
-        it = _rowCache.emplace(id, Entry{.rowPtr = TrackRowObject::create(id, _textCatalog)}).first;
-      }
-
-      it->second.loadedRevision = revision;
-      it->second.stale = false;
+      optRow = scope.trackRow(id, resolvePath ? rt::TrackRowPathMode::Resolve : rt::TrackRowPathMode::Omit);
     }
 
-    // No transaction or map entry is borrowed by the cell callbacks fired by populate().
+    if (!optRow)
+    {
+      _rowCache.erase(id);
+      return nullptr;
+    }
+
+    // Do not pair a newly read path with metadata from another revision.
+    auto const isPathOnlyUpgrade = isFresh && it->second.loadedRevision == revision;
+
+    if (!isCached)
+    {
+      it = _rowCache.emplace(id, Entry{.rowPtr = TrackRowObject::create(id, _textCatalog)}).first;
+    }
+
+    it->second.loadedRevision = revision;
+    it->second.stale = false;
+    it->second.pathAttempted = resolvePath;
+
+    // The callbacks can look up more rows; keep only the row owner across emission.
     auto const rowPtr = it->second.rowPtr;
-    rowPtr->populate(std::move(*optRow));
+
+    if (isPathOnlyUpgrade)
+    {
+      rowPtr->updateFilePath(*optRow);
+    }
+    else
+    {
+      rowPtr->populate(std::move(*optRow));
+    }
+
     return rowPtr;
   }
 
@@ -114,7 +133,7 @@ namespace ao::gtk
 
     entry.stale = true;
 
-    if (!entry.rowPtr->signalFieldsChanged().empty())
+    if (!entry.rowPtr->signalFieldsChanged().empty() || !entry.rowPtr->signalFilePathChanged().empty())
     {
       bound.push_back(entry.rowPtr->trackId());
     }

@@ -81,8 +81,9 @@ namespace ao::winui
         auto const* const projection = _projection;
         auto const* const library = _library;
         auto const bindingPtr = _lifetimePtr;
+        auto const reader = detail::TrackTableRowReader{_columns};
         _rows.reset(projection->size(),
-                    [projection, library, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
+                    [projection, library, bindingPtr, reader](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
                       if (bindingPtr.expired() || index >= projection->size())
                       {
@@ -158,6 +159,20 @@ namespace ao::winui
       return uimodel::pixelTrackColumnSpecs(fields, stored);
     }
   } // namespace
+
+  detail::TrackTableRowReader::TrackTableRowReader(std::span<TrackColumnCellSpec const> const columns) noexcept
+    : _pathMode{std::ranges::contains(columns, rt::TrackField::FilePath, &TrackColumnCellSpec::field)
+                  ? rt::TrackRowPathMode::Resolve
+                  : rt::TrackRowPathMode::IfUntitled}
+  {
+    // Even without File Path, an untitled row needs its filename for its native name.
+  }
+
+  std::optional<rt::TrackRow> detail::TrackTableRowReader::read(rt::LibrarySnapshot const& snapshot,
+                                                                TrackId const id) const
+  {
+    return snapshot.trackRow(id, _pathMode);
+  }
 
   TrackListController::TrackListController(rt::ViewService& views,
                                            rt::WorkspaceService& workspace,
