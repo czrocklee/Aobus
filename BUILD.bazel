@@ -362,6 +362,7 @@ filegroup(
             "//test:library_import_apply_cancellation_test",
             "//test:scan_directory_spelling_fallback_test",
         ],
+        "@platforms//os:macos": ["//test:appkit_editor_test"],
         "//conditions:default": [],
     }) + select({
         "//bazel:linux_gtk_enabled": ["//test:gtk_test"],

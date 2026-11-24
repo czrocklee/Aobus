@@ -14,9 +14,11 @@
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/library/RecordingDate.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
@@ -381,6 +383,99 @@ namespace ao::appkit::test
       fixture.finish();
     }
 
+    void closeSessionAndVerifyPropertiesSave(EditorFixture& fixture,
+                                             std::filesystem::path const& musicRoot,
+                                             std::filesystem::path const& stateRoot,
+                                             std::vector<TrackId> const& tracks)
+    {
+      auto& session = fixture.session();
+      auto const target = tracks[0];
+      auto const other = tracks[1];
+      auto const [originalGenre, revision] = [&]
+      {
+        auto const snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(other);
+        AO_INVARIANT(optRow, "The unedited control track must exist");
+        return std::pair<std::string, std::uint64_t>{optRow->genre, snapshot.revision()};
+      }();
+
+      session.navigate(rt::kAllTracksListId);
+      requireWaitUntil([&] { return session.displayIndexOf(target) && session.displayIndexOf(other); },
+                       "The closing draft needs both tracks in the browser");
+      session.select({target});
+      requireAdmission(fixture.model().beginProperties(std::array{target}), "The closing Properties draft must begin");
+      fixture.present();
+      auto* const retired = fixture.editor();
+      auto const closePtr = std::make_shared<CloseObservation>();
+      std::uint64_t savedRevision = 0;
+
+      {
+        auto& model = fixture.model();
+        editText(retired.window, @"genre", @"Saved before session close");
+        [retired save:nil];
+        AO_INVARIANT(model.state().busy, "The Properties save must be in flight when close is requested");
+        [retired requestCloseWithCompletion:^(BOOL closed) {
+          ++closePtr->count;
+          closePtr->closed = closed != NO;
+        }];
+        session.select({other});
+        AO_INVARIANT(closePtr->count == 0 && retired.window != nil && session.selection() == std::vector{other},
+                     "The close request must defer while the captured Properties edit is in flight");
+        requireWaitUntil([&] { return model.state().completed; }, "The in-flight Properties save must complete");
+        [retired refresh];
+        requireWaitUntil([&] { return closePtr->count == 1 && closePtr->closed; },
+                         "The completed Properties write must release the deferred close");
+        fixture.detachClosed();
+        savedRevision = session.runtime().library().snapshot().revision();
+        AO_INVARIANT(savedRevision == revision + 1, "Only the intended Properties save must commit before teardown");
+
+        // Close on this same main-loop turn, before Properties can enter authoring.
+        // The worker may or may not have queued its callback hop by then.
+        requireAdmission(model.beginProperties(std::array{other}), "The teardown control draft must begin");
+        auto const field = std::ranges::find_if(model.state().fields,
+                                                [](LibraryEditorField const& candidate)
+                                                { return candidate.spec.field == rt::TrackField::Genre; });
+        AO_INVARIANT(field != model.state().fields.end(), "The teardown control draft needs the Genre field");
+        model.editField(static_cast<std::size_t>(std::distance(model.state().fields.begin(), field)), "Not admitted");
+        model.save();
+        AO_INVARIANT(model.state().busy && session.canClose(), "Teardown must find a pending Properties submission");
+      }
+
+      // Queue a marker independently of the worker to check the real session's final drain.
+      bool drained = false;
+      session.runtime().async().callbackExecutor().defer([&drained] { drained = true; });
+      AO_INVARIANT(!drained, "The marker must still be queued when the session closes");
+      session.close();
+      AO_INVARIANT(drained, "Session close must drain the queued marker before returning");
+
+      // Reopen the indexed library without the fixture's rescan, which is not part of this edit.
+      auto reopenedRes = LibrarySession::create(
+        musicRoot,
+        stateRoot,
+        false,
+        session.catalog(),
+        [](DesktopInvalidation) {},
+        [] { return std::vector<std::unique_ptr<audio::BackendProvider>>{}; });
+      AO_INVARIANT(reopenedRes, "The closed session's indexed library must reopen");
+      auto& reopenedLibrary = (*reopenedRes)->runtime().library();
+      {
+        auto const snapshot = reopenedLibrary.snapshot();
+        auto const optSaved = snapshot.trackRow(target);
+        auto const optUntouched = snapshot.trackRow(other);
+        AO_INVARIANT(snapshot.revision() == savedRevision && optSaved &&
+                       optSaved->genre == "Saved before session close" && optUntouched &&
+                       optUntouched->genre == originalGenre,
+                     "Without rescanning, reopening must show only the intended durable edit");
+      }
+
+      // Invoke the closed native editor's old Save action after its runtime is gone.
+      [retired save:nil];
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        retired.window == nil && closePtr->count == 1 && reopenedLibrary.snapshot().revision() == savedRevision,
+        "The retired Save must not reopen the panel, repeat close completion, or write");
+    }
+
     void verifyPendingTagClose(EditorFixture& fixture, TrackId trackId)
     {
       auto& model = fixture.model();
@@ -455,7 +550,10 @@ namespace ao::appkit::test
       std::int32_t callbackCount = 0;
       bool callbacksOnMainThread = true;
       auto& session = fixture.session();
-      auto model = LibraryEditorModel{session.runtime(),
+      auto& runtime = session.runtime();
+      auto model = LibraryEditorModel{runtime.library(),
+                                      runtime.async(),
+                                      runtime.notifications(),
                                       session.catalog(),
                                       [&]
                                       {
@@ -535,7 +633,9 @@ namespace ao::appkit::test
     void verifyRecordingDateProperty(EditorFixture& fixture, TrackId trackId)
     {
       auto& session = fixture.session();
-      auto model = LibraryEditorModel{session.runtime(), session.catalog(), [] {}};
+      auto& runtime = session.runtime();
+      auto model =
+        LibraryEditorModel{runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {}};
 
       // A full typed date through the shared Date editor parsing.
       requireAdmission(model.beginProperties(std::array{trackId}), "The recording-date property edit must begin");
@@ -1340,7 +1440,9 @@ namespace ao::appkit::test
       fixture.present();
       click(@"credits-edit-3");
       editText(fixture.editor().window, @"credit-role-0", @"Retained stale role");
-      auto concurrent = LibraryEditorModel{fixture.session().runtime(), fixture.session().catalog(), [] {}};
+      auto& runtime = fixture.session().runtime();
+      auto concurrent = LibraryEditorModel{
+        runtime.library(), runtime.async(), runtime.notifications(), fixture.session().catalog(), [] {}};
       requireAdmission(concurrent.beginProperties(std::array{tracks[1]}), "Independent mutation must begin");
       auto const field = std::ranges::find(
         concurrent.state().fields, rt::TrackField::Genre, [](auto const& candidate) { return candidate.spec.field; });
@@ -1782,7 +1884,9 @@ namespace ao::appkit::test
       auto* const activeTags = requireTextField(fixture, @"shared-tags");
       AO_INVARIANT(activeTags.currentEditor != nil, "The stale regression requires an uncommitted token candidate");
 
-      auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      auto& runtime = session.runtime();
+      auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(
+        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(concurrentModelPtr->beginList(), "The concurrent list mutation must begin");
       concurrentModelPtr->editList("Authoring probe", "", "#aobus_authoring_probe");
       auto const listRevision = session.state().listRevision;
@@ -1848,7 +1952,9 @@ namespace ao::appkit::test
       AO_INVARIANT([confirmation.defaultButtonCell.title isEqualToString:@"Keep Editing"] != 0,
                    "A fresh dirty draft must initially offer Keep Editing");
 
-      auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      auto& runtime = session.runtime();
+      auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(
+        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(concurrentModelPtr->beginList(listId), "The stale close mutation must begin");
       concurrentModelPtr->editList("Authoring probe", "Stale close mutation", "#aobus_authoring_probe");
       concurrentModelPtr->save();
@@ -2515,7 +2621,9 @@ namespace ao::appkit::test
       model.cancel();
 
       // Live positive control on a separately owned model borrowing the same runtime.
-      auto controlPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      auto& runtime = session.runtime();
+      auto controlPtr = std::make_shared<LibraryEditorModel>(
+        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(
         controlPtr->beginMembership(std::array{tracks[0]}, probeListId, false), "The control membership must begin");
       requireWaitUntil([&] { return controlPtr->state().completed; }, "The control membership must complete");
@@ -2526,7 +2634,8 @@ namespace ao::appkit::test
       fixture.retainMembershipModel(controlPtr);
 
       // A shutdown before the callback lands retires the completed edit: no post.
-      auto retiredPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      auto retiredPtr = std::make_shared<LibraryEditorModel>(
+        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(
         retiredPtr->beginMembership(std::array{tracks[1]}, probeListId, true), "The retired membership must begin");
       retiredPtr->shutdown();
@@ -2540,7 +2649,9 @@ namespace ao::appkit::test
       // A reentrant shutdown from the completed change callback also suppresses the post.
       auto const reentrantBorrowPtr = std::make_shared<std::weak_ptr<LibraryEditorModel>>();
       auto const shutdownObservedPtr = std::make_shared<bool>(false);
-      auto reentrantPtr = std::make_shared<LibraryEditorModel>(session.runtime(),
+      auto reentrantPtr = std::make_shared<LibraryEditorModel>(runtime.library(),
+                                                               runtime.async(),
+                                                               runtime.notifications(),
                                                                session.catalog(),
                                                                [reentrantBorrowPtr, shutdownObservedPtr]
                                                                {
@@ -2711,6 +2822,8 @@ namespace ao::appkit::test
     verifyMembershipNotifications(fixture, tracks);
     verifyRejectedTitleRecovery(fixture, tracks[0]);
     verifyNativeBlankTitleClear(fixture);
+    // This step closes the shared fixture's session; it must run last.
+    closeSessionAndVerifyPropertiesSave(fixture, musicRoot, stateRoot, tracks);
     return 0;
   }
 
