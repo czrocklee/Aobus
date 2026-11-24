@@ -6,12 +6,6 @@
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
-#include <string_view>
-
-namespace ao::i18n
-{
-  class MessageCatalog;
-}
 
 namespace ao::uimodel
 {
@@ -41,6 +35,4 @@ namespace ao::uimodel
   };
 
   TrackColumnDefaults trackColumnDefaults(rt::TrackField field) noexcept;
-
-  std::string_view trackFieldColumnTitle(i18n::MessageCatalog const& textCatalog, rt::TrackField field);
 } // namespace ao::uimodel

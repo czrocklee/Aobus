@@ -3,9 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 
-#include "test/MessageCatalogTestSupport.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -115,24 +113,6 @@ namespace ao::uimodel::test
     {
       INFO("Track Field " << rt::trackFieldId(field));
       CHECK(weight(field) == weight(F::Genre));
-    }
-  }
-
-  TEST_CASE("trackFieldColumnTitle uses the localized field label")
-  {
-    auto const& textCatalog = ao::test::englishMessageCatalog();
-    CHECK(trackFieldColumnTitle(textCatalog, F::AlbumArtist) == "Album Artist");
-
-    for (auto const& definition : rt::trackFieldDefinitions())
-    {
-      if (!definition.presentable)
-      {
-        continue;
-      }
-
-      INFO("Track Field " << definition.id);
-      CHECK_FALSE(trackFieldColumnTitle(textCatalog, definition.field).empty());
-      CHECK(trackFieldColumnTitle(textCatalog, definition.field) == trackFieldLabel(textCatalog, definition.field));
     }
   }
 } // namespace ao::uimodel::test

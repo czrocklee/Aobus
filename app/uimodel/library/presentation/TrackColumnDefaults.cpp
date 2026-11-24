@@ -3,12 +3,9 @@
 
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 
-#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <cstdint>
-#include <string_view>
 
 namespace ao::uimodel
 {
@@ -112,10 +109,5 @@ namespace ao::uimodel
       case rt::TrackField::TechnicalSummary: return {.width = kWidthTechnicalSummary};
       default: return {};
     }
-  }
-
-  std::string_view trackFieldColumnTitle(i18n::MessageCatalog const& textCatalog, rt::TrackField const field)
-  {
-    return trackFieldLabel(textCatalog, field);
   }
 } // namespace ao::uimodel

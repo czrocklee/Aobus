@@ -129,6 +129,7 @@ namespace ao::uimodel::test
 
     CHECK_FALSE(builtinTrackPresentation(catalog, "extension-view"));
     CHECK(trackFieldLabel(catalog, rt::TrackField::SampleRate) == "Sample Rate");
+    CHECK(trackFieldLabel(catalog, rt::TrackField::AlbumArtist) == "Album Artist");
     CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View...");
   }
 
