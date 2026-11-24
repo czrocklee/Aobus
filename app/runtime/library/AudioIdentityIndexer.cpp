@@ -16,6 +16,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
+#include <ao/utility/FileAccessPath.h>
 
 #include <algorithm>
 #include <atomic>
@@ -112,7 +113,7 @@ namespace ao::rt
         {
           row.pathError = parsedRes.error().message;
         }
-        else if (auto resolvedRes = parsedRes->resolveUnder(ml.rootPath()); resolvedRes)
+        else if (auto resolvedRes = parsedRes->resolveFileUnder(ml.rootPath()); resolvedRes)
         {
           row.fullPath = std::move(*resolvedRes);
         }
@@ -227,7 +228,7 @@ namespace ao::rt
       }
 
       auto const lock = std::scoped_lock{batch.callbackMutex};
-      batch.progressCallback(AudioIdentityIndexProgress{.path = path,
+      batch.progressCallback(AudioIdentityIndexProgress{.path = utility::ordinaryFilePath(path),
                                                         .processedCount = batch.processedCount.load(),
                                                         .totalCount = batch.totalCount,
                                                         .itemFraction = itemFraction});

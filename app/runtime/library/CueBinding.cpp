@@ -13,6 +13,7 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/media/cue/Sheet.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/UnicodeText.h>
 #include <ao/utility/Xxh3.h>
@@ -114,7 +115,7 @@ namespace ao::rt
         return snapshot;
       }
 
-      auto resolvedPathRes = uriRes->resolveUnder(root);
+      auto resolvedPathRes = uriRes->resolveFileUnder(root);
 
       if (!resolvedPathRes)
       {
@@ -217,22 +218,21 @@ namespace ao::rt
   Result<std::vector<CueSheetSnapshot>> readCueDirectory(std::filesystem::path const& root,
                                                          std::filesystem::path const& directory)
   {
-    auto ec = std::error_code{};
-    auto const resolvedRoot = std::filesystem::weakly_canonical(root, ec);
+    auto rootRes = utility::weaklyCanonicalFilePath(root);
 
-    if (ec)
+    if (!rootRes)
     {
-      return makeError(Error::Code::IoError, "Cannot resolve CUE root: " + ec.message());
+      return std::unexpected{rootRes.error()};
     }
 
-    auto const resolvedDirectory = std::filesystem::weakly_canonical(directory, ec);
+    auto directoryRes = utility::weaklyCanonicalFilePath(directory);
 
-    if (ec)
+    if (!directoryRes)
     {
-      return makeError(Error::Code::IoError, "Cannot resolve CUE directory: " + ec.message());
+      return std::unexpected{directoryRes.error()};
     }
 
-    auto const relative = resolvedDirectory.lexically_relative(resolvedRoot);
+    auto const relative = directoryRes->lexically_relative(*rootRes);
 
     if (relative.empty() || relative.is_absolute() ||
         std::ranges::any_of(relative, [](auto const& component) { return component == ".."; }))
@@ -240,8 +240,16 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "CUE directory resolves outside the library root");
     }
 
+    auto accessRes = utility::fileAccessPath(*directoryRes);
+
+    if (!accessRes)
+    {
+      return std::unexpected{accessRes.error()};
+    }
+
     auto sheets = std::vector<CueSheetSnapshot>{};
-    auto it = std::filesystem::directory_iterator{resolvedDirectory, ec};
+    auto ec = std::error_code{};
+    auto it = std::filesystem::directory_iterator{*accessRes, ec};
 
     while (!ec && it != std::filesystem::directory_iterator{})
     {
@@ -254,7 +262,7 @@ namespace ao::rt
         // the same stem fails that parse for the audio file too.
         if (auto nameRes = library::LibraryUri::parse(utility::pathToGenericUtf8(path.filename())); nameRes)
         {
-          sheets.push_back(readSheet(resolvedRoot, path, std::string{nameRes->value()}));
+          sheets.push_back(readSheet(*rootRes, utility::ordinaryFilePath(path), std::string{nameRes->value()}));
         }
       }
 

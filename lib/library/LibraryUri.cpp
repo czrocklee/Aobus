@@ -5,14 +5,28 @@
 
 #include "LibraryUriValidation.h"
 #include <ao/Error.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/String.h>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+#include <cstdint>
+#endif
 
 #include <algorithm>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -66,6 +80,54 @@ namespace ao::library
       return std::ranges::any_of(relative, [](auto const& component) { return component == ".."; });
     }
 
+    // Only the drive designator has case-independent syntax. Never fold
+    // directory or filename components, which may be case-sensitive.
+    std::filesystem::path relativeToRoot(std::filesystem::path const& path, std::filesystem::path const& root)
+    {
+#ifdef _WIN32
+      auto const& name = path.native();
+      auto const& base = root.native();
+
+      auto const upper = [](wchar_t unit)
+      { return unit >= L'a' && unit <= L'z' ? static_cast<wchar_t>(unit - L'a' + L'A') : unit; };
+
+      if (name.size() >= 2 && base.size() >= 2 && name[1] == L':' && base[1] == L':' && name[0] != base[0] &&
+          upper(name[0]) == upper(base[0]))
+      {
+        auto adjusted = name;
+        adjusted.front() = base.front();
+        return utility::pathFromNative(adjusted).lexically_relative(root);
+      }
+#endif
+      return path.lexically_relative(root);
+    }
+
+    bool isRedirect(std::filesystem::path const& accessPath, std::error_code& ec)
+    {
+#ifdef _WIN32
+      // symlink_status need not classify a junction as a symlink.
+      auto const attributes = ::GetFileAttributesW(accessPath.c_str());
+
+      if (attributes == INVALID_FILE_ATTRIBUTES)
+      {
+        ec = std::error_code{static_cast<std::int32_t>(::GetLastError()), std::system_category()};
+        return false;
+      }
+
+      return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+      return std::filesystem::is_symlink(std::filesystem::symlink_status(accessPath, ec));
+#endif
+    }
+
+    std::unexpected<Error> unresolvedComponent(std::string_view uri, std::error_code ec)
+    {
+      auto const invalid = ec == std::errc::no_such_file_or_directory || ec == std::errc::not_a_directory ||
+                           ec == std::errc::too_many_symbolic_link_levels;
+      return makeError(invalid ? Error::Code::InvalidInput : Error::Code::IoError,
+                       std::format("Failed to resolve library path component for '{}': {}", uri, ec.message()));
+    }
+
     Result<> rejectUnresolvedSymlinks(std::filesystem::path const& root,
                                       std::filesystem::path const& relative,
                                       std::string_view const uri)
@@ -76,7 +138,7 @@ namespace ao::library
       {
         current /= component;
         auto ec = std::error_code{};
-        auto const status = std::filesystem::symlink_status(current, ec);
+        auto const redirects = isRedirect(current, ec);
 
         if (ec == std::errc::no_such_file_or_directory)
         {
@@ -85,17 +147,13 @@ namespace ao::library
 
         if (ec)
         {
-          return makeError(
-            Error::Code::IoError,
-            std::format("Failed to inspect library path '{}': {}", utility::pathToUtf8(current), ec.message()));
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to inspect library path '{}': {}",
+                                       utility::pathToUtf8(utility::ordinaryFilePath(current)),
+                                       ec.message()));
         }
 
-        if (status.type() == std::filesystem::file_type::not_found)
-        {
-          return {};
-        }
-
-        if (!std::filesystem::is_symlink(status))
+        if (!redirects)
         {
           continue;
         }
@@ -104,13 +162,198 @@ namespace ao::library
 
         if (ec)
         {
+          return unresolvedComponent(uri, ec);
+        }
+
+        auto accessRes = utility::fileAccessPath(current);
+
+        if (!accessRes)
+        {
+          return std::unexpected{accessRes.error()};
+        }
+
+        current = std::move(*accessRes);
+        auto const bound = relativeToRoot(utility::ordinaryFilePath(current), utility::ordinaryFilePath(root));
+
+        if (bound != "." && isOutsideRoot(bound))
+        {
           return makeError(
-            Error::Code::InvalidInput, std::format("Library URI '{}' contains an unresolved symlink component", uri));
+            Error::Code::InvalidInput, std::format("Library URI '{}' resolves outside the library root", uri));
         }
       }
 
       return {};
     }
+
+    // Keep the input components, not just the final resolved name. Absolute
+    // inputs may reach the configured tree through a different symlink or
+    // short-name spelling; after the first entry, validate its whole suffix.
+    Result<> checkInputTraversal(std::filesystem::path const& root,
+                                 std::filesystem::path const& candidate,
+                                 std::string_view input)
+    {
+      auto rootRes = utility::fileAccessPath(root);
+
+      if (!rootRes)
+      {
+        return std::unexpected{rootRes.error()};
+      }
+
+      // The ordinary in-root spelling needs only the redirect checks used for
+      // a stored URI. Do not normalize away any step from a disk input.
+      if (auto const relative = relativeToRoot(candidate, root);
+          !isOutsideRoot(relative) && !std::ranges::contains(relative, std::filesystem::path{"."}))
+      {
+        return rejectUnresolvedSymlinks(*rootRes, relative, input);
+      }
+
+      auto prefix = candidate.root_path();
+      auto const parts = candidate.relative_path();
+      auto part = parts.begin();
+#ifdef _WIN32
+      // For UNC paths root_path() names only the server. Start at the share,
+      // never probe an incomplete authority or skip the disk root itself.
+      if (prefix.native().starts_with(LR"(\\)") && part != parts.end())
+      {
+        prefix /= *part++;
+      }
+#endif
+      auto diskRootRes = utility::weaklyCanonicalFilePath(prefix);
+
+      if (!diskRootRes)
+      {
+        return std::unexpected{diskRootRes.error()};
+      }
+
+      auto const start = relativeToRoot(*diskRootRes, root);
+      bool entered = start == "." || !isOutsideRoot(start);
+
+      while (part != parts.end())
+      {
+        prefix /= *part++;
+        // Keep prefix in its input spelling. Each Windows I/O projects just
+        // this prefix, so a later '..' cannot erase an earlier observation.
+        auto accessRes = utility::fileAccessPath(prefix);
+
+        if (!accessRes)
+        {
+          return std::unexpected{accessRes.error()};
+        }
+
+        auto ec = std::error_code{};
+        auto const redirects = isRedirect(*accessRes, ec);
+
+        if (ec && ec != std::errc::no_such_file_or_directory)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to inspect library path '{}': {}", utility::pathToUtf8(prefix), ec.message()));
+        }
+
+#ifndef _WIN32
+        if (ec && std::find(part, parts.end(), "..") != parts.end())
+        {
+          return makeError(Error::Code::NotFound, "Cannot traverse missing directory in track file path");
+        }
+#endif
+        auto resolved =
+          redirects ? std::filesystem::canonical(*accessRes, ec) : std::filesystem::weakly_canonical(*accessRes, ec);
+
+        if (ec)
+        {
+          if (redirects)
+          {
+            return unresolvedComponent(input, ec);
+          }
+
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to resolve library path '{}': {}", utility::pathToUtf8(prefix), ec.message()));
+        }
+
+        auto const relative = relativeToRoot(utility::ordinaryFilePath(resolved), root);
+        auto const inside = relative == "." || !isOutsideRoot(relative);
+
+        if (!inside && entered)
+        {
+          return makeError(Error::Code::InvalidInput, std::format("track file is outside music root: {}", input));
+        }
+
+        entered = inside;
+      }
+
+      if (!entered)
+      {
+        return makeError(Error::Code::InvalidInput, std::format("track file is outside music root: {}", input));
+      }
+
+      return {};
+    }
+#ifdef _WIN32
+    // An absent ordinary suffix is allowed. A failed open of a reachable
+    // redirect (or a non-directory ancestor) is not evidence of absence.
+    Result<> validateBaselineDirectory(std::filesystem::path directory)
+    {
+      for (;;)
+      {
+        auto accessRes = utility::fileAccessPath(directory);
+
+        if (!accessRes)
+        {
+          return std::unexpected{accessRes.error()};
+        }
+
+        directory = utility::ordinaryFilePath(*accessRes);
+        auto ec = std::error_code{};
+
+        if (auto const physical = std::filesystem::canonical(*accessRes, ec); !ec)
+        {
+          auto resolvedRes = utility::fileAccessPath(physical);
+
+          if (!resolvedRes)
+          {
+            return std::unexpected{resolvedRes.error()};
+          }
+
+          if (std::filesystem::is_directory(*resolvedRes, ec))
+          {
+            return {};
+          }
+
+          if (!ec)
+          {
+            ec = std::make_error_code(std::errc::not_a_directory);
+          }
+        }
+        else if (ec == std::errc::no_such_file_or_directory)
+        {
+          auto probeEc = std::error_code{};
+
+          if (isRedirect(*accessRes, probeEc))
+          {
+            return unresolvedComponent(utility::pathToUtf8(directory), ec);
+          }
+
+          if (probeEc == std::errc::no_such_file_or_directory)
+          {
+            if (auto parent = directory.parent_path(); parent != directory)
+            {
+              directory = std::move(parent);
+              continue;
+            }
+          }
+          else if (probeEc)
+          {
+            ec = probeEc;
+          }
+        }
+
+        return makeError(
+          Error::Code::IoError,
+          std::format("Failed to inspect baseline directory '{}': {}", utility::pathToUtf8(directory), ec.message()));
+      }
+    }
+#endif
   } // namespace
 
   bool detail::isCanonicalLibraryUri(std::string_view const text) noexcept
@@ -205,7 +448,7 @@ namespace ao::library
 
     auto value = utility::pathToGenericUtf8(path);
 
-    if (value.empty() || value.starts_with('/'))
+    if (value.empty() || value.starts_with('/') || hasWindowsRootName(value))
     {
       return makeError(
         Error::Code::InvalidInput, std::format("Library URI {} must be root-relative", quotedInput(text)));
@@ -220,25 +463,133 @@ namespace ao::library
     return LibraryUri{std::move(value)};
   }
 
-  Result<std::filesystem::path> LibraryUri::resolveUnder(std::filesystem::path const& root) const
+  Result<LibraryUri> LibraryUri::fromFilePath(std::filesystem::path const& configuredRoot,
+                                              std::filesystem::path const& input)
   {
-    auto ec = std::error_code{};
-    auto const resolvedRoot = std::filesystem::weakly_canonical(root, ec);
+    auto rootRes = utility::weaklyCanonicalFilePath(configuredRoot);
 
-    if (ec)
+    if (!rootRes)
+    {
+      return std::unexpected{rootRes.error()};
+    }
+
+    auto const& root = *rootRes;
+    auto inputRes = utility::checkedFileSpelling(input);
+
+    if (!inputRes)
+    {
+      return std::unexpected{inputRes.error()};
+    }
+
+    auto const candidate = inputRes->is_absolute() ? *inputRes : root / *inputRes;
+    auto candidateRes = utility::fileAccessPath(candidate);
+
+    if (!candidateRes)
+    {
+      return std::unexpected{candidateRes.error()};
+    }
+
+    auto const inputText = utility::pathToUtf8(input);
+    auto ec = std::error_code{};
+    auto const fullPath = utility::ordinaryFilePath(std::filesystem::weakly_canonical(*candidateRes, ec));
+    auto const tooLong = ec == std::errc::filename_too_long;
+
+    if (ec && !tooLong)
+    {
+      if (ec == std::errc::no_such_file_or_directory)
+      {
+        return makeError(Error::Code::NotFound, std::format("track file not found under music root: {}", inputText));
+      }
+
+      return makeError(
+        Error::Code::IoError, std::format("Failed to resolve track file '{}': {}", inputText, ec.message()));
+    }
+
+    auto relative = relativeToRoot(fullPath, root);
+
+    if (tooLong)
+    {
+      // Measure a path the platform cannot resolve under either spelling of
+      // the configured root. Its lexical form can diagnose, never admit, it.
+      auto const lexical = candidate.lexically_normal();
+      relative = relativeToRoot(lexical, root);
+
+      if (isOutsideRoot(relative))
+      {
+        relative = relativeToRoot(lexical, utility::ordinaryFilePath(configuredRoot).lexically_normal());
+      }
+    }
+
+    if (isOutsideRoot(relative))
+    {
+      return makeError(Error::Code::InvalidInput, std::format("track file is outside music root: {}", inputText));
+    }
+
+    auto uriRes = parse(utility::pathToGenericUtf8(relative));
+
+    if (!uriRes)
+    {
+      auto const& error = uriRes.error();
+      return makeError(
+        error.code,
+        std::format("{}: {}: {}",
+                    error.code == Error::Code::ValueTooLarge ? "track file path is too long for the library"
+                                                             : "track file path does not form a library URI",
+                    inputText,
+                    error.message));
+    }
+
+    if (tooLong)
     {
       return makeError(Error::Code::IoError,
-                       std::format("Failed to resolve library root '{}': {}", utility::pathToUtf8(root), ec.message()));
+                       std::format("track file path is too long for the platform: {}: {}", inputText, ec.message()));
+    }
+
+    if (auto checkRes = checkInputTraversal(root, candidate, inputText); !checkRes)
+    {
+      return std::unexpected{checkRes.error()};
+    }
+
+    return uriRes;
+  }
+
+  Result<std::filesystem::path> LibraryUri::resolveUnder(std::filesystem::path const& root) const
+  {
+    auto fileRes = resolveFileUnder(root);
+    return fileRes.transform([](auto const& path) { return utility::ordinaryFilePath(path); });
+  }
+
+  Result<std::filesystem::path> LibraryUri::resolveFileUnder(std::filesystem::path const& root) const
+  {
+    auto rootRes = utility::weaklyCanonicalFilePath(root);
+
+    if (!rootRes)
+    {
+      return std::unexpected{rootRes.error()};
+    }
+
+    auto accessRootRes = utility::fileAccessPath(*rootRes);
+
+    if (!accessRootRes)
+    {
+      return std::unexpected{accessRootRes.error()};
     }
 
     auto const relative = utility::pathFromUtf8(_value);
+    auto candidateRes = utility::fileAccessPath(*rootRes / relative);
 
-    if (auto const symlinkRes = rejectUnresolvedSymlinks(resolvedRoot, relative, _value); !symlinkRes)
+    if (!candidateRes)
+    {
+      return std::unexpected{candidateRes.error()};
+    }
+
+    if (auto const symlinkRes = rejectUnresolvedSymlinks(*accessRootRes, relative, _value); !symlinkRes)
     {
       return std::unexpected{symlinkRes.error()};
     }
 
-    auto resolvedPath = std::filesystem::weakly_canonical(resolvedRoot / relative, ec);
+    auto ec = std::error_code{};
+    auto resolvedPath = utility::ordinaryFilePath(std::filesystem::weakly_canonical(*candidateRes, ec));
 
     if (ec)
     {
@@ -246,7 +597,7 @@ namespace ao::library
         Error::Code::IoError, std::format("Failed to resolve library path '{}': {}", _value, ec.message()));
     }
 
-    auto const resolvedRelative = resolvedPath.lexically_relative(resolvedRoot);
+    auto const resolvedRelative = relativeToRoot(resolvedPath, *rootRes);
 
     if (isOutsideRoot(resolvedRelative))
     {
@@ -254,6 +605,83 @@ namespace ao::library
         Error::Code::InvalidInput, std::format("Library URI '{}' resolves outside the library root", _value));
     }
 
-    return resolvedPath;
+    return utility::fileAccessPath(resolvedPath);
+  }
+
+  Result<std::optional<std::filesystem::path>> LibraryUri::resolveOptionalFileUnder(
+    std::filesystem::path const& root) const
+  {
+#ifdef _WIN32
+    auto prefix = std::filesystem::path{};
+    bool unrepresentable = false;
+
+    // Validate the complete URI before looking up a baseline. An unavailable
+    // name must not hide a later stream, drive specification, or pattern.
+    for (auto const& component : utility::pathFromUtf8(_value))
+    {
+      auto nameRes = utility::isRepresentableFileName(component);
+
+      if (!nameRes)
+      {
+        return std::unexpected{nameRes.error()};
+      }
+
+      if (!*nameRes)
+      {
+        unrepresentable = true;
+      }
+      else if (!unrepresentable)
+      {
+        prefix /= component;
+      }
+    }
+
+    if (unrepresentable)
+    {
+      // This URI can never be a native file. That does not excuse an
+      // invalid root, an inaccessible ancestor, or a prior redirect outside.
+      if (auto checkRes = validateBaselineDirectory(root); !checkRes)
+      {
+        return std::unexpected{checkRes.error()};
+      }
+
+      if (!prefix.empty())
+      {
+        auto rootRes = utility::weaklyCanonicalFilePath(root);
+
+        if (!rootRes)
+        {
+          return std::unexpected{rootRes.error()};
+        }
+
+        auto accessRes = utility::fileAccessPath(*rootRes);
+
+        if (!accessRes)
+        {
+          return std::unexpected{accessRes.error()};
+        }
+
+        if (auto checkRes = rejectUnresolvedSymlinks(*accessRes, prefix, _value); !checkRes)
+        {
+          return std::unexpected{checkRes.error()};
+        }
+
+        if (auto checkRes = validateBaselineDirectory(*rootRes / prefix); !checkRes)
+        {
+          return std::unexpected{checkRes.error()};
+        }
+      }
+
+      return std::nullopt;
+    }
+#endif
+    auto pathRes = resolveFileUnder(root);
+
+    if (!pathRes)
+    {
+      return std::unexpected{pathRes.error()};
+    }
+
+    return std::optional{std::move(*pathRes)};
   }
 } // namespace ao::library

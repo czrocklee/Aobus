@@ -1488,6 +1488,8 @@ cc_test(
         "perf/report/PerformanceReportTest.cpp",
     ] + select({
         "@platforms//os:linux": ["runtime/PlaybackSessionAlsaMuteTest.cpp"],
+        # This test exercises native Windows filesystem paths across MAX_PATH.
+        "@platforms//os:windows": ["windows/runtime/LibraryLongPathTest.cpp"],
         "//conditions:default": [],
     }),
     copts = AUDIO_TEST_COPTS,

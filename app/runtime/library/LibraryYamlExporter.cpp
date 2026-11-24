@@ -28,6 +28,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/AtomicFile.h>
+#include <ao/utility/FileAccessPath.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -823,28 +824,32 @@ namespace ao::rt
 
     if (mode == ExportMode::Delta)
     {
-      auto fileEc = std::error_code{};
+      auto optFullPathRes = uriRes->resolveOptionalFileUnder(ml.rootPath());
 
-      auto fullPathRes = uriRes->resolveUnder(ml.rootPath());
-
-      if (!fullPathRes)
+      if (!optFullPathRes)
       {
-        return std::unexpected{fullPathRes.error()};
+        return std::unexpected{optFullPathRes.error()};
       }
 
-      if (auto const& fullPath = *fullPathRes; std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      if (auto const& optFullPath = *optFullPathRes; optFullPath)
       {
-        if (auto mediaTrackRes = readMediaTrack(fullPath); mediaTrackRes)
+        auto fileEc = std::error_code{};
+
+        if (auto const& fullPath = *optFullPath; std::filesystem::exists(fullPath, fileEc) && !fileEc)
         {
-          optMediaTrack.emplace(std::move(*mediaTrackRes));
-          optBaseline = optMediaTrack->builder();
+          if (auto mediaTrackRes = readMediaTrack(fullPath); mediaTrackRes)
+          {
+            optMediaTrack.emplace(std::move(*mediaTrackRes));
+            optBaseline = optMediaTrack->builder();
+          }
         }
-      }
-      else if (fileEc)
-      {
-        return makeError(
-          Error::Code::IoError,
-          std::format("Failed to inspect file '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
+        else if (fileEc)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to inspect file '{}': {}",
+                                       utility::pathToUtf8(utility::ordinaryFilePath(fullPath)),
+                                       fileEc.message()));
+        }
       }
     }
 
