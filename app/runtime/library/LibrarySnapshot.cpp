@@ -9,8 +9,8 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>

@@ -10,7 +10,7 @@
 #include "track/TrackRowObject.h"
 #include "track/TrackRowPathDemand.h"
 #include <ao/async/Subscription.h>
-#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>

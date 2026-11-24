@@ -6,7 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
-#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackFieldValue.h>
 

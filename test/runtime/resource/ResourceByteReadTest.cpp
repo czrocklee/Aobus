@@ -17,7 +17,7 @@
 #include <ao/PictureType.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ReadTransaction.h>

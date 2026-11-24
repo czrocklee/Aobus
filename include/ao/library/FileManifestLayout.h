@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
+#include <ao/library/FileStatus.h>
 #include <ao/utility/Hash128.h>
 
 #include <array>
@@ -15,16 +16,6 @@
 
 namespace ao::library
 {
-  /**
-   * FileStatus - Physical availability of a track.
-   */
-  enum class FileStatus : std::uint8_t
-  {
-    Available = 0,
-    Missing = 1,
-    Error = 2
-  };
-
   /**
    * FileManifestHeader - POD struct for physical file tracking.
    * Total size: 52 bytes with 4-byte alignment.

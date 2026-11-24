@@ -6,8 +6,8 @@
 #include "test/library/MusicLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/AudioIdentity.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryPaths.h>

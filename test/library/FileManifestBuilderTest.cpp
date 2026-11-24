@@ -5,17 +5,21 @@
 
 #include "lib/library/FileManifestValidation.h"
 #include "test/TestFixtureSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/library/FileStatus.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace ao::library::test
@@ -43,6 +47,25 @@ namespace ao::library::test
     CHECK(view.audioPayloadLength() == 777777);
     CHECK(view.audioSignature() == signature);
     CHECK(view.status() == FileStatus::Error);
+  }
+
+  TEST_CASE("FileManifestBuilder - preserves the persisted status byte")
+  {
+    static_assert(std::is_same_v<std::underlying_type_t<FileStatus>, std::uint8_t>);
+    constexpr std::size_t kStatusOffset = 48;
+    constexpr auto kEncodings = std::array{
+      std::pair{FileStatus::Available, std::byte{0}},
+      std::pair{FileStatus::Missing, std::byte{1}},
+      std::pair{FileStatus::Error, std::byte{2}},
+    };
+
+    for (auto const& [status, encoded] : kEncodings)
+    {
+      auto const bytes = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).status(status).serialize();
+      REQUIRE(bytes.size() == 52);
+      CHECK(bytes[kStatusOffset] == encoded);
+      CHECK(FileManifestView{bytes}.status() == status);
+    }
   }
 
   TEST_CASE("FileManifestBuilder - constructs from view")

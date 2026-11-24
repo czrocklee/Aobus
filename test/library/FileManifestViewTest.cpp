@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>

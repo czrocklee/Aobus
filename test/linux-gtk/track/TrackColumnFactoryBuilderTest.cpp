@@ -15,7 +15,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
-#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>

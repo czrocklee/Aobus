@@ -10,8 +10,8 @@
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/rt/library/ScanPlan.h>
 

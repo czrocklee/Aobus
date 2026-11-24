@@ -10,8 +10,8 @@
 #include <ao/CoreIds.h>
 #include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
