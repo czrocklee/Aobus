@@ -189,7 +189,7 @@ jobs:
         run: |
           # Expand variables inside the Nix child, not the runner's host shell.
           # shellcheck disable=SC2016
-          nix-shell --run 'python3 script/ao/portal/bazel_remote_cache.py start --state "$RUNNER_TEMP/aobus-bazel-remote" --github-output "$GITHUB_OUTPUT" --runner-os "$RUNNER_OS" --runner-arch "$RUNNER_ARCH" --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"'
+          script/ao/pinned-nix-shell.sh ./shell.nix --run 'python3 script/ao/portal/bazel_remote_cache.py start --state "$RUNNER_TEMP/aobus-bazel-remote" --github-output "$GITHUB_OUTPUT" --runner-os "$RUNNER_OS" --runner-arch "$RUNNER_ARCH" --trusted-writer "$CACHE_UPLOAD" --key-prefix "$CACHE_PREFIX"'
 
       - name: Require requested R2 cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.r2 }}
@@ -214,7 +214,7 @@ jobs:
         run: |
           # Expand variables inside the Nix child, not the runner's host shell.
           # shellcheck disable=SC2016
-          nix-shell --run 'python3 script/ao/portal/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
+          script/ao/pinned-nix-shell.sh ./shell.nix --run 'python3 script/ao/portal/bazel_remote_cache.py stop --state "$RUNNER_TEMP/aobus-bazel-remote" --report "$RUNNER_TEMP/bazel-r2-stop.json"'
 
       # Only look up tools in Nix. Bare Bazel must discover the SDK without the portal.
       - name: Test direct Bazel entry
@@ -224,7 +224,7 @@ jobs:
           unset AOBUS_BAZEL_CONFIGURATION AOBUS_BAZEL_PYTHON AOBUS_BAZEL_LINT_CONFIGURATION \
             AOBUS_NIX_DEPENDENCY_REPORT AO_NIX_PORTAL_PYTHON AOBUS_BAZEL_REMOTE_CACHE
           # shellcheck disable=SC2016
-          tools="$(nix-shell --pure --run 'set -eu; printf "%s\t%s\t%s\n" "$(command -v bazel)" "$AOBUS_BAZEL_SERVER_JAVABASE" "$(command -v python3)"')"
+          tools="$(script/ao/pinned-nix-shell.sh ./shell.nix --pure --run 'set -eu; printf "%s\t%s\t%s\n" "$(command -v bazel)" "$AOBUS_BAZEL_SERVER_JAVABASE" "$(command -v python3)"')"
           IFS=$'\t' read -r bazel server_javabase python <<< "$tools"
           bare="$RUNNER_TEMP/aobus-bare"
           mkdir -p "$bare"
@@ -245,7 +245,7 @@ jobs:
         run: |
           # Expand runner paths inside the pinned Python environment.
           # shellcheck disable=SC2016
-          nix-shell --run 'python script/ao/portal/bazel_ci_summary.py \
+          script/ao/pinned-nix-shell.sh ./shell.nix --run 'python script/ao/portal/bazel_ci_summary.py \
             --tree "$RUNNER_TEMP/aobus-bazel-fastbuild" \
             --remote-start "$BAZEL_REMOTE_START" --remote-bound "$BAZEL_REMOTE_BOUND" \
             --remote-stop-outcome "$BAZEL_REMOTE_STOP" \
