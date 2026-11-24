@@ -93,21 +93,33 @@ namespace ao::winui::test
     CHECK(plans.front().actionId == "playback.playPause");
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - an action that presents from an anchor is dropped")
+  TEST_CASE("KeymapAcceleratorPlan - shipped anchor requirements exclude custom key bindings")
   {
-    // A keystroke has no anchor, so binding one would raise a menu at nowhere.
-    auto const keymap = KeymapModel{KeymapBindings{{"playback.showOutputDeviceSelector", {chord("Ctrl+O")}}}};
-    auto const schema = schemaWith("playback.showOutputDeviceSelector",
-                                   uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu);
+    auto const schema = layoutSchema();
+    REQUIRE(schema.action("library.rescan"));
+    REQUIRE_FALSE(schema.action(uimodel::kRevealCurrentTrackActionId));
 
-    CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).empty());
+    // All handlers are offered to isolate the shipped schema's keyboard admission policy.
+    auto const keymap = KeymapModel{KeymapBindings{
+      {"library.open", {chord("Ctrl+O")}},
+      {"shell.showSystemMenu", {chord("Ctrl+M")}},
+      {"playback.showOutputDeviceSelector", {chord("Ctrl+D")}},
+      {"library.rescan", {chord("Ctrl+R")}},
+      {std::string{uimodel::kRevealCurrentTrackActionId}, {chord("Ctrl+L")}},
+    }};
+    auto const plans = planKeymapAccelerators(keymap, schema, kEverythingOffered);
+
+    CHECK(plans.size() == 2);
+    CHECK(std::ranges::contains(plans, std::string{"library.rescan"}, &KeymapAcceleratorPlan::actionId));
+    CHECK(std::ranges::contains(
+      plans, std::string{uimodel::kRevealCurrentTrackActionId}, &KeymapAcceleratorPlan::actionId));
   }
 
   TEST_CASE("KeymapAcceleratorPlan - a menu that needs no anchor is kept")
   {
-    auto const keymap = KeymapModel{KeymapBindings{{"shell.showSoul", {chord("Ctrl+K")}}}};
+    auto const keymap = KeymapModel{KeymapBindings{{"test.anchorlessMenu", {chord("Ctrl+K")}}}};
     auto const schema =
-      schemaWith("shell.showSoul", uimodel::actionCapabilityBit(uimodel::ActionCapability::PresentsMenu));
+      schemaWith("test.anchorlessMenu", uimodel::actionCapabilityBit(uimodel::ActionCapability::PresentsMenu));
 
     CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).size() == 1);
   }
