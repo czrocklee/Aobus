@@ -95,14 +95,7 @@ if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
         CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH; do
         unset -v "$inherited"
     done
-    # nix-shell otherwise resolves its launch Bash through ambient <nixpkgs>.
-    # A host Bash also prepends its directory (often /usr/bin) ahead of pinned
-    # tools, so resolve the launch shell from the same project dependency pin.
-    if [[ -z "${NIX_BUILD_SHELL:-}" ]]; then
-        NIX_BUILD_SHELL="$(nix-build "$ROOT/shell.nix" -A portalShell --no-out-link)/bin/bash"
-        export NIX_BUILD_SHELL
-    fi
-    exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
+    exec "$ROOT/script/ao/pinned-nix-shell.sh" "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 
 # Reuse must not adopt a subsequently activated virtualenv or ambient packages.

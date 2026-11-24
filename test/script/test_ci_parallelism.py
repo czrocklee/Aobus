@@ -40,14 +40,59 @@ def _needs(job: str) -> set[str]:
     return set(re.findall(r"[\w-]+", _field(job, 4, "needs"))) - {"-"}
 
 
-def _run_bash(
-    step: str, env: dict[str, str], *, cwd: Path | None = None, prelude: str = ""
-) -> subprocess.CompletedProcess[str]:
+def _direct_nix_shell_lines(workflow: str) -> list[int]:
+    """Heuristically scan inline and literal-block workflow `run:` scalars only.
+
+    Match common shell command positions, simple assignments, and backslash
+    continuations. This is not shell parsing: quoting and here-docs are not
+    interpreted, and folded YAML scalars are not scanned.
+    """
+    assignment = r"[a-zA-Z_]\w*=(?:'[^']*'|\"[^\"]*\"|[^\s'\";|&()]*)\s+"
+    direct_call = re.compile(
+        r"(?:^|\$\(|[;|&])\s*['\"]?(?:(?:command|exec)\s+)?(?:env\s+)?"
+        rf"(?:{assignment})*(?:[\w./-]+/)?nix-shell(?=$|[\s'\");|&])"
+    )
+    calls = []
+    run_indent = None
+    folded = False
+    pending = ""
+    start = 0
+    for number, line in enumerate(workflow.splitlines(), 1):
+        indent = len(line) - len(line.lstrip())
+        if run_indent is not None and (not line.strip() or indent > run_indent):
+            if folded:
+                continue
+            command = line
+        else:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            pending = ""
+            run_indent = None
+            if not (run := re.match(r"^ *(?:- )?(?P<key>run): *(?P<body>.*)$", line)):
+                continue
+            command = run["body"]
+            if re.match(r"^[|>][1-9+-]{0,2}(?:\s|$)", command):
+                run_indent = run.start("key")
+                folded = command.startswith(">")
+                continue
+        if not pending:
+            start = number
+        command = re.split(r"(?:^|\s)#", pending + command, maxsplit=1)[0]
+        if command.endswith("\\"):
+            pending = command[:-1]
+            continue
+        pending = ""
+        if direct_call.search(command):
+            calls.append(start)
+    return calls
+
+
+def _run_bash(step: str, env: dict[str, str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     # GitHub enables pipefail for explicit bash, but not for the Linux default shell.
     options = ["--noprofile", "--norc", "-eo", "pipefail"] if _field(step, 8, "shell") == "bash" else ["-e"]
     body = step.split("        run: |\n", 1)[1]
     return subprocess.run(
-        ["bash", *options, "-c", prelude + textwrap.dedent(body)],
+        ["bash", *options, "-c", textwrap.dedent(body)],
         cwd=cwd,
         env={"PATH": os.environ["PATH"], **env},
         capture_output=True,
@@ -60,6 +105,33 @@ def _run_verdict(step: str, context: dict[str, str]) -> subprocess.CompletedProc
     # Feed the actual workflow bindings so a swapped result cannot pass the shell test.
     bindings = re.findall(r"(?m)^ *(\w+):[ \t]*\$\{\{\s*([\w.-]+)\s*\}\}", _field(step, 8, "env"))
     return _run_bash(step, {name: context[source] for name, source in bindings if source in context})
+
+
+class WorkflowNixShellTest(unittest.TestCase):
+    def test_detects_common_direct_calls_without_matching_command_arguments(self):
+        for workflow, expected in (
+            ("run: nix-shell --run true", [1]),
+            ("run: NIX_PATH= nix-shell --run true", [1]),
+            ('run: env NIX_PATH="" LABEL="two words" /usr/bin/nix-shell --run true', [1]),
+            ('run: tools="$(NIX_PATH= nix-shell --pure --run true)"', [1]),
+            ("run: |\n  env NIX_PATH= \\\n    nix-shell --run true", [2]),
+            ("run: |\n  echo \\\n    nix-shell", []),
+            ("run: |\n  # nix-shell --run true\n  echo nix-shell # ; nix-shell", []),
+            ("run: env NIX_PATH= script/ao/pinned-nix-shell.sh ./shell.nix", []),
+            ("run: >-\n  echo\n  nix-shell", []),
+            ("name: nix-shell --run true\nenv:\n  COMMAND: nix-shell", []),
+        ):
+            with self.subTest(workflow=workflow):
+                self.assertEqual(_direct_nix_shell_lines(workflow), expected)
+
+    def test_workflow_run_commands_use_the_pinned_nix_shell_launcher(self):
+        calls = [
+            f"{path.relative_to(PROJECT_ROOT)}:{line}"
+            for path in sorted(WORKFLOW.parent.iterdir())
+            if path.suffix in (".yml", ".yaml") and path.is_file()
+            for line in _direct_nix_shell_lines(path.read_text(encoding="utf-8"))
+        ]
+        self.assertFalse(calls, "Use script/ao/pinned-nix-shell.sh instead of nix-shell at:\n" + "\n".join(calls))
 
 
 class GateRoutingTest(unittest.TestCase):
@@ -131,20 +203,34 @@ class LinuxVerdictTest(unittest.TestCase):
         step = _step(_job("linux"), "Test direct Bazel entry")
         self.assertIn(_field(step, 8, "continue-on-error"), ("", "false"))
         root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="bare bazel ")))
-        bazel = root / "bazel"
-        bazel.write_text(
-            "#!/usr/bin/env bash\n"
+
+        def stub(name: str, body: str) -> Path:
+            executable = root / name
+            executable.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8")
+            executable.chmod(0o755)
+            return executable
+
+        stub("nix-build", '[[ "$*" == "./shell.nix -A portalShell --no-out-link" ]] && echo /fixture/pinned-bash\n')
+        stub(
+            "nix-shell",
+            '[[ "$1" == ./shell.nix && "$2" == --pure && "$3" == --run ]] || exit 2\n'
+            '[[ "$NIX_BUILD_SHELL" == /fixture/pinned-bash/bin/bash ]] || exit 3\n'
+            'printf "%s\\t%s\\t%s\\n" "$FAKE_BAZEL" /fixture/jdk "$TEST_PYTHON"\n',
+        )
+        bazel = stub(
+            "bazel",
             '[[ " $* " == *" build "* && " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
             "[[ -z ${AOBUS_BAZEL_CONFIGURATION+x} && -z ${AOBUS_BAZEL_REMOTE_CACHE+x} ]] || exit 3\n"
+            "[[ -z ${NIX_BUILD_SHELL+x} ]] || exit 4\n"
             ': > "$0.ran"\n'
             "exit 37\n",
-            encoding="utf-8",
         )
-        bazel.chmod(0o755)
         result = _run_bash(
             step,
             {
                 "RUNNER_TEMP": str(root),
+                "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                "NIX_PATH": "",
                 "FAKE_BAZEL": str(bazel),
                 "TEST_PYTHON": sys.executable,
                 "PYTHONDONTWRITEBYTECODE": "1",
@@ -155,7 +241,6 @@ class LinuxVerdictTest(unittest.TestCase):
                 "AOBUS_BAZEL_REMOTE_CACHE": "must-not-inherit",
             },
             cwd=PROJECT_ROOT,
-            prelude='nix-shell() { printf "%s\\t%s\\t%s\\n" "$FAKE_BAZEL" /fixture/jdk "$TEST_PYTHON"; }\n',
         )
         self.assertTrue(bazel.with_suffix(".ran").is_file(), result.stdout + result.stderr)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)

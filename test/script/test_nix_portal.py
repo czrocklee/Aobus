@@ -52,6 +52,8 @@ class NativeNixPortalTest(unittest.TestCase):
         self.package.mkdir(parents=True)
         self.portal = self.checkout / "ao"
         shutil.copy2(PROJECT_ROOT / "ao", self.portal)
+        self.pinned_shell = self.package / "pinned-nix-shell.sh"
+        shutil.copy2(PROJECT_ROOT / "script/ao/pinned-nix-shell.sh", self.pinned_shell)
         for name in SHELL_INPUTS:
             shutil.copy2(PROJECT_ROOT / name, self.checkout / name)
         (self.package / "__init__.py").touch()
@@ -123,6 +125,48 @@ class NativeNixPortalTest(unittest.TestCase):
             timeout=30,
         )
 
+    def _run_pinned_shell(self, *args, **environment):
+        return subprocess.run(
+            [str(self.pinned_shell), *args],
+            env={**self.environment, "NIX_PATH": "", **environment},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def test_pinned_shell_requires_a_file_before_options_even_with_an_override(self):
+        self._stub("nix-build", "echo unexpected nix-build >&2; exit 37")
+        self._stub("nix-shell", "echo unexpected nix-shell >&2; exit 38")
+        for args in (
+            (),
+            ("--pure", str(self.checkout / "shell.nix")),
+            (str(self.checkout / "missing.nix"),),
+            (str(self.checkout),),
+        ):
+            for override in ("", "/explicit/bash"):
+                with self.subTest(args=args, override=override):
+                    result = self._run_pinned_shell(*args, NIX_BUILD_SHELL=override)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertIn("Usage: pinned-nix-shell.sh <existing Nix file>", result.stderr)
+                    self.assertNotIn("unexpected", result.stderr)
+                    self.assertEqual(result.stdout, "")
+
+    def test_pinned_shell_preserves_a_file_with_spaces_and_forwards_options(self):
+        shell_nix = str(self.checkout / "shell.nix")
+        self._stub(
+            "nix-build",
+            '[ -z "$NIX_BUILD_SHELL" ] && [ "$1" = "$EXPECTED_NIX" ] && [ "$#" -eq 4 ] || exit 37\n'
+            '[ "$2" = -A ] && [ "$3" = portalShell ] && [ "$4" = --no-out-link ] || exit 38\n'
+            "printf '%s\\n' /fixture/pinned",
+        )
+        self._stub("nix-shell", 'printf "%s\\n" "$NIX_BUILD_SHELL" "$@"')
+        args = (shell_nix, "--pure", "--keep", "FIXTURE", "--run", "printf '%s' 'words with spaces'")
+        for override in ("", "/explicit/bash"):
+            with self.subTest(override=override):
+                result = self._run_pinned_shell(*args, NIX_BUILD_SHELL=override, EXPECTED_NIX=shell_nix)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [override or "/fixture/pinned/bin/bash", *args])
+
     def test_nix_reentry_selects_bash_without_a_nix_search_path(self):
         shell_package = self.root / "pinned-bash"
         self._stub("nix-build", f'printf "%s\\n" "{shell_package}"')
@@ -132,6 +176,7 @@ class NativeNixPortalTest(unittest.TestCase):
             with self.subTest(selected_shell=selected_shell):
                 environment = {"NIX_PATH": ""}
                 if selected_shell is not None:
+                    self._stub("nix-build", "exit 37")
                     environment["NIX_BUILD_SHELL"] = selected_shell
                 result = self._run_portal(**environment)
 
@@ -140,6 +185,20 @@ class NativeNixPortalTest(unittest.TestCase):
                 self.assertEqual(lines[0], selected_shell or str(shell_package / "bin/bash"))
                 self.assertEqual(lines[1:3], [str(self.checkout / "shell.nix"), "--run"])
                 self.assertIn("AO_IN_NIX_PORTAL=1", lines[3])
+
+    def test_nix_reentry_stops_if_pinned_bash_resolution_fails(self):
+        self._stub("nix-build", "exit 37")
+        result = self._run_portal(NIX_PATH="", NIX_BUILD_SHELL="")
+        self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_nix_reentry_rejects_empty_or_multiple_pinned_bash_outputs(self):
+        for body in ("exit 0", "printf '%s\\n' /fixture/out /fixture/man"):
+            with self.subTest(body=body):
+                self._stub("nix-build", body)
+                result = self._run_portal(NIX_PATH="", NIX_BUILD_SHELL="")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(result.stdout, "")
 
     def test_nix_reentry_reuses_only_a_shell_built_from_current_inputs(self):
         for fingerprint, expected in ((self._fingerprint(), "portal entered"), ("0" * 64, "nix-shell re-entered")):
