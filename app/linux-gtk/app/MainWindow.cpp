@@ -725,7 +725,6 @@ namespace ao::gtk
       .textCatalog = _implPtr->textCatalog,
       .playbackActions = &_implPtr->playbackActions,
       .themeCoordinator = &_implPtr->themeCoordinator,
-      .trackRowCache = &_implPtr->trackRowCache,
       .imageLoader = &_implPtr->resourceImageLoader,
       .tagEditController = &_implPtr->tagEditController,
       .importExportActions = &_implPtr->importExportCoordinator,

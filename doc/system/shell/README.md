@@ -61,11 +61,12 @@ scope. Component factories capture the exact long-lived collaborators they need
 at registration; `LayoutBuildContext` carries only one build's snapshot and
 traversal state.
 
-Every rebuild constructs a complete detached tree before replacing the active
-generation. `LayoutSession` advances the component-state generation before the
+Every rebuild constructs a detached tree with reserved shared-widget slots before
+replacing the active generation. `LayoutSession` advances the component-state generation before the
 old tree is destroyed, preventing retiring widgets from writing into successor
-state. The candidate-only `SharedWidgetHandoff` protects the one shell-owned
-track-page widget while a build is accepted or rolled back.
+state. The candidate-only `SharedWidgetHandoff` reserves slots for the shared track-page
+stack and List navigation panel without moving them until commit; see the
+[layout lifecycle](layout-lifecycle.md#expand-and-build) for their ownership and handoff.
 
 Component state is separate from authored layout. A stateful component resolves
 state by stable expanded node id, type, entry version, and authored baseline hash.

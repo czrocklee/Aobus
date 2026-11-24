@@ -52,7 +52,6 @@ namespace ao::gtk
   class TagEditController;
   class ThemeCoordinator;
   class TrackPageHost;
-  class TrackRowCache;
 
   namespace portal
   {
@@ -73,7 +72,6 @@ namespace ao::gtk::layout
                                   i18n::MessageCatalog const& textCatalog,
                                   uimodel::OutputDeviceIntent const& outputDeviceIntent);
   void registerSemanticComponents(ComponentRegistry& registry,
-                                  TrackRowCache* trackRowCache,
                                   TrackPageHost* trackPageHost,
                                   ListNavigationController* listNavigationController,
                                   portal::ImportExportActions* importExportActions,
@@ -148,9 +146,7 @@ namespace ao::gtk::layout
 
   void registerLabelComponent(ComponentRegistry& registry);
   void registerActionButtonComponent(ComponentRegistry& registry);
-  void registerListTreeComponent(ComponentRegistry& registry,
-                                 TrackRowCache* trackRowCache,
-                                 ListNavigationController* listNavigationController);
+  void registerListTreeComponent(ComponentRegistry& registry, ListNavigationController* listNavigationController);
   void registerTracksTableComponent(ComponentRegistry& registry, TrackPageHost* trackPageHost);
   void registerOpenLibraryButtonComponent(ComponentRegistry& registry,
                                           portal::ImportExportActions* importExportActions,
