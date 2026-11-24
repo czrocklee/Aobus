@@ -8,6 +8,8 @@
 #include "test/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Contract.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/desktop/LibraryPath.h>
+#include <ao/utility/Path.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -15,6 +17,8 @@
 
 namespace ao::appkit::test::desktop
 {
+  NSString* const kPendingFixtureTrack = @"AppKit Fixture Track 20";
+
   namespace
   {
     NSString* const kUnknownSettingKey = @"scenarioUnknownSetting";
@@ -52,6 +56,39 @@ namespace ao::appkit::test::desktop
       auto const delegate = table.delegate;
       return [delegate respondsToSelector:@selector(tableView:isGroupRow:)] != NO && [delegate tableView:table
                                                                                               isGroupRow:row] != NO;
+    }
+
+    template<typename Matches>
+    NSMenuItem* findMatchingMenuItem(NSMenu* menu, Matches const& matches)
+    {
+      if (menu == nil)
+      {
+        return nil;
+      }
+
+      if (auto const delegate = menu.delegate; [delegate respondsToSelector:@selector(menuNeedsUpdate:)] != NO)
+      {
+        [delegate menuNeedsUpdate:menu];
+      }
+
+      auto* const items = menu.itemArray;
+
+      for (NSUInteger index = 0; index < items.count; ++index)
+      {
+        auto* const item = items[index];
+
+        if (matches(item))
+        {
+          return item;
+        }
+
+        if (auto* const found = findMatchingMenuItem(item.submenu, matches); found != nil)
+        {
+          return found;
+        }
+      }
+
+      return nil;
     }
   } // namespace
 
@@ -169,37 +206,58 @@ namespace ao::appkit::test::desktop
     return [result copy];
   }
 
+  NSInteger trackRow(NSTableView* table, NSString* title)
+  {
+    auto const column = [table columnWithIdentifier:@"Title"];
+    AO_INVARIANT(column >= 0, "The native track table must expose its Title column");
+
+    for (NSInteger row = 0; row < table.numberOfRows; ++row)
+    {
+      if (isGroupRow(table, row))
+      {
+        continue;
+      }
+
+      auto* const cell = static_cast<NSTableCellView*>([table viewAtColumn:column row:row makeIfNecessary:YES]);
+
+      if ([cell.textField.stringValue isEqual:title] != NO)
+      {
+        return row;
+      }
+    }
+
+    return -1;
+  }
+
   NSMenuItem* findMenuItem(NSMenu* menu, SEL action, bool matchTag, NSInteger tag, NSString* representedObject)
   {
-    if (menu == nil)
-    {
-      return nil;
-    }
-
-    if (auto const delegate = menu.delegate; [delegate respondsToSelector:@selector(menuNeedsUpdate:)] != NO)
-    {
-      [delegate menuNeedsUpdate:menu];
-    }
-
-    auto* const items = menu.itemArray;
-
-    for (NSUInteger index = 0; index < items.count; ++index)
-    {
-      auto* const item = items[index];
-
-      if (item.action == action && (!matchTag || item.tag == tag) &&
-          (representedObject == nil || [item.representedObject isEqual:representedObject] != NO))
+    return findMatchingMenuItem(
+      menu,
+      [&](NSMenuItem* item)
       {
-        return item;
-      }
+        return item.action == action && (!matchTag || item.tag == tag) &&
+               (representedObject == nil || [item.representedObject isEqual:representedObject] != NO);
+      });
+  }
 
-      if (auto* const found = findMenuItem(item.submenu, action, matchTag, tag, representedObject); found != nil)
-      {
-        return found;
-      }
-    }
+  NSMenuItem* findRecentLibraryItem(std::filesystem::path const& root)
+  {
+    auto* const action = ::NSSelectorFromString(@"openRecentLibrary:");
+    return findMatchingMenuItem(NSApp.mainMenu,
+                                [&](NSMenuItem* item)
+                                {
+                                  id const payload = item.representedObject;
 
-    return nil;
+                                  if (item.action != action || [payload isKindOfClass:NSString.class] == NO)
+                                  {
+                                    return false;
+                                  }
+
+                                  NSString* const path = payload;
+                                  auto const* const native = path.fileSystemRepresentation;
+                                  return native != nullptr && *native != '\0' &&
+                                         ao::desktop::isSameLibraryRoot(root, utility::pathFromNative(native));
+                                });
   }
 
   void activateMenuItem(NSMenuItem* item, NSString* obligation)
@@ -326,14 +384,21 @@ namespace ao::appkit::test::desktop
     };
   }
 
+  void requireIndexedOpenWithoutScan(NSTableView* table, char const* context)
+  {
+    auto* const rescan = findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"rescan:"));
+    [rescan.menu update];
+    AO_INVARIANT(rescan.enabled != NO, "{} must leave Rescan enabled, not start a scan", context);
+    AO_INVARIANT(selectableRowCount(table) == kIndexedFixtureTrackCount && trackRow(table, kPendingFixtureTrack) < 0,
+                 "{} must show the saved index without importing the newly added track",
+                 context);
+  }
+
   void preseedSettings(DesktopLaunch const& launch)
   {
     AO_INVARIANT(launch.optRequest, "The desktop smoke requires an initial library request");
     auto const successorRoot = launch.stateRoot / "successor-library";
-    auto successorFixtureRes = prepareAppKitMediaLibrary(successorRoot);
-    auto const successorFixtureError = successorFixtureRes ? std::string{} : successorFixtureRes.error().message;
-    AO_INVARIANT(
-      successorFixtureRes, "The desktop successor must have its own playable media fixture: {}", successorFixtureError);
+    preindexLibraryWithPendingTrack(successorRoot, launch.stateRoot);
     auto const settingsPath = launch.stateRoot / "desktop.plist";
     NSMutableDictionary* settings = [[NSDictionary dictionaryWithContentsOfFile:nativePath(settingsPath)] mutableCopy];
 
@@ -352,7 +417,8 @@ namespace ao::appkit::test::desktop
       settings[@"output"] = missingOutputRoute();
     }
 
-    settings[@"libraryRoot"] = nativePath(launch.optRequest->libraryRoot);
+    // The public --library root must win over this valid saved root.
+    settings[@"libraryRoot"] = nativePath(successorRoot);
     settings[@"recentLibraries"] = @[nativePath(successorRoot)];
     // desktop.plist carries no version. Each value below has a type this build
     // never writes, as a damaged or hand-edited file can hold, so startup uses

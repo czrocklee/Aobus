@@ -69,14 +69,12 @@ transaction. TUI has no in-process or successor switch command.
 
 ### GTK
 
-GTK creates one `AppRuntime`, moves it into one `unique_ptr`, and constructs
-`MainWindow` only after that placement. The raw runtime pointer is attached
-directly to the window GObject with one delete notifier; there is no second heap
-smart-pointer holder for the runtime. `MainWindow` itself has an explicit C++
-`unique_ptr` owner. Deleting that owner releases frontend members and observers
-before GTK base teardown releases the attached runtime. A GObject-only `RefPtr`
-does not delete an unmanaged C++ window wrapper, so observing GObject finalization
-alone does not prove that its C++ collaborators retired.
+GTK places one `AppRuntime` in a `unique_ptr` before constructing `MainWindow`.
+A shared `WindowOwner` holds the application config store, runtime, and C++
+window owner; the returned `Glib::RefPtr` aliases that owner to the window.
+Reverse member destruction releases the window and its frontend observers before
+the runtime, then the borrowed config store. GObject finalization alone does not
+prove that the unmanaged C++ window wrapper and its collaborators retired.
 
 Preparation constructs library-backed pages, workspace, and shell layout.
 Activation then chooses ordinary playback restoration or successor idle start,

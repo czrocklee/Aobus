@@ -18,6 +18,7 @@ objc_library(
         "DesktopCommandSurface.mm",
         "DesktopControls.mm",
         "DesktopShell.mm",
+        "DesktopStartup.cpp",
         "EntryCompletionAdapter.mm",
         "LibraryBrowser.mm",
         "LibraryEditor.mm",
@@ -101,6 +102,7 @@ cc_binary(
     name = "aobus-appkit-bin",
     linkstatic = True,
     target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//test:__pkg__"],
     deps = [
         ":appkit",
         ":main",
@@ -151,6 +153,7 @@ objc_library(
     target_compatible_with = ["@platforms//os:macos"],
     deps = [
         ":appkit",
+        "//app/desktop:desktop_launch",
         # The test package owns the scenario headers and their local include root.
         "//test:appkit_smoke_headers",
         "//test:coreaudio_test_support",
@@ -167,6 +170,7 @@ cc_binary(
     testonly = True,
     linkstatic = True,
     target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//test:__pkg__"],
     deps = [
         ":appkit",
         ":appkit_smoke",

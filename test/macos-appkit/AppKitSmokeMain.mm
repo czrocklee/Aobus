@@ -4,7 +4,6 @@
 #include "AppKitPlaybackScenario.h"
 #include "AppKitScenarioSupport.h"
 #include <ao/Contract.h>
-#include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
 
@@ -25,45 +24,22 @@ int main(int argc, char** argv)
       arguments.emplace_back(argv[index]);
     }
 
-    auto parsedRes = ao::desktop::parseLibrarySuccessorProtocol(arguments);
+    auto startupRes = ao::appkit::parseDesktopStartupArguments(arguments, /*allowScenario=*/true);
 
-    if (!parsedRes)
+    if (!startupRes)
     {
+      std::println(stderr, "{}", startupRes.error().message);
       return 2;
     }
 
-    auto launch = ao::appkit::DesktopLaunch{};
-    auto const successor = parsedRes->optRequest.has_value();
-    launch.optRequest = std::move(parsedRes->optRequest);
-    auto scenario = std::string_view{"desktop"};
-    auto const& remaining = parsedRes->remainingArguments;
-
-    for (std::size_t index = 0; index < remaining.size(); ++index)
-    {
-      if (remaining[index] == "--state-root" && index + 1 < remaining.size())
-      {
-        launch.stateRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index]));
-      }
-      else if (remaining[index] == "--library" && index + 1 < remaining.size() && !launch.optRequest)
-      {
-        launch.optRequest = ao::desktop::LibrarySwitchRequest{
-          .libraryRoot = std::filesystem::absolute(ao::utility::pathFromUtf8(remaining[++index])),
-          .scanAfterOpen = true};
-      }
-      else if (remaining[index] == "--scenario" && index + 1 < remaining.size() && !successor)
-      {
-        scenario = remaining[++index];
-      }
-      else
-      {
-        return 2;
-      }
-    }
+    auto launch = std::move(startupRes->launch);
+    auto const successor = startupRes->successor;
+    auto const& scenario = startupRes->scenario;
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
-        (scenario != "desktop" && scenario != "membership" && scenario != "authoring" && scenario != "presentation" &&
-         scenario != "media" && scenario != "credits-controls" && scenario != "credits-previews" &&
-         scenario != "quality-presentation"))
+        (scenario != "desktop" && scenario != "initial-index" && scenario != "membership" && scenario != "authoring" &&
+         scenario != "presentation" && scenario != "media" && scenario != "credits-controls" &&
+         scenario != "credits-previews" && scenario != "quality-presentation"))
     {
       return 2;
     }
@@ -71,6 +47,12 @@ int main(int argc, char** argv)
     if (!successor)
     {
       auto fixtureRes = ao::appkit::test::prepareAppKitFixtureRoots(launch.optRequest->libraryRoot, launch.stateRoot);
+
+      // Desktop and membership populate their fixtures in two phases around indexing.
+      if (fixtureRes && scenario != "desktop" && scenario != "membership")
+      {
+        fixtureRes = ao::appkit::test::prepareAppKitMediaLibrary(launch.optRequest->libraryRoot);
+      }
 
       if (!fixtureRes)
       {
@@ -105,6 +87,11 @@ int main(int argc, char** argv)
       AO_INVARIANT(launcher.length > 0, "Desktop scenarios require the process supervisor's launch bridge");
       launch.executable = ao::utility::pathFromNative(launcher.fileSystemRepresentation);
       return ao::appkit::test::runDesktopScenario(std::move(launch), std::move(*catalogRes), successor);
+    }
+
+    if (scenario == "initial-index")
+    {
+      return ao::appkit::test::runInitialIndexScenario(std::move(launch), std::move(*catalogRes));
     }
 
     if (scenario == "membership")

@@ -6,18 +6,17 @@ id: user.use-tui
 
 ## Outcome
 
-You can open an existing Aobus library, browse and play tracks, filter the current view, edit selected tracks, and inspect the main panels from a terminal.
+You can open an Aobus library, browse and play tracks, filter the current view, edit selected tracks, and inspect the main panels from a terminal.
 
 ## Before you start
 
-The TUI opens an existing Aobus database; it does not create one.
-Initialize and index a root first with the Linux GTK application, Windows desktop, or:
+The TUI can create an empty database when opening a root, but it does not automatically index music. To prepare an indexed library first, use the Linux GTK application, Windows desktop, or:
 
 ```bash
 aobus -C /music init
 ```
 
-`aobus init` performs the initial scan. After files change, rescan from the TUI with `:scan`.
+`aobus init` performs the initial scan. You can also scan from the TUI with `:scan`, both for initial indexing and after files change.
 
 ## Open and browse a library
 

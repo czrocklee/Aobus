@@ -76,7 +76,7 @@ After that structural boundary accepts the group, invalid chord strings are skip
 Neutral keys that cannot map to GTK accelerators are skipped with a warning.
 Unknown action ids remain valid mapping keys but do not become schema-backed editor rows.
 
-The TUI adapter similarly diagnoses and omits Alt, Super, media, Unicode, mixed-modifier, and otherwise unsupported terminal chords without falling back the whole keymap.
+The TUI adapter supports Alt+Up, Alt+Down, Alt+Home, and Alt+End as terminal navigation sequences. It diagnoses and omits other Alt chords, Super, media, Unicode, mixed-modifier, and otherwise unsupported terminal chords without falling back the whole keymap. Alt plus a letter is ambiguous with Escape followed by that letter.
 Terminal aliases such as Ctrl-I/Tab and Ctrl-M/Return are compared after projection; the earlier TUI descriptor and chord wins, and later claims are diagnosed.
 Ctrl-C is representable by the adapter but never installable in the executable root plan because it belongs to the fixed graceful-exit protocol.
 
@@ -116,6 +116,8 @@ Renaming an action requires an explicit override migration or deliberate rejecti
 The GTK preferences page groups actions by locale-selected schema category, shows effective chords, captures a complete non-modifier key combination, surfaces localized conflict and editing copy, and applies accepted changes live.
 Action ids and neutral chord strings remain the untranslated identities; localized schema labels and categories are presentation only.
 Standalone modifier presses do not complete capture.
+
+AppKit uses native menu key equivalents rather than the Aobus shortcut override store; its menu shortcuts are not configurable through that store.
 
 GTK app-scoped `Ctrl+,` remains outside its current layout-action keymap.
 TUI bare Space is a frontend-local default for shared `playback.playPause`; protocol-owned text-input, list, overlay, notification, mouse, and escape behavior remains outside configurable root dispatch.

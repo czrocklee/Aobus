@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_test")
 load("//bazel:compiler_policy.bzl", "GTK_HEADER_SSE_COPTS", "PIPEWIRE_SPA_COPTS", "UNIX_TEST_COPTS")
 load("//bazel:testing.bzl", "native_test")
 load("//bazel:windows_utf8_manifest.bzl", "windows_utf8_manifest_checks")
@@ -130,6 +131,25 @@ windows_utf8_manifest_checks(
     target_compatible_with = ["@platforms//os:windows"],
 )
 
+# Use both raw AppKit executables so the smoke supervisor cannot rewrite argv.
+# Invalid arguments and fixture validation must complete without a GUI session.
+py_test(
+    name = "appkit_cli_test",
+    size = "small",
+    srcs = ["macos-appkit/appkit_cli_test.py"],
+    args = [
+        "$(rlocationpath //app/macos-appkit:aobus-appkit-bin)",
+        "$(rlocationpath //app/macos-appkit:ao_appkit_smoke_bin)",
+    ],
+    data = [
+        "//app/macos-appkit:ao_appkit_smoke_bin",
+        "//app/macos-appkit:aobus-appkit-bin",
+    ],
+    main = "macos-appkit/appkit_cli_test.py",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = ["@rules_python//python/runfiles"],
+)
+
 # Native process smokes reuse the shipping TUI and the existing WinUI probes.
 # The wrappers add execution only; they do not compile product sources twice.
 # The two console probes resolve the App Runtime natively and carry the staged
@@ -192,6 +212,7 @@ native_test(
 test_suite(
     name = "native_process_tests",
     tests = [
+        ":appkit_cli_test",
         ":tui_help_smoke",
         ":winui_localization_probe_test",
         ":winui_track_item_probe_test",

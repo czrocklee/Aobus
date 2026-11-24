@@ -1387,7 +1387,7 @@ namespace ao::appkit
       }
 
       auto planRes = ao::desktop::planLibrarySwitch(
-        _sessionPtr->runtime().musicRoot(), ao::utility::pathFromNative(url.fileSystemRepresentation), true);
+        _sessionPtr->runtime().musicRoot(), ao::utility::pathFromNative(url.fileSystemRepresentation), false);
 
       if (!planRes)
       {
@@ -1395,14 +1395,11 @@ namespace ao::appkit
         return;
       }
 
-      if (planRes->disposition == ao::desktop::LibrarySwitchDisposition::ReuseActive)
+      if (planRes->disposition == ao::desktop::LibrarySwitchDisposition::Restart)
       {
-        _sessionPtr->rescan();
-        return;
+        _optPendingSuccessor = std::move(planRes->request);
+        [self requestService];
       }
-
-      _optPendingSuccessor = std::move(planRes->request);
-      [self requestService];
     });
 }
 

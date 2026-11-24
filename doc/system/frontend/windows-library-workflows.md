@@ -41,8 +41,8 @@ completion before releasing Runtime borrowers.
 
 ## Scan
 
-When a successor root contains the canonical database, WinUI opens it without an
-implicit scan. When no canonical database exists, the successor first activates
+When a successor root has the [database marker](../desktop-library-lifecycle.md#invariants) and the request carries no scan intent, WinUI opens it without an
+implicit scan, even if indexing is incomplete. A request carrying scan intent still scans. Without the marker, the successor first activates
 the window and settles its durable-root gate, then starts the ordinary initial
 scan. The status line, which only the Classic preset shows, carries the
 warnings raised while the library opens: a failed root commit, settings or

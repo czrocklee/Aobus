@@ -24,23 +24,6 @@ namespace ao::appkit::test
     NSString* const kSecond = @"AppKit Fixture Track 02";
     NSString* const kSentinel = @"AppKit Fixture Track 03";
 
-    NSInteger trackRow(NSTableView* table, NSString* title)
-    {
-      auto const column = [table columnWithIdentifier:@"Title"];
-
-      for (NSInteger row = 0; row < table.numberOfRows; ++row)
-      {
-        auto* const cell = static_cast<NSTableCellView*>([table viewAtColumn:column row:row makeIfNecessary:YES]);
-
-        if ([cell.textField.stringValue isEqual:title] != NO)
-        {
-          return row;
-        }
-      }
-
-      return -1;
-    }
-
     NSArray<NSNumber*>* selectTracks(AobusLibraryBrowser* browser, NSArray<NSString*>* titles)
     {
       auto* const table = browser.tracks;
@@ -193,6 +176,23 @@ namespace ao::appkit::test
       }
     }
 
+    void exerciseInitialIndex()
+    {
+      requireWaitUntil([] { return findDesktopWindow() != nil; }, "The production desktop window must open");
+      auto* const table = findTrackTable(findDesktopWindow().contentView);
+      auto* const rescan = findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"rescan:"));
+      AO_INVARIANT(table != nil && rescan != nil, "The fresh desktop must expose the track table and Rescan action");
+      requireWaitUntil(
+        [&]
+        {
+          [rescan.menu update];
+          return rescan.enabled != NO && trackRow(table, kPendingFixtureTrack) >= 0;
+        },
+        "Opening a fresh library without explicit scan intent must index the fixture tracks");
+      AO_INVARIANT(selectableRowCount(table) == kIndexedFixtureTrackCount + 1,
+                   "The initial scan must show exactly twenty selectable fixture tracks");
+    }
+
     void exerciseMembership()
     {
       requireWaitUntil([] { return findDesktopWindow() != nil; }, "The production desktop window must open");
@@ -200,14 +200,9 @@ namespace ao::appkit::test
       auto* const table = findTrackTable(window.contentView);
       auto* const browser = static_cast<AobusLibraryBrowser*>(table.delegate);
       AO_INVARIANT([browser isKindOfClass:AobusLibraryBrowser.class] != NO, "The desktop must own the native browser");
-      auto* const rescan = findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"rescan:"));
-      requireWaitUntil(
-        [&]
-        {
-          [rescan.menu update];
-          return rescan.enabled != NO && trackRow(table, kSentinel) >= 0;
-        },
-        "The disposable fixture must finish scanning before list authoring");
+      requireWaitUntil([&] { return selectableRowCount(table) >= kIndexedFixtureTrackCount; },
+                       "The restored index must be visible before list authoring");
+      requireIndexedOpenWithoutScan(table, "Restoring the indexed library from desktop settings");
       auto* const computed = createList(browser, kComputed, @"not #blocked");
       selectTracks(browser, @[kFirst]);
       membershipItems(table, nil, nil);
@@ -250,27 +245,45 @@ namespace ao::appkit::test
       std::println(
         "AppKit membership: current plus other routes captured Add and Remove after selection changes passed");
     }
+    std::int32_t runDesktopCheck(DesktopLaunch launch, i18n::MessageCatalog catalog, void (*exercise)())
+    {
+      __block bool completed = false;
+      auto const observer = [NSNotificationCenter.defaultCenter
+        addObserverForName:NSApplicationWillTerminateNotification
+                    object:NSApp
+                     queue:nil
+                usingBlock:^(NSNotification*) {
+                  AO_INVARIANT(completed, "The desktop scenario must complete before Quit");
+                }];
+      [NSTimer scheduledTimerWithTimeInterval:0
+                                      repeats:NO
+                                        block:^(NSTimer*) {
+                                          exercise();
+                                          completed = true;
+                                          [NSApp terminate:nil];
+                                        }];
+      auto const status = runDesktopApplication(std::move(launch), std::move(catalog));
+      [NSNotificationCenter.defaultCenter removeObserver:observer];
+      return completed ? status : 1;
+    }
   } // namespace
+
+  std::int32_t runInitialIndexScenario(DesktopLaunch launch, i18n::MessageCatalog catalog)
+  {
+    AO_INVARIANT(launch.optRequest && !launch.optRequest->scanAfterOpen,
+                 "The first-open control must use the public library option without explicit scan intent");
+    return runDesktopCheck(std::move(launch), std::move(catalog), exerciseInitialIndex);
+  }
 
   std::int32_t runMembershipScenario(DesktopLaunch launch, i18n::MessageCatalog catalog)
   {
-    __block bool completed = false;
-    auto const observer = [NSNotificationCenter.defaultCenter
-      addObserverForName:NSApplicationWillTerminateNotification
-                  object:NSApp
-                   queue:nil
-              usingBlock:^(NSNotification*) {
-                AO_INVARIANT(completed, "The membership scenario must run before Quit");
-              }];
-    [NSTimer scheduledTimerWithTimeInterval:0
-                                    repeats:NO
-                                      block:^(NSTimer*) {
-                                        exerciseMembership();
-                                        completed = true;
-                                        [NSApp terminate:nil];
-                                      }];
-    auto const status = runDesktopApplication(std::move(launch), std::move(catalog));
-    [NSNotificationCenter.defaultCenter removeObserver:observer];
-    return completed ? status : 1;
+    AO_INVARIANT(launch.optRequest, "The membership scenario requires an isolated library fixture");
+    auto const& musicRoot = launch.optRequest->libraryRoot;
+    preindexLibraryWithPendingTrack(musicRoot, launch.stateRoot);
+    auto* const settings = @{@"libraryRoot": nativePath(musicRoot)};
+    auto const written = [settings writeToFile:nativePath(launch.stateRoot / "desktop.plist") atomically:YES];
+    AO_INVARIANT(written != NO, "The scenario must save the root that ordinary startup will restore");
+    launch.optRequest.reset();
+    return runDesktopCheck(std::move(launch), std::move(catalog), exerciseMembership);
   }
 } // namespace ao::appkit::test

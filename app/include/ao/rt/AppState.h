@@ -29,10 +29,9 @@ namespace ao::rt
   /**
    * @name Application-global configuration groups
    *
-   * The group names are part of the on-disk contract and are shared by every
-   * frontend that keeps application-global state. A frontend chooses the file
-   * these groups live in; it does not choose what they are called or what shape
-   * they have.
+   * These group names and shapes are part of the on-disk contract for frontends
+   * that use these application-global configuration groups. Each such frontend
+   * chooses the file in which they live.
    * @{
    */
   inline constexpr std::string_view kAppPrefsConfigGroup = "runtime";

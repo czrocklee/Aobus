@@ -34,7 +34,6 @@ namespace ao::appkit::test
 {
   namespace
   {
-    constexpr std::size_t kFixtureTrackCount = 20;
     constexpr std::uint32_t kFixtureSampleRate = 44100;
     constexpr std::size_t kFixtureDurationSeconds = 12;
 
@@ -154,28 +153,12 @@ namespace ao::appkit::test
     AO_INVARIANT(reached, "{}", obligation);
   }
 
-  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot)
+  namespace
   {
-    auto rootRes = requireEmptyFixturePath(musicRoot, "--library");
-
-    if (!rootRes)
+    Result<> writeFixtureTrack(std::filesystem::path const& musicRoot, std::int32_t trackNumber)
     {
-      return std::unexpected{rootRes.error()};
-    }
-
-    auto error = std::error_code{};
-    std::filesystem::create_directories(*rootRes, error);
-
-    if (error)
-    {
-      return makeError(
-        Error::Code::IoError,
-        std::format("Cannot create AppKit media fixture '{}': {}", utility::pathToUtf8(*rootRes), error.message()));
-    }
-
-    for (std::size_t index = 0; index < kFixtureTrackCount; ++index)
-    {
-      auto const frameCount = (kFixtureSampleRate * kFixtureDurationSeconds) + index;
+      auto const frameCount =
+        (kFixtureSampleRate * kFixtureDurationSeconds) + static_cast<std::size_t>(trackNumber - 1);
       auto spec = ao::test::wav::Spec{
         .channels = 1,
         .sampleRate = kFixtureSampleRate,
@@ -183,13 +166,13 @@ namespace ao::appkit::test
         .audioData = std::vector<std::uint8_t>(frameCount * 2),
         .infoFields =
           {
-            {.id = {'I', 'N', 'A', 'M'}, .value = std::format("AppKit Fixture Track {:02}", index + 1)},
+            {.id = {'I', 'N', 'A', 'M'}, .value = std::format("AppKit Fixture Track {:02}", trackNumber)},
             {.id = {'I', 'A', 'R', 'T'}, .value = "Aobus Fixture Artist"},
             {.id = {'I', 'P', 'R', 'D'}, .value = "Aobus Fixture Album"},
           },
       };
       auto const bytes = ao::test::wav::makeWav(spec);
-      auto const path = *rootRes / std::format("appkit-fixture-{:02}.wav", index + 1);
+      auto const path = musicRoot / std::format("appkit-fixture-{:02}.wav", trackNumber);
       auto output = std::ofstream{path, std::ios::binary | std::ios::out | std::ios::noreplace};
 
       if (!output)
@@ -206,9 +189,64 @@ namespace ao::appkit::test
         return makeError(
           Error::Code::IoError, std::format("Cannot write AppKit fixture track '{}'", utility::pathToUtf8(path)));
       }
+
+      return {};
     }
 
-    return {};
+    Result<> prepareMediaLibrary(std::filesystem::path const& musicRoot, std::int32_t trackCount)
+    {
+      auto rootRes = requireEmptyFixturePath(musicRoot, "--library");
+
+      if (!rootRes)
+      {
+        return std::unexpected{rootRes.error()};
+      }
+
+      auto error = std::error_code{};
+      std::filesystem::create_directories(*rootRes, error);
+
+      if (error)
+      {
+        return makeError(
+          Error::Code::IoError,
+          std::format("Cannot create AppKit media fixture '{}': {}", utility::pathToUtf8(*rootRes), error.message()));
+      }
+
+      for (std::int32_t trackNumber = 1; trackNumber <= trackCount; ++trackNumber)
+      {
+        if (auto res = writeFixtureTrack(*rootRes, trackNumber); !res)
+        {
+          return res;
+        }
+      }
+
+      return {};
+    }
+  } // namespace
+
+  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot)
+  {
+    return prepareMediaLibrary(musicRoot, kFixtureTrackCount);
+  }
+
+  void preindexLibraryWithPendingTrack(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
+  {
+    if (auto res = prepareMediaLibrary(musicRoot, kIndexedFixtureTrackCount); !res)
+    {
+      AO_FATAL("Could not prepare the indexed AppKit fixture: {}", res.error().message);
+    }
+
+    {
+      auto fixture = SessionFixture{musicRoot, stateRoot, SessionFixture::AudioOutput::Silent};
+      AO_INVARIANT(fixture.session().displayIndex().rowCount() == kIndexedFixtureTrackCount,
+                   "Only the original media may be present in the saved index");
+    }
+
+    // The new media must not exist until the indexing session has released the library.
+    if (auto res = writeFixtureTrack(musicRoot, kFixtureTrackCount); !res)
+    {
+      AO_FATAL("Could not add the pending AppKit fixture track: {}", res.error().message);
+    }
   }
 
   Result<> prepareAppKitFixtureRoots(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
@@ -243,7 +281,7 @@ namespace ao::appkit::test
         std::format("Cannot create AppKit state fixture '{}': {}", utility::pathToUtf8(*stateRes), error.message()));
     }
 
-    return prepareAppKitMediaLibrary(*libraryRes);
+    return {};
   }
 
   void settleNativeCallbacks()

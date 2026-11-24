@@ -14,6 +14,7 @@ from pathlib import Path
 
 SCENARIOS = (
     "desktop",
+    "initial-index",
     "membership",
     "authoring",
     "presentation",

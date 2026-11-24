@@ -118,14 +118,18 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         )
     else:
         optional.update(linux_only)
+    appkit_cli_test = "//test:appkit_cli_test"
     if platform == "macos":
         required.update(
             (
+                appkit_cli_test,
                 "//test/script:test_bazel_appkit_deps",
                 "//test/script:test_bazel_environment",
                 "//test/script:test_bazel_remote_cache",
             )
         )
+    else:
+        optional.add(appkit_cli_test)
     for feature, label in (("gtk", "//test:gtk_test"), ("system_media", "//test:systemmedia_test")):
         if platform == "linux" and bazel_workflows.feature_enabled(getattr(request, feature), feature):
             required.add(label)
