@@ -31,7 +31,6 @@ namespace ao::gtk::layout
                                collaborators.textCatalog,
                                collaborators.outputDeviceIntent);
     registerSemanticComponents(registry,
-                               collaborators.trackRowCache,
                                collaborators.trackPageHost,
                                collaborators.listNavigationController,
                                collaborators.importExportActions,

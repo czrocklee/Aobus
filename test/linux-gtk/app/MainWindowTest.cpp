@@ -8,9 +8,11 @@
 #include "app/GtkMainContextExecutor.h"
 #include "app/KeymapApplicator.h"
 #include "app/LibraryWindowLifecycle.h"
+#include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/WindowState.h"
 #include "i18n/GtkText.h"
+#include "layout/document/LayoutPresets.h"
 #include "list/ListNavigationController.h"
 #include "playback/OutputDevicePopover.h"
 #include "portal/ImportExportCoordinator.h"
@@ -55,9 +57,15 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <giomm/action.h>
@@ -72,11 +80,14 @@
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/switch.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -633,6 +644,110 @@ namespace ao::gtk::test
     CHECK(configStorePtr.use_count() == initialConfigOwners);
     configStorePtr.reset();
     CHECK(weakConfigStorePtr.expired());
+  }
+
+  TEST_CASE("MainWindow - an unrenderable custom layout falls back at startup without changing its file")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto const layoutsDir = fixture.tempDir().path() / "layouts";
+    auto const stateDir = fixture.tempDir().path() / "layout-state";
+    auto const configPath = fixture.tempDir().path() / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto layoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
+    auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(stateDir);
+    auto custom = uimodel::LayoutDocument{};
+    custom.root.type = "box";
+
+    SECTION("two template references try to mount the same library tree")
+    {
+      auto node = uimodel::LayoutNode{.id = "first-library-tree", .type = "template"};
+      node.props["templateId"] = uimodel::LayoutValue{std::string{"test.libraryTree"}};
+      custom.templates.emplace("test.libraryTree", uimodel::LayoutNode{.type = "library.listTree"});
+      custom.root.children.push_back(node);
+      node.id = "second-library-tree";
+      custom.root.children.push_back(std::move(node));
+    }
+
+    SECTION("different component types try to mount the same track stack")
+    {
+      custom.root.children.push_back(uimodel::LayoutNode{.type = "track.table"});
+      custom.root.children.push_back(uimodel::LayoutNode{.type = "workspace.withDetailPane"});
+    }
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "modern";
+    configStorePtr->saveAppPrefs(prefs);
+    REQUIRE(layoutStorePtr->save(custom, "modern"));
+
+    auto const preparedModern =
+      ao::test::requireValue(uimodel::prepareLayout(layout::makeBuiltInLayout(layout::LayoutPresetId::Modern)));
+    auto state = uimodel::LayoutComponentStateDocument{.preset = "modern"};
+    uimodel::visitExpandedLayoutNodes(preparedModern,
+                                      [&state](uimodel::LayoutNode const& node)
+                                      {
+                                        if (node.id == "main-workspace-split")
+                                        {
+                                          REQUIRE(node.propertyOr<bool>("revealed", false));
+                                          state.components.emplace(
+                                            node.id,
+                                            uimodel::LayoutComponentStateEntry{
+                                              .type = node.type,
+                                              .stateVersion = uimodel::kStateEntryVersion,
+                                              .baselineHash = uimodel::componentBaselineHash(node),
+                                              .state = {{"revealed", uimodel::LayoutValue{false}}},
+                                            });
+                                        }
+                                      });
+    REQUIRE(state.components.size() == 1);
+    componentStateStorePtr->save("modern", state);
+
+    // Backdate each file to distinguish no write from a rewrite with identical bytes.
+    auto const paths = std::array{layoutsDir / "modern.yaml", stateDir / "modern.yaml", configPath};
+    auto originalBytes = std::vector<std::string>{};
+    auto originalTimes = std::vector<std::filesystem::file_time_type>{};
+
+    for (auto const& path : paths)
+    {
+      std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) - std::chrono::hours{24});
+      originalBytes.push_back(ao::test::readFile(path));
+      originalTimes.push_back(std::filesystem::last_write_time(path));
+    }
+
+    auto const checkNoWrites = [&]
+    {
+      for (std::size_t index = 0; index < paths.size(); ++index)
+      {
+        CAPTURE(paths[index]);
+        CHECK(ao::test::readFile(paths[index]) == originalBytes[index]);
+        CHECK(std::filesystem::last_write_time(paths[index]) == originalTimes[index]);
+      }
+    };
+
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto window =
+      MainWindow{fixture.runtime(), configStorePtr, std::move(layoutStorePtr), catalog, componentStateStorePtr};
+    REQUIRE(window.prepareSession());
+
+    auto const modernBarPresent = [&window]
+    { return findWidgetByClass<Gtk::Widget>(window, "ao-bottom-bar-wrapper-modern") != nullptr; };
+    REQUIRE(tryPumpGtkEventsUntil(modernBarPresent));
+    auto* const handle = findWidgetByClass<Gtk::Button>(window, "ao-detail-handle");
+    REQUIRE(handle != nullptr);
+    CHECK(handle->get_tooltip_text() == gtkText(catalog, i18n::MessageId::GtkExpandPanel));
+    checkNoWrites();
+
+    window.openLayoutEditor();
+    auto* const editor = findAppDialogByTitle(gtkText(catalog, i18n::MessageId::GtkLayoutEditorTitle));
+    REQUIRE(editor != nullptr);
+    checkNoWrites();
+    editor->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
+    CHECK(modernBarPresent());
+    auto* const restoredHandle = findWidgetByClass<Gtk::Button>(window, "ao-detail-handle");
+    REQUIRE(restoredHandle != nullptr);
+    CHECK(restoredHandle->get_tooltip_text() == gtkText(catalog, i18n::MessageId::GtkExpandPanel));
+    checkNoWrites();
   }
 
   TEST_CASE("MainWindow - shell menu components receive the window's menu model")

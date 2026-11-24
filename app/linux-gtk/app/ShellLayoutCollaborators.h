@@ -27,7 +27,6 @@ namespace ao::gtk
   class TagEditController;
   class ThemeCoordinator;
   class TrackPageHost;
-  class TrackRowCache;
 
   namespace portal
   {
@@ -52,7 +51,6 @@ namespace ao::gtk
     i18n::MessageCatalog textCatalog;
     uimodel::PlaybackActions* playbackActions = nullptr;
     ThemeCoordinator* themeCoordinator = nullptr;
-    TrackRowCache* trackRowCache = nullptr;
     ResourceImageLoader* imageLoader = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportActions* importExportActions = nullptr;

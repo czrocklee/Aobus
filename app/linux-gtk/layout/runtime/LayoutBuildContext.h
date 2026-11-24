@@ -5,6 +5,7 @@
 
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/shell/LayoutSession.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
@@ -12,12 +13,18 @@
 
 #include <chrono>
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace Gtk
 {
   class Box;
   class Widget;
+}
+
+namespace ao::gtk
+{
+  class TrackPageHost;
 }
 
 namespace ao::gtk::layout
@@ -28,35 +35,54 @@ namespace ao::gtk::layout
   class ActionRegistry;
 
   /**
-   * @brief Reparents shell-owned widgets between Gtk::Box hosts with transactional rollback.
+   * @brief Reserves child slots for shell-owned widgets in a detached candidate.
    *
-   * The two current semantic hosts are boxes. A future non-box host needs an
-   * explicit transfer strategy instead of weakening this ownership contract.
+   * Preparing or discarding a candidate does not touch the active hierarchy.
+   * Only publication reparents the shared widgets and applies track presentation.
    */
   class SharedWidgetHandoff final
   {
   public:
     SharedWidgetHandoff() = default;
-    ~SharedWidgetHandoff();
+    ~SharedWidgetHandoff() = default;
 
     SharedWidgetHandoff(SharedWidgetHandoff const&) = delete;
     SharedWidgetHandoff& operator=(SharedWidgetHandoff const&) = delete;
     SharedWidgetHandoff(SharedWidgetHandoff&&) = delete;
     SharedWidgetHandoff& operator=(SharedWidgetHandoff&&) = delete;
 
+    struct TrackStackPresentation final
+    {
+      std::optional<uimodel::CoverArtPlaceholderStyle> optGroupCoverPlaceholderStyle{};
+      bool forceExpand = false;
+    };
+
+    /// Reserve the first child of an empty candidate box without staging presentation changes.
+    /// The widget must be unparented or in a Gtk::Box. Use transferTrackStack for the track stack.
     void transfer(Gtk::Widget& widget, Gtk::Box& destination);
-    void commit() noexcept;
+
+    /// Reserve the same slot for the track stack and stage its presentation for publication.
+    void transferTrackStack(TrackPageHost& trackPageHost, Gtk::Box& destination, TrackStackPresentation presentation);
 
   private:
+    // Only LayoutHost installs the reserved widgets, after retiring the old root.
+    friend class LayoutHost;
+
+    void validateReservations();
+    void attach();
+
     struct Transfer final
     {
       Gtk::Widget* widget = nullptr;
-      Gtk::Box* previousParent = nullptr;
-      Gtk::Widget* previousSibling = nullptr;
+      // Resolves only while the destination's C++ wrapper is alive.
+      sigc::slot<Gtk::Box*()> resolveDestination{};
+      TrackPageHost* trackPageHost = nullptr;
+      TrackStackPresentation presentation{};
     };
 
+    void reserve(Transfer pending, Gtk::Box& destination);
+
     std::vector<Transfer> _transfers;
-    bool _committed = false;
   };
 
   /**

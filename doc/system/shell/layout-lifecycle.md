@@ -21,7 +21,7 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 - **Authored layout**: a built-in or customized `LayoutDocument` before template expansion.
 - **Effective layout**: the tree obtained after template expansion.
 - **Prepared layout**: a `PreparedLayout` whose authored and effective trees passed the shared limits.
-- **Prepared tree**: a detached GTK component tree that has not replaced the active host generation.
+- **Prepared tree**: a detached GTK component tree with reserved shared-widget slots that has not replaced the active host generation.
 - **Active shell session**: the preset id, authored layout, component state, edit state, and committed generation held by `LayoutSession`.
 - **Build snapshot**: immutable, owning candidate inputs captured by `LayoutSession` for one tree traversal.
 - **Component-state binding**: one node's restored state and generation-fenced write authority.
@@ -37,7 +37,7 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 - Every GTK root is built from a `PreparedLayout`; raw authored documents cannot enter `LayoutRuntime`.
 - UIModel bounded template expansion completes before the GTK registry creates the root component.
 - One host owns at most one active component tree.
-- A rebuild prepares a complete detached tree before committing a replacement.
+- A rebuild prepares a detached tree and reserves shared-widget slots before committing a replacement.
 - Failed document preparation or GTK construction leaves the active session, tree, component state, and generation unchanged.
 - Action handlers and availability come from the live action registry, not from layout YAML or keymap data.
 - Every Gio action-map export or attached action group has a registration that retires before both the map/group and every callback target.
@@ -66,7 +66,7 @@ A missing custom file selects the matching built-in document; a rejected custom 
 When a newer version saved the rejected file, the workflow posts the newer-layout warning after it resumes on the callback executor; the editor's preset loader does the same.
 The selected authored document is prepared before the worker returns, and matching component state is loaded or replaced by an empty state document.
 
-The workflow resumes on the callback executor, prepares a detached GTK tree against the candidate preset and component state, and only then installs the session/state and commits the tree.
+The workflow resumes on the callback executor, prepares a detached GTK tree against the candidate preset and component state, and only then installs the session/state and commits the tree. If GTK preparation of a custom startup layout fails, it retries once with the matching built-in layout and the same preset state and generation; it does not rewrite the custom file. If the built-in candidate also fails, no candidate is installed.
 
 Cancellation before callback resumption installs nothing.
 An internal exception is logged and leaves the previous shell generation unchanged.
@@ -81,8 +81,9 @@ Authored and produced entries, owned string bytes, and depth are charged against
 `LayoutHost::prepare()` builds a detached root through `LayoutRuntime` and the `ComponentRegistry` against a `LayoutBuildSnapshot` for the next component-state generation.
 The controller applies or advances that generation before `LayoutHost::commit()` retires the old tree, so teardown from the predecessor cannot write into successor state.
 The host then installs the prepared root.
-`TrackPageHost::stack()` is a shell-owned singleton that may occur as either `track.table` or `workspace.withDetailPane`.
-Candidate construction transfers it through a `SharedWidgetHandoff`: the widget has one GTK parent throughout a successful switch, and discarding or failing the candidate restores its exact previous parent before control returns.
+`TrackPageHost::stack()` is a shell-owned singleton that may occur as either `track.table` or `workspace.withDetailPane`; the window-owned List navigation panel is hosted by `library.listTree`, while its controller initializes and refreshes the view independently of layout construction.
+Candidate construction reserves their destination slots through `SharedWidgetHandoff` without reparenting them: the live hierarchy and focus remain unchanged if preparation fails or the candidate is discarded. On commit the old tree retires and the widgets attach in their reserved first-child positions before the new root is attached. A candidate belongs to its preparing host and publishes once for the current, newer session generation.
+Common authored properties on these components apply to their candidate wrapper boxes, not directly to the shared widgets. Track-stack presentation changes, including cover placeholder style and forced expansion, are staged until the candidate is accepted, before its root is attached; a failed or discarded candidate does not apply them. Workspace forces stack expansion on commit; switching later to `track.table` does not reset those expansion flags.
 Unknown component types produce a visible layout error component.
 Common layout properties, declared interactions, and an optional tooltip are applied around the created component.
 Authored common properties are applied after construction, so a component that also drives one of those properties at runtime reconciles both sources once they are applied.
@@ -142,7 +143,7 @@ Invalid stateful ids are diagnosed; duplicate stateful ids block editor save, wh
 Load work observes the shell lifetime stop token at executor transitions.
 Shell teardown closes callback admission and action-state subscriptions before retiring Gio actions, so no teardown-time state publication can refresh a retired export.
 Component construction and rebuild are callback-executor GTK operations and have no independent cancellation point.
-Preparation, layout load/save/remove, and detached GTK construction return existing typed `Error` values.
+Preparation, layout load/save/remove, and detached GTK construction return existing typed `Error` values. The documented rollback covers rejected or discarded candidates; it is not a blanket no-throw guarantee for arbitrary GTK operations or commit.
 The layout store preserves its prior live document and backing bytes on a returned failure; component-state operations retain their existing optional/Boolean reporting contract.
 The shell does not add generic commit receipts or a blocked-store recovery mode.
 
@@ -180,11 +181,11 @@ GTK responsive and component-specific behavior remains owned by the individual c
 ## Test map
 
 - UIModel tests under [`test/uimodel/layout/`](../../../test/uimodel/layout) protect document preparation, state, schema validation, action-slot resolution, promotion, session transitions, immutable snapshots, and generation-fenced writes.
-- [`LayoutRuntimeBuildTest.cpp`](../../../test/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/linux-gtk/layout/runtime/`](../../../test/linux-gtk/layout/runtime) protect construction, activation, shared-widget switching, and failed-handoff rollback.
+- [`LayoutRuntimeBuildTest.cpp`](../../../test/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/linux-gtk/layout/runtime/`](../../../test/linux-gtk/layout/runtime) protect construction, activation, shared-widget switching, and failed or discarded candidate isolation.
 - Editor tests under [`test/linux-gtk/layout/editor/`](../../../test/linux-gtk/layout/editor) protect preview, validation, save, cancel, and template editing.
 - [`ShellLayoutControllerTest.cpp`](../../../test/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention, persistable cancel restoration, repeated action export, and controller teardown across the editor/controller boundary.
 - [`GioActionBridgeTest.cpp`](../../../test/linux-gtk/layout/runtime/GioActionBridgeTest.cpp), [`ActionMapRegistrationTest.cpp`](../../../test/linux-gtk/common/ActionMapRegistrationTest.cpp), and [`MainWindowTest.cpp`](../../../test/linux-gtk/app/MainWindowTest.cpp) protect retained-action revocation, partial-export rollback, exact replacement identity, and window action teardown.
-- Component tests under [`test/linux-gtk/layout/components/`](../../../test/linux-gtk/layout/components) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
+- [`ListTreeLayoutHandoffTest.cpp`](../../../test/linux-gtk/layout/components/ListTreeLayoutHandoffTest.cpp) protects List navigation handoff and candidate isolation. Component tests under [`test/linux-gtk/layout/components/`](../../../test/linux-gtk/layout/components) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
 
 ## Related documents
 

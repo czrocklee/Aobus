@@ -86,6 +86,7 @@ namespace ao::gtk
       uimodel::PreparedLayout preparedLayout;
       uimodel::LayoutComponentStateDocument componentState;
       bool newerCustomLayout = false;
+      bool usingCustomLayout = false;
     };
 
     Result<uimodel::PreparedLayout> prepareValidatedLayout(uimodel::LayoutDocument const& document,
@@ -173,6 +174,7 @@ namespace ao::gtk
                      preparedRes.error().message);
         doc = layout::makeBuiltInLayout(presetId);
         preparedRes = prepareValidatedLayout(doc, store.limits(), schema);
+        usingCustomLayout = false;
       }
 
       AO_INVARIANT(preparedRes, "Built-in shell layout is invalid");
@@ -186,7 +188,8 @@ namespace ao::gtk
               .document = std::move(doc),
               .preparedLayout = std::move(*preparedRes),
               .componentState = std::move(stateDoc),
-              .newerCustomLayout = newerCustomLayout};
+              .newerCustomLayout = newerCustomLayout,
+              .usingCustomLayout = usingCustomLayout};
     }
 
     uimodel::PlaybackActions& requirePlaybackActions(ShellLayoutCollaborators const& collaborators)
@@ -699,15 +702,19 @@ namespace ao::gtk
              uimodel::LayoutDocument document,
              uimodel::PreparedLayout preparedLayout,
              uimodel::LayoutComponentStateDocument componentState,
-             bool const newerCustomLayout)
+             bool const newerCustomLayout,
+             bool const usingCustomLayout)
       {
         if (newerCustomLayout)
         {
           reportNewerLayout();
         }
 
-        applyLoadedLayout(
-          std::move(presetId), std::move(document), std::move(preparedLayout), std::move(componentState));
+        applyLoadedLayout(std::move(presetId),
+                          std::move(document),
+                          std::move(preparedLayout),
+                          std::move(componentState),
+                          usingCustomLayout);
       });
 
     asyncRuntime->spawnWithLifetime(
@@ -736,9 +743,12 @@ namespace ao::gtk
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     std::string lastLayoutPreset,
     uimodel::LayoutSchema schema,
-    std::function<
-      void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument, bool)>
-      present,
+    std::function<void(std::string,
+                       uimodel::LayoutDocument,
+                       uimodel::PreparedLayout,
+                       uimodel::LayoutComponentStateDocument,
+                       bool,
+                       bool)> present,
     std::stop_token const stopToken)
   {
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
@@ -764,7 +774,8 @@ namespace ao::gtk
             std::move(optRes->document),
             std::move(optRes->preparedLayout),
             std::move(optRes->componentState),
-            optRes->newerCustomLayout);
+            optRes->newerCustomLayout,
+            optRes->usingCustomLayout);
   }
 
   void ShellLayoutController::reportNewerLayout()
@@ -776,7 +787,8 @@ namespace ao::gtk
   void ShellLayoutController::applyLoadedLayout(std::string presetId,
                                                 uimodel::LayoutDocument document,
                                                 uimodel::PreparedLayout preparedLayout,
-                                                uimodel::LayoutComponentStateDocument componentState)
+                                                uimodel::LayoutComponentStateDocument componentState,
+                                                bool const usingCustomLayout)
   {
     auto optBuildSnapshot = _session.buildSnapshot(componentState, false);
 
@@ -786,12 +798,26 @@ namespace ao::gtk
       return;
     }
 
-    auto pendingRes = prepareHost(preparedLayout, std::move(*optBuildSnapshot));
+    // A rejected native candidate has already rolled back its widget handoff.
+    // Retry only a custom layout, using the same preset state and generation.
+    auto pendingRes = prepareHost(preparedLayout, usingCustomLayout ? *optBuildSnapshot : std::move(*optBuildSnapshot));
+
+    if (!pendingRes && usingCustomLayout)
+    {
+      APP_LOG_WARN(
+        "ShellLayoutController: Rejected custom GTK layout for preset '{}': {}", presetId, pendingRes.error().message);
+      document = layout::makeBuiltInLayout(layout::presetIdFromString(presetId));
+      auto fallbackRes = prepareValidatedLayout(document, layoutLimits(), _registry.schema());
+      AO_INVARIANT(fallbackRes, "Built-in shell layout is invalid");
+      preparedLayout = std::move(*fallbackRes);
+      pendingRes = prepareHost(preparedLayout, std::move(*optBuildSnapshot));
+    }
 
     if (!pendingRes)
     {
-      APP_LOG_ERROR(
-        "ShellLayoutController: Failed to prepare loaded layout '{}': {}", presetId, pendingRes.error().message);
+      APP_LOG_ERROR("ShellLayoutController: Failed to prepare built-in GTK layout for preset '{}': {}",
+                    presetId,
+                    pendingRes.error().message);
       return;
     }
 

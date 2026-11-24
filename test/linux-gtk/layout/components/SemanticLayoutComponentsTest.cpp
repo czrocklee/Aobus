@@ -141,31 +141,11 @@ namespace ao::gtk::layout::test
   {
     auto fixture = LayoutRuntimeFixture{};
 
-    SECTION("library.listTree shows error when rowDataProvider missing")
-    {
-      auto const node = LayoutNode{.type = "library.listTree"};
-      auto const compPtr = fixture.create(node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_label().raw().contains("trackRowCache missing"));
-    }
-
     SECTION("library.listTree shows error when listNavigationController missing")
     {
-      auto const rdpPtr =
-        std::make_unique<TrackRowCache>(fixture.runtime().library(), ao::test::englishMessageCatalog());
-      registerListTreeComponent(fixture.components(), rdpPtr.get(), nullptr);
-      auto const node = LayoutNode{.type = "library.listTree"};
-      auto const compPtr = fixture.create(node);
-
+      auto const compPtr = fixture.create(LayoutNode{.type = "library.listTree"});
       REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_label().raw().contains("listNavigationController missing"));
+      CHECK(findLabelByText(compPtr->widget(), "Error: listNavigationController missing") != nullptr);
     }
 
     SECTION("track.table shows error when trackPageGraph missing")

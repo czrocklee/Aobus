@@ -16,6 +16,7 @@
 
 namespace ao::uimodel
 {
+  class LayoutSession;
   class PreparedLayout;
 } // namespace ao::uimodel
 
@@ -28,6 +29,12 @@ namespace ao::gtk::layout
   class LayoutHost final : public Gtk::Box
   {
   public:
+    /**
+     * @brief A detached candidate with reserved slots for shell-owned widgets.
+     *
+     * It does not borrow the active tree. Commit or discard it before preparing
+     * another candidate, clearing the host, or destroying the host or its dependencies.
+     */
     class [[nodiscard]] PreparedTree final
     {
     public:
@@ -40,11 +47,15 @@ namespace ao::gtk::layout
       std::uint64_t generation() const noexcept { return _generation; }
 
     private:
-      PreparedTree(std::unique_ptr<LayoutComponent> rootComponentPtr,
+      PreparedTree(LayoutHost& host,
+                   uimodel::LayoutSession const& session,
+                   std::unique_ptr<LayoutComponent> rootComponentPtr,
                    std::unique_ptr<SharedWidgetHandoff> sharedWidgetHandoffPtr,
                    std::uint64_t generation)
         : _sharedWidgetHandoffPtr{std::move(sharedWidgetHandoffPtr)}
         , _rootComponentPtr{std::move(rootComponentPtr)}
+        , _host{&host}
+        , _session{&session}
         , _generation{generation}
       {
       }
@@ -53,18 +64,22 @@ namespace ao::gtk::layout
 
       std::unique_ptr<SharedWidgetHandoff> _sharedWidgetHandoffPtr;
       std::unique_ptr<LayoutComponent> _rootComponentPtr;
+      LayoutHost* _host = nullptr;
+      uimodel::LayoutSession const* _session = nullptr;
       std::uint64_t _generation = 0;
     };
 
     explicit LayoutHost(ComponentRegistry const& registry);
 
     /**
-     * @brief Build a disposable replacement generation without changing the active tree.
+     * @brief Build a detached replacement without moving shared widgets.
+     *
+     * No other candidate from this host may be outstanding.
      */
     Result<PreparedTree> prepare(LayoutBuildContext const& ctx, uimodel::PreparedLayout const& layout);
 
     /**
-     * @brief Invalidate the previous generation and install a prepared tree as one host replacement.
+     * @brief Retire the old tree and install the candidate for the current session generation.
      */
     void commit(PreparedTree prepared);
 
@@ -79,5 +94,6 @@ namespace ao::gtk::layout
   private:
     LayoutRuntime _runtime;
     std::unique_ptr<LayoutComponent> _activeComponentPtr;
+    std::uint64_t _lastPublishedGeneration = 0;
   };
 } // namespace ao::gtk::layout

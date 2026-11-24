@@ -7,7 +7,6 @@
 namespace ao::gtk::layout
 {
   void registerSemanticComponents(ComponentRegistry& registry,
-                                  TrackRowCache* trackRowCache,
                                   TrackPageHost* trackPageHost,
                                   ListNavigationController* listNavigationController,
                                   portal::ImportExportActions* importExportActions,
@@ -16,7 +15,7 @@ namespace ao::gtk::layout
   {
     registerLabelComponent(registry);
     registerActionButtonComponent(registry);
-    registerListTreeComponent(registry, trackRowCache, listNavigationController);
+    registerListTreeComponent(registry, listNavigationController);
     registerTracksTableComponent(registry, trackPageHost);
     registerOpenLibraryButtonComponent(registry, importExportActions, textCatalog);
     registerMenuBarComponent(registry, menuModelPtr);

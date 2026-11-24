@@ -5,23 +5,26 @@
 
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include "track/TrackPageHost.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
+#include <sigc++/adaptors/track_obj.h>
 
-#include <algorithm>
 #include <exception>
 #include <format>
 #include <memory>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -34,65 +37,92 @@ namespace ao::gtk::layout
     }
   } // namespace
 
-  SharedWidgetHandoff::~SharedWidgetHandoff()
+  void SharedWidgetHandoff::transfer(Gtk::Widget& widget, Gtk::Box& destination)
   {
-    if (_committed)
-    {
-      return;
-    }
+    reserve(Transfer{.widget = &widget}, destination);
+  }
 
-    for (auto& transfer : _transfers | std::views::reverse)
+  void SharedWidgetHandoff::transferTrackStack(TrackPageHost& trackPageHost,
+                                               Gtk::Box& destination,
+                                               TrackStackPresentation const presentation)
+  {
+    reserve(Transfer{.widget = &trackPageHost.stack(), .trackPageHost = &trackPageHost, .presentation = presentation},
+            destination);
+  }
+
+  void SharedWidgetHandoff::reserve(Transfer pending, Gtk::Box& destination)
+  {
+    AO_EXPECTS(destination.get_first_child() == nullptr, "A shared widget reserves the first child slot");
+    pending.resolveDestination = sigc::track_object([&destination] { return &destination; }, destination);
+    _transfers.push_back(std::move(pending));
+  }
+
+  void SharedWidgetHandoff::validateReservations()
+  {
+    // A container can replace a child (and its entire subtree) during the build.
+    // Only the reservations whose wrappers survived can conflict.
+    std::erase_if(_transfers, [](Transfer const& transfer) { return transfer.resolveDestination.empty(); });
+    auto widgets = std::unordered_set<Gtk::Widget*>{};
+    auto destinations = std::unordered_set<Gtk::Box*>{};
+
+    for (auto const& transfer : _transfers)
     {
-      if (transfer.widget->get_parent() != nullptr)
+      if (!widgets.insert(transfer.widget).second)
       {
-        transfer.widget->unparent();
+        throwLayoutBuildError("A shell-owned widget may appear only once in a layout candidate");
       }
 
-      if (transfer.previousParent == nullptr)
+      if (auto* const parent = transfer.widget->get_parent();
+          parent != nullptr && dynamic_cast<Gtk::Box*>(parent) == nullptr)
+      {
+        throwLayoutBuildError("A shell-owned layout widget must be parented by Gtk::Box");
+      }
+
+      AO_EXPECTS(destinations.insert(transfer.resolveDestination()).second,
+                 "Each candidate box can reserve only one shared widget slot");
+    }
+  }
+
+  void SharedWidgetHandoff::attach()
+  {
+    for (auto const& transfer : _transfers)
+    {
+      auto* const destination = transfer.resolveDestination();
+
+      if (destination == nullptr)
       {
         continue;
       }
 
-      if (transfer.previousSibling != nullptr && transfer.previousSibling->get_parent() == transfer.previousParent)
+      // Destroying the old wrappers detaches their shared children. Also
+      // support a widget that was previously hosted in another Gtk::Box.
+      if (auto* const parent = transfer.widget->get_parent(); parent != nullptr)
       {
-        transfer.previousParent->insert_child_after(*transfer.widget, *transfer.previousSibling);
+        auto* const box = dynamic_cast<Gtk::Box*>(parent);
+        AO_EXPECTS(box != nullptr, "A shared widget changed to an unsupported parent before publication");
+        box->remove(*transfer.widget);
       }
-      else
+
+      // The workspace adds the handle and revealer after reserving this slot.
+      destination->prepend(*transfer.widget);
+
+      if (transfer.trackPageHost == nullptr)
       {
-        transfer.previousParent->prepend(*transfer.widget);
+        continue;
+      }
+
+      if (auto const optStyle = transfer.presentation.optGroupCoverPlaceholderStyle; optStyle)
+      {
+        transfer.trackPageHost->setGroupCoverPlaceholderStyle(*optStyle);
+      }
+
+      if (transfer.presentation.forceExpand)
+      {
+        auto& stack = transfer.trackPageHost->stack();
+        stack.set_hexpand(true);
+        stack.set_vexpand(true);
       }
     }
-  }
-
-  void SharedWidgetHandoff::transfer(Gtk::Widget& widget, Gtk::Box& destination)
-  {
-    if (std::ranges::any_of(_transfers, [&widget](Transfer const& transfer) { return transfer.widget == &widget; }))
-    {
-      throwLayoutBuildError("A shell-owned widget may appear only once in a layout candidate");
-    }
-
-    auto* const previousWidgetParent = widget.get_parent();
-    auto* const previousParent = dynamic_cast<Gtk::Box*>(previousWidgetParent);
-
-    if (previousWidgetParent != nullptr && previousParent == nullptr)
-    {
-      throwLayoutBuildError("A shell-owned layout widget must be parented by Gtk::Box");
-    }
-
-    auto* const previousSibling = widget.get_prev_sibling();
-    _transfers.push_back({.widget = &widget, .previousParent = previousParent, .previousSibling = previousSibling});
-
-    if (previousWidgetParent != nullptr)
-    {
-      widget.unparent();
-    }
-
-    destination.append(widget);
-  }
-
-  void SharedWidgetHandoff::commit() noexcept
-  {
-    _committed = true;
   }
 
   LayoutHost::LayoutHost(ComponentRegistry const& registry)
@@ -112,6 +142,7 @@ namespace ao::gtk::layout
     try
     {
       rootComponentPtr = _runtime.build(buildContext, layout);
+      handoffPtr->validateReservations();
     }
     catch (std::exception const& ex)
     {
@@ -127,21 +158,23 @@ namespace ao::gtk::layout
     auto& activeWidget = rootComponentPtr->widget();
     activeWidget.set_hexpand(true);
     activeWidget.set_vexpand(true);
-    return PreparedTree{std::move(rootComponentPtr), std::move(handoffPtr), ctx.buildSnapshot.generation()};
+    return PreparedTree{
+      *this, ctx.session, std::move(rootComponentPtr), std::move(handoffPtr), ctx.buildSnapshot.generation()};
   }
 
   void LayoutHost::commit(PreparedTree prepared)
   {
-    prepared._sharedWidgetHandoffPtr->commit();
+    AO_EXPECTS(prepared._host == this && prepared._rootComponentPtr && prepared._sharedWidgetHandoffPtr,
+               "A layout host can only publish its own, unconsumed candidate");
+    AO_EXPECTS(
+      prepared.generation() == prepared._session->generation() && prepared.generation() > _lastPublishedGeneration,
+      "A candidate must publish exactly once for the current session generation");
+    _lastPublishedGeneration = prepared.generation();
+
     clearLayout();
-
     _activeComponentPtr = std::move(prepared._rootComponentPtr);
-
-    if (_activeComponentPtr)
-    {
-      auto& activeWidget = _activeComponentPtr->widget();
-      append(activeWidget);
-    }
+    prepared._sharedWidgetHandoffPtr->attach();
+    append(_activeComponentPtr->widget());
   }
 
   void LayoutHost::clearLayout()

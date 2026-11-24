@@ -16,7 +16,6 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -42,9 +41,15 @@ namespace ao::gtk::layout
 
         for (auto const& childNode : node.children)
         {
-          auto childPtr = ctx.registry.create(ctx, childNode);
-
           auto const slot = childNode.layoutOr<std::string>("slot", "");
+
+          if (slot != "start" && slot != "center" && slot != "end")
+          {
+            // Unassigned children have no native slot and must not reserve shared widgets.
+            continue;
+          }
+
+          auto childPtr = ctx.registry.create(ctx, childNode);
 
           if (slot == "start")
           {
@@ -56,14 +61,10 @@ namespace ao::gtk::layout
             _centerBox.set_center_widget(childPtr->widget());
             _centerChildPtr = std::move(childPtr);
           }
-          else if (slot == "end")
+          else
           {
             _centerBox.set_end_widget(childPtr->widget());
             _endChildPtr = std::move(childPtr);
-          }
-          else
-          {
-            _overflowChildren.push_back(std::move(childPtr));
           }
         }
       }
@@ -75,7 +76,6 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _startChildPtr;
       std::unique_ptr<LayoutComponent> _centerChildPtr;
       std::unique_ptr<LayoutComponent> _endChildPtr;
-      std::vector<std::unique_ptr<LayoutComponent>> _overflowChildren;
     };
 
     std::unique_ptr<LayoutComponent> createCenterBox(LayoutBuildContext& ctx, LayoutNode const& node)
