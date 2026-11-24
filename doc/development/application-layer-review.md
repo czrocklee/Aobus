@@ -6,7 +6,7 @@ id: development.application-layer-review
 
 ## Scope
 
-This guide defines how contributors review changes that cross runtime, UIModel, GTK, TUI, or CLI.
+This guide defines how contributors review changes across runtime, UIModel, and frontend boundaries, including the CLI's direct use of runtime.
 Architectural authority remains in the [system](../system/overview.md), [runtime execution](../system/execution/README.md), and [presentation](../system/presentation/README.md) documents; this guide turns those boundaries into a review workflow.
 
 ## Policy
@@ -63,7 +63,23 @@ During review, reject these shapes unless an owning architecture explicitly docu
 - provider registration, restoration, or observer binding before final runtime placement;
 - a weak admission token presented as proof that raw owner memory remains alive.
 
-Known direct-library migration seams are documented in the [presentation architecture](../system/presentation/README.md); their presence is not permission to add new seams.
+Do not treat an existing call site as permission.
+Document any temporary migration seam in the owning architecture with its owner, scope, and removal condition.
+
+### Boundary references
+
+These are standing checker allowances for the current architecture, not temporary migration seams.
+They do not relax the review requirements above:
+
+- `uimodel_core` allows the exact [Core value headers](../system/presentation/README.md#ownership-and-lifetime-rules) `RecordingDate.h` and `Credits.h`, not library storage or write authority.
+- `gtk-leaf` skips the two `ListNavigationController` files for [GTK saved-List dialog assembly](../system/frontend/gtk/dialog-lifecycle.md#saved-list-dialog-assembly), a bounded composition root that does not pass `AppRuntime` to leaf widgets.
+
+[TUI terminal-title formatting](../system/query/README.md#format-consumers) is a separate design route, not a checker exception.
+The TUI uses Core to compile the title format and evaluates it for the playing track through the runtime library facade.
+[List predicates and transient filters](../system/query/README.md#predicate-consumers) use runtime sources instead.
+
+Frontend code that needs file availability should include [`FileStatus.h`](../../include/ao/library/FileStatus.h), not the manifest layout header.
+The current `frontend_core` rule checks for specific storage dependencies, not storage-layout headers as a class.
 
 ## Validation
 

@@ -199,6 +199,8 @@ GTK_COMPOSITION_ROOTS = frozenset(
         "layout/component/track/TrackRegistrations.cpp",
         "layout/runtime/LayoutRuntime.h",
         "layout/runtime/LayoutRuntime.cpp",
+        # Saved-List dialog composition root; see "Saved-List dialog assembly" in
+        # doc/system/frontend/gtk/dialog-lifecycle.md.
         "list/ListNavigationController.h",
         "list/ListNavigationController.cpp",
     )
