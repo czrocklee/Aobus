@@ -14,17 +14,23 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ao::appkit::test
 {
   inline constexpr std::int32_t kFixtureTrackCount = 20;
   inline constexpr std::int32_t kIndexedFixtureTrackCount = kFixtureTrackCount - 1;
+  inline constexpr auto kDefaultFixtureDuration = std::chrono::milliseconds{12'000};
+  inline constexpr auto kMediaSeekFixtureDuration = std::chrono::milliseconds{16'002};
+  inline constexpr auto kMediaInteriorSeekFixtureDuration = std::chrono::milliseconds{15'992};
 
   bool tryWaitUntil(std::function<bool()> predicate, std::chrono::seconds timeout = std::chrono::seconds{15});
   void requireWaitUntil(std::function<bool()> predicate,
                         char const* obligation,
                         std::chrono::seconds timeout = std::chrono::seconds{15});
-  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot);
+  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot,
+                                     std::chrono::milliseconds duration,
+                                     std::optional<std::chrono::milliseconds> optLastTrackDuration = std::nullopt);
   Result<> prepareAppKitFixtureRoots(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   void preindexLibraryWithPendingTrack(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   void settleNativeCallbacks();
