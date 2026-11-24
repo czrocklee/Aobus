@@ -54,6 +54,7 @@ _FOUNDATIONS = [
     "script/ao/core/paths.py",
     "script/ao/core/phases.py",
     "script/ao/core/proc.py",
+    "script/ao/generate_python_requirements.py",
 ]
 
 _POLICY = [
@@ -93,6 +94,8 @@ _PORTAL = [
     "script/ao/guardrails.py",
     "script/ao/portal/__init__.py",
     "script/ao/portal/bazel_attempt.py",
+    "script/ao/portal/bazel_check_tools.py",
+    "script/ao/portal/bazel_checker_arch.py",
     "script/ao/portal/bazel_ci_summary.py",
     "script/ao/portal/bazel_compiler_probe.py",
     "script/ao/portal/bazel_concepts.py",
@@ -137,6 +140,7 @@ _PORTAL = [
     "script/ao/portal/python_check.py",
     "script/ao/portal/python_env.py",
     "script/ao/portal/r2_credentials.py",
+    "script/ao/portal/ready_tool.py",
     "script/ao/portal/setup_actions.py",
     "script/ao/portal/source_analyzer.py",
     "script/ao/portal/source_format.py",

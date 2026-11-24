@@ -339,6 +339,8 @@ pkgs.mkShell {
   nativeBuildInputs = [ pkgs.bazel_9 pkgs.buildifier pkgs.actionlint aobus-prettier ];
   passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
+  # The versioned wrapper carries its own executable closure, unlike bin/bazel's dispatcher.
+  AO_NIX_BAZEL = "${pkgs.bazel_9}/bin/bazel-${bazelToolchain.version}-linux-${pkgs.stdenv.hostPlatform.parsed.cpu.name}";
   AOBUS_BAZEL_SERVER_JAVABASE = bazelServerJavabase;
   # Coverage analysis uses rules_java's declared local runtime from this same JDK.
   JAVA_HOME = (builtins.head bazelJavaInputs).home;
@@ -348,6 +350,7 @@ pkgs.mkShell {
   ) portalInputs;
   AO_NIX_PORTAL_PYTHON = "${portalPython}/bin/python3";
   AO_NIX_BUILDIFIER = "${pkgs.buildifier}/bin/buildifier";
+  AO_NIX_CLANG_FORMAT = "${pkgs.llvmPackages_22.clang-unwrapped}/bin/clang-format";
   AO_NIX_PRETTIER = "${aobus-prettier}/bin/prettier";
   AO_NIX_ACTIONLINT = "${pkgs.actionlint}/bin/actionlint";
   buildInputs =

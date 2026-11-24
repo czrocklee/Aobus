@@ -59,6 +59,18 @@ def file_exists(name: str) -> bool:
     return (PROJECT_ROOT / name).is_file()
 
 
+def discover_markdown(root: Path = PROJECT_ROOT) -> list[Path]:
+    """Find the shared inventory for documentation semantics and formatting."""
+    doc_root = root / "doc"
+    files = {path for path in doc_root.rglob("*.md") if path.relative_to(doc_root).parts[:1] != ("plan",)}
+    files.update(path for path in (root / ".agents" / "skills").rglob("*.md"))
+    files.update(path for name in ("README.md", "AGENTS.md", "CONTRIBUTING.md") if (path := root / name).is_file())
+    for folder in ("tool", "app", "asset"):
+        if (root / folder).is_dir():
+            files.update((root / folder).rglob("*.md"))
+    return sorted(files)
+
+
 def spelling(name: str | Path) -> str:
     """Normalize lexical paths without hiding a text formatter's escaping symlink."""
     path = Path(os.path.abspath(PROJECT_ROOT / name))

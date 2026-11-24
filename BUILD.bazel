@@ -18,6 +18,7 @@ exports_files([
     "pyproject.toml",
     "vcpkg.json",
     "vcpkg-configuration.json",
+    "script/ao/portal/bazel_checker_arch.py",
     "script/ao/portal/bazel_resolver.py",
     "script/ao/portal/bazel_environment.py",
     "script/ao/__init__.py",

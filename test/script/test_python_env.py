@@ -318,7 +318,8 @@ class NativePythonEnvironmentTest(unittest.TestCase):
             (["--", "check", "format", "README.md"], False),
             (["--", "check", "lint", "script/ao/core/proc.py"], True),
             (["--", "check", "lint", "--tidy-check", "aobus-no-c-assert", "script/ao/core/proc.py"], False),
-            (["--", "check"], True),
+            (["--", "check"], False),
+            (["--", "check", "--ci"], False),
             (["--", "setup", "llvm-sdk"], False),
         )
         for command, needs_tools in commands:
@@ -624,6 +625,27 @@ class NativePythonEnvironmentTest(unittest.TestCase):
         self.assertIn("--require-hashes", command)
         self.assertIn("--no-deps", command)
         self.assertEqual(command[-2:], ["-r", str(requirements)])
+
+    def test_builder_passes_offline_wheelhouse_settings_to_pip(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            offline = {"PIP_NO_INDEX": "1", "PIP_FIND_LINKS": str(root / "prefetched wheels")}
+            with (
+                mock.patch.dict(os.environ, offline),
+                mock.patch.object(python_env.venv, "EnvBuilder"),
+                mock.patch.object(python_env.subprocess, "run") as run,
+                mock.patch.object(python_env, "_tools_match", return_value=True),
+            ):
+                python_env._build_environment(
+                    root, LOCKED_TOOL_VERSIONS, root / "requirements.txt", root / "state", "fingerprint"
+                )
+
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual({key: environment[key] for key in offline}, offline)
+        self.assertNotIn("--isolated", command)
+        self.assertTrue(run.call_args.kwargs["check"])
 
     def test_tool_subprocesses_drop_ambient_python_package_paths(self):
         with mock.patch.dict(

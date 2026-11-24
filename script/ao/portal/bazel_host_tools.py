@@ -419,88 +419,17 @@ def _python_action_sdk(host: str, watch_directories: set[Path]) -> dict[str, Any
     }
 
 
-def _lock_graph(requirements: Path) -> list[Path]:
-    # The tooling venv's location embeds the fingerprint of the whole included
-    # lock graph, so every governed lock file is a repository input.
+def _python_runtime(host: str) -> tuple[dict[str, str], list[Path]]:
+    """Publish the governed base runtime without consulting the portal venv."""
     from ao.portal import python_env
-
-    files = [requirements]
-    for included in python_env._included_requirements(requirements):
-        files.extend(_lock_graph(included))
-    return files
-
-
-def _python_runtime(host: str) -> tuple[dict[str, Any], list[Path], list[Path]]:
-    """Select the interpreter that actually runs governed Python tests, never install one.
-
-    Linux runs under the Nix portal interpreter, whose withPackages
-    environment is itself the base installation. Windows and macOS run under
-    the checkout-isolated locked tooling venv when the existing bootstrap
-    prepared it; without that venv the base interpreter is an honest recorded
-    fallback whose runtime lacks the pinned tool wheels.
-    """
-    from ao.portal import build_dir, python_env
 
     versions = python_env.tool_versions()
     python_env.validate_base_python(versions, exact_patch=host != "macos")
     actual_version = ".".join(str(part) for part in sys.version_info[:3])
-    base = native.governed_base_executable()
-    evidence = [python_env.TOOLCHAIN_FILE]
-    executable = base
-    tooling = ""
-    provider = "nix" if host == "linux" else "native-base"
+    executable = native.governed_base_executable()
     if host == "linux":
-        tooling = str(base)
-    else:
-        requirements = python_env.MACOS_REQUIREMENTS_FILE if host == "macos" else python_env.REQUIREMENTS_FILE
-        evidence.extend(_lock_graph(requirements))
-        fingerprint = python_env.environment_fingerprint(
-            versions,
-            requirements,
-            base_prefix=sys.base_prefix,
-            runtime_version=actual_version,
-        )
-        try:
-            destination = python_env.environment_path(
-                native.PROJECT_ROOT,
-                build_dir.state_root(system="Windows" if host == "windows" else "Darwin"),
-                fingerprint,
-                environ=dict(os.environ),
-                os_name="nt" if host == "windows" else "posix",
-            )
-        except RuntimeError:
-            # Without the portal's stable checkout identity there is no shared
-            # tooling venv location to select.
-            destination = None
-        complete = False
-        if destination is not None:
-            candidate = python_env._python_path(destination, platform_name=host)
-            marker = destination / python_env.COMPLETE_MARKER
-            evidence.extend([candidate, marker])
-            try:
-                complete = candidate.is_file() and marker.read_text(encoding="utf-8").strip() == fingerprint
-            except OSError:
-                complete = False
-            if complete:
-                executable = candidate
-                tooling = str(candidate)
-                provider = "tooling-venv"
-    contracts = {
-        "nix": (
-            "Installed immutable Nix portal environment; declared interpreter location, not full OS/runtime hermeticity"
-        ),
-        "tooling-venv": (
-            "Checkout-isolated locked tooling venv over the installed base; declared interpreter "
-            "location, not full OS/runtime hermeticity"
-        ),
-        "native-base": (
-            "Base interpreter without the prepared locked tooling venv; pinned tool wheels are "
-            "unavailable in this runtime"
-        ),
-    }
-    if provider != "native-base":
-        # The pinned documentation parser packages must import under the
-        # runtime that actually executes Python tests.
+        # The Nix withPackages interpreter is itself the governed base. Retain
+        # admission of its pinned packages independently of declared wheel inputs.
         probe = subprocess.run(
             [
                 str(executable),
@@ -515,32 +444,18 @@ def _python_runtime(host: str) -> tuple[dict[str, Any], list[Path], list[Path]]:
             text=True,
             check=False,
         )
-        components = 3 if host != "macos" else 2
-        pinned = ".".join(versions["python"].split(".")[:components])
-        reported = probe.stdout.split()
-        if (
-            probe.returncode
-            or len(reported) != 3
-            or not reported[0].startswith(pinned)
-            or reported[1] != versions["markdown-it-py"]
-            or reported[2] != versions["mdurl"]
-        ):
+        expected = [versions["python"], versions["markdown-it-py"], versions["mdurl"]]
+        if probe.returncode or probe.stdout.split() != expected:
             raise native.BazelWorkspaceError(
                 f"selected Python tooling runtime does not match the pinned toolchain: {executable}"
             )
     identity = {
-        "provider": provider,
-        # Publish the interpreter that actually runs governed tests, not the
-        # governed pin: macOS admits any patch of the pinned minor version, so
-        # only the observed runtime describes the toolchain consumers receive.
+        # macOS allows different patches of the governed minor version.
         "version": actual_version,
         "implementation": "cpython",
-        "executable": str(executable.absolute()),
-        "base_prefix": sys.base_prefix,
-        "tooling_python": tooling,
-        "runtime_contract": contracts[provider],
+        "executable": str(executable),
     }
-    return identity, [*evidence, executable], evidence
+    return identity, [python_env.TOOLCHAIN_FILE, executable]
 
 
 def _app_version(root: Path) -> str:
@@ -623,9 +538,8 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
         files.update({path.absolute(), path.resolve()})
     files.update(path.absolute() for path in sdk_evidence)
     directories.update(Path(tools[name]).parent for name in ("genrb", "pkgdata"))
-    python_identity, python_inputs, _ = _python_runtime(host)
+    python_identity, python_inputs = _python_runtime(host)
     result["python"] = python_identity
-    result["test_tools"]["tooling_python"] = python_identity["tooling_python"]
     files.update(path.absolute() for path in python_inputs)
     # The WinUI quality probe embeds the original checkout, not an execution root.
     if source is not None:

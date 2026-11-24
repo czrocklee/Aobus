@@ -21,6 +21,7 @@ from typing import cast
 from ao.core.build_lock import shared_file_lock
 from ao.core.paths import PROJECT_ROOT
 from ao.portal import build_dir
+from ao.portal.ready_tool import ReadyTool, ToolMissing
 
 MANIFEST_PATH = PROJECT_ROOT / "script/ao/prettier.json"
 # A bounded per-socket-operation timeout; the transfer itself is not bounded.
@@ -271,6 +272,11 @@ def _receipt(
     }
 
 
+def cache_receipt_path(cache: Path) -> Path:
+    """Return the provenance receipt required by a ready managed bundle."""
+    return cache / _RECEIPT_FILE
+
+
 def _verify_cache(
     cache: Path,
     *,
@@ -305,7 +311,7 @@ def _verify_cache(
     if not node.is_file() or not (package / "bin/prettier.cjs").is_file():
         raise PrettierError(damaged)
     try:
-        document = _json_document((cache / _RECEIPT_FILE).read_text(encoding="utf-8"))
+        document = _json_document(cache_receipt_path(cache).read_text(encoding="utf-8"))
         executable_sha256 = _sha256(node)
         tree_sha256 = _tree_digest(package)
     except (OSError, UnicodeError, PrettierError) as exc:
@@ -374,7 +380,7 @@ def _provision(
             package_archive=package_archive,
             package_tree=package_tree,
         )
-        (stage / _RECEIPT_FILE).write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        cache_receipt_path(stage).write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         _probe([str(node), str(package / "bin/prettier.cjs")], version)
         # Publish decoded tool state only; archive verification is complete.
         node_archive_file.unlink()
@@ -384,6 +390,10 @@ def _provision(
         return cache / node.name, cache / "package"
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+
+
+class PrettierMissing(ToolMissing, PrettierError):
+    """The managed Prettier bundle has not been set up."""
 
 
 def _managed_command(
@@ -410,7 +420,9 @@ def _managed_command(
     cache = (build_dir.state_root() / "tools/prettier" / version / node_version / key).absolute()
     if not provision:
         if not os.path.lexists(cache):
-            raise PrettierError(f"Prettier is not ready at {cache}; run ao setup prettier explicitly")
+            raise PrettierMissing(
+                f"Prettier is not ready at {cache}; run ao setup prettier explicitly", MANIFEST_PATH, cache
+            )
         node, package = _verify_cache(
             cache,
             version=version,
@@ -497,6 +509,18 @@ def command(*, provision: bool = True) -> tuple[str, ...]:
     )
 
 
+def ready_tool() -> ReadyTool:
+    argv = command(provision=False)
+    tool = Path(argv[0])
+    files = (MANIFEST_PATH, tool)
+    if len(argv) == 1:
+        return ReadyTool(argv, files)
+    # Cache admission checks the receipt and shallow root membership as well
+    # as Node's bytes and the recursive package digest.
+    cache = tool.parent
+    return ReadyTool(argv, (*files, cache_receipt_path(cache)), (cache,), (cache / "package",))
+
+
 def _absolute_file(filename: str) -> Path:
     path = Path(filename)
     # Do not resolve symlinks: the checkout containment check in run() rejects
@@ -504,7 +528,7 @@ def _absolute_file(filename: str) -> Path:
     return (path if path.is_absolute() else PROJECT_ROOT / path).absolute()
 
 
-def run(files: list[str], *, check: bool, provision: bool = True) -> int:
+def run(files: list[str], *, check: bool, provision: bool = True, tool_command: tuple[str, ...] | None = None) -> int:
     """Check only, or write, Prettier formatting for an explicit selection.
 
     Empty selections never provision a tool. Relative inputs are
@@ -545,7 +569,7 @@ def run(files: list[str], *, check: bool, provision: bool = True) -> int:
         # Without an explicit mode Prettier prints formatted output to stdout
         # instead of rewriting files, so write mode must name --write.
         options.append("--write")
-    base = [*command(provision=provision), *options]
+    base = [*(tool_command if tool_command is not None else command(provision=provision)), *options]
     batches: list[dict[Path, str]] = []
     batch: dict[Path, str] = {}
     for path, logical in requested.items():

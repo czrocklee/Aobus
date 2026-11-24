@@ -18,6 +18,7 @@ from typing import Any, TextIO, cast
 from ao.core.build_lock import shared_file_lock
 from ao.core.paths import PROJECT_ROOT
 from ao.portal import build_dir
+from ao.portal.ready_tool import ReadyTool, ToolMissing
 
 MANIFEST_PATH = PROJECT_ROOT / "script/ao/buildifier.json"
 # A bounded per-socket-operation timeout; urlretrieve has none.
@@ -26,6 +27,15 @@ _DOWNLOAD_TIMEOUT_SECONDS = 60
 
 class BuildifierError(RuntimeError):
     """A governed Buildifier setup, execution, or diagnostic-protocol failure."""
+
+
+class BuildifierMissing(ToolMissing, BuildifierError):
+    """The managed Buildifier artifact has not been set up."""
+
+
+def ready_tool() -> ReadyTool:
+    tool = executable(provision=False)
+    return ReadyTool((str(tool),), (MANIFEST_PATH, tool))
 
 
 def _json_document(text: str) -> dict[str, object]:
@@ -163,7 +173,9 @@ def executable(*, provision: bool = True) -> Path:
     ).absolute()
     if not provision:
         if not os.path.lexists(tool):
-            raise BuildifierError(f"Buildifier is not ready at {tool}; run ao setup buildifier explicitly")
+            raise BuildifierMissing(
+                f"Buildifier is not ready at {tool}; run ao setup buildifier explicitly", MANIFEST_PATH, tool
+            )
         _validate_native(tool, sha256, version)
         return tool
     try:
@@ -283,13 +295,15 @@ def _lint_output(result: subprocess.CompletedProcess[str], requested: dict[Path,
     return _check_output(result.stdout, requested, sink=sink, verify_format=False)
 
 
-def lint_paths(files: list[str], *, sink: TextIO | None = None, provision: bool = False) -> int:
+def lint_paths(
+    files: list[str], *, sink: TextIO | None = None, provision: bool = False, tool: str | None = None
+) -> int:
     """Return semantic findings only (0/1); tool/protocol failures raise.
 
     The official read-only JSON check mode also calculates formatting metadata;
     neither that metadata nor its format-only exit is a semantic finding.
     """
-    return _run(files, check=True, lint=True, sink=sink, provision=provision, semantic_only=True)
+    return _run(files, check=True, lint=True, sink=sink, provision=provision, semantic_only=True, tool=tool)
 
 
 def run(
@@ -299,9 +313,10 @@ def run(
     lint: bool = False,
     sink: TextIO | None = None,
     provision: bool = True,
+    tool: str | None = None,
 ) -> int:
     """Run the existing format/check operation, including formatting diagnostics."""
-    return _run(files, check=check, lint=lint, sink=sink, provision=provision)
+    return _run(files, check=check, lint=lint, sink=sink, provision=provision, tool=tool)
 
 
 def _run(
@@ -312,6 +327,7 @@ def _run(
     sink: TextIO | None = None,
     provision: bool = True,
     semantic_only: bool = False,
+    tool: str | None = None,
 ) -> int:
     """Format only, or check complete structured format/project-lint diagnostics.
 
@@ -343,7 +359,7 @@ def _run(
         # Repository graph factories own fixed labels, not per-instance names.
         # Keep all other upstream default warnings; never filter returned records.
         options.append("-warnings=-unnamed-macro")
-    base = [str(executable(provision=provision)), *options]
+    base = [tool if tool is not None else str(executable(provision=provision)), *options]
     batches: list[dict[Path, str]] = []
     batch: dict[Path, str] = {}
     for path, logical in requested.items():

@@ -196,8 +196,7 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
         if action in ("docs", "winui"):
             return False
         if action == "format":
-            # The documentation inventory contains only Markdown; defer its
-            # discovery until managed Python tools are available.
+            # The documentation inventory contains only Markdown and needs no native formatter.
             return not args.docs and options.needs_formatter_environment(options.resolved_scope(args))
         if action == "lint":
             return _owner_only(args) or options.has_native_sources(options.resolved_scope(args))
@@ -212,10 +211,11 @@ def requires_python_tools(args: argparse.Namespace) -> bool:
     try:
         _admit(args)
         action = args.check_action
-        if action in (None, "repository", "docs"):
+        # Full and repository checks use the graph's Python tools, not the portal's.
+        if action == "docs":
             return True
         if action == "format":
-            return args.docs or options.has_python_sources(options.resolved_scope(args))
+            return not args.docs and options.has_python_sources(options.resolved_scope(args))
         if action == "lint":
             return not (args.tidy_check or _owner_only(args)) and options.has_python_sources(
                 options.resolved_scope(args)

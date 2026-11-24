@@ -2,13 +2,25 @@
 
 import contextlib
 import io
+import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.policy import compiler_policy
-from ao.portal import build_dir, buildifier, compiler_rc, source_format, source_lint, source_scope
+from ao.policy import compiler_policy, windows_llvm_sdk
+from ao.portal import (
+    bazel_check_tools,
+    build_dir,
+    buildifier,
+    compiler_rc,
+    prettier,
+    source_format,
+    source_lint,
+    source_scope,
+)
 from ao.portal.source_lint import LintRequest
 from ao.portal.source_scope import SourceScope
 
@@ -69,7 +81,14 @@ class FormatServiceTest(unittest.TestCase):
                     compiler_rc.format_msvc_rc(check=True)
 
     def test_windows_clang_format_uses_the_ready_pinned_sdk_or_an_explicit_tool(self):
-        sdk = Path("ready-sdk")
+        with tempfile.TemporaryDirectory() as temporary:
+            sdk = Path(temporary)
+            tool = sdk / "bin/clang-format.exe"
+            tool.parent.mkdir()
+            tool.touch(mode=0o755)
+            self.check_windows_clang_format(sdk)
+
+    def check_windows_clang_format(self, sdk):
         for explicit in (None, "explicit-clang-format"):
             with (
                 self.subTest(explicit=explicit),
@@ -96,6 +115,147 @@ class FormatServiceTest(unittest.TestCase):
                 cwd=source_format.PROJECT_ROOT,
             )
             self.assertEqual(ready.call_count, int(explicit is None))
+
+    @unittest.skipUnless(sys.platform == "linux", "Nix path admission runs only on Linux")
+    def test_linux_clang_format_rejects_unadmitted_tool_paths(self):
+        for selected, resolved, executable in (
+            ("clang-format", "/nix/store/fixture/bin/clang-format", True),
+            ("/tmp/clang-format", "/nix/store/fixture/bin/clang-format", True),
+            ("/nix/store/fixture/bin/clang-format", "/tmp/clang-format", True),
+            ("/nix/store/fixture/bin/clang-format", "/nix/store/fixture/bin/clang-format", False),
+        ):
+            with (
+                self.subTest(selected=selected, resolved=resolved, executable=executable),
+                mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE),
+                mock.patch.dict(os.environ, {"AO_NIX_CLANG_FORMAT": selected}),
+                mock.patch.object(Path, "resolve", return_value=Path(resolved)),
+                mock.patch.object(Path, "is_file", return_value=True),
+                mock.patch.object(os, "access", return_value=executable),
+                self.assertRaises(ValueError),
+            ):
+                source_format.clang_format_executable()
+
+    def test_macos_clang_format_uses_selected_llvm_and_never_path_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tool = root / "bin/clang-format"
+            tool.parent.mkdir()
+            tool.touch(mode=0o755)
+            with (
+                mock.patch.object(build_dir, "platform_profile", return_value=build_dir.MACOS_PROFILE),
+                mock.patch.dict(source_format.os.environ, {"AOBUS_LLVM_ROOT": str(root), "PATH": str(root / "other")}),
+            ):
+                facts = bazel_check_tools.resolve("clang-format")
+                self.assertEqual(facts["selection"], {"name": "clang-format", "command": (str(tool),)})
+                self.assertIn(str(root), facts["watch_files"])
+                self.assertIn(str(tool), facts["watch_files"])
+                self.assertEqual(facts["directories"], [])
+                self.assertEqual(facts["trees"], [])
+                tool.unlink()
+                with self.assertRaises(ValueError):
+                    source_format.run_clang_format(["lib/Foo.cpp"], check=True)
+
+    def test_windows_clang_format_tracks_required_sdk_files_without_projecting_them(self):
+        manifest = windows_llvm_sdk.Manifest("22.1.8", "b" * 64, ("bin/clang-format.exe", "include/required.h"))
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            for cached in (False, True):
+                explicit = cache / "explicit"
+                environment = {"AOBUS_LLVM_SDK_ROOT": "" if cached else str(explicit)}
+                environment["AOBUS_LLVM_SDK_CACHE_ROOT"] = str(cache)
+                sdk = windows_llvm_sdk.cache_root(environment, manifest) if cached else explicit
+                formatter, header = (sdk / relative for relative in manifest.required_files)
+                for path in (formatter, header):
+                    path.parent.mkdir(parents=True)
+                    path.touch(mode=0o755)
+                marker = sdk / windows_llvm_sdk.MARKER
+                if cached:
+                    marker.write_text(windows_llvm_sdk.marker_text(manifest), encoding="utf-8")
+                with (
+                    self.subTest(cached=cached),
+                    mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),
+                    mock.patch.object(windows_llvm_sdk, "read_manifest", return_value=manifest),
+                    mock.patch.dict(os.environ, environment),
+                ):
+                    facts = bazel_check_tools.resolve("clang-format")
+                    self.assertIn(str(header), facts["watch_files"])
+                    self.assertEqual(str(marker) in facts["watch_files"], cached)
+                    self.assertEqual(facts["directories"], [])
+                    self.assertEqual(facts["trees"], [])
+                    header.unlink()
+                    if cached:
+                        missing = bazel_check_tools.resolve("clang-format")
+                        self.assertIn("unavailable", missing["selection"])
+                        self.assertIn(str(header), missing["watch_files"])
+                    else:
+                        with self.assertRaises(ValueError):
+                            bazel_check_tools.resolve("clang-format")
+
+    def test_python_only_format_does_not_select_llvm(self):
+        with (
+            mock.patch.object(source_scope, "require_files"),
+            mock.patch.object(source_format, "clang_format_executable") as clang,
+            mock.patch.object(source_format, "run_ruff_format", return_value=0),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(source_format.check(SourceScope(("script/foo.py",))), 0)
+        clang.assert_not_called()
+
+    def test_managed_prettier_tracks_shallow_cache_and_recursive_package(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            node = root / "node.exe"
+            entry = root / "package/bin/prettier.cjs"
+            plugin = root / "package/plugins/example.mjs"
+            for path in (node, entry, plugin):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            with mock.patch.object(prettier, "command", return_value=(str(node), str(entry))) as command:
+                facts = bazel_check_tools.resolve("prettier")
+            command.assert_called_once_with(provision=False)
+            self.assertEqual(facts["selection"], {"name": "prettier", "command": (str(node), str(entry))})
+            self.assertIn(str(node), facts["watch_files"])
+            self.assertIn(str(prettier.MANIFEST_PATH), facts["watch_files"])
+            self.assertIn(str(root / ".aobus-prettier-receipt.json"), facts["watch_files"])
+            self.assertEqual(facts["directories"], [str(root)])
+            self.assertEqual(facts["trees"], [str(root / "package")])
+
+    def test_tool_resolver_uses_checkout_relative_state_but_writes_to_the_external_repo(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            checkout = root / "checkout"
+            external = root / "external"
+            checkout.mkdir()
+            external.mkdir()
+            with (
+                contextlib.chdir(external),
+                mock.patch.object(bazel_check_tools, "_ROOT", checkout),
+                mock.patch.object(sys, "argv", ["resolver", "buildifier", "tool.json"]),
+                mock.patch.object(sys, "path", sys.path.copy()),
+                mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": "relative-state"}),
+                mock.patch.object(
+                    bazel_check_tools,
+                    "resolve",
+                    side_effect=lambda _: {"state": str(build_dir.state_root().absolute())},
+                ),
+            ):
+                self.assertEqual(bazel_check_tools.main(), 0)
+            facts = json.loads((external / "tool.json").read_text(encoding="utf-8"))
+            self.assertEqual(facts, {"state": str(checkout / "relative-state")})
+
+    def test_ruff_formatter_uses_the_declared_binary_instead_of_the_portal_interpreter(self):
+        tool = Path("declared-ruff")
+        with (
+            mock.patch.object(source_format.python_check, "ruff_command", side_effect=AssertionError("ambient Ruff")),
+            mock.patch.object(source_format.python_check, "tool_versions", return_value={"python": "3.12.8"}),
+            mock.patch.object(source_format.subprocess, "run", return_value=mock.Mock(returncode=0)) as process,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(source_format.run_ruff_format(["script/file.py"], check=True, tool=tool), 0)
+        process.assert_called_once_with(
+            (str(tool), "format", "--target-version", "py312", "--check", "script/file.py"),
+            cwd=source_format.PROJECT_ROOT,
+        )
 
     def test_ruff_formatter_preserves_check_mode_and_tool_failure(self):
         for check, code, arguments, expected in (

@@ -237,9 +237,10 @@ When a required include exists solely for specialization or registration side ef
 ## Python hygiene
 
 Fix Ruff and mypy findings with the same bias as C++ lint: prefer a local code or typing improvement, keep public shape stable unless the task changes it, and avoid broad ignores.
-Linux uses the project shell.
-Windows uses the checkout-specific managed environment and never ambient `PATH` tools.
-Both supported tooling environments must match exact versions in `script/ao/toolchain.json`; Nix checks this during evaluation, while Windows bootstrap and tooling tests probe the managed environment.
+Scoped portal commands use the pinned Nix environment on Linux or the managed
+tooling environment on macOS and Windows, not ambient `PATH` tools. The
+repository checks use the separate [Bazel Python-check provider](dependency-governance.md#python-wheel-sources-and-fetches).
+Both routes follow the version policy in `script/ao/toolchain.json`.
 
 - Use `./ao format` for Python formatting.
 - Use targeted `# noqa: RULE` or `# type: ignore[code]` only when the tool cannot express the real contract; explain a non-obvious reason.
@@ -316,11 +317,11 @@ workflow-lint scope is skipped without resolving actionlint.
 
 On Linux the stage runs the actionlint pinned by
 [`nixpkgs.json`](../../nixpkgs.json), including the packaged ShellCheck and
-Pyflakes; `shell.nix` exports `AO_NIX_ACTIONLINT`, and the `workflows` test
-inherits it without changing the environment of unrelated tests. The Nixpkgs pin is the
-sole version authority — there is no separate manifest, native installer, or
-setup command. The `workflows` target is Linux-only, so macOS and Windows mark it
-host-incompatible; Linux CI supplies the enforcement pass, while source
+Pyflakes. The portal selects it through `AO_NIX_ACTIONLINT`; the `workflows`
+test uses the [ready host command](dependency-governance.md#ready-host-tools-in-bazel)
+from the same Nix provider. The Nixpkgs pin is its sole version authority;
+there is no native installer or setup command. The `workflows` target remains
+Linux-only; Linux CI supplies the enforcement pass, while source
 discovery itself is platform-independent. A YAML-only lint scope must not initialize the C++
 SDK or a managed Ruff/mypy environment; the base portal Python remains
 required. See the [version authority table](dependency-governance.md#find-the-source-of-truth).

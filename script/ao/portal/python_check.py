@@ -38,16 +38,21 @@ def module_command(
     return (sys.executable if python is None else str(python), *isolated, "-m", module, *arguments)
 
 
-def _governed_python() -> str:
+def governed_python_version() -> str:
     """The governed toolchain Python as ``major.minor``, for tool target options."""
     major, minor, _ = tool_versions()["python"].split(".")
     return f"{major}.{minor}"
 
 
+def ruff_target_version() -> str:
+    """Return Ruff's pyXY spelling of the governed Python target."""
+    return "py" + governed_python_version().replace(".", "")
+
+
 def mypy_command(*arguments: str, python: Path | None = None, platform_name: str | None = None) -> tuple[str, ...]:
     """Keep native mypy caches in the managed environment, not the source checkout."""
     cache = _local_cache_option(".mypy_cache", python=python, platform_name=platform_name)
-    target = ("--python-version", _governed_python())
+    target = ("--python-version", governed_python_version())
     return module_command("mypy", *cache, *target, *arguments, python=python, platform_name=platform_name)
 
 
@@ -56,7 +61,7 @@ def ruff_command(
 ) -> tuple[str, ...]:
     """Keep native Ruff check and format caches in the managed environment."""
     cache = _local_cache_option(".ruff_cache", python=python, platform_name=platform_name)
-    target = ("--target-version", "py" + _governed_python().replace(".", ""))
+    target = ("--target-version", ruff_target_version())
     return module_command("ruff", subcommand, *cache, *target, *arguments, python=python, platform_name=platform_name)
 
 

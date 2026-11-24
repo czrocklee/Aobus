@@ -45,6 +45,10 @@ ENVIRONMENT_KEYS = (
     "AOBUS_CHECKOUT_ID",
     "XDG_CACHE_HOME",
     "AOBUS_NIX_DEPENDENCY_REPORT",
+    "AO_NIX_ACTIONLINT",
+    "AO_NIX_BUILDIFIER",
+    "AO_NIX_CLANG_FORMAT",
+    "AO_NIX_PRETTIER",
     "PKG_CONFIG_PATH",
     "PKG_CONFIG_LIBDIR",
     "AOBUS_LLVM_ROOT",
@@ -472,16 +476,28 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--request", type=Path)
+    parser.add_argument("--test-launcher", type=Path)
     parser.add_argument("--environment-json")
     args = parser.parse_args(argv)
     staged = args.output.with_name(args.output.name + ".tmp")
     try:
         args.output.unlink(missing_ok=True)
         try:
-            environment = None if args.environment_json is None else _mapping(json.loads(args.environment_json))
+            environment = os.environ if args.environment_json is None else _mapping(json.loads(args.environment_json))
         except ValueError, UnicodeError:
             raise EnvironmentError("invalid explicit environment JSON") from None
         result = discover_environment(output=args.output, request=args.request, environment=environment)
+        if args.test_launcher is not None:
+            # Only the Linux nested-Bazel fixture consumes these Nix shell outputs.
+            # They are not resolver environment keys or input paths to watch.
+            keys = {"bazel": "AO_NIX_BAZEL", "server_javabase": "AOBUS_BAZEL_SERVER_JAVABASE"}
+            missing = [name for name in keys.values() if not environment.get(name)]
+            launcher: dict[str, str | int] = {"schema": 1}
+            if missing:
+                launcher["unavailable"] = "Missing Linux test launcher selection: " + ", ".join(missing)
+            else:
+                launcher.update({field: environment[name] for field, name in keys.items()})
+            args.test_launcher.write_text(json.dumps(launcher) + "\n", encoding="utf-8")
         staged.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         os.replace(staged, args.output)
         return 0

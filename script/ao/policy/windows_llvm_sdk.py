@@ -85,6 +85,11 @@ def _require_selected_file(path: Path) -> None:
         )
 
 
+def readiness_paths(root: Path, manifest: Manifest, *, cached: bool) -> tuple[Path, ...]:
+    """The exact SDK files a ready-only selection requires, not directory trees."""
+    return tuple(root / relative for relative in (*manifest.required_files, *((MARKER,) if cached else ())))
+
+
 def ready_root(environment: Mapping[str, str], manifest: Manifest) -> tuple[Path, bool]:
     """Select a complete SDK and report whether it is the automatic cache.
 
@@ -96,8 +101,8 @@ def ready_root(environment: Mapping[str, str], manifest: Manifest) -> tuple[Path
         root, cached = _absolute(explicit, "AOBUS_LLVM_SDK_ROOT"), False
     else:
         root, cached = cache_root(environment, manifest), True
-    for relative in (*manifest.required_files, *((MARKER,) if cached else ())):
-        _require_selected_file(root / relative)
+    for path in readiness_paths(root, manifest, cached=cached):
+        _require_selected_file(path)
     if cached:
         marker = root / MARKER
         # A native owner may write the marker with Windows CRLF line endings.

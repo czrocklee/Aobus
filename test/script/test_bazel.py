@@ -937,12 +937,8 @@ class BazelWorkspaceTests(unittest.TestCase):
             resource = ({'provider': 'fixture', 'outputs': [str(fixtures)]}, fixtures / 'bin/glib-compile-resources',
                         [fixtures / 'lib/libglib-2.0.so'], [fixtures / 'glib-report.json'])
             python_runtime = (
-                {'provider': 'fixture', 'version': '9.9.9', 'implementation': 'cpython',
-                 'executable': str(fixtures / 'bin/python3'), 'base_prefix': str(fixtures),
-                 'tooling_python': str(fixtures / 'bin/python3'),
-                 'runtime_contract': 'fixture interpreter; declared location only'},
+                {'version': '9.9.9', 'implementation': 'cpython', 'executable': str(fixtures / 'bin/python3')},
                 [fixtures / 'bin/python3', fixtures / 'toolchain.json'],
-                [fixtures / 'toolchain.json'],
             )
             with (
                 patch.object(native, 'native_platform', return_value='linux'),
@@ -1036,7 +1032,6 @@ class BazelWorkspaceTests(unittest.TestCase):
             {
                 "dbus_daemon": str(fixtures / "bin/dbus-daemon"),
                 "dbus_daemon_directory": str(fixtures / "bin"),
-                "tooling_python": str(fixtures / "bin/python3"),
                 "pipewire": str(fixtures / "bin/pipewire"),
                 "wireplumber": str(fixtures / "bin/wireplumber"),
                 "pw_cli": str(fixtures / "bin/pw-cli"),

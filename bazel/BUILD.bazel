@@ -102,7 +102,9 @@ cc_library(
 # do not require source-file exports.
 exports_files([
     "apple_support_llvm.patch",
+    "check_tools.bzl",
     "compiler_policy.bzl",
+    "environment.bzl",
     "msvc_policy.bzl",
     "rules_cc_coverage_private_headers.patch",
     "rules_cc_msvc_exception_handling.patch",

@@ -137,7 +137,7 @@ def requires_parsed_build_env(args: argparse.Namespace) -> bool:
 
 
 def requires_python_tools(command: str, arguments: Sequence[str] = ()) -> bool:
-    """Return True when `command` needs the managed Ruff/mypy environment."""
+    """Return True when `command` needs the portal's managed Python tools."""
     from ao.command import COMMAND_MODULES
 
     if _help_requested(arguments):

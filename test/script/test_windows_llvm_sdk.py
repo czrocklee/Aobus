@@ -58,6 +58,9 @@ class WindowsFormatReadySdkTest(unittest.TestCase):
     def test_cpp_format_uses_only_the_ready_pinned_sdk_without_visual_studio(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            tool = root / "bin/clang-format.exe"
+            tool.parent.mkdir()
+            tool.touch(mode=0o755)
             manifest = windows_llvm_sdk.Manifest("31.2.3", "b" * 64, ("bin/clang-format.exe",))
             with (
                 mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE),

@@ -8,7 +8,33 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from ao.portal import python_check
+from ao.portal import bazel_checker_arch, python_check
+
+
+class CheckerWheelArchitectureTest(unittest.TestCase):
+    def test_standard_cpython_selects_the_process_architecture(self):
+        with (
+            mock.patch.object(bazel_checker_arch.sysconfig, "get_config_var", return_value=0),
+            mock.patch.object(bazel_checker_arch.sysconfig, "get_platform", return_value="win-amd64"),
+            mock.patch.object(bazel_checker_arch, "sys", SimpleNamespace(platform="win32")),
+        ):
+            self.assertEqual(bazel_checker_arch.checker_arch(), "x86_64")
+        with (
+            mock.patch.object(bazel_checker_arch.sysconfig, "get_config_var", return_value=0),
+            mock.patch.object(bazel_checker_arch, "sys", SimpleNamespace(platform="darwin")),
+            mock.patch.object(
+                bazel_checker_arch, "os", SimpleNamespace(uname=lambda: SimpleNamespace(machine="arm64"))
+            ),
+        ):
+            self.assertEqual(bazel_checker_arch.checker_arch(), "arm64")
+
+    def test_free_threaded_build_is_rejected_even_when_the_gil_is_enabled(self):
+        with (
+            mock.patch.object(bazel_checker_arch.sysconfig, "get_config_var", side_effect={"Py_GIL_DISABLED": 1}.get),
+            mock.patch.object(sys, "_is_gil_enabled", return_value=True),
+            self.assertRaisesRegex(SystemExit, "locked Ruff/mypy wheels.*free-threaded CPython"),
+        ):
+            bazel_checker_arch.checker_arch()
 
 
 class PythonCheckRunnerTest(unittest.TestCase):
