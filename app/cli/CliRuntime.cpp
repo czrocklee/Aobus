@@ -5,6 +5,7 @@
 
 #include "CommandError.h"
 #include <ao/Contract.h>
+#include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
@@ -23,6 +24,12 @@
 #include <ostream>
 #include <utility>
 
+#ifdef _WIN32
+#include <ao/utility/FileAccessPath.h>
+
+#include <system_error>
+#endif
+
 namespace ao::cli
 {
   struct CliRuntime::Storage final
@@ -33,6 +40,51 @@ namespace ao::cli
 
   namespace
   {
+#ifdef _WIN32
+    bool hasWindowsNamespacePrefix(std::filesystem::path const& path)
+    {
+      auto const& name = path.native();
+      auto const isSeparator = [](wchar_t unit) { return unit == L'\\' || unit == L'/'; };
+      return name.size() >= 3 && isSeparator(name[0]) && isSeparator(name[1]) && (name[2] == L'?' || name[2] == L'.') &&
+             (name.size() == 3 || isSeparator(name[3]));
+    }
+
+    void validateWindowsRootSpelling(std::filesystem::path const& root)
+    {
+      if (hasWindowsNamespacePrefix(root))
+      {
+        throwCommandError(Error::Code::InvalidInput,
+                          "failed to open library: Windows namespace paths are not supported for the library root; "
+                          "use an ordinary path on a local drive without a namespace prefix");
+      }
+
+      if (auto const spellingRes = utility::checkedFileSpelling(root); !spellingRes)
+      {
+        throwCommandError(
+          spellingRes.error(), "failed to open library: invalid library root: {}", spellingRes.error().message);
+      }
+    }
+
+    void validateWindowsLibraryRoot(std::filesystem::path const& root)
+    {
+      validateWindowsRootSpelling(root);
+
+      if (!root.is_absolute())
+      {
+        auto ec = std::error_code{};
+        auto const cwd = std::filesystem::current_path(ec);
+
+        if (ec)
+        {
+          throwCommandError(
+            Error::Code::IoError, "failed to open library: cannot determine the current directory: {}", ec.message());
+        }
+
+        validateWindowsRootSpelling(cwd / root);
+      }
+    }
+#endif
+
     struct TaskCompletionState final
     {
       async::Executor& executor;
@@ -116,6 +168,16 @@ namespace ao::cli
   {
     if (!_storagePtr->optRuntime)
     {
+      if (_options.root.empty())
+      {
+        throwCommandError(Error::Code::InvalidInput, "failed to open library: the library root must not be empty");
+      }
+
+#ifdef _WIN32
+      // The root also names the database. Check it before opening storage,
+      // without rewriting the spelling that the storage layer receives.
+      validateWindowsLibraryRoot(_options.root);
+#endif
       // CliRuntime is invocation-thread confined; lazy construction binds the
       // loop executor to the thread that enters the first command callback.
       auto executorPtr = std::make_unique<async::LoopExecutor>();

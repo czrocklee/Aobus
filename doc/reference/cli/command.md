@@ -26,6 +26,12 @@ CLI11 help is the executable syntax authority; this document is the durable repo
 | `--help-all`         | recursive complete command help                                                                         |
 | `--version`          | application version                                                                                     |
 
+An unset or empty `AOBUS_ROOT` falls back to the current directory when `-C` is omitted. An explicitly empty argument (`-C ""`) is rejected before opening or creating the database, even if `AOBUS_ROOT` is set.
+
+On Windows, use an ordinary local drive path such as `C:\Music` for the music root. Namespace-prefixed roots such as `\\?\C:\Music` and `\\?\Volume{…}\Music` are rejected before opening or creating the database. Relative roots use the current directory, which must not have a namespace prefix. The [database storage requirements](../library/storage/database.md#environment) still apply.
+
+Individual media path arguments can use extended DOS paths such as `\\?\C:\Music\track.flac`, subject to the usual library-root and file checks. Volume GUID paths and device namespace paths such as `\\.\C:\Music\track.flac` are not supported as media inputs.
+
 Exactly one top-level command is required.
 
 ### Command inventory
