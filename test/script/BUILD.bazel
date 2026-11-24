@@ -481,13 +481,15 @@ _DOC_WHEEL_MODULES = [
     "test_naming_doc",
 ]
 
-# These host-backed modules repeatedly start Windows shells/interpreters. Both
-# reached the 60s short deadline alongside cold native CI actions. Give only
-# these targets 300s without changing their scheduling size.
-_WINDOWS_PROCESS_MODULES = [
-    "test_windows_portal",
-    "test_windows_prerequisites",
-]
+# Keep scheduling size small. These exceptions give the Git, shell, and tool
+# subprocesses more time under native CI load. Bazel timeouts are not configurable.
+_UNIT_TIMEOUTS = {
+    "test_bazel_check_tools": "moderate",
+    "test_git_files": "moderate",
+    "test_perf_identity": "moderate",
+    "test_windows_portal": "long",
+    "test_windows_prerequisites": "long",
+}
 
 _WINDOWS_MANAGED_STATE = [
     "AOBUS_STATE_ROOT",
@@ -511,7 +513,7 @@ _WINDOWS_MODULE_ENV = {
     py_test(
         name = module,
         size = "small",
-        timeout = "moderate" if module in _WINDOWS_PROCESS_MODULES or module == "test_bazel_check_tools" else "short",
+        timeout = _UNIT_TIMEOUTS.get(module, "short"),
         srcs = [module + ".py"] + _SUPPORT.get(module, []),
         args = [module] + (_LIVE_CHECKOUT_ARGS if module in _HOST_BACKED_MODULES else []) + (_DOC_WHEEL_ARGS if module in _DOC_WHEEL_MODULES else []),
         data = _REPO_DATA.get(module, []) + (_LIVE_CHECKOUT_DATA if module in _HOST_BACKED_MODULES else []) + (_DOC_WHEELS if module in _DOC_WHEEL_MODULES else []),
