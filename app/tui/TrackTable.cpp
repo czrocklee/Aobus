@@ -17,6 +17,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackRowField.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
 
@@ -109,7 +110,7 @@ namespace ao::tui
       {
         columns.push_back(TrackColumn{
           .field = terminalColumn.field,
-          .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, terminalColumn.field)},
+          .label = std::string{uimodel::trackFieldLabel(textCatalog, terminalColumn.field)},
           .width = terminalColumn.columns,
           .rightAligned =
             uimodel::trackColumnDefaults(terminalColumn.field).alignment == uimodel::TrackColumnAlignment::End,

@@ -12,6 +12,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/utility/Uuid.h>
+#include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -20,7 +21,9 @@
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -28,26 +31,83 @@ namespace ao::uimodel
 {
   namespace
   {
+    std::string_view visibilityToken(TrackColumnVisibility visibility) noexcept
+    {
+      switch (visibility)
+      {
+        case TrackColumnVisibility::Default: return "default";
+        case TrackColumnVisibility::Show: return "show";
+        case TrackColumnVisibility::Hide: return "hide";
+      }
+
+      return {};
+    }
+
+    std::optional<TrackColumnVisibility> visibilityFromToken(std::string_view token) noexcept
+    {
+      constexpr auto kChoices =
+        std::array{TrackColumnVisibility::Default, TrackColumnVisibility::Show, TrackColumnVisibility::Hide};
+
+      for (auto const visibility : kChoices)
+      {
+        if (token == visibilityToken(visibility))
+        {
+          return visibility;
+        }
+      }
+
+      return std::nullopt;
+    }
+
     Result<> writeColumn(ryml::NodeRef node, StoredTrackColumn const& column)
     {
       auto writer = yaml::MapWriter{node};
-      writer.scalar("field", column.field)
-        .scalar("width", column.width)
-        .scalar("weight", column.weight)
-        .scalar("visible", column.visible);
-      return {};
+      writer.scalar("field", column.field);
+
+      if (column.optWidth && column.optWeight)
+      {
+        writer.scalar("width", *column.optWidth).scalar("weight", *column.optWeight);
+      }
+
+      writer.scalar("visibility", column.visibility);
+      return std::move(writer).finish();
     }
 
     Result<StoredTrackColumn> readColumn(ryml::ConstNodeRef node, std::string_view context)
     {
-      constexpr auto kKeys = std::to_array<std::string_view>({"field", "width", "weight", "visible"});
+      if (auto const res = yaml::requireMap(node, context); !res)
+      {
+        return std::unexpected{res.error()};
+      }
 
+      constexpr auto kKeys = std::to_array<std::string_view>({"field", "width", "weight", "visibility"});
+      constexpr auto kBooleanKeys = std::to_array<std::string_view>({"field", "width", "weight", "visible"});
+      // Select by key presence, not by whether either value parses. MapReader
+      // rejects both keys together and duplicate keys in either spelling.
+      auto const hasBooleanKey = yaml::findChild(node, "visible").readable();
       auto column = StoredTrackColumn{};
-      auto reader = yaml::MapReader{node, kKeys, context};
-      reader.requiredScalar("field", column.field)
-        .requiredScalar("width", column.width)
-        .requiredScalar("weight", column.weight)
-        .requiredScalar("visible", column.visible);
+      auto reader = yaml::MapReader{node, hasBooleanKey ? kBooleanKeys : kKeys, context};
+      reader.requiredScalar("field", column.field);
+
+      // The earlier boolean form always carried dimensions. The current form
+      // may omit the pair, but a partial or malformed pair is not an override.
+      if (hasBooleanKey || yaml::findChild(node, "width").readable() || yaml::findChild(node, "weight").readable())
+      {
+        reader.requiredScalar("width", column.optWidth.emplace()).requiredScalar("weight", column.optWeight.emplace());
+      }
+
+      if (hasBooleanKey)
+      {
+        bool visible = false;
+        reader.requiredScalar("visible", visible);
+        // Earlier writers could not distinguish geometry from an explicit show.
+        column.visibility = visibilityToken(visible ? TrackColumnVisibility::Default : TrackColumnVisibility::Hide);
+      }
+      else
+      {
+        reader.requiredScalar("visibility", column.visibility);
+      }
+
       return std::move(reader).finish(std::move(column));
     }
 
@@ -101,7 +161,7 @@ namespace ao::uimodel
 
       constexpr auto kKeys = std::to_array<std::string_view>({"version", "libraryId", "layouts"});
 
-      auto document = TrackColumnLayoutDocument{.version = *versionRes};
+      auto document = TrackColumnLayoutDocument{};
       auto reader = yaml::MapReader{node, kKeys, kContext};
       reader.requiredValue("libraryId", document.libraryId, yaml::uuidScalar)
         .requiredSequence("layouts", document.layouts, readLayout);
@@ -115,16 +175,21 @@ namespace ao::uimodel
       return trackColumnDefaults(column.field).sizing == TrackColumnSizing::Fixed ? fixed : flexible;
     }
 
-    Result<> validateColumn(TrackColumnState const& column, Error::Code code)
+    Result<> validateColumn(TrackColumnState const& column, bool const hasGeometry, Error::Code code)
     {
       if (rt::trackFieldId(column.field).empty())
       {
         return makeError(code, "Track column contains an unknown field");
       }
 
-      if (!matchesColumnSizingPolicy(column))
+      if (hasGeometry && !matchesColumnSizingPolicy(column))
       {
         return makeError(code, "Track column width and weight do not match the field sizing policy");
+      }
+
+      if (!hasGeometry && column.visibility == TrackColumnVisibility::Default)
+      {
+        return makeError(code, "Track columns without geometry require an explicit visibility choice");
       }
 
       return {};
@@ -146,9 +211,18 @@ namespace ao::uimodel
 
       for (auto const& column : columns)
       {
-        if (auto const validRes = validateColumn(column, Error::Code::InvalidState); !validRes)
+        auto const hasPosition = column.hasPosition();
+
+        if (auto const validRes = validateColumn(column, hasPosition, Error::Code::InvalidState); !validRes)
         {
           return std::unexpected{validRes.error()};
+        }
+
+        auto const visibility = visibilityToken(column.visibility);
+
+        if (visibility.empty())
+        {
+          return makeError(Error::Code::InvalidState, "Track column contains an unknown visibility choice");
         }
 
         auto const field = rt::trackFieldId(column.field);
@@ -158,9 +232,9 @@ namespace ao::uimodel
 
         stored.columns.push_back(StoredTrackColumn{
           .field = std::string{field},
-          .width = column.width,
-          .weight = column.weight,
-          .visible = column.visible,
+          .optWidth = hasPosition ? std::optional<std::int32_t>{column.width} : std::nullopt,
+          .optWeight = hasPosition ? std::optional<double>{column.weight} : std::nullopt,
+          .visibility = std::string{visibility},
         });
       }
 
@@ -212,14 +286,29 @@ namespace ao::uimodel
           return makeError(Error::Code::FormatRejected, std::format("Duplicate track column field '{}'", column.field));
         }
 
-        auto columnState = TrackColumnState{
+        auto const optVisibility = visibilityFromToken(column.visibility);
+
+        if (!optVisibility)
+        {
+          return makeError(
+            Error::Code::FormatRejected,
+            std::format("Unknown track column visibility '{}'", yaml::boundedErrorContext(column.visibility)));
+        }
+
+        if (column.optWidth.has_value() != column.optWeight.has_value())
+        {
+          return makeError(Error::Code::FormatRejected, "Track column width and weight must be supplied together");
+        }
+
+        auto const columnState = TrackColumnState{
           .field = *optField,
-          .width = column.width,
-          .weight = column.weight,
-          .visible = column.visible,
+          .width = column.optWidth.value_or(-1),
+          .weight = column.optWeight.value_or(-1.0),
+          .visibility = *optVisibility,
         };
 
-        if (auto const validRes = validateColumn(columnState, Error::Code::FormatRejected); !validRes)
+        if (auto const validRes = validateColumn(columnState, column.optWidth.has_value(), Error::Code::FormatRejected);
+            !validRes)
         {
           return std::unexpected{validRes.error()};
         }

@@ -137,8 +137,17 @@ namespace ao::gtk
     // projection, and rebinding even the same one resets GTK's selection.
     if (auto const& projectionPtr = *projectionRes; entry.modelPtr->projection() != projectionPtr.get())
     {
+      auto const* presentation = _views.findTrackListPresentation(entry.viewId);
+
+      if (presentation == nullptr)
+      {
+        return false;
+      }
+
+      // Visibility follows the authored view spec, not inferred projection metadata.
+      auto const authoredPresentation = *presentation;
       entry.modelPtr->bindProjection(projectionPtr);
-      entry.pagePtr->applyPresentation(projectionPtr->presentation());
+      entry.pagePtr->applyPresentation(authoredPresentation);
 
       if (_playingTrackId != kInvalidTrackId)
       {

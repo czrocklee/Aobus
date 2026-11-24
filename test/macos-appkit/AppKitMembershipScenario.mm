@@ -3,9 +3,13 @@
 
 #include "AppKitDesktopScenarioHelpers.h"
 #include "AppKitScenarioSupport.h"
+#include "app/macos-appkit/DesktopApplicationInternal.h"
+#include "app/macos-appkit/DesktopWindowGeometry.h"
 #include "app/macos-appkit/LibraryBrowser.h"
 #include <ao/Contract.h>
 
+#include <filesystem>
+#include <functional>
 #include <print>
 #include <utility>
 
@@ -176,10 +180,50 @@ namespace ao::appkit::test
       }
     }
 
-    void exerciseInitialIndex()
+    void exerciseSelectedFile(NSWindow* window, NSTableView* table, std::filesystem::path const& musicRoot)
+    {
+      auto* const browser = static_cast<AobusLibraryBrowser*>(table.delegate);
+      AO_INVARIANT([browser isKindOfClass:AobusLibraryBrowser.class] != NO, "The desktop must own the native browser");
+      selectTracks(browser, @[kFirst]);
+      auto* const expectedURL = [NSURL fileURLWithPath:nativePath(musicRoot / "appkit-fixture-01.wav")];
+
+      auto* const menu = table.menu;
+      [menu.delegate menuNeedsUpdate:menu];
+      [menu update];
+      auto* const reveal = findMenuItem(menu, ::NSSelectorFromString(@"revealSelection:"));
+      AO_INVARIANT(reveal != nil && reveal.enabled && [reveal.target isKindOfClass:AobusDesktopDelegate.class] != NO,
+                   "Reveal in Finder must be available for the selected track");
+      auto* const target = static_cast<AobusDesktopDelegate*>(reveal.target);
+      // Ask the real action target for the URL without dispatching the Finder action.
+      auto* const url = [target revealURL:reveal];
+      auto* const expectedResolvedURL = expectedURL.URLByResolvingSymlinksInPath;
+      AO_INVARIANT(url.isFileURL && [url.URLByResolvingSymlinksInPath isEqual:expectedResolvedURL] != NO,
+                   "Reveal in Finder must resolve the selected fixture file");
+
+      [window setContentSize:NSMakeSize(780, 520)];
+      requireWaitUntil([&] { return window.contentView.bounds.size.width < kDockedInspectorMinimumWidth; },
+                       "The test window must be narrow enough to open the compact inspector");
+      activateMenuItem(findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"toggleInspector:")),
+                       @"show the selected file in the compact inspector");
+      requireWaitUntil([&] { return window.attachedSheet != nil; }, "The compact inspector sheet must open");
+      auto* const sheet = window.attachedSheet;
+      auto* const scroll =
+        static_cast<NSScrollView*>(findAccessibilityView(sheet.contentView, @"compact-inspector-scroll"));
+      AO_INVARIANT(
+        [scroll isKindOfClass:NSScrollView.class] != NO && [scroll.documentView isKindOfClass:NSTextView.class] != NO,
+        "The compact inspector must provide native detail text");
+      auto* const text = static_cast<NSTextView*>(scroll.documentView);
+      AO_INVARIANT([text.string containsString:expectedURL.lastPathComponent] != NO,
+                   "The compact inspector must display the selected track's filename");
+      [sheet cancelOperation:nil];
+      requireWaitUntil([&] { return window.attachedSheet == nil; }, "The compact inspector sheet must close");
+    }
+
+    void exerciseInitialIndex(std::filesystem::path const& musicRoot)
     {
       requireWaitUntil([] { return findDesktopWindow() != nil; }, "The production desktop window must open");
-      auto* const table = findTrackTable(findDesktopWindow().contentView);
+      auto* const window = findDesktopWindow();
+      auto* const table = findTrackTable(window.contentView);
       auto* const rescan = findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"rescan:"));
       AO_INVARIANT(table != nil && rescan != nil, "The fresh desktop must expose the track table and Rescan action");
       requireWaitUntil(
@@ -191,6 +235,7 @@ namespace ao::appkit::test
         "Opening a fresh library without explicit scan intent must index the fixture tracks");
       AO_INVARIANT(selectableRowCount(table) == kIndexedFixtureTrackCount + 1,
                    "The initial scan must show exactly twenty selectable fixture tracks");
+      exerciseSelectedFile(window, table, musicRoot);
     }
 
     void exerciseMembership()
@@ -245,7 +290,7 @@ namespace ao::appkit::test
       std::println(
         "AppKit membership: current plus other routes captured Add and Remove after selection changes passed");
     }
-    std::int32_t runDesktopCheck(DesktopLaunch launch, i18n::MessageCatalog catalog, void (*exercise)())
+    std::int32_t runDesktopCheck(DesktopLaunch launch, i18n::MessageCatalog catalog, std::function<void()> exercise)
     {
       __block bool completed = false;
       auto const observer = [NSNotificationCenter.defaultCenter
@@ -272,7 +317,8 @@ namespace ao::appkit::test
   {
     AO_INVARIANT(launch.optRequest && !launch.optRequest->scanAfterOpen,
                  "The first-open control must use the public library option without explicit scan intent");
-    return runDesktopCheck(std::move(launch), std::move(catalog), exerciseInitialIndex);
+    auto const musicRoot = launch.optRequest->libraryRoot;
+    return runDesktopCheck(std::move(launch), std::move(catalog), [musicRoot] { exerciseInitialIndex(musicRoot); });
   }
 
   std::int32_t runMembershipScenario(DesktopLaunch launch, i18n::MessageCatalog catalog)

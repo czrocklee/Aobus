@@ -32,7 +32,10 @@ namespace ao::gtk::test
 
     auto const seededLayouts = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7},
-       {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123, .weight = 2.25, .visible = false}}},
+       {uimodel::TrackColumnState{.field = rt::TrackField::Artist,
+                                  .width = 123,
+                                  .weight = 2.25,
+                                  .visibility = uimodel::TrackColumnVisibility::Hide}}},
     };
     auto const seededPreferences = uimodel::ListPresentations::Snapshot{{ListId{7}, "artists"}};
 
@@ -91,10 +94,10 @@ namespace ao::gtk::test
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
     auto const expectedState = uimodel::TrackColumnLayouts::Snapshot{
-      {ListId{10},
-       {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75, .visible = true}}},
+      {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75}}},
       {ListId{20},
-       {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0, .visible = true}}},
+       {uimodel::TrackColumnState{
+         .field = rt::TrackField::Duration, .width = 200, .visibility = uimodel::TrackColumnVisibility::Hide}}},
     };
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
@@ -113,13 +116,13 @@ namespace ao::gtk::test
                         "        - field: \"artist\"\n"
                         "          width: -1\n"
                         "          weight: 1.75\n"
-                        "          visible: true\n"
+                        "          visibility: \"default\"\n"
                         "    - listId: 20\n"
                         "      columns:\n"
                         "        - field: \"duration\"\n"
                         "          width: 200\n"
                         "          weight: -1\n"
-                        "          visible: true\n"
+                        "          visibility: \"hide\"\n"
                         "trackView.presentations:\n"
                         "  version: 1\n"
                         "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
@@ -144,7 +147,7 @@ namespace ao::gtk::test
     auto const libraryPath = std::filesystem::path{tempDir.path()};
     std::filesystem::create_directories(libraryPath);
     auto const stored = std::string{"trackView.columnLayouts:\n"
-                                    "  version: 2\n"
+                                    "  version: 99\n"
                                     "  layouts: []\n"
                                     "trackView.presentations:\n"
                                     "  version: 1\n"
@@ -155,8 +158,7 @@ namespace ao::gtk::test
     std::ofstream{libraryPath / "gtk_layout.yaml"} << stored;
 
     auto const expectedState = uimodel::TrackColumnLayouts::Snapshot{
-      {ListId{7},
-       {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123, .weight = -1.0, .visible = true}}},
+      {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123, .weight = -1.0}}},
     };
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{42}, "albums"}};
     auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
@@ -203,8 +205,7 @@ namespace ao::gtk::test
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
     auto const expectedState = uimodel::TrackColumnLayouts::Snapshot{
-      {ListId{10},
-       {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 123, .weight = -1.0, .visible = true}}},
+      {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 123, .weight = -1.0}}},
     };
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
     auto store = GtkLayoutStateStore{libraryPath, kLibraryId};

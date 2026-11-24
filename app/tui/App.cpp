@@ -1472,12 +1472,13 @@ namespace ao::tui
     };
     auto requestLayoutCheckpoint = [&]
     { scheduleLayoutCheckpoint(screen, layoutStateDirty, layoutCheckpointRequested); };
+    // Interactive layout edits only resize columns; they do not change row path demand.
     auto columnLayoutsSub =
       trackColumnLayouts.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
     auto listPresentationsSub =
       listPresentations.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
-    auto library =
-      LibraryController{runtime.library(), runtime.views(), runtime.workspace(), textCatalog, listPresentations};
+    auto library = LibraryController{
+      runtime.library(), runtime.views(), runtime.workspace(), textCatalog, listPresentations, trackColumnLayouts};
     runtime.startPlaybackSessionPersistence();
 
     if (auto const restoredRes = runtime.restorePlaybackSession(); !restoredRes)

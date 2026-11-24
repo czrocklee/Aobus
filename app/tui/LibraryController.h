@@ -35,11 +35,13 @@ namespace ao::rt
   class ViewService;
   class WorkspaceService;
   struct NavigationRequest;
+  struct TrackListViewState;
 } // namespace ao::rt
 
 namespace ao::uimodel
 {
   class ListPresentations;
+  class TrackColumnLayouts;
 } // namespace ao::uimodel
 
 namespace ao::tui
@@ -65,7 +67,8 @@ namespace ao::tui
                       rt::ViewService& views,
                       rt::WorkspaceService& workspace,
                       i18n::MessageCatalog textCatalog,
-                      uimodel::ListPresentations& listPresentations);
+                      uimodel::ListPresentations& listPresentations,
+                      uimodel::TrackColumnLayouts const& trackColumnLayouts);
 
     std::vector<TrackPresentationNavEntry> const& presentationEntries() const noexcept { return _presentationEntries; }
     std::vector<TrackListEntry> const& tracks() const noexcept { return _tracks; }
@@ -166,6 +169,7 @@ namespace ao::tui
     };
 
     Result<TrackItemsSnapshot> materializeView(rt::ViewId viewId);
+    Result<TrackItemsSnapshot> materializeView(rt::TrackListViewState const& state);
     void installRows(TrackItemsSnapshot snapshot);
     Result<> refreshActiveView();
     Result<> refreshKeepingSelection();
@@ -184,6 +188,7 @@ namespace ao::tui
     rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
     uimodel::ListPresentations& _listPresentations;
+    uimodel::TrackColumnLayouts const& _trackColumnLayouts;
     ListNavigationModel _navigation{};
     std::vector<LibraryNavEntry> _libraryEntries{};
     std::vector<std::string> _libraryLabels{};

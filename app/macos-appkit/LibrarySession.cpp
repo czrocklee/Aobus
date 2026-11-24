@@ -568,10 +568,12 @@ namespace ao::appkit
     auto const& projectionPtr = storage.projectionPtr;
     auto const displayReset = storage.displayIndex.tryReset(*projectionPtr);
     AO_INVARIANT(displayReset);
-    storage.rows.reset(
-      projectionPtr->size(),
-      [this](std::size_t index)
-      { return runtime().library().snapshot().trackRow(_storagePtr->projectionPtr->trackIdAt(index)); });
+    storage.rows.reset(projectionPtr->size(),
+                       [this](std::size_t index)
+                       {
+                         auto const id = _storagePtr->projectionPtr->trackIdAt(index);
+                         return runtime().library().snapshot().trackRow(id, rt::TrackRowPathMode::Omit);
+                       });
     ++storage.state.tableRevision;
     storage.invalidate(DesktopInvalidation::Library);
   }

@@ -143,7 +143,8 @@ namespace ao::tui
 
         for (std::size_t index = 0; index < sampleLimit; ++index)
         {
-          if (auto const optRow = snapshot.trackRow(projectionPtr->trackIdAt(index)); optRow)
+          if (auto const optRow = snapshot.trackRow(projectionPtr->trackIdAt(index), rt::TrackRowPathMode::Omit);
+              optRow)
           {
             tracks.push_back(
               uimodel::formatSmartListPreviewTrackLabel(textCatalog, optRow->title, optRow->artist, optRow->album));

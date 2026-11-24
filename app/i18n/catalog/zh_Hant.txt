@@ -810,6 +810,7 @@ zh_Hant:table {
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "調整欄 {column} 的寬度" }
+    winui_track_no_visible_columns { "此檢視未顯示任何曲目欄位。" }
     winui_playback_options { "播放選項" }
     winui_more_menu { "更多" }
     winui_error { "錯誤：{detail}" }

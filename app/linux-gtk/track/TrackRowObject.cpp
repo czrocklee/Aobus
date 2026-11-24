@@ -40,8 +40,7 @@ namespace ao::gtk
         case rt::TrackField::Work:
         case rt::TrackField::Movement:
         case rt::TrackField::Soloist:
-        // Resolved by the read model and stored at populate(); never editable,
-        // so it is text-backed for display only.
+        // Resolved by the row cache when requested and never editable.
         case rt::TrackField::FilePath: return true;
 
         default: return false;
@@ -95,8 +94,7 @@ namespace ao::gtk
     _text[static_cast<std::size_t>(rt::TrackField::Work)] = Glib::ustring{std::move(row.work)};
     _text[static_cast<std::size_t>(rt::TrackField::Movement)] = Glib::ustring{std::move(row.movement)};
     _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = Glib::ustring{std::move(row.soloist)};
-    _text[static_cast<std::size_t>(rt::TrackField::FilePath)] =
-      Glib::ustring{row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}};
+    setFilePathText(row);
 
     _tags = Glib::ustring{std::move(row.tags)};
     _duration = row.duration;
@@ -120,6 +118,20 @@ namespace ao::gtk
 
     _computedFilled = 0;
     _fieldsChanged.emit();
+    _filePathChanged.emit();
+  }
+
+  void TrackRowObject::setFilePathText(rt::TrackRow const& row)
+  {
+    _text[static_cast<std::size_t>(rt::TrackField::FilePath)] =
+      Glib::ustring{row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{}};
+  }
+
+  void TrackRowObject::updateFilePath(rt::TrackRow const& row)
+  {
+    AO_EXPECTS(row.id == trackId(), "Cannot update a row with another track's path");
+    setFilePathText(row);
+    _filePathChanged.emit();
   }
 
   Glib::ustring const* TrackRowObject::displayText(rt::TrackField field) const

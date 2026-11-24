@@ -881,6 +881,7 @@ namespace
     {
       if (auto const* row = session.rowAt(index); row != nullptr)
       {
+        AO_INVARIANT(!row->optUriPath, "AppKit table rows must not carry resolved file paths");
         selectedIndex = index;
         selectedId = row->id;
         break;
@@ -888,6 +889,9 @@ namespace
     }
 
     AO_INVARIANT(selectedId != ao::kInvalidTrackId, "library scenario requires a selectable track row");
+    auto const optDetailRow = session.runtime().library().snapshot().trackRow(selectedId);
+    AO_INVARIANT(optDetailRow && optDetailRow->optUriPath,
+                 "The same fixture track must still resolve its path in a full row read");
     [browser.tracks selectRowIndexes:[NSIndexSet indexSetWithIndex:selectedIndex] byExtendingSelection:NO];
     ao::appkit::test::requireWaitUntil([&] { return session.selection() == std::vector{selectedId}; },
                                        "native table selection did not reach the library session");

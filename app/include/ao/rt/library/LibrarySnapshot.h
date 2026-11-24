@@ -36,6 +36,13 @@ namespace ao::rt
 {
   class Library;
 
+  enum class TrackRowPathMode : std::uint8_t
+  {
+    Omit,
+    IfUntitled, // Resolve only when the stored title is empty.
+    Resolve,
+  };
+
   // A scoped read cursor over the music library. Owns one read transaction for
   // its lifetime; all read accessors execute under that single transaction, so
   // a batch of reads (e.g. many fields across many tracks) stays consistent and
@@ -55,7 +62,12 @@ namespace ao::rt
     utility::UuidBytes libraryId() const;
 
     // Tracks
+    /// Reads a row with the same path resolution as TrackRowPathMode::Resolve.
     std::optional<TrackRow> trackRow(TrackId id) const;
+    /// A missing or unreadable track returns nullopt. The mode controls only optUriPath:
+    /// omission and failed resolution both leave it empty. A resolved path does not
+    /// imply that the file exists; filesystem resolution is not pinned by the snapshot.
+    std::optional<TrackRow> trackRow(TrackId id, TrackRowPathMode pathMode) const;
     /// Evaluates one compiled scalar format; missing or unreadable tracks return nullopt.
     std::optional<std::string> formatTrack(TrackId id, query::FormatPlan const& plan) const;
     bool containsTrack(TrackId id) const;

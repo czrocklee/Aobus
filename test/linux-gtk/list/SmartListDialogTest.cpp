@@ -11,6 +11,7 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -18,6 +19,7 @@
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -172,7 +174,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
   }
 
-  TEST_CASE("SmartListDialog - a title edit refreshes the mapped preview label")
+  TEST_CASE("SmartListDialog - a title edit refreshes the mapped preview without requesting a path")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -201,6 +203,10 @@ namespace ao::gtk::test
         return label != nullptr && label->get_mapped();
       }));
     REQUIRE(previewRows(dialog)->get_n_items() == 1);
+    REQUIRE(cache.rowLoadCount() == 1);
+    auto const rowPtr = cache.trackRow(trackId);
+    REQUIRE(rowPtr);
+    CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
 
     updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "Edited"; });
 
@@ -208,6 +214,7 @@ namespace ao::gtk::test
     auto* const editedLabel = findLabelByText(*preview, "Edited - Artist (Album)");
     REQUIRE(editedLabel != nullptr);
     CHECK(editedLabel->get_mapped());
+    CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
   }
 
   TEST_CASE("SmartListDialog - populating an Auto edit immediately refreshes its filter preview")

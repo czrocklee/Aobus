@@ -19,6 +19,7 @@
 #include "track/TrackOrderActions.h"
 #include "track/TrackOrderDragController.h"
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -290,22 +291,13 @@ namespace ao::gtk
     configureHeaderFactory();
 
     // 1. Configure columns and layout first (Off-tree)
-    _viewHostPtr->configureColumns(
-      [this](rt::TrackField field)
-      {
-        return buildColumnFactory(
-          field,
-          [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
-          {
-            auto const trackIds = std::array{rowPtr->trackId()};
-            return uimodel::TrackAuthoringSession::begin(_library, trackIds);
-          },
-          std::bind_front(&TrackViewPage::commitMetadataChange, this),
-          *_modelPtr);
-      });
+    auto const visibleFields =
+      uimodel::visibleTrackFieldsInStoredLayout(presentation, _columnLayouts.layoutForList(_listId));
+    _viewHostPtr->configureColumns(columnFactoryProvider(visibleFields));
 
     installOrderDragController();
-    _viewHostPtr->columnController().syncLayout(presentation.visibleFields);
+    _viewHostPtr->columnController().applyColumnLayout(visibleFields);
+    _viewHostPtr->columnController().updateTitlePositionVariable();
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
@@ -473,7 +465,7 @@ namespace ao::gtk
 
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
-    rebuildColumnView(presentation.visibleFields);
+    rebuildColumnView(presentation);
   }
 
   void TrackViewPage::refreshOrderCapabilities()
@@ -502,9 +494,14 @@ namespace ao::gtk
     updateSectionHeaders();
   }
 
-  void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
+  TrackColumnViewHost::FactoryProvider TrackViewPage::columnFactoryProvider(
+    std::span<rt::TrackField const> const visibleFields)
   {
-    auto const factoryProvider = [this](rt::TrackField field)
+    // Capture the effective demand of this generation, not the active page or model.
+    auto const pathDemand = std::ranges::contains(visibleFields, rt::TrackField::FilePath)
+                              ? TrackRowPathDemand::OnLoad
+                              : TrackRowPathDemand::NoRequest;
+    return [this, pathDemand](rt::TrackField field)
     {
       return buildColumnFactory(
         field,
@@ -514,8 +511,16 @@ namespace ao::gtk
           return uimodel::TrackAuthoringSession::begin(_library, trackIds);
         },
         std::bind_front(&TrackViewPage::commitMetadataChange, this),
-        *_modelPtr);
+        *_modelPtr,
+        pathDemand);
     };
+  }
+
+  void TrackViewPage::rebuildColumnView(rt::TrackPresentationSpec const& presentation)
+  {
+    auto const visibleFields =
+      uimodel::visibleTrackFieldsInStoredLayout(presentation, _columnLayouts.layoutForList(_listId));
+    auto const factoryProvider = columnFactoryProvider(visibleFields);
 
     // 1. Detach UI from Model and Tree immediately.
     _orderDragControllerPtr.reset();
@@ -529,7 +534,7 @@ namespace ao::gtk
     applyColumnViewStyles(newView);
 
     installOrderDragController();
-    _viewHostPtr->columnController().setLayoutAndApply(visibleFields);
+    _viewHostPtr->columnController().applyColumnLayout(visibleFields);
     _viewHostPtr->columnController().updateTitlePositionVariable();
 
     // 4. Apply decorations (Section Headers)

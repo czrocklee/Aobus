@@ -128,6 +128,7 @@ namespace ao::gtk
 
   private:
     void configureHeaderFactory();
+    TrackColumnViewHost::FactoryProvider columnFactoryProvider(std::span<rt::TrackField const> visibleFields);
     void buildStatusBar();
     void applyColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
@@ -135,7 +136,7 @@ namespace ao::gtk
     void setOrderCapabilityStatus(std::string_view message);
     void clearOrderCapabilityStatus();
 
-    void rebuildColumnView(std::span<rt::TrackField const> visibleFields);
+    void rebuildColumnView(rt::TrackPresentationSpec const& presentation);
 
     void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr,
                               rt::TrackField field,

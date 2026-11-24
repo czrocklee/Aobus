@@ -10,6 +10,7 @@
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "track/TrackRowObject.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -23,15 +24,18 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
+#include <sigc++/scoped_connection.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <ranges>
 #include <string>
@@ -214,18 +218,27 @@ namespace ao::gtk::test
       }
     }
 
-    // FilePath is a text-backed value materialized from the read-model row.
-    SECTION("File path is materialized into the row")
+    SECTION("A path request upgrades the shared row without replacing its metadata")
     {
-      auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-
+      auto const provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
       auto const rowPtr = provider.trackRow(helperId);
       REQUIRE(rowPtr);
+      CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
+      CHECK(provider.trackRow(helperId, TrackRowPathDemand::OnLoad) == rowPtr);
+      CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
+      CHECK(provider.rowLoadCount() == 1);
 
+      bool fieldsChanged = false;
+      auto const connection =
+        sigc::scoped_connection{rowPtr->signalFieldsChanged().connect([&fieldsChanged] { fieldsChanged = true; })};
       auto const expected = Glib::ustring{(runtime.musicRoot() / "test.flac").string()};
-      REQUIRE(rowPtr->stringField(rt::TrackField::FilePath) != nullptr);
-      CHECK(*rowPtr->stringField(rt::TrackField::FilePath) == expected);
+
+      REQUIRE(provider.trackRow(helperId, TrackRowPathDemand::Required) == rowPtr);
       CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == expected);
+      CHECK_FALSE(fieldsChanged);
+      CHECK(provider.trackRow(helperId) == rowPtr);
+      CHECK(provider.trackRow(helperId, TrackRowPathDemand::Required) == rowPtr);
+      CHECK(provider.rowLoadCount() == 2);
     }
 
     SECTION("Non-existent track")
@@ -234,6 +247,40 @@ namespace ao::gtk::test
       auto const rowPtr = provider.trackRow(TrackId{999});
       CHECK_FALSE(rowPtr);
     }
+  }
+
+  TEST_CASE("TrackRowCache - remembers an unavailable path until the row refreshes")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const trackId = addRuntimeTrack(runtime, {.title = "Track with relocated media"});
+    auto const optUri = runtime.library().snapshot().trackUri(trackId);
+    REQUIRE(optUri);
+    auto const path = runtime.musicRoot() / *optUri;
+    auto const outside = ao::test::TempDir{};
+    auto const outsidePath = std::filesystem::path{outside.path()} / path.filename();
+    std::filesystem::copy_file(path, outsidePath);
+    REQUIRE(std::filesystem::remove(path));
+    std::filesystem::create_symlink(outsidePath, path);
+    auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+
+    auto const rowPtr = cache.trackRow(trackId, TrackRowPathDemand::Required);
+    REQUIRE(rowPtr);
+    CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
+    REQUIRE(std::filesystem::remove(path));
+    std::filesystem::copy_file(outsidePath, path);
+
+    REQUIRE(cache.trackRow(trackId, TrackRowPathDemand::Required) == rowPtr);
+    CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
+    CHECK(cache.rowLoadCount() == 1);
+
+    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "Media restored"; });
+
+    REQUIRE(cache.trackRow(trackId, TrackRowPathDemand::Required) == rowPtr);
+    CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == path.string());
+    CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Media restored");
+    CHECK(cache.rowLoadCount() == 2);
   }
 
   TEST_CASE("TrackRowCache - library changes refresh edited rows and drop deleted rows")

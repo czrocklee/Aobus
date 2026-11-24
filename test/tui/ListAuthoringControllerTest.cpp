@@ -191,6 +191,20 @@ namespace ao::tui::test
     CHECK(editor->previewTracks().front() == "Roadsongs - Artist (Album)");
   }
 
+  TEST_CASE("ListAuthoringController - an untitled preview sample uses a placeholder instead of the filename")
+  {
+    auto fixture = AuthoringFixture{};
+    fixture.addTrack({.title = "", .artist = "", .uri = "preview-source.flac"});
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryOpenNew(rt::kAllTracksListId));
+    auto const* editor = controller.activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->previewTracks() == std::vector<std::string>{"(untitled)"});
+    auto const rendered = renderElement(controller.activeModal(100, 40), 100, 40);
+    CHECK(findTextCells(rendered.screen, "(untitled)"));
+  }
+
   TEST_CASE("ListAuthoringController - a blank expression reports the sample and its source total")
   {
     auto const [matchCount, sampleCount, useSavedParent, expectedStatus] =

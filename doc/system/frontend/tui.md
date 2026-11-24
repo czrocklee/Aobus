@@ -212,6 +212,13 @@ A fallback or later plain-list navigation supplies that list's saved or recommen
 A successful user presentation choice records the current base list's preference, while filtering and exact workspace attachment do not.
 Reload follows the same direct materialization path; if the controller's view disappeared, it attaches a different active workspace view when available and otherwise opens All Tracks.
 
+When materializing rows, the TUI resolves paths for all tracks only if the
+destination view's effective columns include File Path after applying that
+List's stored layout. The decision does not depend on terminal width. If File
+Path is hidden or unavailable, the TUI skips path resolution for titled tracks
+but still requests a path for tracks with an empty stored title so the table
+and Detail can use a filename when available. See [track-list presentation](../presentation/track-presentation.md#table-rows-and-display-coordinates) for how the fallback is displayed.
+
 Views and `:view` (including aliases) share the [List eligibility rule](../presentation/list-preference.md#resolution). On All Tracks, confirming the disabled Manual Order row keeps Views open; the command gives the same reason. Neither rejection changes the presentation, history, or saved preference. Custom flat unsorted presentations are not the built-in Manual Order preset and remain eligible.
 
 #### Fit Lists beside Tracks

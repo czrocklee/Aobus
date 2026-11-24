@@ -61,14 +61,7 @@ namespace ao::tui
     std::vector<rt::TrackField> visibleFields(rt::TrackPresentationSpec const& presentation,
                                               std::span<uimodel::TrackColumnState const> const storedLayout)
     {
-      auto normalized = rt::normalizeTrackPresentationSpec(presentation);
-
-      if (normalized.visibleFields.empty())
-      {
-        normalized = rt::defaultTrackPresentationSpec();
-      }
-
-      return uimodel::visibleTrackFieldsInStoredLayout(normalized.visibleFields, storedLayout);
+      return uimodel::visibleTrackFieldsInStoredLayout(rt::normalizeTrackPresentationSpec(presentation), storedLayout);
     }
 
     std::vector<uimodel::TrackColumnSolveSpec> terminalSpecs(
@@ -141,11 +134,19 @@ namespace ao::tui
   {
     auto const fields = visibleFields(presentation, storedLayout);
     auto const specs = terminalSpecs(fields, storedLayout);
+    auto const viewport = trackColumnViewport(availableColumns, fields.size());
     auto const resizedSpecs = uimodel::resizeTrackColumnSpecs(
       specs,
       resizedField,
       std::clamp(targetColumns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnWidthColumns),
-      trackColumnViewport(availableColumns, fields.size()));
+      viewport);
+
+    // An unchanged terminal layout must not turn visibility-only overrides into saved positions.
+    if (uimodel::solveTrackColumnWidths(resizedSpecs, viewport) == uimodel::solveTrackColumnWidths(specs, viewport))
+    {
+      return {storedLayout.begin(), storedLayout.end()};
+    }
+
     return uimodel::mergeVisibleTrackColumnSpecs(storedLayout, resizedSpecs);
   }
 } // namespace ao::tui

@@ -53,7 +53,6 @@ namespace ao::gtk
 
     // Layout management
     void applyColumnLayout(std::span<rt::TrackField const> visibleFields);
-    void setLayoutAndApply(std::span<rt::TrackField const> visibleFields);
     void updateColumnVisibility(std::span<rt::TrackField const> visibleFields);
     void queueSharedColumnLayoutUpdate();
     void queueColumnResolve();
@@ -61,9 +60,6 @@ namespace ao::gtk
     // Title position CSS variable for the playing-track beam
     void updateTitlePositionVariable();
     void queueTitlePositionVariableUpdate();
-
-    // Synchronize visibility, layout, and CSS variables
-    void syncLayout(std::span<rt::TrackField const> visibleFields);
 
     // Exposed for TrackViewPage to connect / manage
     Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProviderPtr; }
@@ -93,7 +89,6 @@ namespace ao::gtk
     std::int32_t leadingUtilityWidth() const;
     std::vector<rt::TrackField> visibleFieldsInColumnOrder() const;
     std::vector<std::int32_t> visibleColumnWidths() const;
-    std::vector<rt::TrackField> visibleFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields) const;
 
     void ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columnsPtr,
                               std::size_t index,

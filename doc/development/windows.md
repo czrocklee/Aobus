@@ -583,6 +583,11 @@ The table probe checks localized resize names from the compiled shipping header
 template before and after sort and width changes, but the donor has no library
 session: header click, drag, and context-menu routing are not tested. Column
 changes use the controller API and the body uses representative row templates.
+The column tests save and reload an Album visibility change on a fresh layout,
+then switch the same List to Library and verify its authored header order. They
+also check that changing visibility preserves saved positions and widths.
+The File Path tests check both the reader's path demand for a titled track and
+the projected cell through show/hide transitions.
 The filter cases check that header-only gestures preserve partly or fully hidden
 runtime selection without a new publication and that clearing the filter restores
 the native rows. History replay checks the presentation label before the table
@@ -667,6 +672,38 @@ it never opens, rows it never materializes, names in other locales, or real
 assistive technology such as Narrator. The [frontend accessibility contract](../system/frontend/windows.md#frontend-observations)
 explains how controls receive names. The track-table and activity-status
 probes are separate manual desktop checks.
+
+### Album Columns restart probe
+
+Use the [staged artifacts](#run-manual-winui-probes) for `aobus-winui` and
+`ao_winui_automation_probe`, built from the same checkout and configuration.
+Run this out-of-process UI Automation check on an English Windows desktop:
+
+```powershell
+powershell.exe -NoProfile -Mta -File .\test\winui\probe\WinUiAlbumColumns.ps1 -AppExe $app -SeedExe $probe
+```
+
+Set `$app` and `$probe` to the absolute staged executable paths. This check
+starts with All Tracks in Albums, uses the actual **More → Columns...** menu,
+checks **Album**, and verifies that the group heading and row cell are both
+present. It visits Bach and returns to All Tracks, then uses normal app
+restarts to verify the shown and subsequently hidden column states. The last
+visible column must stay checked when the probe attempts to hide it. It then
+uses a presentation switch to leave Albums with no visible columns and restarts
+from that state. The probe checks that the message and opening its **Columns...**
+button leave the saved layout unchanged, that the toggles are unchecked, and
+that checking **Title** dismisses the message without removing the group or
+track. This is UI Automation and persistence evidence, not physical pointer
+input.
+
+The driver uses `--seed-album-columns`, a headless mode of the automation
+probe, to create a new temporary directory and print its absolute path in
+UTF-8. The synthetic library is its `library` subdirectory. The driver sets
+`LOCALAPPDATA` and `APPDATA` only in the shipping child environment. It reports
+the fixture root and keeps it as evidence; remove only that run's reported root
+if desired and only after all processes close. The seeder never accepts an
+output path, refuses collisions, and removes its own partial fixture on a
+handled failure. Never point the app at a personal library for this check.
 
 ### Output selection probe
 

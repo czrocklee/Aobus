@@ -5,6 +5,7 @@
 
 #include "track/TrackListItem.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowPathDemand.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/ScopedTimer.h>
@@ -75,9 +76,9 @@ namespace ao::gtk
     return (_projectionPtr != nullptr) ? _projectionPtr->indexOf(trackId) : std::nullopt;
   }
 
-  Glib::RefPtr<TrackRowObject> TrackListModel::trackRow(TrackId trackId) const
+  Glib::RefPtr<TrackRowObject> TrackListModel::trackRow(TrackId trackId, TrackRowPathDemand const pathDemand) const
   {
-    return _provider->trackRow(trackId);
+    return _provider->trackRow(trackId, pathDemand);
   }
 
   ::GType TrackListModel::get_item_type_vfunc()

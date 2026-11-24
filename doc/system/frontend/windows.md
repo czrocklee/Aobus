@@ -99,10 +99,16 @@ The track list supports extended selection, keyboard navigation supplied by
 `ListView`, double-click playback, native recycling, and sortable headers backed
 by sortable runtime fields. Double-click playback targets the row under the
 gesture regardless of any existing multi-row selection.
-Headers and row cells are generated from the active
-presentation; width, order, and visibility are shared per-list state. A header
-edge resizes its column, a header context menu moves it, and the Columns menu
-toggles fields while retaining at least one visible field.
+Headers and row cells are generated from the active presentation. Per-list
+width, order, and visibility follow the [shared column policy](../presentation/track-column-layout.md).
+A header edge resizes its column, a header context menu moves it, and the
+Columns menu toggles visibility without changing saved widths or positions.
+The menu rejects hiding the last visible field in the current presentation.
+A restored layout or presentation switch can still leave a nonempty table with
+no visible columns. The table then shows **No track columns are visible in this
+presentation.** and a **Columns...** button that opens the same menu. Showing
+the prompt or opening its menu does not change stored visibility or clear the
+rows. Checking a field explicitly shows it and dismisses the prompt.
 The active primary sort is marked in its generated header. Clicking that header
 reverses the persisted workspace direction; clicking another sortable header
 starts that field in ascending order.

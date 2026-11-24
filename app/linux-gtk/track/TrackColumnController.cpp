@@ -205,12 +205,6 @@ namespace ao::gtk
     }
   }
 
-  void TrackColumnController::setLayoutAndApply(std::span<rt::TrackField const> visibleFields)
-  {
-    auto const orderedFields = visibleFieldsInStoredOrder(visibleFields);
-    applyColumnLayout(orderedFields);
-  }
-
   void TrackColumnController::queueSharedColumnLayoutUpdate()
   {
     if (_syncingColumnLayout || _queuedColumnLayoutUpdateConnection.connected())
@@ -462,12 +456,6 @@ namespace ao::gtk
     return widths;
   }
 
-  std::vector<rt::TrackField> TrackColumnController::visibleFieldsInStoredOrder(
-    std::span<rt::TrackField const> visibleFields) const
-  {
-    return uimodel::visibleTrackFieldsInStoredLayout(visibleFields, _columnLayouts.layoutForList(_listId));
-  }
-
   void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)
   {
     for (auto& binding : _columns)
@@ -475,13 +463,6 @@ namespace ao::gtk
       auto const visible = std::ranges::contains(visibleFields, binding.field);
       binding.columnPtr->set_visible(visible);
     }
-  }
-
-  void TrackColumnController::syncLayout(std::span<rt::TrackField const> visibleFields)
-  {
-    auto const orderedFields = visibleFieldsInStoredOrder(visibleFields);
-    applyColumnLayout(orderedFields);
-    updateTitlePositionVariable();
   }
 
   void TrackColumnController::updateTitlePositionVariable()

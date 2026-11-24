@@ -243,6 +243,35 @@ namespace ao::uimodel
       std::ranges::reverse(indices);
       return indices;
     }
+
+    std::vector<TrackColumnState> mergeVisibleTrackColumnLayout(std::span<TrackColumnState const> storedLayout,
+                                                                std::span<TrackColumnState const> visibleLayout)
+    {
+      auto merged = std::vector<TrackColumnState>{};
+      merged.reserve(storedLayout.size() + visibleLayout.size());
+      auto nextVisible = visibleLayout.begin();
+
+      for (auto const& stored : storedLayout)
+      {
+        auto const participates = std::ranges::contains(visibleLayout, stored.field, &TrackColumnState::field);
+
+        if (!participates)
+        {
+          merged.push_back(stored);
+          continue;
+        }
+
+        // Visibility-only entries do not supply a slot for the reordered columns.
+        if (stored.hasPosition() && nextVisible != visibleLayout.end())
+        {
+          merged.push_back(*nextVisible);
+          ++nextVisible;
+        }
+      }
+
+      merged.insert(merged.end(), nextVisible, visibleLayout.end());
+      return merged;
+    }
   } // namespace
 
   std::vector<TrackColumnSolveSpec> pixelTrackColumnSpecs(std::span<rt::TrackField const> fields,
@@ -514,7 +543,16 @@ namespace ao::uimodel
 
     for (auto const& spec : visibleSpecs)
     {
-      visibleLayout.push_back(canonicalTrackColumnState(spec));
+      auto column = canonicalTrackColumnState(spec);
+
+      // Geometry edits neither invent user choices nor transfer them by slot.
+      if (auto const prior = std::ranges::find(storedLayout, spec.field, &TrackColumnState::field);
+          prior != storedLayout.end())
+      {
+        column.visibility = prior->visibility;
+      }
+
+      visibleLayout.push_back(column);
     }
 
     return mergeVisibleTrackColumnLayout(storedLayout, visibleLayout);

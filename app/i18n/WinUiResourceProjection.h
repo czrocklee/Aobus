@@ -72,7 +72,6 @@ namespace ao::i18n::detail
     {.resourceId = "ColumnOutsidePresentation",
      .text = "The requested Windows track column is not part of this presentation"},
     {.resourceId = "OneVisibleColumnRequired", .text = "A track presentation must keep at least one visible column"},
-    {.resourceId = "ColumnLayoutPolicyMissing", .text = "The requested track column has no layout policy"},
     {.resourceId = "NoPlayableTrackRow", .text = "No playable Windows track row is active"},
     {.resourceId = "NoTrackViewActive", .text = "No Windows track view is active"},
     {.resourceId = "StartupHresultDetailFormat", .text = "{0} (HRESULT 0x{1:08X})"},

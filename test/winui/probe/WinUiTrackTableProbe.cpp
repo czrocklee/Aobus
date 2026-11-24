@@ -30,6 +30,7 @@
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
+#include "track/TrackRowItem.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -69,6 +70,7 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
@@ -190,7 +192,12 @@ namespace
     {
       auto const unique = std::chrono::steady_clock::now().time_since_epoch().count();
       _root = std::filesystem::temp_directory_path() / std::format("aobus-winui-track-table-probe-{}", unique);
-      std::filesystem::create_directories(_root);
+
+      if (!std::filesystem::create_directory(_root))
+      {
+        throw std::filesystem::filesystem_error{
+          "track table probe scratch directory already exists", _root, std::make_error_code(std::errc::file_exists)};
+      }
     }
 
     TempRoot(TempRoot const&) = delete;
@@ -673,7 +680,8 @@ namespace
         _actions,
         [](std::string_view) -> std::string { return {}; },
         std::move(*registrationCatalogRes),
-        [this](std::string message) { _statusMessages.push_back(std::move(message)); });
+        [this](std::string message) { _statusMessages.push_back(std::move(message)); },
+        {});
 
       // A constructed-only frame owns the compiled header template and its
       // resources. It never binds a session or reads/writes application state;
@@ -703,17 +711,23 @@ namespace
       _report.beginScenario("column edits preserve hidden sizing and order");
       using ao::rt::TrackField;
       using ao::uimodel::TrackColumnState;
+      using ao::uimodel::TrackColumnVisibility;
       auto const listId = _trackListPtr->activeListId();
-      auto const hiddenDuration = TrackColumnState{.field = TrackField::Duration, .width = 123, .visible = false};
-      auto const unavailableAlbum = TrackColumnState{.field = TrackField::Album, .weight = 4.0};
+      auto const hiddenDuration =
+        TrackColumnState{.field = TrackField::Duration, .width = 123, .visibility = TrackColumnVisibility::Hide};
+      auto const unavailableComposer =
+        TrackColumnState{.field = TrackField::Composer, .weight = 4.0, .visibility = TrackColumnVisibility::Show};
       auto const numberFieldId = ao::rt::trackFieldId(TrackField::DisplayTrackNumber);
       _columnLayoutsPtr->updateLayout(listId,
                                       {TrackColumnState{.field = TrackField::Title, .weight = 3.0},
                                        hiddenDuration,
-                                       unavailableAlbum,
+                                       unavailableComposer,
                                        TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 91}});
       _trackListPtr->setViewportWidth(800.0, 0.0);
 
+      auto const composerRes = _trackListPtr->setColumnVisible("composer", false);
+      _report.check(!composerRes && composerRes.error().code == ao::Error::Code::NotFound,
+                    "Composer remains outside Albums even with a stored Show override");
       _report.check(_trackListPtr->setColumnVisible("artist", false).has_value(),
                     "hiding an unrecorded Artist materializes column state");
       _report.check(_trackListPtr->moveColumn("title", 1).has_value(), "Title moves past the track number");
@@ -721,12 +735,14 @@ namespace
       auto const expected = std::vector{
         TrackColumnState{.field = TrackField::DisplayTrackNumber, .width = 127},
         hiddenDuration,
+        unavailableComposer,
         TrackColumnState{.field = TrackField::Title, .weight = 1.0},
-        TrackColumnState{.field = TrackField::Artist, .weight = 2.0, .visible = false},
-        unavailableAlbum,
+        TrackColumnState{.field = TrackField::Artist, .visibility = TrackColumnVisibility::Hide},
       };
-      _report.check(_columnLayoutsPtr->layoutForList(listId) == expected,
-                    "reorder and resize preserve hidden and unavailable state while saving canonical dimensions");
+      auto const storedLayout = [this, listId] -> auto const& { return _columnLayoutsPtr->layoutForList(listId); };
+      _report.check(storedLayout() == expected,
+                    "column edits retain hidden and unavailable slots and only record the targeted new field");
+      auto const hiddenLayout = _columnLayoutsPtr->layoutForList(listId);
 
       auto const resizedHeaders = _trackListPtr->headers();
       _report.check(resizedHeaders.Size() == 2, "only the track number and Title remain visible after resize");
@@ -742,6 +758,9 @@ namespace
       }
 
       _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration can be shown again");
+      auto shown = expected;
+      shown[1].visibility = TrackColumnVisibility::Show;
+      _report.check(storedLayout() == shown, "showing Duration records explicit intent without changing geometry");
       auto const headers = _trackListPtr->headers();
       _report.check(headers.Size() == 3, "showing Duration restores only that hidden header");
 
@@ -753,10 +772,10 @@ namespace
       }
 
       _report.beginScenario("column edits respect an external hide with stale headers");
-      auto const hideDurationInStore = [this, listId, &expected]
+      auto const hideDurationInStore = [this, listId, &hiddenLayout]
       {
         // Change the store without refreshing the controller.
-        _columnLayoutsPtr->updateLayout(listId, expected);
+        _columnLayoutsPtr->updateLayout(listId, hiddenLayout);
         auto const cachedHeaders = _trackListPtr->headers();
         _report.check(cachedHeaders.Size() == 3 &&
                         cachedHeaders.GetAt(1).as<winrt::Aobus::TrackCellItem>().FieldId() == L"duration",
@@ -766,20 +785,27 @@ namespace
       hideDurationInStore();
       _report.check(_trackListPtr->moveColumn("title", -1).has_value(), "Title moves left with a stale header");
       auto moved = expected;
-      std::swap(moved[0], moved[2]);
-      _report.check(_columnLayoutsPtr->layoutForList(listId) == moved,
+      std::swap(moved[0], moved[3]);
+      _report.check(storedLayout() == moved,
                     "Title swaps with the track number, leaving Duration hidden at 123 DIP in its stored slot");
 
       // Reseed before resize: move refreshes the cache, even if it revives Duration.
-      _columnLayoutsPtr->updateLayout(listId, expected);
+      _columnLayoutsPtr->updateLayout(listId, hiddenLayout);
       _report.check(_trackListPtr->setColumnVisible("duration", true).has_value(), "Duration is shown before resize");
       hideDurationInStore();
       _report.check(
         _trackListPtr->resizeColumn(numberFieldId, 36.0).has_value(), "the track number resizes with a stale header");
       auto resized = expected;
       resized[0].width = 163;
-      _report.check(_columnLayoutsPtr->layoutForList(listId) == resized,
-                    "the track number reaches 163 DIP while Duration remains hidden at 123 DIP");
+      _report.check(
+        storedLayout() == resized, "the track number reaches 163 DIP while Duration remains hidden at 123 DIP");
+
+      _report.check(_trackListPtr->setColumnVisible(numberFieldId, false).has_value(), "hide the penultimate column");
+      auto const onlyTitle = _columnLayoutsPtr->layoutForList(listId);
+      auto const hideFinalRes = _trackListPtr->setColumnVisible("title", false);
+      _report.check(!hideFinalRes && hideFinalRes.error().code == ao::Error::Code::InvalidState &&
+                      _columnLayoutsPtr->layoutForList(listId) == onlyTitle && _trackListPtr->headers().Size() == 1,
+                    "rejecting the last visible column leaves the stored layout and its header intact");
 
       // The loaded-table scenarios use the original layout and viewport.
       _columnLayoutsPtr->restore({}, {});
@@ -903,7 +929,270 @@ namespace
       _report.check(trackRowSeen, "the grouped projection exposes track rows");
       _report.check(_rowsPanel.FirstVisibleIndex() >= 0, "the loaded viewport realizes rows");
       verifyHeaderResizeNames();
+      beginPositionlessAlbumToggle();
+    }
 
+    void beginPositionlessAlbumToggle()
+    {
+      _report.beginScenario("showing Album on an empty layout keeps Library's authored header order after reload");
+      auto const listId = _trackListPtr->activeListId();
+      _report.check(_columnLayoutsPtr->layoutForList(listId).empty(), "Albums begins without a recorded layout");
+      _report.check(_trackListPtr->setColumnVisible("album", true).has_value(), "show default-hidden Album");
+      _report.check(
+        headerFields() == std::vector<std::string>{"display-track-number", "title", "artist", "duration", "album"},
+        "Albums displays the override after its four authored columns");
+
+      if (!tryReloadColumnLayout("album-visibility.yaml"))
+      {
+        return;
+      }
+
+      auto const& saved = _columnLayoutsPtr->layoutForList(listId);
+      _report.check(saved.size() == 1 && saved.front().field == ao::rt::TrackField::Album &&
+                      saved.front().visibility == ao::uimodel::TrackColumnVisibility::Show &&
+                      !saved.front().hasPosition(),
+                    "only Album Show is recorded and it has no position");
+      changeColumnTestPreset("library", &WinUiTrackTableProbeApplication::verifyPositionlessAlbumToggle);
+    }
+
+    void verifyPositionlessAlbumToggle()
+    {
+      _report.check(headerFields() ==
+                      std::vector<std::string>{"display-track-number", "title", "artist", "album", "year", "duration"},
+                    "Library keeps Album, Year and Duration in authored order despite the reloaded Show override");
+      _columnLayoutsPtr->restore({}, {});
+      changeColumnTestPreset("albums", &WinUiTrackTableProbeApplication::beginUntouchedColumnOrder);
+    }
+
+    void beginUntouchedColumnOrder()
+    {
+      _report.beginScenario("a saved Albums toggle preserves untouched field order in Artists");
+      auto const listId = _trackListPtr->activeListId();
+      _report.check(_columnLayoutsPtr->layoutForList(listId).empty(), "start with an uncustomized list");
+
+      if (auto const hiddenRes = _trackListPtr->setColumnVisible("display-track-number", false); !hiddenRes)
+      {
+        failSetup(hiddenRes.error().message);
+        return;
+      }
+
+      if (!tryReloadColumnLayout("column-order.yaml"))
+      {
+        return;
+      }
+
+      if (auto const artistsRes = _runtimePtr->workspace().setActivePresentation("artists", {.recordHistory = false});
+          !artistsRes)
+      {
+        failSetup(artistsRes.error().message);
+        return;
+      }
+
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::verifyUntouchedColumnOrder);
+    }
+
+    bool tryReloadColumnLayout(std::string_view const name)
+    {
+      // Use the production serializer and discard live state before adopting the readback.
+      auto store = ao::rt::ConfigStore{_optTempRoot->root() / std::string{name}};
+      auto const schema = ao::uimodel::TrackColumnLayoutYamlSchema{_runtimePtr->library().snapshot().libraryId()};
+      auto const saved = _columnLayoutsPtr->snapshot();
+      auto loaded = ao::uimodel::TrackColumnLayouts::Snapshot{};
+      using ao::uimodel::kTrackColumnLayoutsConfigGroup;
+
+      if (auto const saveRes = store.save(kTrackColumnLayoutsConfigGroup, saved, schema); !saveRes)
+      {
+        failSetup(saveRes.error().message);
+        return false;
+      }
+
+      if (auto const loadRes = store.load(kTrackColumnLayoutsConfigGroup, loaded, schema); !loadRes)
+      {
+        failSetup(loadRes.error().message);
+        return false;
+      }
+
+      _report.check(!loaded.empty() && loaded == saved, "the column layout was saved and read back in order");
+      _columnLayoutsPtr->restore({}, {});
+      _columnLayoutsPtr->restore(std::move(loaded), {});
+      return true;
+    }
+
+    std::vector<std::string> headerFields() const
+    {
+      auto fields = std::vector<std::string>{};
+
+      for (auto const& item : _trackListPtr->headers())
+      {
+        fields.push_back(winrt::to_string(item.as<winrt::Aobus::TrackCellItem>().FieldId()));
+      }
+
+      return fields;
+    }
+
+    void verifyUntouchedColumnOrder()
+    {
+      _report.check(_trackListPtr->activePresentationId() == "artists", "the same list now uses Artists");
+      auto const fields = headerFields();
+      _report.check(!std::ranges::contains(fields, "display-track-number"), "the saved Hide persists across presets");
+      auto const year = std::ranges::find(fields, "year");
+      auto const album = std::ranges::find(fields, "album");
+      _report.check(year != fields.end() && album != fields.end() && year < album,
+                    "the untouched Year and Album headers follow Artists order (Year before Album)");
+      _columnLayoutsPtr->restore({}, {});
+
+      if (auto const albumsRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
+          !albumsRes)
+      {
+        failSetup(albumsRes.error().message);
+        return;
+      }
+
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::beginFilePathTransitions);
+    }
+
+    void checkFilePathCell(std::optional<std::wstring_view> const optExpected)
+    {
+      auto const track = _seededTrackIds.front();
+      auto const optIndex = _trackListPtr->displayIndexOfTrack(track);
+      auto const items = _trackListPtr->items();
+      auto const row = optIndex && *optIndex < items.Size()
+                         ? items.GetAt(static_cast<std::uint32_t>(*optIndex)).try_as<ProjectedTrackRow>()
+                         : nullptr;
+
+      if (!row || row.TrackId() != track.raw())
+      {
+        _report.record("the named fixture did not materialize after the column projection changed");
+        return;
+      }
+
+      _report.check(row.Title() == L"Probe Title 00", "the titled row retains its metadata title");
+      auto optCellText = std::optional<winrt::hstring>{};
+
+      for (auto const& item : row.Cells())
+      {
+        if (auto const cell = item.as<winrt::Aobus::TrackCellItem>(); cell.FieldId() == L"file-path")
+        {
+          optCellText = cell.Text();
+          break;
+        }
+      }
+
+      _report.check(optExpected ? optCellText && *optCellText == *optExpected : !optCellText,
+                    optExpected ? "the visible File Path cell contains the absolute path in generic form"
+                                : "the row has no File Path cell when the column is not visible");
+    }
+
+    void beginFilePathTransitions()
+    {
+      _report.beginScenario("File Path visibility changes reproject cells from the same track id");
+      {
+        auto const snapshot = _runtimePtr->library().snapshot();
+        auto const track = _seededTrackIds.front();
+        using ao::rt::TrackField;
+        using ao::winui::TrackColumnCellSpec;
+        using ao::winui::detail::TrackTableRowReader;
+        auto const hidden = std::array{TrackColumnCellSpec{.field = TrackField::Title}};
+        auto const shown = std::array{hidden.front(), TrackColumnCellSpec{.field = TrackField::FilePath}};
+        auto const optHidden = TrackTableRowReader{hidden}.read(snapshot, track);
+        auto const optShown = TrackTableRowReader{shown}.read(snapshot, track);
+        _report.check(optHidden && !optHidden->title.empty() && !optHidden->optUriPath,
+                      "the materializer reader omits the path of a titled track without File Path");
+        _report.check(optShown && optShown->optUriPath && optShown->optUriPath->filename() == L"track-00.flac",
+                      "the same reader resolves that track path with File Path");
+      }
+      checkFilePathCell(std::nullopt);
+      changeColumnTestPreset("library", &WinUiTrackTableProbeApplication::recordYearColumn);
+    }
+
+    void changeColumnTestPreset(std::string_view const preset, Step const next)
+    {
+      if (auto const res = _runtimePtr->workspace().setActivePresentation(preset, {.recordHistory = false}); !res)
+      {
+        failSetup(res.error().message);
+        return;
+      }
+
+      afterNextLayoutStep(next);
+    }
+
+    void recordYearColumn()
+    {
+      _report.beginScenario("a visibility edit preserves saved positions and widths outside its preset");
+      constexpr std::uint32_t kMovesToFront = 4;
+      constexpr double kYearResize = 19.0;
+      auto const fields = headerFields();
+      _report.check(
+        fields.size() > kMovesToFront && fields[kMovesToFront] == "year", "Library initially places Year fifth");
+
+      for (std::uint32_t move = 0; move < kMovesToFront; ++move)
+      {
+        _report.check(_trackListPtr->moveColumn("year", -1).has_value(), "move Year left through the active headers");
+      }
+
+      _report.check(_trackListPtr->resizeColumn("year", kYearResize).has_value(), "give Year a nondefault fixed width");
+      checkRecordedYear();
+
+      if (tryReloadColumnLayout("before-file-path.yaml"))
+      {
+        changeColumnTestPreset("technical", &WinUiTrackTableProbeApplication::hideUnstoredFilePath);
+      }
+    }
+
+    void checkRecordedYear()
+    {
+      _report.check(headerFields() ==
+                      std::vector<std::string>{"year", "display-track-number", "title", "artist", "album", "duration"},
+                    "Library keeps the explicit Year-first header order");
+      auto const headers = _trackListPtr->headers();
+      constexpr double kResizedYearWidth = 99.0;
+      _report.check(
+        headers.Size() != 0 && headers.GetAt(0).as<winrt::Aobus::TrackCellItem>().Width() == kResizedYearWidth,
+        "Year retains the deliberately resized fixed width");
+    }
+
+    std::wstring expectedPathCell() const
+    {
+      return (std::filesystem::canonical(_optTempRoot->root()) / "probe/album-a/track-00.flac").generic_wstring();
+    }
+
+    void hideUnstoredFilePath()
+    {
+      using ao::rt::TrackField;
+      auto const fields = headerFields();
+      auto const& stored = _columnLayoutsPtr->layoutForList(_trackListPtr->activeListId());
+      _report.check(!std::ranges::contains(fields, "year") &&
+                      !std::ranges::contains(stored, TrackField::FilePath, &ao::uimodel::TrackColumnState::field),
+                    "Technical cannot display stored Year and File Path has no stored slot yet");
+      checkFilePathCell(expectedPathCell());
+      _report.check(_trackListPtr->setColumnVisible("file-path", false).has_value(), "hide default-visible File Path");
+      checkFilePathCell(std::nullopt);
+
+      if (tryReloadColumnLayout("after-file-path.yaml"))
+      {
+        changeColumnTestPreset("library", &WinUiTrackTableProbeApplication::verifyRecordedYear);
+      }
+    }
+
+    void verifyRecordedYear()
+    {
+      checkRecordedYear();
+      changeColumnTestPreset("technical", &WinUiTrackTableProbeApplication::showFilePathColumn);
+    }
+
+    void showFilePathColumn()
+    {
+      checkFilePathCell(std::nullopt);
+      _report.check(_trackListPtr->setColumnVisible("file-path", true).has_value(), "show File Path in Technical");
+      checkFilePathCell(expectedPathCell());
+      _columnLayoutsPtr->restore({}, {});
+      changeColumnTestPreset("albums", &WinUiTrackTableProbeApplication::finishFilePathTransitions);
+    }
+
+    void finishFilePathTransitions()
+    {
+      _report.check(_trackListPtr->activePresentationId() == "albums", "the original Albums presentation is restored");
+      checkFilePathCell(std::nullopt);
       clearSelectionPublications();
       enqueueStep(&WinUiTrackTableProbeApplication::listFeedbackSetupStep);
     }

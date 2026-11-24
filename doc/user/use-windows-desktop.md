@@ -37,8 +37,18 @@ The Windows frontend keeps its database beneath the selected music root. Network
 4. Type in **Filter tracks** to narrow the active view. Select one or more rows
    with ordinary Windows list gestures, use a sortable column header to change
    ordering, and double-click a track row to start playback. Drag a header's
-   right edge to resize it, right-click a header to move it, and use **More >
-   Columns** in Modern or **View > Columns** in Classic to show or hide fields.
+   right edge to resize it, right-click a header to move it, and use
+   **More → Columns...** in Modern or **View → Columns...** in Classic to show
+   or hide fields.
+   In **Albums**, check **Album** to show the album name in each track row as
+   well as in its group heading. Aobus remembers each show or hide choice for
+   that List and applies it in every presentation that offers the field.
+   Checking a column again shows it explicitly rather than restoring the
+   presentation's default. Checking or unchecking a field does not change its
+   saved position or width or reorder other fields. Across presentations,
+   fields with saved positions come first, then the remaining fields in the
+   presentation's order. You cannot uncheck the last visible field in the
+   current presentation.
    See [filtering and suggestions](manage-library.md#understand-filtering-and-suggestions) for Quick versus Expression mode and why romanized suggestions must be accepted to search their original text.
    When the current filter is non-empty and valid, choose **Create List from current filter** to open the List editor with the resolved expression already filled in.
    To edit built-in metadata, tags, and custom metadata, right-click a selected row and choose **Properties...**, choose the same command from **More** in Modern or **View** in Classic, or press `Alt+Enter`.
@@ -82,6 +92,7 @@ The status area reports the selected library as ready, rows remain keyboard navi
 
 ## Troubleshooting
 
+- If the track table says **No track columns are visible in this presentation.**, choose **Columns...** next to the message and check a field to show it. A presentation switch or restored layout can leave all its columns hidden. Aobus keeps those saved choices; only the field you check changes.
 - If Aobus restarts but cannot open the folder you chose, it reports **Aobus could not start:** and exits. A normal launch can reopen the previously saved library if it is still available. A scan failure, unlike an open failure, leaves the selected folder open for retry.
 - If the root is on a network share, switching between a mapped drive letter and UNC spelling does not make it a supported database location. Use local storage; a remote desktop connection to Windows does not itself make that host's local disk a network filesystem.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.
