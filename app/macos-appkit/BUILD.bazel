@@ -68,6 +68,7 @@ objc_library(
         "QuartzCore",
     ],
     target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//test:__pkg__"],
     deps = [
         "//app/desktop:desktop_launch",
         "//app/i18n",

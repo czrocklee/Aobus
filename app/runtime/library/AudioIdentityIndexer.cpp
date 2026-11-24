@@ -9,8 +9,8 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>

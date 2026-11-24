@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/utility/Hash128.h>
 

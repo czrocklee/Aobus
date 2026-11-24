@@ -65,25 +65,4 @@ namespace ao::uimodel
    * once per shell.
    */
   std::string playbackCommandActionId(PlaybackCommand command);
-
-  /// The words a shell shows for @p command where actions are listed.
-  constexpr std::string_view playbackCommandLabel(PlaybackCommand const command) noexcept
-  {
-    switch (command)
-    {
-      case PlaybackCommand::Play: return "Play";
-      case PlaybackCommand::Pause: return "Pause";
-      case PlaybackCommand::PlayPause: return "Play/Pause";
-      case PlaybackCommand::Stop: return "Stop";
-      case PlaybackCommand::Next: return "Next";
-      case PlaybackCommand::Previous: return "Previous";
-      case PlaybackCommand::ToggleShuffle: return "Toggle Shuffle";
-      case PlaybackCommand::CycleRepeat: return "Cycle Repeat";
-    }
-
-    return {};
-  }
-
-  /// The category a transport action is listed under.
-  inline constexpr auto kPlaybackActionCategory = std::string_view{"Playback"};
 } // namespace ao::uimodel

@@ -150,6 +150,26 @@ py_test(
     deps = ["@rules_python//python/runfiles"],
 )
 
+# AppKit authoring model runs headless with a controlled owner executor.
+cc_test(
+    name = "appkit_editor_test",
+    size = "small",
+    srcs = ["macos-appkit/AppKitLibraryEditorModelTest.cpp"],
+    data = ["//test/data/audio:audio_fixtures"],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":async_test_support",
+        ":common_test_support",
+        ":library_test_support",
+        ":message_catalog_test_support",
+        ":runtime_test_support",
+        "//app/macos-appkit:appkit",
+        "//app/runtime",
+        "@aobus_native_deps//:gsl_lite",
+        "@aobus_test_deps//:catch2",
+    ],
+)
+
 # Native process smokes reuse the shipping TUI and the existing WinUI probes.
 # The wrappers add execution only; they do not compile product sources twice.
 # The two console probes resolve the App Runtime natively and carry the staged
@@ -213,6 +233,7 @@ test_suite(
     name = "native_process_tests",
     tests = [
         ":appkit_cli_test",
+        ":appkit_editor_test",
         ":tui_help_smoke",
         ":winui_localization_probe_test",
         ":winui_track_item_probe_test",

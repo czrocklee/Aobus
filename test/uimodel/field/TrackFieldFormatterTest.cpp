@@ -9,8 +9,8 @@
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/FileTimestamp.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/library/LibraryScan.h>

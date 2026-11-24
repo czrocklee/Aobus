@@ -10,6 +10,7 @@
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>

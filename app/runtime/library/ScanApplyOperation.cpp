@@ -15,8 +15,8 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>

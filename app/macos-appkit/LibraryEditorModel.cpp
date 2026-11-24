@@ -10,7 +10,6 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -40,10 +39,17 @@
 
 namespace ao::appkit
 {
-  LibraryEditorModel::LibraryEditorModel(rt::AppRuntime& runtime,
+  LibraryEditorModel::LibraryEditorModel(rt::Library& library,
+                                         async::Runtime& asyncRuntime,
+                                         rt::NotificationService& notifications,
                                          i18n::MessageCatalog catalog,
                                          std::function<void()> onChange)
-    : _runtime{runtime}, _catalog{std::move(catalog)}, _onChange{std::move(onChange)}, _form{_catalog}
+    : _library{library}
+    , _asyncRuntime{asyncRuntime}
+    , _notifications{notifications}
+    , _catalog{std::move(catalog)}
+    , _onChange{std::move(onChange)}
+    , _form{_catalog}
   {
   }
 
@@ -88,9 +94,9 @@ namespace ao::appkit
     auto tags = std::vector<std::string>{};
 
     {
-      auto snapshot = _runtime.library().snapshot();
+      auto snapshot = _library.snapshot();
 
-      auto sessionRes = uimodel::prepareTrackProperties(_runtime.library(), snapshot, ids, spec, baseline);
+      auto sessionRes = uimodel::prepareTrackProperties(_library, snapshot, ids, spec, baseline);
 
       if (!sessionRes)
       {
@@ -159,7 +165,7 @@ namespace ao::appkit
 
     if (listId != kInvalidListId)
     {
-      auto const optList = _runtime.library().snapshot().listNode(listId);
+      auto const optList = _library.snapshot().listNode(listId);
 
       if (!optList)
       {
@@ -194,7 +200,7 @@ namespace ao::appkit
               .title = std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitDeleteList)},
               .busy = true};
     publishChange();
-    _runtime.async().spawnLogged(deleteListAsync(this, listId, true), "AppKit list deletion preview");
+    _asyncRuntime.spawnLogged(deleteListAsync(this, listId, true), "AppKit list deletion preview");
     return {};
   }
 
@@ -205,7 +211,7 @@ namespace ao::appkit
       return res;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), ids);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, ids);
 
     if (!sessionRes)
     {
@@ -218,7 +224,7 @@ namespace ao::appkit
               .membershipTargetCount = sessionRes->targetIds().size(),
               .busy = true};
     publishChange();
-    _runtime.async().spawnLogged(
+    _asyncRuntime.spawnLogged(
       membershipAsync(this, std::move(*sessionRes), listId, remove), "AppKit list membership edit");
     return {};
   }
@@ -460,7 +466,7 @@ namespace ao::appkit
     {
       _state.busy = true;
       publishChange();
-      _runtime.async().spawnLogged(saveListAsync(this, _state.list), "AppKit list save");
+      _asyncRuntime.spawnLogged(saveListAsync(this, _state.list), "AppKit list save");
       return;
     }
 
@@ -468,8 +474,7 @@ namespace ao::appkit
     {
       _state.busy = true;
       publishChange();
-      _runtime.async().spawnLogged(
-        deleteListAsync(this, _state.optDeletion->rootListId, false), "AppKit list deletion");
+      _asyncRuntime.spawnLogged(deleteListAsync(this, _state.optDeletion->rootListId, false), "AppKit list deletion");
       return;
     }
 
@@ -503,8 +508,8 @@ namespace ao::appkit
 
     _state.busy = true;
     publishChange();
-    _runtime.async().spawnLogged(submitPropertiesAsync(this, _optTrackSession->submitPropertiesAsync(std::move(patch))),
-                                 "AppKit track properties save");
+    _asyncRuntime.spawnLogged(submitPropertiesAsync(this, _optTrackSession->submitPropertiesAsync(std::move(patch))),
+                              "AppKit track properties save");
   }
 
   void LibraryEditorModel::cancel()
@@ -576,9 +581,9 @@ namespace ao::appkit
     async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
   {
     // TrackAuthoringSession and its synchronous invalidation observer share the callback executor.
-    co_await owner->_runtime.async().resumeOnCallbackExecutorAsync();
+    co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
     auto res = co_await std::move(submission);
-    co_await owner->_runtime.async().resumeOnCallbackExecutorAsync();
+    co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)
     {
@@ -607,8 +612,8 @@ namespace ao::appkit
 
   async::Task<void> LibraryEditorModel::saveListAsync(LibraryEditorModel* owner, rt::ListDraft draft)
   {
-    auto res = co_await uimodel::saveListAsync(&owner->_runtime.library(), std::move(draft));
-    co_await owner->_runtime.async().resumeOnCallbackExecutorAsync();
+    auto res = co_await uimodel::saveListAsync(&owner->_library, std::move(draft));
+    co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)
     {
@@ -635,9 +640,9 @@ namespace ao::appkit
 
   async::Task<void> LibraryEditorModel::deleteListAsync(LibraryEditorModel* owner, ListId listId, bool preview)
   {
-    auto res = co_await (preview ? uimodel::previewListDeletionAsync(&owner->_runtime.library(), listId, true)
-                                 : uimodel::deleteListAsync(&owner->_runtime.library(), listId, true));
-    co_await owner->_runtime.async().resumeOnCallbackExecutorAsync();
+    auto res = co_await (preview ? uimodel::previewListDeletionAsync(&owner->_library, listId, true)
+                                 : uimodel::deleteListAsync(&owner->_library, listId, true));
+    co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)
     {
@@ -670,7 +675,7 @@ namespace ao::appkit
                                                         bool remove)
   {
     auto res = co_await (remove ? session.removeFromListAsync(listId) : session.addToListAsync(listId));
-    co_await owner->_runtime.async().resumeOnCallbackExecutorAsync();
+    co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)
     {
@@ -685,7 +690,7 @@ namespace ao::appkit
           co_return;
         }
 
-        owner->_runtime.notifications().post(notification.severity, notification.text, notification.lifetime);
+        owner->_notifications.post(notification.severity, notification.text, notification.lifetime);
       }
       else
       {

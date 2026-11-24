@@ -312,8 +312,12 @@ namespace ao::appkit
       }
     }
 
-    storage.editorPtr = std::make_unique<LibraryEditorModel>(
-      runtime, storage.catalog, [&storage] { storage.invalidate(DesktopInvalidation::Editor); });
+    storage.editorPtr =
+      std::make_unique<LibraryEditorModel>(runtime.library(),
+                                           runtime.async(),
+                                           runtime.notifications(),
+                                           storage.catalog,
+                                           [&storage] { storage.invalidate(DesktopInvalidation::Editor); });
 
     auto const playSelection = [this]
     {
@@ -907,6 +911,7 @@ namespace ao::appkit
     storage.actionsPtr.reset();
     storage.rows.reset(0, {});
     storage.projectionPtr.reset();
+    // Authoring tasks can still hold the retired editor while the runtime stops and drains.
     storage.optRuntime->shutdown();
     storage.executor->finishClosing();
     storage.editorPtr.reset();

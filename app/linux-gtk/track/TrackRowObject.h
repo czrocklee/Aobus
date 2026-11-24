@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileStatus.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 

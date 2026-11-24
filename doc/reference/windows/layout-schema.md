@@ -86,6 +86,11 @@ The `navigationView` presentation is the exception. It draws its own pane inside
 
 ### Registered action ids
 
+The category column describes internal Windows schema metadata. WinUI does not currently use the schema's action labels and leaves them empty.
+If WinUI adds an action picker or command palette, it should resolve display labels from the [message catalog](../../system/presentation/text-catalog.md#text-ownership-boundary) where it renders them.
+Layout buttons get their text from the node's [`textResourceKey` or `text`](#text-resources), not from the bound action.
+Native menus supply their own localized text, and transport button tooltips and automation names come from the transport view model's catalog text.
+
 | Action id                           | Category | Capabilities                     |
 | ----------------------------------- | -------- | -------------------------------- |
 | `library.open`                      | Library  | `RequiresAnchor`                 |
@@ -103,9 +108,12 @@ The `navigationView` presentation is the exception. It draws its own pane inside
 | `playback.cycleRepeat`              | Playback | None                             |
 | `playback.showOutputDeviceSelector` | Playback | `RequiresAnchor`, `PresentsMenu` |
 
-Menus, reveal-current-track, and column editing remain native behavior of the component that owns them and have no layout-schema action id.
-Transport components also run their native command directly, but every `playback.*` transport command is registered so layout action slots and the shared keymap resolve the same stable inventory.
-The separate shared keymap action `workspace.revealCurrentTrack` is registered directly by the native shell and is therefore runnable by `Ctrl+L` without becoming authorable in a layout-document action slot.
+A layout action slot must name a schema action. The native binder rejects a candidate if a bound action has no registered handler. When the gesture fires, the handler receives the triggering element as its anchor.
+Keyboard accelerators require a registered handler but do not require a schema entry. They invoke without an element anchor, so planning skips actions whose schema entry declares `RequiresAnchor`. `PresentsMenu` alone does not block a binding. See [keymap validation](../shell/keymap.md#validation-rules) for the other admission rules.
+
+The shell registers `workspace.revealCurrentTrack` directly, so `Ctrl+L` works without making the action authorable in a layout slot.
+Menu-only commands such as import/export and column editing are supplied by native menu entries, not registered as layout actions.
+Transport components run their commands directly, but those commands also have schema entries so layout action slots and the shared keymap use the same stable IDs.
 
 `actionButton` and `playback.soulButton` accept the primary click, primary long press, and secondary click; `playback.soulButton` defaults `secondaryAction` to `shell.showSystemMenu` and `primaryLongPressAction` to `shell.showSoul`. Every other component accepts none.
 
@@ -113,7 +121,7 @@ No component here accepts `secondaryLongPressAction`. Windows raises one holding
 
 `playback.soulButton` has no `primaryAction` default, because that slot is the soul's own play/pause gesture: the soul runs the transport when the document leaves the slot alone, and presents playback without driving it when the document names an action there. Nothing else in the schema puts a native gesture and an action slot on the same event, so this is the only component where authoring an action takes behavior away.
 
-A bound slot becomes one native gesture: `primaryAction` is a button's `Click` and a plain `Tapped` on any other element, `secondaryAction` is `RightTapped`, and `primaryLongPressAction` is a completed `Holding`. Windows raises one holding sequence per press regardless of pointer button, so `secondaryLongPressAction` cannot be distinguished from `primaryLongPressAction` and binding it rejects the document. An action id that the running shell registers no handler for also rejects the document, because a compiled preset naming an unimplemented capability is a shipped-artifact defect.
+A bound slot becomes one native gesture: `primaryAction` is a button's `Click` and a plain `Tapped` on any other element, `secondaryAction` is `RightTapped`, and `primaryLongPressAction` is a completed `Holding`.
 
 ### Text resources
 

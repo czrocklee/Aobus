@@ -9,7 +9,6 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -26,6 +25,17 @@
 #include <span>
 #include <string>
 #include <vector>
+
+namespace ao::async
+{
+  class Runtime;
+}
+
+namespace ao::rt
+{
+  class Library;
+  class NotificationService;
+}
 
 namespace ao::appkit
 {
@@ -66,13 +76,17 @@ namespace ao::appkit
     bool completed = false;
   };
 
-  // One native editor at a time. The owning LibrarySession retains this object
-  // through runtime shutdown and the final callback drain; observers never enter AppKit.
+  // One native editor at a time. LibrarySession owns this model and the borrowed services.
+  // It retires the model, stops producers, and drains callbacks before destroying either.
   // TrackAuthoringSession submission and invalidation state are callback-executor confined.
   class [[nodiscard]] LibraryEditorModel final
   {
   public:
-    LibraryEditorModel(rt::AppRuntime& runtime, i18n::MessageCatalog catalog, std::function<void()> onChange);
+    LibraryEditorModel(rt::Library& library,
+                       async::Runtime& asyncRuntime,
+                       rt::NotificationService& notifications,
+                       i18n::MessageCatalog catalog,
+                       std::function<void()> onChange);
     ~LibraryEditorModel();
     LibraryEditorModel(LibraryEditorModel const&) = delete;
     LibraryEditorModel& operator=(LibraryEditorModel const&) = delete;
@@ -129,7 +143,9 @@ namespace ao::appkit
                                              ListId listId,
                                              bool remove);
 
-    rt::AppRuntime& _runtime;
+    rt::Library& _library;
+    async::Runtime& _asyncRuntime;
+    rt::NotificationService& _notifications;
     i18n::MessageCatalog _catalog;
     std::function<void()> _onChange;
     uimodel::TrackPropertiesFormModel _form;

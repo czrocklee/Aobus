@@ -456,6 +456,38 @@ class CompletionEvidenceTest(unittest.TestCase):
                             self.verify([*base, *others, *evidence, self.finish, self.last])
                 self.verify([*base, *(_summary(item) for item in self.scope.required), self.finish, self.last])
 
+    def test_appkit_editor_skip_is_allowed_off_macos_after_suite_expansion(self):
+        label = "//test:appkit_editor_test"
+        for platform in ("linux", "windows"):
+            with self.subTest(platform=platform):
+                self.scope = completion._selection(platform, completion.Request())
+                self.verify(
+                    [
+                        self.expanded_check_suites(label),
+                        self.policy_result([UNIT_TEST]),
+                        _summary(),
+                        _skipped(label, "skip-cfg"),
+                        *(_summary(item) for item in self.scope.required - {label}),
+                        self.finish,
+                        self.last,
+                    ]
+                )
+
+    def test_appkit_editor_requires_a_macos_pass_even_without_suite_discovery(self):
+        label = "//test:appkit_editor_test"
+        self.scope = completion._selection("macos", completion.Request())
+        events = [
+            self.expanded_check_suites(),
+            self.policy_result([UNIT_TEST]),
+            _summary(),
+            *(_summary(item) for item in self.scope.required - {label}),
+        ]
+        for evidence in ([], [_skipped(label, "skip-cfg")]):
+            with self.subTest(evidence=evidence), self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
+                self.verify([*events, *evidence, self.finish, self.last])
+            self.assertIn(label, str(caught.exception))
+        self.verify([*events, _summary(label), self.finish, self.last])
+
     def test_a_required_member_must_have_one_unambiguous_pass(self):
         for summaries in (
             [_summary(status="FAILED")],

@@ -7,7 +7,7 @@ id: linux-gtk.dialog-lifecycle
 ## Scope
 
 This specification owns GTK window/dialog classification and the interaction lifetime of application-owned dialogs.
-It also defines the native Open Library chooser handoff and layout-editor apply/save/cancel semantics.
+It defines the saved-List dialog composition boundary, the native Open Library chooser handoff, and layout-editor apply/save/cancel semantics.
 The active-library switch and successor restart belong to the [GTK active-library lifecycle specification](active-library-lifecycle.md).
 
 ## Code boundary
@@ -18,6 +18,28 @@ Object editors such as `SmartListDialog`, `TrackPropertiesDialog`, `TrackCustomV
 Native `Gtk::FileDialog`, `Gtk::AboutDialog`, and `Gtk::MessageDialog` remain desktop/GTK-owned.
 
 No dialog directly replaces `AppRuntime` or mutates a shell layout store outside its owning workflow.
+
+### Saved-List dialog assembly
+
+`MainWindow` owns `ListNavigationController` for the lifetime of the window, not of a shell layout generation.
+The controller is a bounded composition root for the List tree, its actions, and the create, edit, and delete dialogs.
+It borrows the already-placed `AppRuntime` to keep this wiring together:
+
+- It uses `rt::Library` to read the List tree and edit targets and follows selection through `rt::WorkspaceService` observations and `rt::ViewService` reads.
+  It reports List selection and reads or saves per-List presentation preferences through `MainWindow` callbacks; it does not own workspace navigation or preference persistence.
+- It constructs `SmartListDialog` with the library, views, `rt::TrackSourceCache`, `rt::CompletionService`, and workspace custom presets, plus the window-owned `TrackRowCache` for the preview.
+  The dialog receives those dependencies, not `AppRuntime`. The panel receives the library facade to build the tree, not the runtime graph.
+- It uses `async::Runtime` and a controller-owned task scope for save and deletion workflows, delegating List operations to UIModel authoring functions over the library facade.
+  It wires dialog responses and theme registration and configures the child dialogs as transient for and destroyed with the parent.
+
+Destroying the dialog invalidates its guarded save-result presentation callback, but does not cancel the controller's save workflow.
+The window revokes List action registrations before releasing the controller.
+On destruction, the controller's task scope requests cancellation before the workspace subscription detaches; the runtime outlives the window.
+If the controller is destroyed after the List write commits but before the save completion runs, the write remains committed.
+In that case, cancellation skips the completion that would apply the submitted presentation preference and request selection of the saved List.
+
+For this composition root, the `gtk-leaf` audit skips the exact paths `list/ListNavigationController.h` and `list/ListNavigationController.cpp` under `app/linux-gtk/`.
+The exception does not extend to other files or checks, and does not authorize passing the runtime graph to leaves, taking direct storage or audio control, or adding unrelated runtime responsibilities to the controller.
 
 ## Terminology
 
@@ -130,6 +152,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`main.cpp`](../../../../app/linux-gtk/main.cpp) owns the active-library restart handoff.
 - [`LayoutEditorDialog.cpp`](../../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.
 - [`TrackPropertiesDialog.cpp`](../../../../app/linux-gtk/tag/TrackPropertiesDialog.cpp) owns revision-bound metadata Save routing, outcome presentation, and deferred successful close.
+- [`ListNavigationController.cpp`](../../../../app/linux-gtk/list/ListNavigationController.cpp) wires the List tree, its window actions, and saved-List dialogs to runtime and UIModel.
 - [`SmartListDialog.cpp`](../../../../app/linux-gtk/list/SmartListDialog.cpp) owns the saved-List preview and submission admission.
 
 ## Test map

@@ -40,6 +40,11 @@ foreign-platform test available.
   - `//test:scan_directory_spelling_fallback_test` exercises scan planning and
     apply with a simulated case-insensitive parent lookup and unavailable file ID.
     Its `lstat` wrapper is linked only into that test; it does not exercise a Windows filesystem driver.
+- On macOS, `//test:appkit_editor_test` runs the real AppKit editor model with a
+  controlled executor. It checks that shutdown preserves a committed Properties
+  edit when publication is withheld, without reporting editor completion. It
+  needs neither a GUI session nor an audio endpoint; it does not replace the
+  [AppKit authoring smoke](../macos.md#appkit-smoke-scenarios).
 - CLI and TUI tests own their frontend contracts.
 - Linux `//test:systemmedia_test` owns shared MPRIS adapter contracts and real-TUI
   process cases on owned PTYs/private buses. It is available when system media

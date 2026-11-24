@@ -39,6 +39,7 @@ namespace ao::winui
     constexpr auto kInlinePresentation = std::string_view{"inline"};
     constexpr auto kNavigationPaneType = std::string_view{"windows.navigationPane"};
     constexpr double kDefaultSplitPosition = 0.5;
+    constexpr auto kPlaybackActionCategory = std::string_view{"Playback"};
 
     constexpr auto kWindowsBindableActionSlots = uimodel::actionSlotBit(ActionSlot::PrimaryClick) |
                                                  uimodel::actionSlotBit(ActionSlot::PrimaryLongPress) |
@@ -214,14 +215,12 @@ namespace ao::winui
 
     void addAction(LayoutSchema& schema,
                    std::string_view const id,
-                   std::string_view const label,
                    std::string_view const category,
                    uimodel::ActionCapabilityMask const capabilities = 0)
     {
-      auto const added = schema.tryAddAction({.id = std::string{id},
-                                              .label = std::string{label},
-                                              .category = std::string{category},
-                                              .capabilities = capabilities});
+      // WinUI validates action bindings but does not render a schema-driven action list.
+      auto const added = schema.tryAddAction(
+        {.id = std::string{id}, .label = {}, .category = std::string{category}, .capabilities = capabilities});
       AO_EXPECTS(added, "WinUI action ids must be unique");
     }
 
@@ -229,29 +228,21 @@ namespace ao::winui
     {
       for (auto const command : uimodel::playbackCommands())
       {
-        addAction(schema,
-                  uimodel::playbackCommandActionId(command),
-                  uimodel::playbackCommandLabel(command),
-                  uimodel::kPlaybackActionCategory);
+        addAction(schema, uimodel::playbackCommandActionId(command), kPlaybackActionCategory);
       }
 
-      addAction(schema,
-                "library.open",
-                "Open Library",
-                "Library",
-                uimodel::actionCapabilityBit(uimodel::ActionCapability::RequiresAnchor));
-      addAction(schema, "library.rescan", "Rescan Library", "Library");
-      addAction(schema, "shell.toggleInspector", "Toggle Inspector", "Shell");
+      addAction(
+        schema, "library.open", "Library", uimodel::actionCapabilityBit(uimodel::ActionCapability::RequiresAnchor));
+      addAction(schema, "library.rescan", "Library");
+      addAction(schema, "shell.toggleInspector", "Shell");
       addAction(schema,
                 "shell.showSystemMenu",
-                "System Menu",
                 "Shell",
                 uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu);
-      addAction(schema, "shell.showSoul", "Show Soul", "Shell");
+      addAction(schema, "shell.showSoul", "Shell");
       addAction(schema,
                 "playback.showOutputDeviceSelector",
-                "Output Device",
-                "Playback",
+                kPlaybackActionCategory,
                 uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu);
     }
   } // namespace
