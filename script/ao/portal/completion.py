@@ -123,6 +123,7 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         required.update(
             (
                 appkit_cli_test,
+                "//test/script:test_appkit_scenarios",
                 "//test/script:test_bazel_appkit_deps",
                 "//test/script:test_bazel_environment",
                 "//test/script:test_bazel_remote_cache",

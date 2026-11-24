@@ -90,7 +90,8 @@ For the desktop app, use the [isolated AppKit launch](#bazel-appkit-product).
 it includes live documentation, formatting, source guardrails, the native-policy
 audit and the whole-graph lint test, but it does not run fixture-dependent
 AppKit GUI scenarios. The macOS tooling selection includes SDK and native
-environment tests, the remote-cache helper and generated wheel-lock checks.
+environment tests, the remote-cache helper, AppKit scenario supervisor tests,
+and generated wheel-lock checks.
 Workflow lint and the
 representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks,
 and lint fixtures; the wildcard graph is broader.
@@ -278,8 +279,18 @@ bazel run //app/macos-appkit:ao_appkit_smoke -- --scenario desktop \
 
 Use one scenario name from the table and fresh disposable paths on each run.
 Both directories must be absent or empty and must not equal or contain one
-another after path resolution. The smoke entry point checks the paths and
-generates deterministic media before creating `NSApplication`. It links the
+another after path resolution; ordinary missing directories are allowed. Existing
+directory identities are compared. On Darwin, both entrances reject ambiguous
+missing Unicode suffixes when they cannot reliably prove disjointness; precreate
+two independent empty roots to avoid that ambiguity. This APFS-oriented check is
+not a general Unicode comparison or a guarantee for other filesystems and hidden
+aliases. A `..` crossing a missing or dangling prefix is rejected; traversable
+`..` remains valid. Both entrances reject dangling symlinks, including targets
+such as `missing/../media`; the raw entry point also rejects invalid UTF-8 paths.
+Use stable, controlled disposable paths: these checks do not promise protection
+against concurrent path changes or mount changes. The smoke
+entry point validates the roots before creating `NSApplication`; desktop and
+membership scenarios defer construction of some fixtures. It links the
 same AppKit implementation as the shipping bundle, which does not accept
 `--scenario`. Both entry points follow the
 [AppKit restoration and geometry contract](../system/session-lifecycle.md#appkit).

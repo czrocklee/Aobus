@@ -16,13 +16,19 @@
 #include <ao/utility/Path.h>
 
 #include <CoreFoundation/CFRunLoop.h>
+#import <Foundation/NSString.h>
+#include <sys/unistd.h>
+#include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <print>
@@ -40,24 +46,216 @@ namespace ao::appkit::test
     constexpr std::uint32_t kFixtureSampleRate = 44100;
     static_assert(kFixtureTrackCount <= kFixtureSampleRate / std::chrono::milliseconds::period::den);
 
-    bool containsPath(std::filesystem::path const& parent, std::filesystem::path const& child)
+    struct FixtureLocation final
     {
-      auto parentIt = parent.begin();
-      auto childIt = child.begin();
+      std::filesystem::path anchor;
+      std::vector<std::filesystem::path> missingFromLeaf;
+    };
 
-      for (; parentIt != parent.end() && childIt != child.end(); ++parentIt, ++childIt)
+    Result<FixtureLocation> locateFixture(std::filesystem::path const& resolved)
+    {
+      auto location = FixtureLocation{.anchor = resolved, .missingFromLeaf = {}};
+
+      while (true)
       {
-        if (*parentIt != *childIt)
+        auto error = std::error_code{};
+        auto const status = std::filesystem::symlink_status(location.anchor, error);
+
+        if (status.type() != std::filesystem::file_type::not_found)
+        {
+          if (error)
+          {
+            return makeError(Error::Code::IoError,
+                             std::format("Cannot inspect AppKit fixture ancestor '{}': {}",
+                                         utility::pathToUtf8(location.anchor),
+                                         error.message()));
+          }
+
+          // weakly_canonical resolves live links. A dangling link is not a missing directory.
+          if (!std::filesystem::is_directory(status))
+          {
+            return makeError(
+              Error::Code::InvalidInput,
+              std::format("AppKit fixture ancestor is not a directory: {}", utility::pathToUtf8(location.anchor)));
+          }
+
+          return location;
+        }
+
+        auto parent = location.anchor.parent_path();
+
+        if (parent == location.anchor)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Cannot locate existing AppKit fixture ancestor for '{}'", utility::pathToUtf8(resolved)));
+        }
+
+        if (location.anchor.has_filename())
+        {
+          location.missingFromLeaf.push_back(location.anchor.filename());
+        }
+
+        location.anchor = std::move(parent);
+      }
+    }
+
+    bool isAscii(std::string_view name)
+    {
+      return std::ranges::all_of(name, [](unsigned char byte) { return byte <= 0x7F; });
+    }
+
+    char foldAscii(char byte)
+    {
+      return byte >= 'A' && byte <= 'Z' ? static_cast<char>(byte + ('a' - 'A')) : byte;
+    }
+
+    Result<bool> fixtureVolumeCaseSensitive(std::filesystem::path const& anchor)
+    {
+      errno = 0;
+      auto const caseSensitive = ::pathconf(anchor.c_str(), _PC_CASE_SENSITIVE);
+
+      if (auto const pathconfError = errno; caseSensitive != 0 && caseSensitive != 1)
+      {
+        auto const reason = caseSensitive == -1 && pathconfError != 0
+                              ? std::error_code{pathconfError, std::generic_category()}.message()
+                              : std::format("indeterminate pathconf result ({})", caseSensitive);
+        return makeError(Error::Code::IoError,
+                         std::format("Cannot determine AppKit fixture volume case sensitivity at '{}': {}",
+                                     utility::pathToUtf8(anchor),
+                                     reason));
+      }
+
+      return caseSensitive == 1;
+    }
+
+    Result<bool> containsMissingSuffix(FixtureLocation const& parent, FixtureLocation const& child)
+    {
+      bool needsCaseSensitivity = false;
+      bool ambiguousNonAscii = false;
+      auto childPart = child.missingFromLeaf.rbegin();
+
+      for (auto parentPart = parent.missingFromLeaf.rbegin(); parentPart != parent.missingFromLeaf.rend();
+           ++parentPart, ++childPart)
+      {
+        if (*parentPart == *childPart)
+        {
+          continue;
+        }
+
+        auto const& left = parentPart->native();
+        auto const& right = childPart->native();
+
+        // A user-space Unicode table cannot prove how this volume compares missing names.
+        if (!isAscii(left) || !isAscii(right))
+        {
+          ambiguousNonAscii = true;
+          continue;
+        }
+
+        if (!std::ranges::equal(left, right, std::ranges::equal_to{}, foldAscii, foldAscii))
+        {
+          return false;
+        }
+
+        needsCaseSensitivity = true;
+      }
+
+      if (needsCaseSensitivity)
+      {
+        auto const caseSensitiveRes = fixtureVolumeCaseSensitive(parent.anchor);
+
+        if (!caseSensitiveRes)
+        {
+          return std::unexpected{caseSensitiveRes.error()};
+        }
+
+        if (*caseSensitiveRes)
         {
           return false;
         }
       }
 
-      return parentIt == parent.end();
+      if (ambiguousNonAscii)
+      {
+        return makeError(Error::Code::InvalidInput,
+                         "cannot determine whether --library and --state-root overlap for missing non-ASCII names; "
+                         "precreate distinct empty fixture directories");
+      }
+
+      return true;
+    }
+
+    Result<bool> containsFixturePath(FixtureLocation const& parent, FixtureLocation const& child)
+    {
+      if (parent.missingFromLeaf.size() > child.missingFromLeaf.size())
+      {
+        return false;
+      }
+
+      for (auto ancestor = child.anchor;; ancestor = ancestor.parent_path())
+      {
+        auto error = std::error_code{};
+        auto const sameDirectory = std::filesystem::equivalent(parent.anchor, ancestor, error);
+
+        if (error)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Cannot compare AppKit fixture directories '{}' and '{}': {}",
+                                       utility::pathToUtf8(parent.anchor),
+                                       utility::pathToUtf8(ancestor),
+                                       error.message()));
+        }
+
+        if (sameDirectory)
+        {
+          return containsMissingSuffix(parent, child);
+        }
+
+        // A missing parent cannot contain an existing part of the child path.
+        if (!parent.missingFromLeaf.empty() || ancestor == ancestor.root_path())
+        {
+          return false;
+        }
+      }
+    }
+
+    Result<> requireTraversableParentComponents(std::filesystem::path const& absolute, std::string_view option)
+    {
+      auto prefix = absolute.root_path();
+
+      // weakly_canonical can remove an untraversable component followed by '..'.
+      // Ask the filesystem to traverse it, not just inspect the preceding directory.
+      for (auto const& part : absolute.relative_path())
+      {
+        prefix /= part;
+
+        if (part == "..")
+        {
+          auto error = std::error_code{};
+
+          if (auto const status = std::filesystem::status(prefix, error);
+              error || !std::filesystem::is_directory(status))
+          {
+            return makeError(
+              Error::Code::InvalidInput,
+              std::format("AppKit {} fixture: '..' requires an existing directory with search permission: '{}'",
+                          option,
+                          utility::pathToUtf8(prefix)));
+          }
+        }
+      }
+
+      return {};
     }
 
     Result<std::filesystem::path> requireEmptyFixturePath(std::filesystem::path const& path, std::string_view option)
     {
+      if ([NSString stringWithUTF8String:path.c_str()] == nil)
+      {
+        return makeError(Error::Code::InvalidInput, std::format("AppKit {} is not UTF-8", option));
+      }
+
       auto error = std::error_code{};
       auto const absolute = std::filesystem::absolute(path, error);
 
@@ -68,6 +266,11 @@ namespace ao::appkit::test
           std::format("Cannot resolve AppKit {} fixture '{}': {}", option, utility::pathToUtf8(path), error.message()));
       }
 
+      if (auto traversalRes = requireTraversableParentComponents(absolute, option); !traversalRes)
+      {
+        return std::unexpected{traversalRes.error()};
+      }
+
       auto resolved = std::filesystem::weakly_canonical(absolute, error);
 
       if (error)
@@ -75,6 +278,11 @@ namespace ao::appkit::test
         return makeError(
           Error::Code::IoError,
           std::format("Cannot resolve AppKit {} fixture '{}': {}", option, utility::pathToUtf8(path), error.message()));
+      }
+
+      if ([NSString stringWithUTF8String:resolved.c_str()] == nil)
+      {
+        return makeError(Error::Code::InvalidInput, std::format("AppKit {} resolved path is not UTF-8", option));
       }
 
       auto const exists = std::filesystem::exists(resolved, error);
@@ -267,7 +475,7 @@ namespace ao::appkit::test
     }
   }
 
-  Result<> prepareAppKitFixtureRoots(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
+  Result<> prepareAppKitFixtureRoots(std::filesystem::path& musicRoot, std::filesystem::path& stateRoot)
   {
     auto libraryRes = requireEmptyFixturePath(musicRoot, "--library");
 
@@ -283,7 +491,33 @@ namespace ao::appkit::test
       return std::unexpected{stateRes.error()};
     }
 
-    if (containsPath(*libraryRes, *stateRes) || containsPath(*stateRes, *libraryRes))
+    auto const libraryLocationRes = locateFixture(*libraryRes);
+
+    if (!libraryLocationRes)
+    {
+      return std::unexpected{libraryLocationRes.error()};
+    }
+
+    auto const stateLocationRes = locateFixture(*stateRes);
+
+    if (!stateLocationRes)
+    {
+      return std::unexpected{stateLocationRes.error()};
+    }
+
+    auto overlapRes = containsFixturePath(*libraryLocationRes, *stateLocationRes);
+
+    if (overlapRes && !*overlapRes)
+    {
+      overlapRes = containsFixturePath(*stateLocationRes, *libraryLocationRes);
+    }
+
+    if (!overlapRes)
+    {
+      return std::unexpected{overlapRes.error()};
+    }
+
+    if (*overlapRes)
     {
       return makeError(
         Error::Code::InvalidInput, "AppKit --library and --state-root must not equal or contain one another");
@@ -299,6 +533,8 @@ namespace ao::appkit::test
         std::format("Cannot create AppKit state fixture '{}': {}", utility::pathToUtf8(*stateRes), error.message()));
     }
 
+    musicRoot = std::move(*libraryRes);
+    stateRoot = std::move(*stateRes);
     return {};
   }
 

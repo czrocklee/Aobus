@@ -291,8 +291,9 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
   through the production lifecycle and launcher invocation, with a test-only
   bridge assigning actual successor-process ownership to the native smoke
   bundle's supervisor in [`appkit_process.py`](../../script/ao/graph/appkit_process.py).
-- [`test_appkit_process.py`](../../test/script/test_appkit_process.py) protects
-  isolated fixture admission, bounded parent collection, and invocation-bound
+- [`test_appkit_scenarios.py`](../../test/script/test_appkit_scenarios.py) protects
+  isolated fixture admission. [`test_appkit_process.py`](../../test/script/test_appkit_process.py) protects
+  bounded parent collection and invocation-bound
   parent and successor completion markers. It uses real
   processes to reject nonzero successor exits, hangs after a valid marker, and
   successful exits without a marker. It also checks that a failed parent cannot

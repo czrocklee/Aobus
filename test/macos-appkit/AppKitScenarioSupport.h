@@ -31,7 +31,8 @@ namespace ao::appkit::test
   Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot,
                                      std::chrono::milliseconds duration,
                                      std::optional<std::chrono::milliseconds> optLastTrackDuration = std::nullopt);
-  Result<> prepareAppKitFixtureRoots(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
+  // On success, use the validated, resolved roots for the rest of the scenario.
+  Result<> prepareAppKitFixtureRoots(std::filesystem::path& musicRoot, std::filesystem::path& stateRoot);
   void preindexLibraryWithPendingTrack(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   void settleNativeCallbacks();
   NSView* findView(NSView* view, NSString* identifier);

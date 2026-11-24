@@ -36,9 +36,9 @@ load("//bazel:python_libraries.bzl", "aobus_assert_unit_modules", "portal_initia
 
 package(default_visibility = ["//visibility:public"])
 
-# Exercise native SDK selection and the cache helper without selecting the full
-# repository tooling suite on macOS.
+# Exercise host-specific tooling without selecting the full repository suite on macOS.
 _MACOS_TOOLING_MODULES = [
+    "test_appkit_scenarios",
     "test_bazel_appkit_deps",
     "test_bazel_environment",
     "test_bazel_remote_cache",
