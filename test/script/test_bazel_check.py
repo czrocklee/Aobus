@@ -216,6 +216,13 @@ class RequiredScopeTest(unittest.TestCase):
         self.assertNotIn(uia, completion._selection("windows", completion.Request()).required)
         self.assertNotIn(uia, completion._selection("linux", completion.Request(ci=True)).required)
 
+    def test_appkit_supervision_requires_evidence_in_local_and_ci_macos_checks(self):
+        label = "//test/script:test_appkit_scenarios"
+        for ci in (False, True):
+            with self.subTest(ci=ci):
+                selection = completion._selection("macos", completion.Request(ci=ci))
+                self.assertIn(label, selection.required - selection.optional)
+
     def test_winui_projection_is_required_only_on_windows(self):
         label = "//test/winui/projection:winui_projection_test"
         for platform in ("linux", "macos", "windows"):

@@ -26,7 +26,7 @@ class AppKitPathArgumentsTest(unittest.TestCase):
             assert path is not None, f"No runfile for {label}"
             cls.executables[entrypoint] = Path(path).absolute()
 
-    def run_in_fixture(self, root: Path, *command: str | Path) -> subprocess.CompletedProcess[str]:
+    def run_in_fixture(self, root: Path, *command: str | bytes | Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             command,
             cwd=root,
@@ -52,6 +52,49 @@ class AppKitPathArgumentsTest(unittest.TestCase):
     def require_usage_error(self, result: subprocess.CompletedProcess[str], diagnostic: str) -> None:
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn(diagnostic, result.stderr)
+
+    def run_smoke_fixture_preparation(
+        self, root: Path, library: Path | bytes, state: Path | bytes
+    ) -> subprocess.CompletedProcess[str]:
+        # Stop admitted inputs at the first WAV write, before the raw smoke can open a GUI.
+        # Directory creation and the creation of an empty WAV are still observable.
+        script = (
+            "import os, resource, signal, sys\n"
+            "signal.signal(signal.SIGXFSZ, signal.SIG_IGN)\n"
+            "resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))\n"
+            "os.execv(sys.argv[1], sys.argv[1:])\n"
+        )
+        return self.run_in_fixture(
+            root,
+            sys.executable,
+            "-c",
+            script,
+            self.executables["smoke"],
+            "--scenario",
+            "initial-index",
+            "--library",
+            library,
+            "--state-root",
+            state,
+        )
+
+    def require_fixture_rejected_before_writes(
+        self,
+        root: Path,
+        library: Path | bytes,
+        state: Path | bytes,
+        diagnostic: str = "--library and --state-root must not equal or contain one another",
+    ) -> None:
+        before = sorted(root.rglob("*"))
+        result = self.run_smoke_fixture_preparation(root, library, state)
+        self.assertEqual(sorted(root.rglob("*")), before, result.stdout + result.stderr)
+        self.require_usage_error(result, diagnostic)
+
+    def require_fixture_roots_admitted(self, root: Path, library: Path, state: Path) -> None:
+        result = self.run_smoke_fixture_preparation(root, library, state)
+        self.require_usage_error(result, "Cannot write AppKit fixture track")
+        self.assertEqual(len(list(library.glob("*.wav"))), 1)
+        self.assertEqual(list(state.iterdir()), [])
 
     def test_path_options_reject_missing_empty_and_dash_prefixed_values(self) -> None:
         for entrypoint in self.executables:
@@ -176,6 +219,175 @@ class AppKitPathArgumentsTest(unittest.TestCase):
                 # The last state root wins; both path operands are valid, but the fixtures overlap.
                 self.require_usage_error(result, "--library and --state-root must not equal or contain one another")
                 self.assertFalse((root / name).exists())
+
+    def test_smoke_distinguishes_case_aliases_from_distinct_fixture_roots(self) -> None:
+        for first_path, second_path in (
+            ("Fixture", "FIXTURE"),
+            ("Fixture", "FIXTURE/pending"),
+            ("Fixture/new", "FIXTURE/new/pending"),
+            # The spellings differ in a component that does not exist in either path.
+            ("Fixture/future", "Fixture/FUTURE"),
+            ("Fixture/future", "Fixture/FUTURE/pending"),
+        ):
+            for reverse_roles in (False, True):
+                with tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch:
+                    root = Path(scratch)
+                    first = root / "Fixture"
+                    alternate = root / "FIXTURE"
+                    first.mkdir()
+                    if not alternate.exists():
+                        alternate.mkdir()
+                    case_aliased = first.samefile(alternate)
+                    library, state = root / first_path, root / second_path
+                    if reverse_roles:
+                        library, state = state, library
+                    with self.subTest(library=library, state=state, case_aliased=case_aliased):
+                        if case_aliased:
+                            self.require_fixture_rejected_before_writes(root, library, state)
+                        else:
+                            self.require_fixture_roots_admitted(root, library, state)
+
+    def test_smoke_requires_existing_identities_for_ambiguous_non_ascii_names(self) -> None:
+        for first_name, second_name in (("Caf\u00e9", "Cafe\u0301"), ("\U00010570", "\U00010597")):
+            with (
+                self.subTest(first_name=first_name, second_name=second_name),
+                tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch,
+            ):
+                root = Path(scratch)
+                probe = root / "identity-probe"
+                first, second = probe / first_name, probe / second_name
+                first.mkdir(parents=True)
+                if second.exists() and first.samefile(second):
+                    self.require_fixture_rejected_before_writes(probe, first, second)
+                else:
+                    second.mkdir()
+                    self.require_fixture_roots_admitted(probe, first, second)
+
+                for nested in (False, True):
+                    for reverse_roles in (False, True):
+                        with (
+                            self.subTest(nested=nested, reverse_roles=reverse_roles),
+                            tempfile.TemporaryDirectory(dir=root) as scratch_fixture,
+                        ):
+                            fixture = Path(scratch_fixture)
+                            library, state = fixture / first_name, fixture / second_name
+                            if nested:
+                                state /= "pending"
+                            if reverse_roles:
+                                library, state = state, library
+                            self.require_fixture_rejected_before_writes(
+                                fixture, library, state, "precreate distinct empty fixture directories"
+                            )
+
+    def test_smoke_admits_missing_non_ascii_paths_with_an_ascii_discriminator(self) -> None:
+        with tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch:
+            root = Path(scratch)
+            self.require_fixture_roots_admitted(root, root / "Caf\u00e9" / "music", root / "Cafe\u0301" / "state")
+
+    def test_smoke_rejects_invalid_utf8_in_either_fixture_operand(self) -> None:
+        for invalid_library in (False, True):
+            with (
+                self.subTest(invalid_library=invalid_library),
+                tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch,
+            ):
+                root = Path(scratch)
+                (root / "left").mkdir()
+                (root / "right").mkdir()
+                invalid_path = os.fsencode(root / "left") + b"/bad-\xff"
+                valid_path = root / "right" / "valid"
+                if invalid_library:
+                    self.require_fixture_rejected_before_writes(
+                        root, invalid_path, valid_path, "--library is not UTF-8"
+                    )
+                else:
+                    self.require_fixture_rejected_before_writes(
+                        root, valid_path, invalid_path, "--state-root is not UTF-8"
+                    )
+
+    def test_smoke_rejects_parent_traversal_after_a_missing_or_dangling_prefix(self) -> None:
+        for prefix in ("missing", "dangling"):
+            for reverse_roles in (False, True):
+                with (
+                    self.subTest(prefix=prefix, reverse_roles=reverse_roles),
+                    tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch,
+                ):
+                    root = Path(scratch)
+                    (root / "dangling").symlink_to(root / "missing", target_is_directory=True)
+                    library, state = root / prefix / ".." / "library", root / "state"
+                    if reverse_roles:
+                        library, state = state, library
+                    self.require_fixture_rejected_before_writes(
+                        root, library, state, "'..' requires an existing directory"
+                    )
+
+    def test_smoke_rejects_parent_traversal_through_an_unsearchable_directory(self) -> None:
+        with tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch:
+            root = Path(scratch)
+            restricted = root / "restricted"
+            restricted.mkdir(mode=0o000)
+            try:
+                try:
+                    (restricted / "..").stat()
+                except PermissionError:
+                    pass
+                else:
+                    self.skipTest("The test process can search the restricted directory")
+
+                self.require_fixture_rejected_before_writes(
+                    root, restricted / ".." / "library", root / "state", "'..' requires an existing directory"
+                )
+            finally:
+                restricted.chmod(0o700)
+
+    def test_smoke_checks_case_aliases_below_symlinked_fixture_ancestor(self) -> None:
+        for reverse_roles in (False, True):
+            with (
+                self.subTest(reverse_roles=reverse_roles),
+                tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch,
+            ):
+                root = Path(scratch)
+                directory = root / "fixture"
+                alias = root / "alias"
+                directory.mkdir()
+                alias.symlink_to(directory, target_is_directory=True)
+                alternate = root / "FIXTURE"
+                case_aliased = alternate.exists() and directory.samefile(alternate)
+
+                # Resolving the live symlink alone leaves two differently spelled missing paths.
+                library, state = directory / "new", alias / "NEW" / "pending"
+                if reverse_roles:
+                    library, state = state, library
+                if case_aliased:
+                    self.require_fixture_rejected_before_writes(root, library, state)
+                else:
+                    self.require_fixture_roots_admitted(root, library, state)
+
+    def test_smoke_rejects_dangling_library_alias_before_creating_state(self) -> None:
+        for target in ("state", "missing/../media"):
+            with (
+                self.subTest(target=target),
+                tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch,
+            ):
+                root = Path(scratch)
+                library, state = root / "library", root / "state"
+                # A dangling target must not become valid by collapsing its missing component.
+                (root / "media").mkdir()
+                library.symlink_to(target, target_is_directory=True)
+                self.assertFalse(library.exists())
+                self.require_fixture_rejected_before_writes(root, library, state, "AppKit fixture preparation failed:")
+
+    def test_smoke_admits_distinct_empty_sibling_fixture_roots(self) -> None:
+        with tempfile.TemporaryDirectory(dir=os.environ["TEST_TMPDIR"]) as scratch:
+            root = Path(scratch)
+            library, state = root / "fixture", root / "fixture-state"
+            library.mkdir()
+            state.mkdir()
+            links = root / "links"
+            links.mkdir()
+            alias = links / "state-link"
+            alias.symlink_to(state, target_is_directory=True)
+            self.assertFalse(library.samefile(state))
+            self.require_fixture_roots_admitted(root, alias / ".." / library.name, state)
 
 
 if __name__ == "__main__":
