@@ -17,6 +17,8 @@
 
 #include <CoreFoundation/CFRunLoop.h>
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -24,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <print>
+#include <ratio>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -35,7 +38,7 @@ namespace ao::appkit::test
   namespace
   {
     constexpr std::uint32_t kFixtureSampleRate = 44100;
-    constexpr std::size_t kFixtureDurationSeconds = 12;
+    static_assert(kFixtureTrackCount <= kFixtureSampleRate / std::chrono::milliseconds::period::den);
 
     bool containsPath(std::filesystem::path const& parent, std::filesystem::path const& child)
     {
@@ -155,10 +158,17 @@ namespace ao::appkit::test
 
   namespace
   {
-    Result<> writeFixtureTrack(std::filesystem::path const& musicRoot, std::int32_t trackNumber)
+    Result<> writeFixtureTrack(std::filesystem::path const& musicRoot,
+                               std::int32_t trackNumber,
+                               std::chrono::milliseconds duration)
     {
+      AO_EXPECTS(duration > std::chrono::milliseconds{0});
+      AO_EXPECTS(trackNumber >= 1 && trackNumber <= kFixtureTrackCount);
+      using FixtureFrames = std::chrono::duration<std::size_t, std::ratio<1, kFixtureSampleRate>>;
+      // Start at the first frame that floors to the requested duration. The distinct per-track frame counts
+      // all fit in that same millisecond.
       auto const frameCount =
-        (kFixtureSampleRate * kFixtureDurationSeconds) + static_cast<std::size_t>(trackNumber - 1);
+        std::chrono::ceil<FixtureFrames>(duration).count() + static_cast<std::size_t>(trackNumber - 1);
       auto spec = ao::test::wav::Spec{
         .channels = 1,
         .sampleRate = kFixtureSampleRate,
@@ -193,8 +203,12 @@ namespace ao::appkit::test
       return {};
     }
 
-    Result<> prepareMediaLibrary(std::filesystem::path const& musicRoot, std::int32_t trackCount)
+    Result<> prepareMediaLibrary(std::filesystem::path const& musicRoot,
+                                 std::int32_t trackCount,
+                                 std::chrono::milliseconds duration,
+                                 std::optional<std::chrono::milliseconds> optLastTrackDuration = std::nullopt)
     {
+      AO_EXPECTS(trackCount >= 1 && trackCount <= kFixtureTrackCount);
       auto rootRes = requireEmptyFixturePath(musicRoot, "--library");
 
       if (!rootRes)
@@ -214,7 +228,9 @@ namespace ao::appkit::test
 
       for (std::int32_t trackNumber = 1; trackNumber <= trackCount; ++trackNumber)
       {
-        if (auto res = writeFixtureTrack(*rootRes, trackNumber); !res)
+        auto const trackDuration = trackNumber == trackCount ? optLastTrackDuration.value_or(duration) : duration;
+
+        if (auto res = writeFixtureTrack(*rootRes, trackNumber, trackDuration); !res)
         {
           return res;
         }
@@ -224,14 +240,16 @@ namespace ao::appkit::test
     }
   } // namespace
 
-  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot)
+  Result<> prepareAppKitMediaLibrary(std::filesystem::path const& musicRoot,
+                                     std::chrono::milliseconds duration,
+                                     std::optional<std::chrono::milliseconds> optLastTrackDuration)
   {
-    return prepareMediaLibrary(musicRoot, kFixtureTrackCount);
+    return prepareMediaLibrary(musicRoot, kFixtureTrackCount, duration, optLastTrackDuration);
   }
 
   void preindexLibraryWithPendingTrack(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
   {
-    if (auto res = prepareMediaLibrary(musicRoot, kIndexedFixtureTrackCount); !res)
+    if (auto res = prepareMediaLibrary(musicRoot, kIndexedFixtureTrackCount, kDefaultFixtureDuration); !res)
     {
       AO_FATAL("Could not prepare the indexed AppKit fixture: {}", res.error().message);
     }
@@ -243,7 +261,7 @@ namespace ao::appkit::test
     }
 
     // The new media must not exist until the indexing session has released the library.
-    if (auto res = writeFixtureTrack(musicRoot, kFixtureTrackCount); !res)
+    if (auto res = writeFixtureTrack(musicRoot, kFixtureTrackCount, kDefaultFixtureDuration); !res)
     {
       AO_FATAL("Could not add the pending AppKit fixture track: {}", res.error().message);
     }

@@ -13,10 +13,12 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
@@ -194,9 +196,16 @@ namespace ao::appkit::test
       requireStatus(
         handler, {.command = MediaRemoteCommand::Pause}, MediaRemoteCommandStatus::NoActionableNowPlayingItem);
 
+      // The first unrepresentable millisecond value must fail even without a seekable subject.
+      constexpr double kCastLimitSeconds = 0x1p63 / 1000.0;
+      requireStatus(handler,
+                    {.command = MediaRemoteCommand::ChangePosition, .optPositionSeconds = 1.0},
+                    MediaRemoteCommandStatus::NoActionableNowPlayingItem);
+
       for (auto position : {std::numeric_limits<double>::quiet_NaN(),
                             std::numeric_limits<double>::infinity(),
                             std::numeric_limits<double>::max(),
+                            kCastLimitSeconds,
                             -1.0})
       {
         requireStatus(handler,
@@ -589,6 +598,117 @@ namespace ao::appkit::test
                    "Remote Play must restore held audio at its offset instead of starting the selected track");
     }
 
+    rt::PlaybackTransportSnapshot startPausedSeekBoundaryTrack(LibrarySession& session,
+                                                               std::chrono::milliseconds duration)
+    {
+      auto trackId = kInvalidTrackId;
+
+      for (std::size_t index = 0; index < session.displayIndex().displayCount(); ++index)
+      {
+        if (auto const* row = session.rowAt(index); row != nullptr && row->duration == duration)
+        {
+          trackId = row->id;
+          break;
+        }
+      }
+
+      AO_INVARIANT(
+        trackId != kInvalidTrackId, "The media fixture needs a track tagged with duration {} ms", duration.count());
+      session.play(trackId);
+      waitForTransport(session, audio::Transport::Playing);
+      executeRemote(session, {.command = MediaRemoteCommand::Pause});
+      waitForTransport(session, audio::Transport::Paused);
+      auto const paused = session.runtime().playback().snapshot().transport;
+      AO_INVARIANT(paused.nowPlaying.trackId == trackId && paused.duration == duration && paused.hasSeekableSubject() &&
+                     paused.elapsed < paused.duration && !paused.hasDeferredResume,
+                   "The seek boundary needs the requested occurrence paused before its end");
+      return paused;
+    }
+
+    void seekAndRequireHeldPosition(LibrarySession& session,
+                                    rt::PlaybackOccurrenceId occurrenceId,
+                                    double positionSeconds,
+                                    std::chrono::milliseconds expectedElapsed)
+    {
+      auto& playback = session.runtime().playback();
+      auto const expectedRevision = playback.snapshot().transport.finalSeekRevision.value + 1;
+      executeRemote(session, {.command = MediaRemoteCommand::ChangePosition, .optPositionSeconds = positionSeconds});
+      requireWaitUntil([&] { return playback.snapshot().transport.finalSeekRevision.value >= expectedRevision; },
+                       "A handled boundary seek must reach the runtime");
+      auto const& sought = playback.snapshot().transport;
+      AO_INVARIANT(sought.occurrenceId == occurrenceId && sought.transport == audio::Transport::Paused &&
+                     sought.hasDeferredResume && sought.elapsed == expectedElapsed &&
+                     sought.finalSeekRevision.value == expectedRevision,
+                   "Media seek at {} s must commit the expected position on the captured occurrence",
+                   positionSeconds);
+    }
+
+    void exerciseSeekDurationBoundary(LibrarySession& session)
+    {
+      auto const paused = startPausedSeekBoundaryTrack(session, kMediaSeekFixtureDuration);
+      auto* const info = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo;
+      auto const endSeconds = [info[MPMediaItemPropertyPlaybackDuration] doubleValue];
+      // The published seconds round-trip to 16001.999999999998 ms, so blind truncation misses exact end.
+      AO_INVARIANT(endSeconds == 16.002, "Now Playing must publish the 16002 ms boundary fixture as 16.002 seconds");
+      constexpr double kHalfMillisecondSeconds = 0.0005;
+
+      // Exact end holds the paused occurrence without rendering. The next seek can then verify millisecond
+      // truncation on the held cursor without depending on the audio backend's frame-based elapsed clock.
+      seekAndRequireHeldPosition(session, paused.occurrenceId, endSeconds, paused.duration);
+      seekAndRequireHeldPosition(session,
+                                 paused.occurrenceId,
+                                 endSeconds - kHalfMillisecondSeconds,
+                                 paused.duration - std::chrono::milliseconds{1});
+
+      auto& playback = session.runtime().playback();
+      auto& media = session.mediaPlayer();
+      auto const handler = media.remoteCommandHandler();
+      // Even the first representable value beyond the published end must be rejected.
+      for (auto const positionSeconds :
+           {std::nextafter(endSeconds, std::numeric_limits<double>::infinity()), endSeconds + kHalfMillisecondSeconds})
+      {
+        auto const before = media.diagnostics();
+        auto const insideEnd = playback.snapshot().transport;
+        auto const status =
+          handler({.command = MediaRemoteCommand::ChangePosition, .optPositionSeconds = positionSeconds});
+        AO_INVARIANT(status == MediaRemoteCommandStatus::CommandFailed,
+                     "A media seek at {} s beyond the end must fail admission",
+                     positionSeconds);
+        drainMediaCallbacks();
+        auto const after = media.diagnostics();
+        AO_INVARIANT(after.admittedCommandCount == before.admittedCommandCount &&
+                       after.settledCommandCount == before.settledCommandCount &&
+                       after.handledCommandCount == before.handledCommandCount,
+                     "A rejected boundary seek must not enqueue or deliver work");
+        auto const& unchanged = playback.snapshot().transport;
+        AO_INVARIANT(unchanged.occurrenceId == paused.occurrenceId && unchanged.elapsed == insideEnd.elapsed &&
+                       unchanged.positionRevision == insideEnd.positionRevision &&
+                       unchanged.finalSeekRevision == insideEnd.finalSeekRevision,
+                     "A rejected boundary seek must leave the held occurrence and position unchanged");
+      }
+
+      executeRemote(session, {.command = MediaRemoteCommand::Stop});
+      waitForTransport(session, audio::Transport::Idle);
+    }
+
+    void exerciseInteriorSeekAtEnd(LibrarySession& session)
+    {
+      auto const paused = startPausedSeekBoundaryTrack(session, kMediaInteriorSeekFixtureDuration);
+      auto* const info = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo;
+      auto const endSeconds = [info[MPMediaItemPropertyPlaybackDuration] doubleValue];
+      auto const beforeEndSeconds = std::nextafter(endSeconds, 0.0);
+      AO_INVARIANT(endSeconds == 15.992 && beforeEndSeconds < endSeconds &&
+                     beforeEndSeconds * 1000.0 == static_cast<double>(paused.duration.count()),
+                   "The preceding native double must be interior but round to the endpoint in milliseconds");
+
+      // Hold the cursor at the end first: a wrongly quantized interior seek would leave it there.
+      seekAndRequireHeldPosition(session, paused.occurrenceId, endSeconds, paused.duration);
+      seekAndRequireHeldPosition(
+        session, paused.occurrenceId, beforeEndSeconds, paused.duration - std::chrono::milliseconds{1});
+      executeRemote(session, {.command = MediaRemoteCommand::Stop});
+      waitForTransport(session, audio::Transport::Idle);
+    }
+
     void exerciseSeek(LibrarySession& session)
     {
       auto& media = session.mediaPlayer();
@@ -850,6 +970,8 @@ namespace ao::appkit::test
       exerciseBackloggedSeek(session, session.mediaPlayer(), false);
       exerciseDeferredResume(session);
       exerciseSeek(session);
+      exerciseSeekDurationBoundary(session);
+      exerciseInteriorSeekAtEnd(session);
       exerciseFilteredRemotePlay(session);
       exerciseCommandAvailability(session);
       retiredHandler = exerciseRetirement(session);

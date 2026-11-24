@@ -51,7 +51,13 @@ int main(int argc, char** argv)
       // Desktop and membership populate their fixtures in two phases around indexing.
       if (fixtureRes && scenario != "desktop" && scenario != "membership")
       {
-        fixtureRes = ao::appkit::test::prepareAppKitMediaLibrary(launch.optRequest->libraryRoot);
+        auto const& musicRoot = launch.optRequest->libraryRoot;
+        fixtureRes =
+          scenario == "media"
+            ? ao::appkit::test::prepareAppKitMediaLibrary(musicRoot,
+                                                          ao::appkit::test::kMediaSeekFixtureDuration,
+                                                          ao::appkit::test::kMediaInteriorSeekFixtureDuration)
+            : ao::appkit::test::prepareAppKitMediaLibrary(musicRoot, ao::appkit::test::kDefaultFixtureDuration);
       }
 
       if (!fixtureRes)

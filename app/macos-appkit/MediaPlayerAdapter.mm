@@ -38,6 +38,8 @@ namespace ao::appkit
   namespace
   {
     constexpr std::size_t kCommandCount = 7;
+    constexpr double kMillisecondsPerSecond = 1000.0;
+    constexpr double kMillisecondCastLimit = -static_cast<double>(std::numeric_limits<std::int64_t>::min());
 
     constexpr std::size_t commandIndex(MediaRemoteCommand const command) noexcept
     {
@@ -45,6 +47,24 @@ namespace ao::appkit
     }
 
     static_assert(commandIndex(MediaRemoteCommand::ChangePosition) + 1 == kCommandCount);
+
+    double nativeSeconds(std::chrono::milliseconds const duration) noexcept
+    {
+      return std::chrono::duration<double>{duration}.count();
+    }
+
+    bool isValidRemoteCommandEvent(MediaRemoteCommandEvent const& event) noexcept
+    {
+      auto const& optPositionSeconds = event.optPositionSeconds;
+
+      if (event.command != MediaRemoteCommand::ChangePosition)
+      {
+        return !optPositionSeconds;
+      }
+
+      return optPositionSeconds && std::isfinite(*optPositionSeconds) && *optPositionSeconds >= 0.0 &&
+             *optPositionSeconds <= kMillisecondCastLimit / kMillisecondsPerSecond;
+    }
 
     bool isActiveTransport(audio::Transport const transport) noexcept
     {
@@ -218,10 +238,16 @@ namespace ao::appkit
 
     // The queued block must own the shared pointer, not capture a caller's reference storage.
     static MediaRemoteCommandStatus admit(std::shared_ptr<AdmissionGate> gatePtr,
-                                          MediaRemoteCommand const command,
-                                          std::optional<std::chrono::milliseconds> const optPosition) noexcept
+                                          MediaRemoteCommandEvent const& event) noexcept
     {
-      auto admitted = AdmittedCommand{.command = command, .optPosition = optPosition};
+      if (!isValidRemoteCommandEvent(event))
+      {
+        return MediaRemoteCommandStatus::CommandFailed;
+      }
+
+      auto const command = event.command;
+      auto const& optPositionSeconds = event.optPositionSeconds;
+      auto admitted = AdmittedCommand{.command = command, .optPosition = std::nullopt};
 
       {
         auto lock = std::scoped_lock{gatePtr->mutex};
@@ -239,20 +265,34 @@ namespace ao::appkit
         }
 
         auto const& snapshot = gatePtr->snapshot;
+        auto const available = snapshot.available[index];
+        auto const durationSeconds = nativeSeconds(snapshot.duration);
+        auto const atEnd = available && optPositionSeconds && *optPositionSeconds == durationSeconds;
+        auto const positionMilliseconds = optPositionSeconds.value_or(0.0) * kMillisecondsPerSecond;
 
-        if (!snapshot.available[index])
+        // Only an actionable exact endpoint can bypass the cast limit.
+        if (!atEnd && positionMilliseconds >= kMillisecondCastLimit)
+        {
+          return MediaRemoteCommandStatus::CommandFailed;
+        }
+
+        if (!available)
         {
           return MediaRemoteCommandStatus::NoActionableNowPlayingItem;
         }
 
-        if (command == MediaRemoteCommand::ChangePosition)
+        if (optPositionSeconds)
         {
-          if (!optPosition || *optPosition < std::chrono::milliseconds{0} ||
-              snapshot.duration <= std::chrono::milliseconds{0} || *optPosition > snapshot.duration)
+          if (snapshot.duration <= std::chrono::milliseconds{0} || *optPositionSeconds > durationSeconds)
           {
             return MediaRemoteCommandStatus::CommandFailed;
           }
 
+          // Scaling can round an interior position up. Only exact native equality selects the endpoint.
+          admitted.optPosition =
+            atEnd ? snapshot.duration
+                  : std::min(std::chrono::milliseconds{static_cast<std::int64_t>(positionMilliseconds)},
+                             snapshot.duration - std::chrono::milliseconds{1});
           admitted.expectedOccurrenceId = snapshot.occurrenceId;
         }
 
@@ -373,31 +413,7 @@ namespace ao::appkit
     static MediaRemoteCommandHandler makeRemoteCommandHandler(std::shared_ptr<AdmissionGate> gatePtr)
     {
       return [gatePtr = std::move(gatePtr)](MediaRemoteCommandEvent const& event) noexcept
-      {
-        auto optPosition = std::optional<std::chrono::milliseconds>{};
-
-        if (event.command == MediaRemoteCommand::ChangePosition)
-        {
-          constexpr double kMillisecondsPerSecond = 1000.0;
-          constexpr auto kMaximumMilliseconds = static_cast<double>(std::numeric_limits<std::int64_t>::max());
-
-          if (!event.optPositionSeconds || !std::isfinite(*event.optPositionSeconds) ||
-              *event.optPositionSeconds < 0.0 ||
-              *event.optPositionSeconds >= kMaximumMilliseconds / kMillisecondsPerSecond)
-          {
-            return MediaRemoteCommandStatus::CommandFailed;
-          }
-
-          optPosition =
-            std::chrono::milliseconds{static_cast<std::int64_t>(*event.optPositionSeconds * kMillisecondsPerSecond)};
-        }
-        else if (event.optPositionSeconds)
-        {
-          return MediaRemoteCommandStatus::CommandFailed;
-        }
-
-        return admit(gatePtr, event.command, optPosition);
-      };
+      { return admit(gatePtr, event); };
     }
 
     bool tryHandleAdmitted(AdmittedCommand const& admitted)
@@ -571,8 +587,8 @@ namespace ao::appkit
       info[MPMediaItemPropertyTitle] = nativeText(transport.nowPlaying.title);
       info[MPMediaItemPropertyArtist] = nativeText(transport.nowPlaying.artist);
       info[MPMediaItemPropertyAlbumTitle] = nativeText(transport.nowPlaying.album);
-      info[MPMediaItemPropertyPlaybackDuration] = @(std::chrono::duration<double>{transport.duration}.count());
-      info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(std::chrono::duration<double>{elapsed}.count());
+      info[MPMediaItemPropertyPlaybackDuration] = @(nativeSeconds(transport.duration));
+      info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(nativeSeconds(elapsed));
       info[MPNowPlayingInfoPropertyPlaybackRate] = @(transport.transport == audio::Transport::Playing ? 1.0 : 0.0);
 
       if (artwork != nil && displayedCoverId == transport.nowPlaying.coverArtId)
