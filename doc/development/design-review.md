@@ -59,6 +59,9 @@ Interfaces hide replaceable or irrelevant mechanism.
 They must not hide semantics that callers need for correctness, including completion, failure, cancellation, ownership, and borrowing.
 A narrow concrete API can be better than an abstract interface when mechanism substitution is not part of the contract.
 
+Keep independent interface dimensions orthogonal so callers compose them without combinatorial variants or hidden cross-effects.
+When parameters, flags, or `optional` fields constrain one another, prefer an enum, `std::variant`, or narrower operation rather than carrying coupled fields past an input parser.
+
 ### Tests and seams
 
 Place tests at the [lowest useful layer](test/layer-selection.md) that proves the behavior.

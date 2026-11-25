@@ -63,6 +63,8 @@ For C functions and types also provided by the C++ standard library, use the `st
 - Prefer `std::string` to owning `char*`.
 - Avoid raw C arrays; use `std::array` or `std::to_array` for fixed-size buffers and API parameters.
 - Prefer `using` to `typedef`.
+- For a distinct ID or scalar over an arithmetic or string value, alias `ao::utility::StrongType<T, Tag>` rather than writing a one-field `struct` (`ao::yaml` map scalars support it directly; include `<ao/utility/StrongTypeFormatter.h>` for `std::format`).
+  Keep a custom `struct` or `class` when it enforces an invariant, when raw-value comparison or implicit `string_view` conversion would be unsafe, or when it names a payload boundary such as a `std::variant` alternative.
 - Never use C-style casts.
   Use `static_cast`, `reinterpret_cast`, or `const_cast` as appropriate, and prefer `static_cast` for numeric conversions in log statements and format strings.
 - Prefer `'\n'` to `std::endl`; the latter forces a flush.
