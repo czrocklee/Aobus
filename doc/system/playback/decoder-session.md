@@ -114,10 +114,11 @@ A successful native scan alone does not prove complete header coverage; identity
 Published identity is the immutable result of complete native-index header coverage, with the initial native prefix exempt, under the [MP3 source policy](pcm-format.md#mp3-source-interpretation).
 It is not the first frame alone, and it does not establish corruption-free audio or file authenticity.
 Seek rejects negative offsets and offsets beyond a known exact duration.
-Sequential decode and stable EOF behavior remain unchanged.
+For ordinary seeks, mpg123 decodes preroll to rebuild the Layer III bit reservoir and synthesis history. With incomplete index coverage, this preroll is bounded and best effort: some free-format streams can require more history than that bound supplies.
+If a fully indexed stream mixes Layer III with another layer, mpg123 can limit preroll based on the layer being left. When the frames have a common sample count and their total matches the native PCM length, the session seeks earlier and discards the extra decoded PCM before returning the target.
 The session decodes and checks one MPEG frame at a time before exposing PCM, because native gapless trimming can make one read span more than one frame and a bulk read would hide a geometry change.
 Gapless header frames yielding no PCM are consumed rather than mistaken for EOF.
-Returned spans already include the native decoder's in-frame seek skips and gapless trim; PCM positions accumulate those decoded frames, never compressed-frame indices.
+In-frame seek skips and gapless trim are applied by mpg123. Public positions count PCM frames, never compressed frames.
 The native output block may grow after open.
 Signed-16 pass-through copies each span into session storage sized to that span, so a later seek can reallocate the native buffer without invalidating the returned block.
 Wider precision-preserving conversions read the native bytes directly and leave converted storage with the shared adapter.

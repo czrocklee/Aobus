@@ -322,6 +322,8 @@ namespace ao::audio
     DecodedStreamInfo info;
     std::vector<std::byte> decodeBuffer;
     std::uint64_t nextFrameIndex = 0;
+    std::uint32_t mixedLayerSeekLead = 0;
+    std::uint64_t remainingSeekSkip = 0;
     std::optional<Error> optTerminalError;
     bool eof = false;
     int initErr = MPG123_OK;
@@ -552,29 +554,45 @@ namespace ao::audio
       return sourceFormat;
     }
 
-    std::uint32_t inspectStreamSpeakerMask(SignalFormat const& sourceFormat) const
+    static constexpr std::int32_t kMaxMpeg1ReservoirBytes = 511;
+    static constexpr std::int32_t kSynthesisPreframes = 3;
+
+    struct IndexedStream
+    {
+      std::uint32_t speakerMask = 0;
+      // Without a table-rate proof, budget one main-data byte per frame. Free-format runs
+      // with zero payload can exceed any fixed window; keep the best-effort seek bounded.
+      std::int32_t seekPreframes = kMaxMpeg1ReservoirBytes + kSynthesisPreframes;
+      std::uint32_t mixedLayerSeekLead = 0;
+    };
+
+    IndexedStream inspectIndexedStream(SignalFormat const& sourceFormat) const
     {
       std::int64_t* offsets = nullptr;
       std::int64_t step = 0;
       std::size_t count = 0;
 
-      // A sampled or partial seek index cannot prove the roles of the omitted frames.
+      // A sampled or partial index cannot prove the geometry or bitrate bounds of the omitted frames.
       if (auto const frameCount = ::mpg123_framelength64(mh);
-          !optAudioByteCount || sourceFormat.speakerMask == 0 || frameCount <= 0 ||
-          ::mpg123_index64(mh, &offsets, &step, &count) != MPG123_OK || offsets == nullptr || step != 1 ||
-          std::cmp_not_equal(count, frameCount))
+          !optAudioByteCount || frameCount <= 0 || ::mpg123_index64(mh, &offsets, &step, &count) != MPG123_OK ||
+          offsets == nullptr || step != 1 || std::cmp_not_equal(count, frameCount))
       {
-        return 0;
+        return {};
       }
 
       auto const bytes = fileCursor.bytes().first(*optAudioByteCount);
+      auto speakerMask = sourceFormat.speakerMask;
+      bool hasLayerIII = false;
+      bool hasOtherLayer = false;
+      std::uint16_t samplesPerFrame = 0;
+      bool fixedSamplesPerFrame = true;
       std::size_t nextOffset = 0;
 
       for (std::size_t index = 0; index < count; ++index)
       {
         if (offsets[index] < 0 || std::cmp_greater(offsets[index], bytes.size()))
         {
-          return 0;
+          return {};
         }
 
         auto const offset = static_cast<std::size_t>(offsets[index]);
@@ -582,35 +600,88 @@ namespace ao::audio
 
         if ((index != 0 && offset != nextOffset) || remaining.size() < sizeof(media::file::mpeg::FrameLayout))
         {
-          return 0;
+          return {};
         }
 
         auto const frame = media::file::mpeg::FrameView{remaining.data(), remaining.size()};
 
         if (!frame.isValid())
         {
-          return 0;
+          return {};
         }
 
         auto const length = frame.length();
 
         if (length < sizeof(media::file::mpeg::FrameLayout) || length > remaining.size() ||
-            frame.sampleRate() != sourceFormat.sampleRate || frame.channels() != sourceFormat.channels ||
-            frame.layout().channelMode() == media::file::mpeg::ChannelMode::DualChannel)
+            frame.sampleRate() != sourceFormat.sampleRate || frame.channels() != sourceFormat.channels)
         {
-          return 0;
+          return {};
         }
 
+        if (frame.layout().channelMode() == media::file::mpeg::ChannelMode::DualChannel)
+        {
+          speakerMask = 0;
+        }
+
+        if (frame.layout().layer() == media::file::mpeg::LayerDescription::LayerIII)
+        {
+          hasLayerIII = true;
+        }
+        else
+        {
+          hasOtherLayer = true;
+        }
+
+        auto const samples = frame.samplesPerFrame();
+        fixedSamplesPerFrame = fixedSamplesPerFrame && (index == 0 || samples == samplesPerFrame);
+        samplesPerFrame = samples;
         nextOffset = offset + length;
       }
 
-      return nextOffset == bytes.size() ? sourceFormat.speakerMask : 0;
+      if (nextOffset != bytes.size())
+      {
+        return {};
+      }
+
+      // Use the smallest table-rate frame, not the first frame's bitrate (VBR).
+      // MPEG-1: >= 96 bytes minus header/CRC/stereo side info (4+2+32); 9 frames cover 511 bytes.
+      // MPEG-2/2.5: >= 24 bytes minus 4+2+17; 255 frames can be needed for a 255-byte reservoir.
+      // Include fully decodable frames for overlap and synthesis. mpg123 caps Layers I/II at two.
+      constexpr std::uint32_t kLowestMpeg1SampleRate = 32000;
+      constexpr std::int32_t kMpeg1SeekPreframes = 16;
+      constexpr std::int32_t kMaxLowRateReservoirBytes = 255;
+      constexpr std::int32_t kLowRateSeekPreframes = kMaxLowRateReservoirBytes + kSynthesisPreframes;
+      auto const preframes =
+        sourceFormat.sampleRate >= kLowestMpeg1SampleRate ? kMpeg1SeekPreframes : kLowRateSeekPreframes;
+      auto result = IndexedStream{.speakerMask = speakerMask, .seekPreframes = preframes};
+
+      if (hasLayerIII && hasOtherLayer && fixedSamplesPerFrame)
+      {
+        // mpg123 caps preroll using the layer being left. Use an explicit lead only on a
+        // common sample timeline, not on concatenations with interior gapless trimming.
+        if (auto const samples = ::mpg123_length64(mh);
+            samples > 0 && samples % samplesPerFrame == 0 && std::cmp_equal(count, samples / samplesPerFrame))
+        {
+          result.mixedLayerSeekLead = static_cast<std::uint32_t>(preframes) * samplesPerFrame;
+        }
+      }
+
+      return result;
     }
 
     void configureStreamInfo()
     {
       info.sourceFormat = inspectSourceFormat();
-      info.sourceFormat.speakerMask = inspectStreamSpeakerMask(info.sourceFormat);
+      auto const indexed = inspectIndexedStream(info.sourceFormat);
+
+      if (int const err = ::mpg123_param(mh, MPG123_PREFRAMES, indexed.seekPreframes, 0.0); err != MPG123_OK)
+      {
+        detail::throwDecoderError(
+          Error::Code::InitFailed, "Failed to configure MP3 seek preroll: " + mpg123ErrorMessage(mh, err));
+      }
+
+      mixedLayerSeekLead = indexed.mixedLayerSeekLead;
+      info.sourceFormat.speakerMask = indexed.speakerMask;
       info.sourceChannelLayout.origin =
         info.sourceFormat.speakerMask != 0 ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown;
       auto const configuredRes = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
@@ -623,6 +694,22 @@ namespace ao::audio
       info.outputFormat = *configuredRes;
       info.isLossy = true;
       info.codec = AudioCodec::Mp3;
+    }
+
+    void checkDecodedFormat() const
+    {
+      auto sourceFormat = inspectSourceFormat();
+
+      if (info.sourceFormat.speakerMask == 0)
+      {
+        // Incomplete or mixed initial evidence stays unassigned, without weakening geometry checks.
+        sourceFormat.speakerMask = 0;
+      }
+
+      if (!(sourceFormat == info.sourceFormat))
+      {
+        detail::throwDecoderError(Error::Code::NotSupported, "MP3 stream changed source format during playback");
+      }
     }
 
     Result<PcmBlock> readNextBlock();
@@ -644,6 +731,8 @@ namespace ao::audio
         return PcmBlock{.endOfStream = true};
       }
 
+      constexpr std::uint32_t kNativeBytesPerSample = 2;
+      auto const bytesPerFrame = static_cast<std::uint32_t>(impl->info.outputFormat.channels) * kNativeBytesPerSample;
       std::size_t done = 0;
       unsigned char* audio = nullptr;
 
@@ -670,18 +759,36 @@ namespace ao::audio
 
         if (err == MPG123_NEW_FORMAT || done != 0)
         {
-          auto sourceFormat = impl->inspectSourceFormat();
+          impl->checkDecodedFormat();
+        }
 
-          if (impl->info.sourceFormat.speakerMask == 0)
-          {
-            // Incomplete or mixed initial evidence stays unassigned, without weakening geometry checks.
-            sourceFormat.speakerMask = 0;
-          }
+        if (done == 0)
+        {
+          continue;
+        }
 
-          if (!(sourceFormat == impl->info.sourceFormat))
-          {
-            detail::throwDecoderError(Error::Code::NotSupported, "MP3 stream changed source format during playback");
-          }
+        if (audio == nullptr)
+        {
+          detail::throwDecoderError(Error::Code::DecodeFailed, "MP3 decoder returned no audio buffer");
+        }
+
+        if (bytesPerFrame == 0)
+        {
+          detail::throwDecoderError(Error::Code::DecodeFailed, "Invalid MP3 output format");
+        }
+
+        if (done % bytesPerFrame != 0)
+        {
+          detail::throwDecoderError(Error::Code::DecodeFailed, "Misaligned MP3 decoder output");
+        }
+
+        if (impl->remainingSeekSkip != 0)
+        {
+          auto const skip = std::min<std::uint64_t>(impl->remainingSeekSkip, done / bytesPerFrame);
+          impl->remainingSeekSkip -= skip;
+          auto const skipBytes = static_cast<std::size_t>(skip) * bytesPerFrame;
+          audio += skipBytes;
+          done -= skipBytes;
         }
 
         if (done != 0)
@@ -690,25 +797,7 @@ namespace ao::audio
         }
       }
 
-      if (audio == nullptr)
-      {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "MP3 decoder returned no audio buffer");
-      }
-
-      constexpr std::uint32_t kNativeBytesPerSample = 2;
-      auto const bytesPerFrame = static_cast<std::uint32_t>(impl->info.outputFormat.channels) * kNativeBytesPerSample;
-
-      if (bytesPerFrame == 0)
-      {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "Invalid MP3 output format");
-      }
-
       std::uint32_t const frames = static_cast<std::uint32_t>(done / bytesPerFrame);
-
-      if ((done % bytesPerFrame) != 0 || frames == 0)
-      {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "Misaligned MP3 decoder output");
-      }
 
       std::uint64_t const currentFrameIndex = impl->nextFrameIndex;
       impl->nextFrameIndex += frames;
@@ -835,14 +924,17 @@ namespace ao::audio
 
         auto const sampleOffset = static_cast<off_t>(durationToSamples(offset, sampleRate));
 
-        auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset, SEEK_SET);
+        auto const lead = static_cast<off_t>(std::min<std::int64_t>(sampleOffset, _implPtr->mixedLayerSeekLead));
+        auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset - lead, SEEK_SET);
 
         if (actualOffset < 0)
         {
           return makeError(Error::Code::SeekFailed, "MP3 seek failed: " + mpg123ErrorMessage(_implPtr->mh, MPG123_ERR));
         }
 
-        _implPtr->nextFrameIndex = static_cast<std::uint64_t>(actualOffset);
+        auto const firstFrame = lead != 0 ? std::max(sampleOffset, actualOffset) : actualOffset;
+        _implPtr->remainingSeekSkip = static_cast<std::uint64_t>(firstFrame - actualOffset);
+        _implPtr->nextFrameIndex = static_cast<std::uint64_t>(firstFrame);
         _implPtr->optTerminalError.reset();
         _implPtr->eof = false;
         return {};
