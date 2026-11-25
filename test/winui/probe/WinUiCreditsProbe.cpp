@@ -891,7 +891,7 @@ namespace
             _ready = [this]
             {
               auto const label =
-                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscard));
+                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::CommonDiscardChanges));
 
               return std::ranges::any_of(controls<Button>(),
                                          [&label](Button const& command)
@@ -1436,7 +1436,7 @@ namespace
                   isFocusedWithin(inputs(MessageId::TrackCreditName)[1]) &&
                   inputs(MessageId::TrackCreditRole)[1].Text() == L"cello",
                 "Delete rehydrates remaining rows with correct logical and native successor focus");
-          invoke(MessageId::TrackCreditsCancel);
+          invoke(MessageId::CommonCancel);
           _typingBox = nullptr;
           _retiredName = nullptr;
           _retiredRole = nullptr;
@@ -1557,7 +1557,7 @@ namespace
         [this]
         {
           check(singleCreditName().Text() == L"Staged soloist", "sequential scope reopening uses pending overlay");
-          invoke(MessageId::TrackCreditsCancel);
+          invoke(MessageId::CommonCancel);
         });
       _steps.emplace_back(
         [this]
@@ -1583,7 +1583,7 @@ namespace
         {
           check(_coordinatorPtr->isActive() && !_dialogClosed, "dirty native Close is cancelled for confirmation");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "discard decision blocks Save");
-          invoke(MessageId::WinUiTrackPropertiesKeepEditing);
+          invoke(MessageId::CommonKeepEditing);
         });
       _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
       _steps.emplace_back(
@@ -1596,7 +1596,7 @@ namespace
       _steps.emplace_back(
         [this]
         {
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.emplace_back(
@@ -1634,7 +1634,7 @@ namespace
           check(std::ranges::any_of(
                   controls<TextBlock>(), [&stale](TextBlock const& label) { return label.Text() == stale; }),
                 "discard detection preserves the stale diagnostic even with invalid scalar input");
-          invoke(MessageId::WinUiTrackPropertiesKeepEditing);
+          invoke(MessageId::CommonKeepEditing);
           _ready = [this, reloadQuestion] { return _dialogClosed || !isTextVisible(reloadQuestion); };
         });
       _steps.emplace_back(
@@ -1676,7 +1676,7 @@ namespace
       _steps.emplace_back(
         [this, reloadQuestion]
         {
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this, reloadQuestion] { return _dialogClosed || !isTextVisible(reloadQuestion); };
         });
       _steps.emplace_back(
@@ -1986,7 +1986,7 @@ namespace
       _steps.emplace_back(
         [this]
         {
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.emplace_back(
@@ -2064,7 +2064,7 @@ namespace
           openProperties(_runtimePtr->views().trackListState(*viewRes).selection);
         });
       _steps.emplace_back([this] { setText(albumInput(), L"Together"); });
-      _steps.emplace_back([this] { setText(auxiliaryInput(MessageId::WinUiTrackPropertiesTags), L"The\u0301"); });
+      _steps.emplace_back([this] { setText(auxiliaryInput(MessageId::TrackFieldTags), L"The\u0301"); });
       _steps.emplace_back(
         [this]
         {
@@ -2072,7 +2072,7 @@ namespace
                 "pending tag text explains why a staged album cannot be saved yet");
           setText(pendingCustomValue(), L"Unadded value");
         });
-      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesTags); });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::TrackFieldTags); });
       _steps.emplace_back(
         [this]
         {
@@ -2085,9 +2085,9 @@ namespace
         {
           check(!isUnstagedInputHintVisible() && _workflowDialog.IsPrimaryButtonEnabled(),
                 "erasing the last pending input hides the hint and restores Save for other edits");
-          setText(auxiliaryInput(MessageId::WinUiTrackPropertiesTags), L"Thé");
+          setText(auxiliaryInput(MessageId::TrackFieldTags), L"Thé");
         });
-      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::WinUiTrackPropertiesTags); });
+      _steps.emplace_back([this] { stageAuxiliaryInput(MessageId::TrackFieldTags); });
       _steps.emplace_back(
         [this]
         {
@@ -2245,7 +2245,7 @@ namespace
           check(std::ranges::any_of(
                   controls<TextBlock>(), [&stale](TextBlock const& text) { return text.Text() == stale; }),
                 "a discard check on the sole invalid field must not overwrite the stale diagnostic");
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.emplace_back(
@@ -2321,7 +2321,7 @@ namespace
 
           check(hasPropertiesErrorDetail("Hot title length 65538"),
                 "discard validation cannot replace the failed-write diagnostic");
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.emplace_back(
@@ -2360,7 +2360,7 @@ namespace
       _steps.emplace_back(
         [this, question]
         {
-          invoke(MessageId::WinUiTrackPropertiesDiscard);
+          invoke(MessageId::CommonDiscardChanges);
           _ready = [this, question] { return _dialogClosed || !isTextVisible(question); };
         });
       _steps.emplace_back(
@@ -2677,7 +2677,7 @@ namespace
           check(_model.entries().size() == 2 && _model.entries()[1].kind == CreditKind::Performer &&
                   _model.entries()[1].name.empty(),
                 "full-scope Add without a kind choice appends a Performer row");
-          invoke(MessageId::TrackCreditsCancel);
+          invoke(MessageId::CommonCancel);
         });
       _steps.emplace_back(
         [this]

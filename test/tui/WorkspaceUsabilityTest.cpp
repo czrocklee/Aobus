@@ -48,7 +48,7 @@ namespace ao::tui::test
                                           1);
       CHECK(rendered.text.contains("/ Alpha"));
       CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiStatusClear)));
-      CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiSettingsTitle)));
+      CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::SettingsTitle)));
       CHECK(activityBox.IsEmpty());
 
       for (auto const& action : actions)

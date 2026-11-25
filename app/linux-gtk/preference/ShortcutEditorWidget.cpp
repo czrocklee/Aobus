@@ -86,7 +86,7 @@ namespace ao::gtk
         gtkText(_textCatalog, MessageId::GtkShortcutConflictTitle),
         i18n::requiredFormat(
           _textCatalog, MessageId::GtkShortcutConflictMessage, {{"chord", chordText}, {"owner", ownerLabel}}),
-        {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonCancel),
+        {AppDialogAction{.label = gtkText(_textCatalog, MessageId::CommonCancel),
                          .responseId = Gtk::ResponseType::CANCEL,
                          .role = AppDialogActionRole::Cancel},
          AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutReassign),
@@ -465,7 +465,7 @@ namespace ao::gtk
     addButton->signal_clicked().connect([this, id = action.id] { beginCapture(id); });
     row->append(*addButton);
 
-    auto* const resetButton = Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShortcutReset));
+    auto* const resetButton = Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::CommonReset));
     resetButton->set_tooltip_text(gtkText(_textCatalog, MessageId::GtkShortcutResetTooltip));
     resetButton->signal_clicked().connect([this, id = action.id] { resetAction(id); });
     row->append(*resetButton);

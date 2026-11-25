@@ -134,8 +134,8 @@ namespace ao::gtk
 
   void TrackCustomViewDialog::buildUi()
   {
-    addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
-    addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
+    addCancelAction(gtkText(_textCatalog, MessageId::CommonCancel), Gtk::ResponseType::CANCEL);
+    addPrimaryAction(gtkText(_textCatalog, MessageId::CommonSave), Gtk::ResponseType::OK);
 
     auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kBoxSpacing * 2);
 
@@ -267,7 +267,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::GtkCommonRemove));
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::CommonRemove));
       removeBtn->signal_clicked().connect(
         [this, i]
         {
@@ -336,7 +336,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::GtkCommonRemove));
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", gtkText(_textCatalog, MessageId::CommonRemove));
       removeBtn->set_sensitive(visibleFields.size() > 1);
       removeBtn->signal_clicked().connect(
         [this, i]

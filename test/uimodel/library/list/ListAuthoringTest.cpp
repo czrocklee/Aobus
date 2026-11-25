@@ -35,7 +35,7 @@ namespace ao::uimodel::test
 
     CHECK(description.labels.title == i18n::MessageId::ListDeleteTitle);
     CHECK(description.labels.action == i18n::MessageId::ListDeleteAction);
-    CHECK(description.question.starts_with("\"Sommer\" löschen?"));
+    CHECK(description.question.starts_with("„Sommer“ löschen?"));
     CHECK_FALSE(description.question.contains("(41)"));
     CHECK_FALSE(description.optCleanup);
   }

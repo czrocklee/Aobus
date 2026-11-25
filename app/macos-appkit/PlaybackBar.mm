@@ -341,7 +341,7 @@ namespace
                            showOutputAction);
     _output.identifier = @"playback.output";
     _volumeButton = symbolButton(@"speaker.wave.2.fill",
-                                 ao::appkit::catalogText(*_optCatalog, MessageId::AppKitVolume),
+                                 ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackVolume),
                                  actionTarget,
                                  showVolumeAction);
     _volumeButton.identifier = @"playback.volume-button";
@@ -354,16 +354,16 @@ namespace
     _seek.identifier = @"playback.seek";
     _seek.controlSize = NSControlSizeSmall;
     _seek.continuous = YES;
-    _seek.accessibilityLabel = ao::appkit::catalogText(*_optCatalog, MessageId::AppKitPlaybackPosition);
+    _seek.accessibilityLabel = ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackPosition);
     _volume = [AobusSlider sliderWithValue:1 minValue:0 maxValue:1 target:actionTarget action:volumeAction];
     _volume.identifier = @"playback.volume";
     _volume.controlSize = NSControlSizeSmall;
-    _volume.accessibilityLabel = ao::appkit::catalogText(*_optCatalog, MessageId::AppKitVolume);
-    _volume.toolTip = ao::appkit::catalogText(*_optCatalog, MessageId::AppKitVolume);
+    _volume.accessibilityLabel = ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackVolume);
+    _volume.toolTip = ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackVolume);
     _volumeIcon = [[NSImageView alloc] initWithFrame:NSZeroRect];
     _volumeIcon.image =
       [NSImage imageWithSystemSymbolName:@"speaker.wave.2.fill"
-                accessibilityDescription:ao::appkit::catalogText(*_optCatalog, MessageId::AppKitVolume)];
+                accessibilityDescription:ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackVolume)];
     _volumeIcon.contentTintColor = NSColor.secondaryLabelColor;
     _volumePopoverContent =
       [[AobusFlippedView alloc] initWithFrame:NSMakeRect(0, 0, kVolumePopoverWidth, kVolumePopoverHeight)];
@@ -705,7 +705,7 @@ namespace
   _volumeButton.image =
     [NSImage imageWithSystemSymbolName:!state.volume.muted && state.volume.volume > 0 ? @"speaker.wave.2.fill"
                                                                                       : @"speaker.slash.fill"
-              accessibilityDescription:ao::appkit::catalogText(*_optCatalog, MessageId::AppKitVolume)];
+              accessibilityDescription:ao::appkit::catalogText(*_optCatalog, MessageId::PlaybackVolume)];
 
   if ([_volume isTrackingGesture] == NO)
   {

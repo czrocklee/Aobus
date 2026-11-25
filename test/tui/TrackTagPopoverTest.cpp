@@ -141,17 +141,15 @@ namespace ao::tui::test
 
   TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes")
   {
-    constexpr auto kLabels = std::array{std::tuple{"en", "Close", "Discard changes"},
-                                        std::tuple{"zh-Hans", "关闭", "放弃更改"},
-                                        std::tuple{"zh-Hant", "關閉", "捨棄變更"},
-                                        std::tuple{"ja", "閉じる", "変更を破棄"},
-                                        std::tuple{"de", "Schließen", "Änderungen verwerfen"},
-                                        std::tuple{"es", "Cerrar", "Descartar cambios"},
-                                        std::tuple{"fr", "Fermer", "Abandonner les modifications"}};
+    constexpr auto kLocales = std::array{"en", "zh-Hans", "zh-Hant", "ja", "de", "es", "fr"};
 
-    for (auto const& [locale, close, discard] : kLabels)
+    for (auto const* const locale : kLocales)
     {
       CAPTURE(locale);
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const close = i18n::requiredText(catalog, i18n::MessageId::CommonClose);
+      auto const discard = i18n::requiredText(catalog, i18n::MessageId::TuiSettingsActionDiscard);
+      REQUIRE(close != discard);
       auto editor =
         makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, locale, TrackEditorMode::Tags);
       auto const clean = frame(editor);
@@ -212,9 +210,8 @@ namespace ao::tui::test
 
       for (bool const offersTag : {false, true})
       {
-        auto const applyLabel =
-          offersTag ? i18n::MessageId::TuiTagPopoverAddApply : i18n::MessageId::TuiTagPopoverApply;
-        auto const exitLabel = offersTag ? i18n::MessageId::TuiTagPopoverCancel : i18n::MessageId::TuiTagPopoverClose;
+        auto const applyLabel = offersTag ? i18n::MessageId::TuiTagPopoverAddApply : i18n::MessageId::CommonApply;
+        auto const exitLabel = offersTag ? i18n::MessageId::TuiSettingsActionDiscard : i18n::MessageId::CommonClose;
 
         for (std::int32_t const width : {24, 36, 48, 80})
         {

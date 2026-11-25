@@ -92,7 +92,7 @@ namespace ao::gtk
   PreferencesWindow::PreferencesWindow(i18n::MessageCatalog textCatalog, Callbacks callbacks)
     : _callbacks{std::move(callbacks)}, _textCatalog{std::move(textCatalog)}
   {
-    set_title(gtkText(_textCatalog, MessageId::GtkPreferencesTitle));
+    set_title(gtkText(_textCatalog, MessageId::SettingsTitle));
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
     _sidebar.set_stack(_stack);
@@ -105,12 +105,12 @@ namespace ao::gtk
 
     set_child(_root);
 
-    auto const general = gtkText(_textCatalog, MessageId::GtkPreferencesPageGeneral);
+    auto const general = gtkText(_textCatalog, MessageId::SettingsPageGeneral);
     addPage("general", general).append(placeholderLabel(general));
-    addPage("appearance", gtkText(_textCatalog, MessageId::GtkPreferencesPageAppearance));
+    addPage("appearance", gtkText(_textCatalog, MessageId::SettingsPageAppearance));
     addPage("playback", gtkText(_textCatalog, MessageId::GtkPreferencesPagePlaybackOutput));
     addPage("layout", gtkText(_textCatalog, MessageId::GtkPreferencesPageLayout));
-    addPage("keyboard", gtkText(_textCatalog, MessageId::GtkPreferencesPageKeyboard));
+    addPage("keyboard", gtkText(_textCatalog, MessageId::SettingsPageKeyboard));
 
     buildAppearancePage();
     buildPlaybackPage();
@@ -215,7 +215,7 @@ namespace ao::gtk
     _outputDeviceButton.set_child(_outputDeviceLabel);
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
-    list->addRow(gtkText(_textCatalog, MessageId::GtkPreferencesOutputDevice), _outputDeviceButton);
+    list->addRow(gtkText(_textCatalog, MessageId::PlaybackOutputDevice), _outputDeviceButton);
     _playbackPage.append(*list);
   }
 
@@ -360,7 +360,7 @@ namespace ao::gtk
       *this,
       gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseTitle),
       gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseMessage),
-      {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonCancel),
+      {AppDialogAction{.label = gtkText(_textCatalog, MessageId::CommonCancel),
                        .responseId = Gtk::ResponseType::CANCEL,
                        .role = AppDialogActionRole::Cancel},
        AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutDiscard),

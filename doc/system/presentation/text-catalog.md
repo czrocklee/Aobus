@@ -199,9 +199,14 @@ text, custom metadata, Tags, and Lists.
 
 In `zh_Hant`, the Aobus domain concept List uses **列表**; **播放清單** names the
 narrower Playlist concept. Use 列表 in export descriptions, navigation labels,
-and List errors when the broader object is meant. The shared `zh_Hant` catalog
-serves requests including `zh-TW` and `zh-HK`; it does not promise each region's
-preferred vocabulary.
+and List errors when the broader object is meant. Across both Chinese catalogs,
+a playable library Track uses **曲目** (reserving **音轨** / **音軌** for
+physical disc or CUE sheet track numbers), key bindings use **快捷键 / 绑定**
+(`zh_Hans`) and **快捷鍵 / 綁定** (`zh_Hant`), settings use **设置 / 設定**,
+repeat modes use **循环 / 循環** (with **全部循环 / 全部循環** for repeat-all),
+and library scanning uses **扫描音乐库 / 掃描音樂庫** consistently across
+frontends. The shared `zh_Hant` catalog serves requests including `zh-TW` and
+`zh-HK`; it does not promise each region's preferred vocabulary.
 
 [Decision 0018](../../decision/0018-chinese-metadata-terminology.md) records the
 terminology rationale. The policy never changes message identities or rewrites

@@ -213,7 +213,7 @@ namespace ao::tui
     }
 
     auto const cancelLabel =
-      isDirty() || _tagEditor.hasNewTagOffer() ? MessageId::TuiTagPopoverCancel : MessageId::TuiTagPopoverClose;
+      isDirty() || _tagEditor.hasNewTagOffer() ? MessageId::TuiSettingsActionDiscard : MessageId::CommonClose;
 
     if (_status != TrackEditorStatus::Ready)
     {
@@ -254,7 +254,7 @@ namespace ao::tui
     }
 
     auto const createsTag = _tagQueryFocused ? _tagEditor.hasNewTagOffer() : _tagEditor.isCreatingTag();
-    auto const applyLabel = createsTag ? MessageId::TuiTagPopoverAddApply : MessageId::TuiTagPopoverApply;
+    auto const applyLabel = createsTag ? MessageId::TuiTagPopoverAddApply : MessageId::CommonApply;
     auto applyPtr = hint("Enter", applyLabel, Event::Return);
     auto cancelPtr = hint("Esc", cancelLabel, Event::Escape);
     // "Enter " (6), separator " · " (3), and "Esc " (4).

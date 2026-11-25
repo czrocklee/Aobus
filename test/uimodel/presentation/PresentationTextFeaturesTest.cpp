@@ -36,7 +36,7 @@ namespace ao::uimodel::test
   TEST_CASE("i18n::MessageCatalog - resolves one-to-one frontend messages through typed ids")
   {
     auto const& english = ao::test::englishMessageCatalog();
-    CHECK(i18n::requiredText(english, MessageId::GtkPreferencesTitle) == "Preferences");
+    CHECK(i18n::requiredText(english, MessageId::SettingsTitle) == "Settings");
     CHECK(i18n::requiredText(english, MessageId::LibraryBusyTryAgain) == "Library is busy. Try again.");
     CHECK(i18n::requiredFormat(
             english, MessageId::GtkShortcutConflictMessage, {{"chord", "Ctrl+P"}, {"owner", "Play/Pause"}}) ==
@@ -130,7 +130,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(builtinTrackPresentation(catalog, "extension-view"));
     CHECK(trackFieldLabel(catalog, rt::TrackField::SampleRate) == "Sample Rate");
     CHECK(trackFieldLabel(catalog, rt::TrackField::AlbumArtist) == "Album Artist");
-    CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View...");
+    CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View…");
   }
 
   TEST_CASE("i18n::MessageCatalog - renders structured group headings only at the UIModel boundary")
@@ -386,7 +386,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredFormat(catalog, MessageId::LibraryImportFailed, {{"error", "bad YAML"}}) ==
           "Import failed: bad YAML");
     CHECK(i18n::requiredText(catalog, MessageId::LibraryImportConfirmationUnavailable) ==
-          "Import failed: Confirmation is unavailable");
+          "Import failed: confirmation is unavailable");
     CHECK(i18n::requiredText(catalog, MessageId::LibraryImported) == "Library imported successfully");
   }
 
@@ -400,7 +400,7 @@ namespace ao::uimodel::test
     REQUIRE(builtinTrackPresentation(catalog, "library"));
     CHECK(builtinTrackPresentation(catalog, "library")->label == "Bibliothek");
     CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) ==
-          "Benutzerdefinierte Ansicht erstellen...");
+          "Benutzerdefinierte Ansicht erstellen…");
     CHECK(audioProfilePresentation(catalog, audio::kProfileShared).label == "Gemeinsam genutzter Modus");
     CHECK(i18n::requiredText(catalog, MessageId::SystemDefaultOutputDevice) == "Systemstandard");
     CHECK(completionDetail(catalog, {.kind = rt::CompletionDetailKind::Field}) == "Feld");
@@ -409,7 +409,7 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredText(catalog, MessageId::TrackTechnicalUnknown) == "Unbekannt");
     CHECK(i18n::requiredText(catalog, MessageId::PlaybackNotPlaying) == "Keine Wiedergabe");
     CHECK(i18n::requiredText(catalog, MessageId::PlaybackConnectingAudioEngine) ==
-          "Verbindung zur Audio-Engine wird hergestellt...");
+          "Verbindung zur Audio-Engine wird hergestellt…");
     CHECK(i18n::requiredText(catalog, MessageId::PlaybackUnknownArtist) == "Unbekannter Interpret");
     CHECK(i18n::requiredText(catalog, MessageId::PlaybackAudioPipeline) == "Audiokette");
     CHECK(transportControlLabel(catalog, PlaybackCommand::Play) == "Wiedergeben");

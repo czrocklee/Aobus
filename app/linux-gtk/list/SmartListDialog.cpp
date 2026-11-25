@@ -151,7 +151,7 @@ namespace ao::gtk
     , _parentListId{parentListId}
     , _trackRowCache{provider}
   {
-    set_title(gtkText(_textCatalog, i18n::MessageId::GtkSmartListNewTitle));
+    set_title(gtkText(_textCatalog, i18n::MessageId::ListEditorNewTitle));
     configureForParent(parent);
     buildUi();
     buildPreview();
@@ -185,8 +185,8 @@ namespace ao::gtk
     _nameEntry.set_text(node.name);
     _descEntry.set_text(node.description);
     _exprBox.entry().set_text(node.expression);
-    set_title(gtkText(_textCatalog, i18n::MessageId::GtkSmartListEditTitle));
-    _okButton->set_label(gtkText(_textCatalog, i18n::MessageId::GtkCommonSave));
+    set_title(gtkText(_textCatalog, i18n::MessageId::ListEditorEditTitle));
+    _okButton->set_label(gtkText(_textCatalog, i18n::MessageId::CommonSave));
 
     // Repeated population is reset-safe: an unavailable option installed by
     // a previous populate() is dropped before this stored id is resolved.
@@ -315,8 +315,8 @@ namespace ao::gtk
 
     set_default_size(-1, -1);
 
-    _cancelButton = addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
-    _okButton = addPrimaryAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCreate), Gtk::ResponseType::OK);
+    _cancelButton = addCancelAction(gtkText(_textCatalog, i18n::MessageId::CommonCancel), Gtk::ResponseType::CANCEL);
+    _okButton = addPrimaryAction(gtkText(_textCatalog, i18n::MessageId::CommonCreate), Gtk::ResponseType::OK);
     _okButton->set_sensitive(false);
 
     auto* const mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2);
@@ -332,7 +332,7 @@ namespace ao::gtk
     _leftPanel.add_css_class("ao-dialog-config-pane");
 
     auto* const detailsList = Gtk::make_managed<FormBoxedList>();
-    _nameEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::GtkSmartListNamePlaceholder));
+    _nameEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::ListFieldNamePlaceholder));
     _nameChangedConnection = _nameEntry.signal_changed().connect(
       [this]
       {
@@ -340,11 +340,11 @@ namespace ao::gtk
         updatePlaylistTagFromName();
         updateDialogState();
       });
-    detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListName), _nameEntry);
+    detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::ListFieldName), _nameEntry);
 
-    _descEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::GtkSmartListDescriptionPlaceholder));
+    _descEntry.set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::ListFieldDescriptionPlaceholder));
     _descriptionChangedConnection = _descEntry.signal_changed().connect([this] { dismissSubmissionError(); });
-    detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListDescription), _descEntry);
+    detailsList->addEntryRow(gtkText(_textCatalog, i18n::MessageId::ListFieldDescription), _descEntry);
 
     _membershipTagEntry.set_placeholder_text(
       gtkText(_textCatalog, i18n::MessageId::GtkSmartListMembershipTagPlaceholder));
@@ -367,10 +367,9 @@ namespace ao::gtk
 
     _inheritedExprLabel.set_halign(Gtk::Align::END);
     _inheritedExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
-    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListInheritedFilter), _inheritedExprLabel);
+    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::ListFieldInheritedFilter), _inheritedExprLabel);
 
-    _exprBox.entry().set_placeholder_text(
-      gtkText(_textCatalog, i18n::MessageId::GtkSmartListFilterExpressionPlaceholder));
+    _exprBox.entry().set_placeholder_text(gtkText(_textCatalog, i18n::MessageId::ListFieldFilterPlaceholder));
     _expressionChangedConnection = _exprBox.entry().signal_changed().connect(
       [this]
       {
@@ -385,21 +384,21 @@ namespace ao::gtk
           },
           100);
       });
-    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListLocalFilter), _exprBox);
+    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::ListFieldLocalFilter), _exprBox);
 
     _effectiveExprLabel.set_halign(Gtk::Align::END);
     _effectiveExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
-    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListEffectiveFilter), _effectiveExprLabel);
+    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::ListFieldEffectiveFilter), _effectiveExprLabel);
 
     _membershipEditingLabel.set_halign(Gtk::Align::END);
     _membershipEditingLabel.set_wrap(true);
-    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListMembership), _membershipEditingLabel);
+    filterList->addRow(gtkText(_textCatalog, i18n::MessageId::ListFieldMembership), _membershipEditingLabel);
 
     _leftPanel.append(*filterList);
 
     auto* const presList = Gtk::make_managed<FormBoxedList>();
     auto stringListPtr = Gtk::StringList::create();
-    stringListPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkSmartListAutoPresentation));
+    stringListPtr->append(gtkText(_textCatalog, i18n::MessageId::TrackPresentationAuto));
 
     for (auto const& preset : rt::builtinTrackPresentationPresets())
     {
@@ -501,7 +500,7 @@ namespace ao::gtk
     _presentationDropDown.set_list_factory(popupFactoryPtr);
     _presentationDropDown.set_valign(Gtk::Align::CENTER);
     _presentationDropDown.set_halign(Gtk::Align::END);
-    presList->addRow(gtkText(_textCatalog, i18n::MessageId::GtkSmartListPresentation), _presentationDropDown);
+    presList->addRow(gtkText(_textCatalog, i18n::MessageId::TrackPresentationPickerLabel), _presentationDropDown);
     _leftPanel.append(*presList);
 
     _errorLabel.set_visible(false);
@@ -517,8 +516,7 @@ namespace ao::gtk
     _rightPanel.add_css_class("ao-dialog-preview-pane");
 
     auto* const previewHeaderBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
-    auto* const previewLabel =
-      Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, i18n::MessageId::GtkSmartListPreview));
+    auto* const previewLabel = Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, i18n::MessageId::ListFieldPreview));
     previewLabel->add_css_class("ao-section-header");
     previewLabel->set_halign(Gtk::Align::START);
     previewHeaderBox->append(*previewLabel);
@@ -550,8 +548,8 @@ namespace ao::gtk
   void SmartListDialog::installUnavailablePresentationOption(std::string_view const unavailableId)
   {
     _optUnavailablePresentationId = std::string{unavailableId};
-    _presentationOptionsPtr->append(i18n::requiredFormat(
-      _textCatalog, i18n::MessageId::GtkSmartListUnavailablePresentation, {{"id", unavailableId}}));
+    _presentationOptionsPtr->append(
+      i18n::requiredFormat(_textCatalog, i18n::MessageId::TrackPresentationUnavailable, {{"id", unavailableId}}));
     _presentationDropDown.set_selected(unavailablePresentationRow());
   }
 

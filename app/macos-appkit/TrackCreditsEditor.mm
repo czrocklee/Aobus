@@ -288,9 +288,7 @@ namespace
   [_stack addArrangedSubview:add];
   [_editControls addObject:add];
   _save = [self button:MessageId::TrackCreditsCommit action:@selector(save:) identifier:@"credits-save"];
-  auto* const cancel = [self button:MessageId::TrackCreditsCancel
-                             action:@selector(cancel:)
-                         identifier:@"credits-cancel"];
+  auto* const cancel = [self button:MessageId::CommonCancel action:@selector(cancel:) identifier:@"credits-cancel"];
   _cancel = cancel;
   _save.keyEquivalent = @"\r";
   _save.keyEquivalentModifierMask = 0;

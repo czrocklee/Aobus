@@ -330,7 +330,7 @@ namespace ao::winui::test
     // Classic reaches this command from composeMenuBar(), not the document.
     // This is a source guard, not evidence of native menu activation.
     auto const builder = readShellBuilderSource();
-    CHECK(builder.contains("\"winui_shell_track_details\""));
+    CHECK(builder.contains("\"track_details_title\""));
     CHECK(builder.contains("commands.toggleInspector"));
   }
 

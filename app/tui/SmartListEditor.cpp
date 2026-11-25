@@ -95,10 +95,10 @@ namespace ao::tui
       return field;
     };
 
-    _fields.push_back(makeField(MessageId::TuiListFieldName, _baseline.name, false, MessageId::Count));
-    _fields.push_back(makeField(MessageId::TuiListFieldDescription, _baseline.description, false, MessageId::Count));
-    _fields.push_back(makeField(
-      MessageId::TuiListFieldExpression, _baseline.expression, true, MessageId::TuiListExpressionPlaceholder));
+    _fields.push_back(makeField(MessageId::ListFieldName, _baseline.name, false, MessageId::Count));
+    _fields.push_back(makeField(MessageId::ListFieldDescription, _baseline.description, false, MessageId::Count));
+    _fields.push_back(
+      makeField(MessageId::ListFieldExpression, _baseline.expression, true, MessageId::TuiListExpressionPlaceholder));
   }
 
   bool SmartListEditor::isDirty() const noexcept
@@ -240,8 +240,7 @@ namespace ao::tui
     using namespace ftxui;
 
     auto const title = std::string{i18n::requiredText(
-      _textCatalog,
-      _mode == ListEditorMode::New ? MessageId::TuiListEditorNewTitle : MessageId::TuiListEditorEditTitle)};
+      _textCatalog, _mode == ListEditorMode::New ? MessageId::ListEditorNewTitle : MessageId::ListEditorEditTitle)};
 
     _mouseBindings.clear();
     _mouseReady = true;
@@ -733,7 +732,7 @@ namespace ao::tui
 
     if (_status == ListEditorStatus::Submitting)
     {
-      return text(std::string{i18n::requiredText(_textCatalog, MessageId::TuiListStatusSaving)}) | bold;
+      return text(std::string{i18n::requiredText(_textCatalog, MessageId::CommonSaving)}) | bold;
     }
 
     auto chips = Elements{};
@@ -756,7 +755,7 @@ namespace ao::tui
     }
 
     auto savePtr = _mouseBindings.bind(
-      style::shortcutChip("Ctrl-S", std::string{i18n::requiredText(_textCatalog, MessageId::TuiListSaveAction)}),
+      style::shortcutChip("Ctrl-S", std::string{i18n::requiredText(_textCatalog, MessageId::CommonSave)}),
       Event::CtrlS);
     chips.push_back(canSubmit() ? std::move(savePtr) : std::move(savePtr) | dim);
 

@@ -267,7 +267,7 @@ namespace
       {
         auto const count = _model->propertyTargetCount();
         title.stringValue =
-          count == 1 ? [self text:MessageId::AppKitTrackDetails]
+          count == 1 ? [self text:MessageId::TrackDetailsTitle]
                      : ao::appkit::catalogFormat(_model->catalog(), MessageId::AppKitEditTracks, {{"count", count}});
         auto const album =
           std::ranges::find(state.fields, TrackField::Album, [](auto const& field) { return field.spec.field; });
@@ -348,7 +348,7 @@ namespace
       _message.identifier = @"editor-status";
       _message.translatesAutoresizingMaskIntoConstraints = NO;
       [_content addSubview:_message];
-      _cancel = [NSButton buttonWithTitle:[self text:MessageId::AppKitCancel] target:self action:@selector(cancel:)];
+      _cancel = [NSButton buttonWithTitle:[self text:MessageId::CommonCancel] target:self action:@selector(cancel:)];
       _cancel.bezelStyle = NSBezelStyleRounded;
       _cancel.controlSize = _modern != NO ? NSControlSizeLarge : NSControlSizeRegular;
       _cancel.keyEquivalent = @"\033";
@@ -750,13 +750,16 @@ namespace
   [self addSection:[self text:MessageId::AppKitListDetails] expanded:YES];
   auto const& list = _model->state().list;
   auto* const names = @[
-    [self text:MessageId::AppKitName],
-    [self text:MessageId::AppKitDescription],
-    [self text:MessageId::AppKitExpression]
+    [self text:MessageId::ListFieldName],
+    [self text:MessageId::ListFieldDescription],
+    [self text:MessageId::ListFieldExpression]
   ];
   auto* const identifiers = @[@"Name", @"Description", @"Expression"];
-  auto* const placeholders =
-    @[[self text:MessageId::AppKitListName], [self text:MessageId::AppKitOptionalDescription], @"#favorites"];
+  auto* const placeholders = @[
+    [self text:MessageId::ListFieldNamePlaceholder],
+    [self text:MessageId::ListFieldDescriptionPlaceholder],
+    @"#favorites"
+  ];
   auto* const values = @[nativeText(list.name), nativeText(list.description), nativeText(list.expression)];
 
   for (NSUInteger index = 0; index < names.count; ++index)
@@ -864,7 +867,7 @@ namespace
 
   if (_discardAlert != nil)
   {
-    _discardAlert.buttons[0].title = [self text:state.stale ? MessageId::AppKitKeepOpen : MessageId::AppKitKeepEditing];
+    _discardAlert.buttons[0].title = [self text:state.stale ? MessageId::AppKitKeepOpen : MessageId::CommonKeepEditing];
   }
 
   if (restoreStale)
@@ -893,7 +896,7 @@ namespace
 
   if (state.busy)
   {
-    _message.stringValue = [self text:MessageId::AppKitSaving];
+    _message.stringValue = [self text:MessageId::CommonSaving];
     _message.textColor = NSColor.secondaryLabelColor;
   }
 
@@ -1227,8 +1230,8 @@ namespace
     alert.messageText = [self text:MessageId::AppKitDiscardQuestion];
     alert.informativeText = [self text:MessageId::AppKitDiscardHint];
     [alert
-      addButtonWithTitle:[self text:_model->state().stale ? MessageId::AppKitKeepOpen : MessageId::AppKitKeepEditing]];
-    [alert addButtonWithTitle:[self text:MessageId::AppKitDiscardChanges]];
+      addButtonWithTitle:[self text:_model->state().stale ? MessageId::AppKitKeepOpen : MessageId::CommonKeepEditing]];
+    [alert addButtonWithTitle:[self text:MessageId::CommonDiscardChanges]];
     alert.buttons[1].hasDestructiveAction = YES;
     // Let the application join this close decision when Quit arrives later.
     alert.window.preventsApplicationTerminationWhenModal = NO;

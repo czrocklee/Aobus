@@ -238,7 +238,7 @@ namespace ao::gtk
       AppDialog::presentMessage(*parentWindow,
                                 gtkText(_textCatalog, MessageId::GtkPresentationUnableToChange),
                                 std::string{message},
-                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonClose),
+                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::CommonClose),
                                                  .responseId = Gtk::ResponseType::CLOSE,
                                                  .role = AppDialogActionRole::Cancel}},
                                 Gtk::ResponseType::CLOSE);

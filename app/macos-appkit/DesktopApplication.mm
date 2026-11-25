@@ -818,8 +818,8 @@ namespace ao::appkit
                                                 : [self text:MessageId::AppKitNoMatchingTracks];
   _emptyHint.stringValue = filter.entryText.empty() ? [self text:MessageId::AppKitEmptyLibraryHint]
                                                     : [self text:MessageId::AppKitNoMatchingTracksHint];
-  auto* emptyActionTitle = filter.entryText.empty() ? [self text:MessageId::AppKitOpenLibraryAction]
-                                                    : [self text:MessageId::AppKitClearFilter];
+  auto* emptyActionTitle =
+    filter.entryText.empty() ? [self text:MessageId::ShellOpenLibrary] : [self text:MessageId::AppKitClearFilter];
 
   if (filter.entryText.empty() && activeListId != ao::rt::kAllTracksListId)
   {
@@ -845,7 +845,7 @@ namespace ao::appkit
   }
 
   _count.textColor = filter.hasError ? NSColor.systemRedColor : NSColor.secondaryLabelColor;
-  _count.stringValue = filter.hasError ? [self text:MessageId::AppKitInvalidFilter]
+  _count.stringValue = filter.hasError ? [self text:MessageId::SmartListInvalidFilter]
                                        : ao::appkit::catalogFormat(_sessionPtr->catalog(),
                                                                    MessageId::TrackCount,
                                                                    {{"count", _sessionPtr->displayIndex().rowCount()}});
@@ -875,12 +875,12 @@ namespace ao::appkit
   auto const& picker = _sessionPtr->state().presentation;
   auto const& optPreference = _sessionPtr->state().optListPresentationId;
   auto* const currentLabel = [_libraryBrowser.presentationIdentifier isEqual:@"appkit-column-sort"] != NO
-                               ? [self text:MessageId::AppKitColumnSortPresentation]
+                               ? [self text:MessageId::TrackPresentationColumnSort]
                                : nativeText(picker.label);
   auto entries = std::vector{
     Entry{.kind = Entry::Kind::Current, .title = utf8(currentLabel), .enabled = false},
     Entry{
-      .title = utf8([self text:MessageId::AppKitAutoPresentation]), .optId = std::string{}, .checked = !optPreference},
+      .title = utf8([self text:MessageId::TrackPresentationAuto]), .optId = std::string{}, .checked = !optPreference},
     Entry{.kind = Entry::Kind::Separator},
   };
   bool preferenceAvailable = !optPreference;
@@ -919,7 +919,7 @@ namespace ao::appkit
   {
     entries.push_back(
       Entry{.title = utf8(ao::appkit::catalogFormat(
-              _sessionPtr->catalog(), MessageId::AppKitUnavailablePresentation, {{"id", *optPreference}})),
+              _sessionPtr->catalog(), MessageId::TrackPresentationUnavailable, {{"id", *optPreference}})),
             .enabled = false,
             .checked = true});
   }

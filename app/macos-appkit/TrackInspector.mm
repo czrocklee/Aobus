@@ -250,7 +250,7 @@ namespace
   }
   else
   {
-    append((count == 0) ? [self text:MessageId::AppKitTrackDetails]
+    append((count == 0) ? [self text:MessageId::TrackDetailsTitle]
                         : ao::appkit::catalogFormat(*_optCatalog, MessageId::AppKitTracksSelected, {{"count", count}}),
            kLargeTitleFontSize,
            NSColor.labelColor,

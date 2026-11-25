@@ -287,7 +287,7 @@ namespace ao::tui::test
                                                   std::pair{"ja", "シャッフル・1曲リピート"},
                                                   std::pair{"de", "Zufallswiedergabe mit Titelwiederholung"},
                                                   std::pair{"es", "Aleatorio con repetición de una pista"},
-                                                  std::pair{"fr", "Lecture aléatoire avec répétition d’un titre"}})
+                                                  std::pair{"fr", "Lecture aléatoire avec répétition d’un morceau"}})
     {
       auto const catalog = ao::test::messageCatalog(locale);
 
@@ -333,8 +333,8 @@ namespace ao::tui::test
                     "Aleatorio con repetición · Clic para cambiar a «Repetir una pista»"},
            Expected{"fr",
                     "Lecture aléatoire en boucle",
-                    "Répéter un titre",
-                    "Lecture aléatoire en boucle · Cliquer pour passer à « Répéter un titre »"}})
+                    "Répéter un morceau",
+                    "Lecture aléatoire en boucle · Cliquer pour passer à « Répéter un morceau »"}})
     {
       auto const catalog = ao::test::messageCatalog(expected.locale);
 

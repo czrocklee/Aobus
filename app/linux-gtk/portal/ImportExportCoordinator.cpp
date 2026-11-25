@@ -228,7 +228,7 @@ namespace ao::gtk::portal
     box->append(*modeCombo);
 
     dialog->setContentWidget(*box);
-    dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
+    dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::CommonCancel), Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction(gtkText(_textCatalog, i18n::MessageId::LibraryNext), Gtk::ResponseType::OK);
     dialog->setDefaultResponse(Gtk::ResponseType::OK);
     dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
@@ -338,7 +338,7 @@ namespace ao::gtk::portal
       _parent,
       presentation.title,
       presentation.message,
-      {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel),
+      {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::CommonCancel),
                        .responseId = Gtk::ResponseType::CANCEL,
                        .role = AppDialogActionRole::Cancel},
        AppDialogAction{
@@ -381,7 +381,7 @@ namespace ao::gtk::portal
       AppDialog::presentMessage(_parent,
                                 gtkText(_textCatalog, i18n::MessageId::GtkLibraryFileSelectionFailed),
                                 fileSelectionError(_textCatalog, operation, message),
-                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonClose),
+                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::CommonClose),
                                                  .responseId = Gtk::ResponseType::CLOSE,
                                                  .role = AppDialogActionRole::Cancel}},
                                 Gtk::ResponseType::CLOSE);

@@ -33,7 +33,7 @@ namespace ao::i18n::test
       {MessageId::AppKitDeletingLists, {{"count", 2}}},
       {MessageId::AppKitFieldActionsFor, {{"field", "F"}}},
       {MessageId::AppKitPropertiesSelection, {{"count", 2}}},
-      {MessageId::AppKitUnavailablePresentation, {{"id", "I"}}},
+      {MessageId::TrackPresentationUnavailable, {{"id", "I"}}},
       {MessageId::AppKitPlaybackPositionValue, {{"elapsed", "1:23"}, {"duration", "5:00"}}},
       {MessageId::AppKitPlaybackPositionUnknownDurationValue, {{"elapsed", "0:17"}}},
       {MessageId::AppKitSelectionTotal, {{"selected", 1}, {"total", 2}}},

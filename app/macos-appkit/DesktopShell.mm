@@ -269,7 +269,7 @@ namespace
   [_sidebar addSubview:_sidebarCover];
   _search = [[NSSearchField alloc] initWithFrame:NSZeroRect];
   _search.bezelStyle = NSTextFieldRoundedBezel;
-  _search.placeholderString = [self text:MessageId::AppKitFilterPlaceholder];
+  _search.placeholderString = [self text:MessageId::LibraryFilterPlaceholder];
   _search.target = self;
   _search.action = @selector(filterTracks:);
   _search.delegate = self;
@@ -299,11 +299,11 @@ namespace
   _emptyHint = label(@"", kBodyFontSize, YES);
   _emptyHint.alignment = NSTextAlignmentCenter;
   [_browser addSubview:_emptyHint];
-  _emptyAction = [NSButton buttonWithTitle:[self text:MessageId::AppKitOpenLibraryAction]
+  _emptyAction = [NSButton buttonWithTitle:[self text:MessageId::ShellOpenLibrary]
                                     target:self
                                     action:@selector(emptyAction:)];
   [_browser addSubview:_emptyAction];
-  _status = label([self text:MessageId::AppKitReady], kSecondaryFontSize, YES);
+  _status = label([self text:MessageId::CommonReady], kSecondaryFontSize, YES);
   [_root addSubview:_status];
   _playbackBar = [[AobusPlaybackBar alloc] initWithCatalog:_sessionPtr->catalog()
                                                     target:self

@@ -234,7 +234,7 @@ namespace winrt::Aobus::implementation
     // The shell built above is the first to show a status, so the startup
     // warnings reach the status line only here.
     auto startupStatus = session.startupStatus();
-    updateStatus(startupStatus.empty() ? ao::winui::resourceString("winui_library_ready") : std::move(startupStatus));
+    updateStatus(startupStatus.empty() ? ao::winui::resourceString("common_ready") : std::move(startupStatus));
     _sessionPhase = SessionPhase::Prepared;
   }
 

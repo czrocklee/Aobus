@@ -131,7 +131,7 @@ namespace ao::winui
       dialog.Title(winrt::box_value(
         winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibrarySelectImportMode))));
       dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::LibraryNext)));
-      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::CommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Primary);
 
       auto content = StackPanel{};
@@ -171,7 +171,7 @@ namespace ao::winui
       dialog.Title(
         winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::LibrarySelectExportMode))));
       dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::LibraryNext)));
-      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::CommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Primary);
 
       auto content = StackPanel{};
@@ -479,7 +479,7 @@ namespace ao::winui
       dialog.MinWidth(kDialogMinWidth);
       dialog.Title(winrt::box_value(winrt::to_hstring(presentation.title)));
       dialog.PrimaryButtonText(winrt::to_hstring(presentation.action));
-      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
+      dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::CommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Close);
       dialog.Content(wrappedText(presentation.message));
       showRestoreConfirmation();

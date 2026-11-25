@@ -285,7 +285,7 @@ namespace ao::tui::test
                                                 defaultKeymapPlan()),
                                       100,
                                       1);
-    CHECK(french.text.contains("Esc titres"));
+    CHECK(french.text.contains("Esc morceaux"));
     CHECK(french.text.contains("Partial import"));
     auto const optWarning = findTextCells(shown.screen, "Partial import");
     REQUIRE(optWarning);

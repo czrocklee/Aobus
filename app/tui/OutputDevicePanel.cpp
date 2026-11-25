@@ -122,7 +122,7 @@ namespace ao::tui
                                         KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
-    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
+    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::PlaybackOutputDevices);
     auto contentColumns =
       std::max({outputDeviceHeaderColumns(title, outputDeviceSummary(&view)) - (2 * style::kPanelBodyPaddingColumns),
                 cellWidth(outputDeviceFooter(textCatalog, view)),
@@ -268,7 +268,7 @@ namespace ao::tui
     rows.push_back(style::panelBody(
       vbox(wrappedOutputLines(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), "", bodyColumns, true))));
 
-    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
+    auto const title = i18n::requiredText(textCatalog, i18n::MessageId::PlaybackOutputDevices);
     auto const summary = outputDeviceSummary(&view);
     auto const headerColumns = columns - kPanelBorderColumns;
     // Keep the full title when the two labels compete for space; the footer carries the routing status.

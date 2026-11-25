@@ -143,10 +143,10 @@ namespace ao::gtk::layout::editor
     configureForParent(parent);
     set_default_size(-1, -1);
 
-    addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
+    addCancelAction(gtkText(_textCatalog, MessageId::CommonCancel), Gtk::ResponseType::CANCEL);
     setCloseResponse(Gtk::ResponseType::CANCEL);
-    addPrimaryAction(gtkText(_textCatalog, MessageId::GtkLayoutApply), Gtk::ResponseType::APPLY);
-    addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
+    addPrimaryAction(gtkText(_textCatalog, MessageId::CommonApply), Gtk::ResponseType::APPLY);
+    addPrimaryAction(gtkText(_textCatalog, MessageId::CommonSave), Gtk::ResponseType::OK);
 
     buildUi();
 

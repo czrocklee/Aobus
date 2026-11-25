@@ -20,7 +20,6 @@ zh_Hans:table {
     track_credits_replace { "替换…" }
     track_credits_clear { "清空此范围" }
     track_credits_commit { "保存制作人员" }
-    track_credits_cancel { "取消" }
     track_credit_delete { "删除制作人员" }
     track_credit_blank_name { "第 {row} 行：请输入名称。" }
     track_credit_invalid_name_text { "第 {row} 行：名称包含无效文本。" }
@@ -45,7 +44,6 @@ zh_Hans:table {
     track_number_invalid { "请输入 0 至 65535 的整数。" }
     tui_go_to_back { "后退" }
     tui_go_to_forward { "前进" }
-    tui_go_to_cancel { "取消" }
     tui_navigation_pin { "显示或隐藏常驻列表" }
     tui_go_to_title { "跳转" }
     tui_go_to_status { "跳转" }
@@ -66,18 +64,18 @@ zh_Hans:table {
     tui_workspace_history_unavailable { "没有可切换的历史视图。" }
     tui_settings_keyboard_scope { "工作区快捷键。编辑器和选择面板使用各自的按键。" }
     tui_playback_modes { "随机播放：{shuffle, select, on {开} other {关}} · 循环：{repeat, select, one {单曲} all {全部} other {关}}" }
-    tui_playback_mode { "{mode, select, order {顺序播放} all {列表循环} shuffle {随机播放} shuffle_all {随机循环} one {单曲循环} shuffle_one {随机播放与单曲循环} other {顺序播放}}" }
+    tui_playback_mode { "{mode, select, order {顺序播放} all {全部循环} shuffle {随机播放} shuffle_all {随机循环} one {单曲循环} shuffle_one {随机播放与单曲循环} other {顺序播放}}" }
     tui_playback_mode_hint { "{current} · 点击切换为「{next}」" }
 
     tui_settings_save_failed { "无法保存设置。{detail}" }
-    tui_settings_load_failed { "无法读取已保存的偏好设置，已使用默认值。{detail}" }
+    tui_settings_load_failed { "无法读取已保存的设置，已使用默认值。{detail}" }
     tui_config_newer_settings { "设置由较新版本的 Aobus 保存。此版本使用默认设置，且不会保存对其所做的更改。" }
     tui_config_newer_output { "首选输出设备由较新版本的 Aobus 保存。此版本会忽略它，且不会保存新的偏好。" }
-    tui_settings_title { "设置" }
-    tui_settings_general { "常规" }
-    tui_settings_appearance { "外观" }
+    settings_title { "设置" }
+    settings_page_general { "常规" }
+    settings_page_appearance { "外观" }
     tui_settings_interaction { "操作" }
-    tui_settings_keyboard { "快捷键" }
+    settings_page_keyboard { "快捷键" }
     tui_settings_language { "语言" }
     tui_settings_system { "跟随系统" }
     tui_settings_global { "TUI 全局设置" }
@@ -100,15 +98,10 @@ zh_Hans:table {
     tui_settings_invalid_chord { "请输入有效的按键组合，例如 {example}。" }
     tui_settings_action_change { "修改" }
     tui_settings_action_choose { "选择" }
-    tui_settings_action_apply { "应用" }
-    tui_settings_action_save { "保存" }
-    tui_settings_action_cancel { "取消" }
+    common_apply { "应用" }
     tui_settings_action_pages { "切页" }
-    tui_settings_action_close { "关闭" }
     tui_settings_action_edit { "编辑" }
-    tui_settings_action_add { "添加" }
-    tui_settings_action_remove { "移除" }
-    tui_settings_action_reset { "重置" }
+    common_reset { "重置" }
     tui_settings_action_search { "搜索" }
     tui_settings_action_clear { "清除" }
     tui_settings_action_retry { "重试保存" }
@@ -188,7 +181,7 @@ zh_Hans:table {
     track_presentation_songs { "歌曲" }
     track_presentation_description_songs { "以列表形式显示按标题排序的所有曲目。" }
     track_presentation_albums { "专辑" }
-    track_presentation_description_albums { "按专辑分组，并显示曲目相关列。" }
+    track_presentation_description_albums { "按专辑分组，展示曲目信息列。" }
     track_presentation_artists { "艺人" }
     track_presentation_description_artists { "按专辑艺人分组，并按唱片目录排序。" }
     track_presentation_performers { "表演者" }
@@ -198,16 +191,16 @@ zh_Hans:table {
     track_presentation_years { "年份" }
     track_presentation_description_years { "按年份分组。" }
     track_presentation_classical_composers { "古典：作曲家" }
-    track_presentation_description_classical_composers { "按作曲家分组，并显示作品相关列。" }
+    track_presentation_description_classical_composers { "按作曲家分组，展示作品信息列。" }
     track_presentation_classical_conductors { "古典：指挥" }
-    track_presentation_description_classical_conductors { "按指挥分组，并显示作品和乐团列。" }
+    track_presentation_description_classical_conductors { "按指挥分组，展示作品与乐团列。" }
     track_presentation_classical_works { "古典：作品" }
-    track_presentation_description_classical_works { "按作品分组，并显示作曲家相关列。" }
+    track_presentation_description_classical_works { "按作品分组，展示作曲家信息列。" }
     track_presentation_tagging { "标签整理" }
     track_presentation_description_tagging { "以列表形式显示光盘和曲目编号、流派、年份及标签，便于整理。" }
     track_presentation_technical { "技术视图" }
     track_presentation_description_technical { "以列表形式显示编解码器、比特率、文件大小和路径，便于检查文件。" }
-    create_custom_track_presentation { "创建自定义视图..." }
+    create_custom_track_presentation { "创建自定义视图…" }
     track_presentation_picker_label { "视图" }
     track_presentation_all_tracks_manual_order_unavailable { "“所有曲目”没有已保存的顺序。请创建一个保存的列表以手动排列整个音乐库。" }
     audio_backend_pipewire_description { "现代低延迟 Linux 音频服务器" }
@@ -283,15 +276,15 @@ zh_Hans:table {
     library_export_failed { "导出失败：{error}" }
     library_exported { "音乐库导出成功" }
     library_import_failed { "导入失败：{error}" }
-    library_import_confirmation_unavailable { "导入失败：确认不可用" }
+    library_import_confirmation_unavailable { "导入失败：无法完成导入确认" }
     library_imported { "音乐库导入成功" }
     track_filter_error { "筛选错误：{diagnostic}" }
     track_count { "{count, plural, one {# 首曲目} other {# 首曲目}}" }
     track_selection_summary { "{count, plural, one {已选 # 项} other {已选 # 项}}{hasDuration, select, yes { ({duration})} other {}}" }
     smart_list_membership_direct { "通过 {expression} 直接编辑成员" }
-    smart_list_membership_computed { "计算成员 — 编辑标签或表达式" }
-    smart_list_expression_none { "(无)" }
-    smart_list_no_tracks { "{source, select, library {音乐库中无曲目} other {源中无曲目}}" }
+    smart_list_membership_computed { "动态计算成员 — 请编辑标签或筛选表达式" }
+    smart_list_expression_none { "（无）" }
+    smart_list_no_tracks { "{source, select, library {音乐库中无曲目} other {源列表中无曲目}}" }
     smart_list_showing_source { "{source, select, library {显示全部 {count, plural, one {# 首曲目} other {# 首曲目}}} other {从源显示全部 {count, plural, one {# 首曲目} other {# 首曲目}}}}" }
     smart_list_invalid_filter { "无效的筛选条件" }
     smart_list_no_matches { "无匹配项" }
@@ -299,7 +292,7 @@ zh_Hans:table {
     smart_list_showing_all_matches { "显示全部 {count, plural, one {# 个匹配项} other {# 个匹配项}}" }
     smart_list_showing_first_matches { "{scope, select, library {音乐库预览：{count, plural, other {# 首曲目}}中的 {visible} 首} source {源列表预览：{count, plural, other {# 首曲目}}中的 {visible} 首} other {预览：{count, plural, other {# 个匹配项}}中的 {visible} 个}}" }
     smart_list_preview_unavailable { "无法预览：{diagnostic}" }
-    smart_list_untitled_track { "(无标题)" }
+    smart_list_untitled_track { "（无标题）" }
     list_order_saved_lists_only { "手动排序仅适用于已保存的列表。" }
     list_order_library_busy { "音乐库正忙。维护完成后将提供手动排序。" }
     list_order_authoring_unavailable { "当前无法修改音乐库。" }
@@ -327,7 +320,7 @@ zh_Hans:table {
     track_channel_count { "{count, plural, one {# 声道} other {# 声道}}" }
     track_technical_unknown { "未知" }
     playback_not_playing { "未在播放" }
-    playback_connecting_audio_engine { "正在连接音频引擎..." }
+    playback_connecting_audio_engine { "正在连接音频引擎…" }
     playback_unknown_artist { "未知艺人" }
     playback_audio_pipeline { "音频链路" }
     audio_node_source { "[源]" }
@@ -380,58 +373,56 @@ zh_Hans:table {
     playback_action_toggle_shuffle { "切换随机播放" }
     playback_action_cycle_repeat { "切换循环模式" }
     playback_volume_tooltip { "音量：{percent}%{state, select, muted { (已静音)} hardware { (硬件)} other {}}" }
-    gtk_shell_menu_file { "文件" }
-    gtk_shell_open_library { "打开音乐库..." }
-    gtk_shell_scan_library { "扫描音乐库" }
-    gtk_shell_import_library_data { "导入音乐库数据..." }
-    gtk_shell_export_library_data { "导出音乐库数据..." }
+    shell_menu_file { "文件" }
+    shell_scan_library { "扫描音乐库" }
+    shell_import_library_data { "导入音乐库数据…" }
+    shell_export_library_data { "导出音乐库数据…" }
     gtk_shell_quit { "退出" }
-    gtk_shell_menu_edit { "编辑" }
-    gtk_shell_preferences { "偏好设置..." }
-    gtk_shell_menu_view { "视图" }
-    gtk_shell_edit_layout { "编辑布局..." }
+    shell_menu_edit { "编辑" }
+    gtk_shell_preferences { "设置…" }
+    shell_menu_view { "视图" }
+    gtk_shell_edit_layout { "编辑布局…" }
     gtk_shell_save_panel_sizes_as_layout_defaults { "保存当前面板大小为布局默认值" }
     gtk_shell_reset_runtime_layout_state { "重置运行时布局状态" }
-    gtk_shell_menu_help { "帮助" }
+    shell_menu_help { "帮助" }
     gtk_shell_about { "关于" }
     gtk_shell_application_menu { "应用程序菜单" }
     gtk_playback_reveal_playing_track { "定位正在播放的曲目" }
     gtk_playback_toggle_mute { "切换静音" }
     gtk_playback_show_current_album { "显示当前专辑" }
     gtk_playback_now_playing_cover_art { "当前播放曲目的封面" }
-    gtk_playback_position { "播放位置" }
-    gtk_library_quick_filter_placeholder { "搜索歌曲、艺人、专辑、标签..." }
+    playback_position { "播放位置" }
+    gtk_library_quick_filter_placeholder { "筛选曲目、艺人、专辑、标签…" }
     gtk_library_clear_filter { "清除筛选" }
-    gtk_library_create_list_from_filter { "根据当前筛选条件创建列表" }
-    list_new { "新建列表..." }
-    gtk_list_new_playlist { "新建播放列表..." }
-    list_edit { "编辑列表..." }
+    list_create_from_filter { "根据当前筛选条件创建列表" }
+    list_new { "新建列表…" }
+    gtk_list_new_playlist { "新建播放列表…" }
+    list_edit { "编辑列表…" }
     list_delete { "删除列表" }
-    list_delete_subtree { "删除列表及其子项..." }
-    gtk_smart_list_new_title { "新建列表" }
-    gtk_smart_list_edit_title { "编辑列表" }
+    list_delete_subtree { "删除列表及其子项…" }
+    list_editor_new_title { "新建列表" }
+    list_editor_edit_title { "编辑列表" }
     gtk_smart_list_new_playlist_title { "新建播放列表" }
-    gtk_common_cancel { "取消" }
-    gtk_common_create { "创建" }
-    gtk_common_save { "保存" }
-    gtk_common_close { "关闭" }
-    gtk_smart_list_name_placeholder { "列表名称" }
-    gtk_smart_list_name { "名称" }
-    gtk_smart_list_description_placeholder { "可选描述" }
-    gtk_smart_list_description { "描述" }
+    common_cancel { "取消" }
+    common_create { "创建" }
+    common_save { "保存" }
+    common_close { "关闭" }
+    list_field_name_placeholder { "列表名称" }
+    list_field_name { "名称" }
+    list_field_description_placeholder { "可选描述" }
+    list_field_description { "描述" }
     gtk_smart_list_membership_tag_placeholder { "用于确定成员资格的可见标签" }
     gtk_smart_list_membership_tag { "成员标签" }
-    gtk_smart_list_inherited_filter { "继承的筛选条件" }
-    gtk_smart_list_filter_expression_placeholder { "筛选表达式（输入 $、@、# 或 %）" }
-    gtk_smart_list_local_filter { "本地筛选条件" }
-    gtk_smart_list_effective_filter { "实际筛选条件" }
-    gtk_smart_list_membership { "成员资格" }
-    gtk_smart_list_auto_presentation { "自动" }
-    gtk_smart_list_unavailable_presentation { "不可用：{id}（自动）" }
-    gtk_smart_list_presentation { "视图" }
-    gtk_smart_list_preview { "预览" }
+    list_field_inherited_filter { "继承的筛选条件" }
+    list_field_filter_placeholder { "筛选表达式（输入 $、@、# 或 %）" }
+    list_field_local_filter { "本地筛选条件" }
+    list_field_effective_filter { "实际筛选条件" }
+    list_field_membership { "成员资格" }
+    track_presentation_auto { "自动" }
+    track_presentation_unavailable { "不可用：{id}（自动）" }
+    list_field_preview { "预览" }
     gtk_smart_list_track { "曲目" }
-    gtk_smart_list_invalid_source { "(无效源)" }
+    gtk_smart_list_invalid_source { "（无效源列表）" }
     gtk_smart_list_choose_membership_tag { "选择一个可见标签作为播放列表成员资格" }
     gtk_library_open_music_library { "打开音乐库" }
     library_select_export_mode { "选择导出模式" }
@@ -465,14 +456,14 @@ zh_Hans:table {
     list_tag_references { "{tag} 还被以下对象引用：{references}。移除它可能会更改这些列表。" }
     library_restore_confirmation { "此恢复操作将替换以下内容：{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用；按原样保留 {invalidFilters} 个无效的列表筛选条件。\n\n仅在此内容与所选备份匹配时继续。" }
     library_file_selection_error { "{operation}：{message}" }
-    gtk_list_other_computed_membership { "其他列表具有计算出的成员资格；请改为编辑其表达式或曲目标签。" }
+    gtk_list_other_computed_membership { "其他列表的成员由筛选条件自动计算，请直接修改其筛选表达式或曲目标签。" }
     list_no_membership_add_targets { "没有可接收这些曲目的播放列表" }
-    gtk_list_create_playlist { "创建播放列表..." }
-    gtk_list_manage_lists { "管理列表..." }
+    gtk_list_create_playlist { "创建播放列表…" }
+    gtk_list_manage_lists { "管理列表…" }
     list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "添加到播放列表" }
     list_remove_from_current { "从 {name} ({tag}) 中移除" }
-    gtk_list_remove_computed_unavailable { "无法从此列表中移除，因为其成员资格是通过计算得出的。" }
+    gtk_list_remove_computed_unavailable { "此列表的成员由筛选条件自动计算，无法直接从中移除曲目。" }
     list_move_up { "上移" }
     list_move_down { "下移" }
     list_move_to_top { "移至顶部" }
@@ -486,17 +477,13 @@ zh_Hans:table {
     gtk_list_move_to_top_action { "移至手动排序顶部" }
     gtk_list_move_to_bottom_action { "移至手动排序底部" }
     gtk_list_reset_order_action { "重置手动排序" }
-    gtk_preferences_title { "偏好设置" }
-    gtk_preferences_page_general { "常规" }
-    gtk_preferences_page_appearance { "外观" }
     gtk_preferences_page_playback_output { "播放/输出" }
     gtk_preferences_page_layout { "布局" }
-    gtk_preferences_page_keyboard { "键盘" }
     gtk_preferences_theme { "主题" }
     gtk_preferences_theme_classic { "经典" }
     gtk_preferences_theme_modern { "现代" }
-    gtk_preferences_output_device { "输出设备" }
-    gtk_preferences_choose_output_device { "选择输出设备..." }
+    playback_output_device { "输出设备" }
+    gtk_preferences_choose_output_device { "选择输出设备…" }
     gtk_preferences_output_unavailable { "不可用" }
     gtk_preferences_default_layout_preset { "默认预设" }
     gtk_preferences_layout_preset_classic { "经典" }
@@ -507,15 +494,14 @@ zh_Hans:table {
     gtk_shortcut_reset_all { "全部重置" }
     gtk_shortcut_reset_all_tooltip { "将所有快捷键重置为默认值" }
     gtk_shortcut_other_category { "其他" }
-    gtk_shortcut_conflict_title { "重新分配快捷键？" }
-    gtk_shortcut_conflict_message { "{chord} 已分配给“{owner}”。是否将其重新分配给此操作？" }
-    gtk_shortcut_reassign { "重新分配" }
+    gtk_shortcut_conflict_title { "重新绑定快捷键？" }
+    gtk_shortcut_conflict_message { "{chord} 已绑定给“{owner}”。是否将其重新绑定到此操作？" }
+    gtk_shortcut_reassign { "重新绑定" }
     gtk_shortcut_conflicts { "冲突的快捷键：{chords}" }
-    gtk_shortcut_unassigned { "未分配" }
+    gtk_shortcut_unassigned { "未绑定" }
     gtk_shortcut_remove { "移除 {chord}" }
     gtk_shortcut_add { "添加…" }
     gtk_shortcut_add_tooltip { "为此操作录制新快捷键" }
-    gtk_shortcut_reset { "重置" }
     gtk_shortcut_reset_tooltip { "将此操作重置为默认值" }
     gtk_shortcut_capture_title { "设置快捷键" }
     gtk_shortcut_capture_prompt { "请按下新的快捷键组合。" }
@@ -529,10 +515,9 @@ zh_Hans:table {
     gtk_action_category_shell { "窗口/界面" }
     gtk_action_category_workspace { "工作区" }
     gtk_action_category_tracks { "曲目" }
-    gtk_action_output_devices { "输出设备" }
+    playback_output_devices { "输出设备" }
     gtk_action_system_menu { "系统菜单" }
     gtk_action_reveal_track { "定位曲目" }
-    gtk_action_track_properties { "属性" }
     gtk_action_edit_tags { "编辑标签" }
     gtk_custom_view_title { "编辑自定义视图" }
     gtk_custom_view_label_placeholder { "视图名称" }
@@ -544,8 +529,8 @@ zh_Hans:table {
     gtk_custom_view_visible_columns { "可见列" }
     gtk_custom_view_sort_ascending { "升序排序" }
     gtk_custom_view_sort_descending { "降序排序" }
-    gtk_common_remove { "移除" }
-    gtk_presentation_view_inactive { "所选曲目视图已不再活跃。" }
+    common_remove { "移除" }
+    gtk_presentation_view_inactive { "所选曲目视图当前未启用。" }
     gtk_presentation_unable_to_change { "无法更改曲目视图" }
     gtk_presentation_copy_label { "{label} 副本" }
     tui_shell_command_palette_title { "命令面板" }
@@ -560,15 +545,10 @@ zh_Hans:table {
     tui_navigation_sync_failed { "无法显示当前列表：{detail}" }
     tui_list_search_hint { "/ 搜索 · Esc 清除" }
     tui_list_search_empty { "无匹配项" }
-    tui_list_editor_new_title { "新建列表" }
-    tui_list_editor_edit_title { "编辑列表" }
-    tui_list_field_name { "名称" }
-    tui_list_field_description { "描述" }
-    tui_list_field_expression { "筛选表达式" }
+    list_field_expression { "筛选表达式" }
     tui_list_inherited_expression { "继承" }
     tui_list_effective_expression { "实际" }
-    tui_list_save_action { "保存" }
-    tui_list_status_saving { "正在保存…" }
+    common_saving { "正在保存…" }
     tui_list_status_deleting { "正在删除…" }
     tui_list_delete_more { "{count, plural, other {另外 # 个列表}}" }
     tui_list_delete_cancelled { "删除已取消；未移除任何内容" }
@@ -632,7 +612,6 @@ zh_Hans:table {
     tui_shell_detail_select_visual { "从当前曲目开始或确认可视选择" }
     tui_shell_detail_select_all { "标记此视图中的全部曲目" }
     tui_shell_detail_select_clear { "清除标记" }
-    tui_shell_output_devices_title { "输出设备" }
     tui_playback_no_active_track { "暂无播放曲目" }
     tui_playback_volume { "音量 {percent}%" }
     tui_playback_no_output_device_selected { "未选择输出设备" }
@@ -680,7 +659,7 @@ zh_Hans:table {
     tui_library_no_tracks_found { "此列表中没有曲目。可选择其他列表浏览。" }
     tui_library_marked_count { "{count, plural, other {已标记 # 首}}" }
     tui_library_visual_mode { "可视选择" }
-    tui_library_ready { "就绪" }
+    common_ready { "就绪" }
     tui_library_scan_already_running { "音乐库扫描已在进行中" }
     tui_library_scan_cancelling { "正在取消扫描" }
     tui_library_section { "分节：{name}" }
@@ -697,8 +676,6 @@ zh_Hans:table {
     tui_editor_title { "曲目属性" }
     tui_editor_title_multiple { "编辑 {count, plural, other {# 首曲目}}" }
     tui_editor_applies_to_all { "更改将应用于全部 {count, plural, other {# 首曲目}}" }
-    tui_editor_tab_metadata { "元数据" }
-    tui_editor_tab_tags { "标签" }
     tui_editor_tab_properties { "属性" }
     tui_editor_tab_tracks { "曲目" }
     tui_editor_clear_for_all { "清空全部 {count, plural, other {# 首曲目}}" }
@@ -724,7 +701,7 @@ zh_Hans:table {
     tui_editor_summary_targets { "{count, plural, other {应用于 # 首曲目}}" }
     tui_editor_tags_state_add { "添加" }
     tui_editor_tags_state_remove { "移除" }
-    tui_editor_tags_action_add_new { "添加新标签 “{name}”" }
+    tui_editor_tags_action_add_new { "添加新标签“{name}”" }
     tui_editor_tags_filter_hint { "输入以筛选或添加标签" }
     tui_editor_tags_more_hidden { "{count, plural, other {另有 # 个标签未显示}}" }
     tui_editor_hint_reload { "重新加载" }
@@ -734,39 +711,23 @@ zh_Hans:table {
     tui_editor_open_incomplete { "无法打开完整的选择" }
     tui_editor_applied { "已更新 {count, plural, other {# 首曲目}}" }
     tui_editor_no_change { "无需更改" }
-    tui_editor_busy { "音乐库繁忙，请重试" }
+    tui_editor_busy { "音乐库正忙，请重试" }
     tui_editor_exit_waiting { "正在完成保存… Ctrl-C 停止等待" }
-    winui_shell_menu_file { "文件" }
-    winui_shell_open_library { "打开音乐库..." }
-    winui_shell_rescan { "重新扫描" }
-    winui_shell_rescan_library { "重新扫描音乐库" }
-    winui_shell_import_library_data { "导入音乐库数据..." }
-    winui_shell_export_library_data { "导出音乐库数据..." }
+    library_scan_action { "扫描" }
     winui_library_select_import_mode { "选择导入模式" }
     winui_library_choose_import_mode { "将此备份合并到音乐库，或恢复其数据范围：" }
     winui_library_import_mode_merge { "合并（保留备份范围外的数据）" }
     winui_library_import_mode_restore { "恢复（预览后替换备份范围）" }
-    winui_shell_menu_view { "视图" }
     winui_shell_modern_mode { "现代模式" }
-    winui_shell_columns { "列设置..." }
+    winui_shell_columns { "列设置…" }
     winui_shell_reload_theme { "重新加载主题" }
-    winui_shell_menu_playback { "播放" }
-    winui_shell_play_pause { "播放/暂停" }
-    winui_shell_stop { "停止" }
+    shell_menu_playback { "播放" }
     winui_shell_reveal_current_track { "定位当前曲目" }
-    winui_track_properties_command { "属性..." }
-    winui_track_properties_title { "属性" }
-    winui_track_properties_selected_title { "属性 — 已选择 {count, plural, one {# 首曲目} other {# 首曲目}}" }
-    winui_track_properties_save { "保存" }
-    winui_track_properties_cancel { "取消" }
-    winui_track_properties_tags { "标签" }
+    winui_track_properties_command { "属性…" }
     winui_track_properties_tags_hint { "所有已选曲目共有的标签" }
-    winui_track_properties_custom_metadata { "自定义元数据" }
     winui_track_properties_custom_key { "新键" }
     winui_track_properties_custom_value { "新值" }
     winui_track_properties_delete { "删除" }
-    winui_track_properties_add { "添加" }
-    winui_track_properties_editing_unavailable { "无法编辑：{detail}" }
     winui_track_properties_save_failed { "保存失败：{detail}" }
     winui_track_properties_stale { "打开此对话框期间，音乐库已发生更改。请选择“重新加载”查看最新值。" }
     track_properties_unstaged_input_hint { "保存前，请添加标签或自定义字段，或者清除未完成的输入。" }
@@ -774,40 +735,18 @@ zh_Hans:table {
     winui_track_properties_invalid_value { "值无效：{detail}" }
     winui_track_properties_reload { "重新加载" }
     winui_track_properties_discard_question { "放弃这些修改？" }
-    winui_track_properties_discard { "放弃修改" }
-    winui_track_properties_keep_editing { "继续编辑" }
-    winui_list_create_from_filter { "根据当前筛选条件创建列表" }
-    winui_list_editor_new_title { "新建列表" }
-    winui_list_editor_edit_title { "编辑列表" }
-    winui_common_cancel { "取消" }
-    winui_common_create { "创建" }
-    winui_common_save { "保存" }
-    winui_list_name_placeholder { "列表名称" }
-    winui_list_name { "名称" }
-    winui_list_description_placeholder { "可选描述" }
-    winui_list_description { "描述" }
-    winui_list_inherited_filter { "继承的筛选条件" }
-    winui_list_filter_placeholder { "筛选表达式（输入 $、@、# 或 %）" }
-    winui_list_local_filter { "本地筛选条件" }
-    winui_list_effective_filter { "实际筛选条件" }
-    winui_list_membership { "成员资格" }
-    winui_list_auto_presentation { "自动" }
-    winui_list_presentation { "视图" }
-    winui_list_preview { "预览" }
-    winui_shell_track_details { "曲目详情" }
+    common_discard_changes { "放弃修改" }
+    common_keep_editing { "继续编辑" }
+    track_details_title { "曲目详情" }
     winui_shell_track_details_resize { "调整曲目详情面板宽度" }
     winui_shell_classic_mode { "经典模式" }
-    winui_playback_output_device { "输出设备" }
-    winui_playback_volume { "音量" }
-    winui_playback_position { "播放位置" }
+    playback_volume { "音量" }
     winui_playback_no_output_devices { "无输出设备" }
     winui_library_open_label { "打开" }
-    winui_library_rescan_label { "重新扫描" }
     winui_library_navigation_pane_title { "音乐库" }
     winui_library_navigation_pane_resize { "调整导航面板宽度" }
-    winui_library_quick_filter_placeholder { "筛选曲目" }
-    winui_library_ready { "就绪" }
-    winui_library_rescanning { "正在重新扫描音乐库..." }
+    library_filter_placeholder { "筛选曲目" }
+    winui_library_rescanning { "正在扫描音乐库…" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "调整列 {column} 的宽度" }
@@ -828,7 +767,6 @@ zh_Hans:table {
     winui_shell_layout_failed { "无法构建界面布局：{detail}" }
     winui_activity_details { "查看活动详情" }
     winui_activity_notifications { "通知" }
-    winui_activity_hide_notification { "在状态栏中隐藏此通知" }
     winui_library_ready_at { "音乐库就绪：{root}" }
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "视图加载失败：{detail}" }
@@ -838,10 +776,10 @@ zh_Hans:table {
     winui_column_visibility_failed { "更改列可见性失败：{detail}" }
     winui_column_not_sortable { "列 ''{column}'' 不支持排序" }
     winui_sort_failed { "排序失败：{detail}" }
-    winui_unavailable_track { "不可用曲目" }
+    winui_unavailable_track { "不可用的曲目" }
     winui_theme_file_not_found { "未找到主题文件：{path}" }
     winui_startup_failure { "Aobus 无法启动：\n\n{detail}" }
-    winui_column_sort_presentation { "列排序" }
+    track_presentation_column_sort { "列排序" }
     track_multiple_values { "<多个值>" }
     track_metadata_heading { "元数据" }
     track_audio_properties_heading { "音频属性" }
@@ -852,8 +790,8 @@ zh_Hans:table {
     library_scan_cue_no_matching_audio { "{uri}：没有受支持的音频文件与此 CUE 文件同名。" }
     library_scan_cue_whole_file { "{uri}：已作为整个文件导入。请移除该音轨后重新扫描以分割文件。" }
     library_scan_cue_missing { "{uri}：没有用于分割此文件的 CUE 文件。已保留导入的片段。" }
-    library_scan_cue_layout_mismatch { "{uri}：CUE 分段无效，或与已导入的范围不一致。请检查 CUE 文件后重新扫描。若要替换已有范围，请先移除已导入的音轨。" }
-    library_scan_cue_carrier_mismatch { "{uri}：无法确认文件的帧数和采样率是否与已导入的片段一致。未更改已导入的音轨。" }
+    library_scan_cue_layout_mismatch { "{uri}：CUE 分段无效，或与已导入的范围不一致。请检查 CUE 文件后重新扫描。若要替换已有范围，请先移除已导入的曲目。" }
+    library_scan_cue_carrier_mismatch { "{uri}：无法确认文件的帧数和采样率是否与已导入的片段一致。未更改已导入的曲目。" }
     library_scan_cue_detail { " 详细信息：{detail}" }
     library_scan_cue_additional_issues { "{count, plural, other {另有 # 个 CUE 问题；详情请查看日志。}}" }
     track_cue_number { "CUE 音轨编号" }
@@ -861,7 +799,7 @@ zh_Hans:table {
     track_segment_end { "结束时间（不含）" }
     track_show_empty_fields { "显示空字段" }
     track_hide_empty_fields { "隐藏空字段" }
-    track_missing_on_some { "在部分曲目中缺失" }
+    track_missing_on_some { "部分曲目未设置" }
     track_fallback { "曲目 {id}" }
     track_no_selection { "未选择曲目" }
     cover_art_title { "封面" }
@@ -872,29 +810,26 @@ zh_Hans:table {
     track_edit_stale { "在编辑此项期间音乐库已更改。请重新加载值后重试。" }
     track_editing_unavailable { "当前无法编辑音乐库。" }
     track_clear_field_for_tracks { "清空 {count, plural, other {# 首曲目}}的“{field}”" }
-    gtk_track_properties_title { "属性" }
-    gtk_track_properties_selected_title { "属性 — 已选择 {count, plural, one {# 首曲目} other {# 首曲目}}" }
-    gtk_track_editing_unavailable { "无法编辑：{detail}" }
+    track_properties_title { "属性" }
+    track_properties_selected_title { "属性 — 已选择 {count, plural, one {# 首曲目} other {# 首曲目}}" }
+    track_properties_editing_unavailable { "无法编辑：{detail}" }
     gtk_track_save_failed { "保存失败" }
     gtk_track_save_stale_title { "无法保存更改" }
     gtk_track_save_stale { "在打开此对话框期间音乐库已更改。请重新加载属性后重试。" }
     gtk_track_credits_discard_title { "放弃对制作人员名单的修改？" }
     gtk_track_credits_discard_message { "现在关闭属性会丢失对制作人员名单尚未保存的修改。" }
-    gtk_track_credits_discard { "放弃修改" }
-    gtk_track_credits_keep_editing { "继续编辑" }
     gtk_tag_add { "添加…" }
     gtk_tag_add_placeholder { "添加标签…" }
     gtk_tag_remove { "移除标签 {tag}" }
-    gtk_custom_metadata_title { "自定义元数据" }
+    track_custom_metadata_title { "自定义元数据" }
     gtk_custom_metadata_key { "键" }
     gtk_custom_metadata_value { "值" }
     gtk_custom_metadata_deleted { "已移除自定义元数据 ''{key}''" }
     gtk_custom_metadata_delete { "删除自定义元数据" }
     gtk_activity_hide_status { "隐藏状态" }
-    gtk_activity_hide_notification { "在状态栏中隐藏此通知" }
+    activity_hide_notification { "在状态栏中隐藏此通知" }
     gtk_manual_order_drag { "拖动以在手动排序中重新排列曲目" }
     gtk_manual_order_rearrange { "重新排列曲目" }
-    gtk_status_ready { "Aobus 就绪" }
     gtk_edit_value { "编辑值" }
     gtk_collapse_panel { "折叠面板" }
     gtk_expand_panel { "展开面板" }
@@ -909,7 +844,6 @@ zh_Hans:table {
     gtk_startup_activate_library_failed { "Aobus 无法激活音乐库：{detail}" }
     gtk_startup_launch_library_failed { "Aobus 无法启动所选音乐库：{detail}" }
     gtk_layout_editor_title { "布局编辑器" }
-    gtk_layout_apply { "应用" }
     gtk_layout_unable_to_save { "无法保存布局" }
     gtk_config_newer_layout { "自定义布局由较新版本的 Aobus 保存。此版本将改为显示内置布局，且不会保存对自定义布局所做的更改。" }
     gtk_layout_tree_node { "节点" }
@@ -929,7 +863,7 @@ zh_Hans:table {
     gtk_layout_invalid_component_ids { "无效的布局组件 ID" }
     gtk_layout_validation_component { "预设 ''{preset}'' 组件 ''{component}'' 类型 ''{type}'' 验证失败：\n\n{detail}" }
     gtk_common_ok { "确定" }
-    gtk_common_add { "添加" }
+    common_add { "添加" }
     gtk_common_undo { "撤销" }
     gtk_common_no { "否" }
     gtk_common_yes { "是" }
@@ -938,7 +872,7 @@ zh_Hans:table {
     gtk_layout_capability_anchor { "锚点" }
     gtk_layout_capability_menu { "菜单" }
     gtk_layout_unknown_id { "⚠ 未知 ID：{id}" }
-    gtk_layout_unsupported_editor { "(不受支持的编辑器)" }
+    gtk_layout_unsupported_editor { "（不受支持的编辑器）" }
     gtk_layout_no_selection { "无选择项" }
     gtk_layout_general { "常规" }
     gtk_layout_properties { "布局属性" }
@@ -952,7 +886,7 @@ zh_Hans:table {
     gtk_layout_category_application { "应用程序" }
     gtk_layout_category_library { "音乐库" }
     gtk_layout_category_layout { "布局" }
-    gtk_layout_component_box { "盒子" }
+    gtk_layout_component_box { "容器框" }
     gtk_layout_component_split_pane { "分割面板" }
     gtk_layout_component_label { "标签" }
     gtk_layout_component_action_button { "操作按钮" }
@@ -987,7 +921,7 @@ zh_Hans:table {
     gtk_layout_component_scroll_window { "滚动窗口" }
     gtk_layout_component_tabs { "选项卡" }
     gtk_layout_component_responsive_class { "响应式类" }
-    gtk_layout_component_center_box { "居中盒子" }
+    gtk_layout_component_center_box { "居中容器框" }
     gtk_layout_component_open_library_button { "打开音乐库按钮" }
     gtk_layout_component_workspace_with_detail { "带详情工作区" }
     gtk_layout_component_collapsible_split { "可折叠分割" }
@@ -1050,22 +984,22 @@ zh_Hans:table {
     gtk_layout_property_expand_vertical { "垂直扩展" }
     gtk_layout_property_horizontal_align { "水平对齐" }
     gtk_layout_property_vertical_align { "垂直对齐" }
-    gtk_layout_property_width_request { "请求宽度" }
-    gtk_layout_property_height_request { "请求高度" }
+    gtk_layout_property_width_request { "最小宽度" }
+    gtk_layout_property_height_request { "最小高度" }
     gtk_layout_property_x { "X" }
     gtk_layout_property_y { "Y" }
     gtk_layout_property_width { "宽度" }
     gtk_layout_property_height { "高度" }
     gtk_layout_property_z_index { "Z-Index" }
-    gtk_layout_value_ambient { "环境" }
+    gtk_layout_value_ambient { "氛围" }
     gtk_layout_value_classic_inline { "经典内联" }
     gtk_layout_value_hidden { "隐藏" }
     gtk_layout_value_reserve { "保留空间" }
     gtk_layout_value_small { "小" }
     gtk_layout_value_normal { "普通" }
     gtk_layout_value_large { "大" }
-    gtk_layout_value_flat { "平坦" }
-    gtk_layout_value_raised { "凸起" }
+    gtk_layout_value_flat { "扁平" }
+    gtk_layout_value_raised { "立体" }
     gtk_layout_value_circular { "圆形" }
     gtk_layout_value_suggested { "建议" }
     gtk_layout_value_destructive { "破坏性" }
@@ -1083,7 +1017,6 @@ zh_Hans:table {
     gtk_layout_value_compact { "紧凑" }
     gtk_layout_value_tooltip { "工具提示" }
     gtk_layout_value_reveal { "定位当前曲目" }
-    gtk_layout_value_play_pause { "播放/暂停" }
     gtk_layout_value_filter_by_field { "按字段筛选" }
     gtk_layout_value_start { "起始" }
     gtk_layout_value_end { "结束" }
@@ -1113,13 +1046,9 @@ zh_Hans:table {
     tui_panel_resize { "移动当前侧栏的分隔线" }
     tui_detail_file_name { "文件名" }
     tui_detail_focus { "进入曲目详情" }
-    tui_detail_keys { "Shift+←/→ 调整宽度 · j/k 分组 · Enter 展开/收起 · ←/→ 收起/展开 · PgUp/PgDn 滚动 · Esc 曲目" }
+    tui_detail_keys { "Shift+←/→ 调整宽度 · j/k 分节 · Enter 展开/收起 · ←/→ 收起/展开 · PgUp/PgDn 滚动 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 调整宽度 · Enter 展开/收起 · Esc 曲目" }
-    tui_shell_tags { "标签" }
-    tui_tag_popover_cancel { "放弃更改" }
-    tui_tag_popover_close { "关闭" }
     tui_tag_popover_title { "标签 · {count, plural, other {# 首曲目}}" }
-    tui_tag_popover_apply { "应用" }
     tui_tag_popover_add_apply { "添加并应用" }
     tui_shell_detail_edit_tags { "编辑曲目标签" }
     tui_settings_terminal_title { "终端标题格式" }
@@ -1128,13 +1057,11 @@ zh_Hans:table {
     tui_settings_title_preview { "预览：{title}" }
     tui_settings_invalid_title_format { "格式无效：{detail}" }
 
-    appkit_collection_hint { "为收藏命名，并选择其中包含的内容。" }
-    appkit_track_details { "曲目详情" }
+    appkit_collection_hint { "为此列表命名，并选择其中包含的内容。" }
     appkit_selected_music { "所选音乐" }
     appkit_saved_list { "已保存的列表" }
     appkit_delete_list_question { "删除列表？" }
     appkit_delete_list_hint { "此列表及其子列表将被移除。" }
-    appkit_cancel { "取消" }
     appkit_delete_list { "删除列表" }
     appkit_save_changes { "保存修改" }
     appkit_field_actions { "字段操作" }
@@ -1146,24 +1073,16 @@ zh_Hans:table {
     appkit_add_shared_tags { "添加共有标签" }
     appkit_shared_tags { "共有标签" }
     appkit_list_details { "列表详情" }
-    appkit_name { "名称" }
-    appkit_description { "描述" }
-    appkit_expression { "筛选表达式" }
-    appkit_list_name { "列表名称" }
-    appkit_optional_description { "可选描述" }
     appkit_list_expression_hint { "使用 #favorites 这样的标签可直接添加曲目。也可以使用查询自动收集匹配的音乐。" }
     appkit_collapse_section { "折叠此部分" }
     appkit_expand_section { "展开此部分" }
     appkit_edits_storage_hint { "编辑内容保存在 Aobus 中，音频文件保持不变。" }
     appkit_deletion_keeps_media { "曲目、标签和音频文件都将保留。" }
-    appkit_saving { "正在保存…" }
     appkit_will_clear { "将清除" }
     appkit_list { "列表" }
     appkit_discard_question { "放弃这些修改？" }
     appkit_discard_hint { "未保存的输入将被放弃。" }
-    appkit_keep_editing { "继续编辑" }
     appkit_keep_open { "保持打开" }
-    appkit_discard_changes { "放弃修改" }
     appkit_clear_selected_field { "清除所选曲目的此字段" }
     appkit_restore_field_value { "还原各曲目的原值" }
     appkit_edit_tracks { "编辑 {count, plural, other {# 首曲目}}" }
@@ -1171,11 +1090,9 @@ zh_Hans:table {
     appkit_deleting_lists { "{count, plural, other {将移除 # 个列表}}" }
     appkit_field_actions_for { "{field} 操作" }
     appkit_properties_selection { "属性 — 已选择 {count, plural, other {# 首曲目}}" }
-    appkit_new_list { "新建列表" }
-    appkit_edit_list { "编辑列表" }
     appkit_remove_from_list { "从列表中移除" }
     appkit_properties_stale { "音乐库已更改。输入内容已保留；请重新打开属性以编辑当前版本。" }
-    appkit_editor_busy { "音乐库繁忙。输入内容已保留；请再次尝试保存。" }
+    appkit_editor_busy { "音乐库正忙。输入内容已保留；请再次尝试保存。" }
     appkit_editor_stale { "音乐库已更改。输入内容已保留；请重新打开编辑器以继续。" }
     appkit_about { "关于 Aobus" }
     appkit_services { "服务" }
@@ -1184,9 +1101,8 @@ zh_Hans:table {
     appkit_show_all { "全部显示" }
     appkit_quit { "退出 Aobus" }
     appkit_menu_file { "文件" }
-    appkit_open_library_action { "打开音乐库…" }
+    shell_open_library { "打开音乐库…" }
     appkit_open_recent { "打开最近使用" }
-    appkit_rescan_library { "重新扫描音乐库" }
     appkit_close_window { "关闭窗口" }
     appkit_menu_edit { "编辑" }
     appkit_undo { "撤销" }
@@ -1217,7 +1133,6 @@ zh_Hans:table {
     appkit_appearance_system { "跟随系统" }
     appkit_appearance_light { "浅色" }
     appkit_appearance_dark { "深色" }
-    appkit_menu_playback { "播放" }
     appkit_output_device_action { "输出设备…" }
     appkit_menu_window { "窗口" }
     appkit_minimize { "最小化" }
@@ -1230,17 +1145,13 @@ zh_Hans:table {
     appkit_saved_lists { "已保存的列表" }
     appkit_playing_artwork { "当前播放曲目的封面" }
     appkit_selected_artwork { "所选曲目的封面" }
-    appkit_filter_placeholder { "筛选曲目" }
     appkit_tracks { "曲目" }
     appkit_empty_library_title { "打开音乐文件夹以建立音乐库" }
-    appkit_ready { "就绪" }
     appkit_reveal_in_finder { "在访达中显示" }
     appkit_edit_properties_action { "编辑属性…" }
     appkit_choose_music { "选择想听的音乐" }
     appkit_output_device { "输出设备" }
-    appkit_volume { "音量" }
     appkit_playback_options { "播放选项" }
-    appkit_playback_position { "播放位置" }
     appkit_repeat_off { "关闭循环" }
     appkit_repeat_all { "全部循环" }
     appkit_repeat_one { "单曲循环" }
@@ -1257,10 +1168,6 @@ zh_Hans:table {
     appkit_list_empty { "此列表为空" }
     appkit_empty_list_hint { "请向此列表添加音乐，或浏览所有曲目。" }
     appkit_show_all_tracks { "显示所有曲目" }
-    appkit_invalid_filter { "无效的筛选条件" }
-    appkit_auto_presentation { "自动" }
-    appkit_unavailable_presentation { "不可用：{id}（自动）" }
-    appkit_column_sort_presentation { "列排序" }
     appkit_no_activity { "当前没有活动" }
     appkit_audio { "音频" }
     appkit_file_label { "文件" }

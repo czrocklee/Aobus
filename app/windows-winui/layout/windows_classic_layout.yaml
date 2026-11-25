@@ -97,7 +97,7 @@ root:
         - id: classic-rescan
           type: actionButton
           props:
-            textResourceKey: winui_library_rescan_label
+            textResourceKey: library_scan_action
             primaryAction: library.rescan
           layout:
             valign: center

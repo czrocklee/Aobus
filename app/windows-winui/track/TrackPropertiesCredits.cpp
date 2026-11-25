@@ -66,11 +66,11 @@ namespace ao::winui
     question.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, MessageId::WinUiTrackPropertiesDiscardQuestion)));
     question.TextWrapping(TextWrapping::Wrap);
     _discardPrompt.Children().Append(question);
-    auto discard = textButton(i18n::requiredText(_textCatalog, MessageId::WinUiTrackPropertiesDiscard));
+    auto discard = textButton(i18n::requiredText(_textCatalog, MessageId::CommonDiscardChanges));
     _discardClickRevokers.push_back(
       discard.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { confirmDiscard(); }));
     _discardPrompt.Children().Append(discard);
-    auto cancel = textButton(i18n::requiredText(_textCatalog, MessageId::WinUiTrackPropertiesKeepEditing));
+    auto cancel = textButton(i18n::requiredText(_textCatalog, MessageId::CommonKeepEditing));
     _discardClickRevokers.push_back(
       cancel.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { cancelDiscard(); }));
     _discardPrompt.Children().Append(cancel);

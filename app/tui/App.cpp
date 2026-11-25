@@ -1519,7 +1519,7 @@ namespace ao::tui
       },
       uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()}};
     runtime.notifications().post(rt::NotificationSeverity::Info,
-                                 chromeText(textCatalog, i18n::MessageId::TuiLibraryReady),
+                                 chromeText(textCatalog, i18n::MessageId::CommonReady),
                                  rt::NotificationLifetime::transient());
 
     auto playbackSub =

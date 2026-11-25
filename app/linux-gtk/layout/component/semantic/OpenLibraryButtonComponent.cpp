@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     public:
       OpenLibraryButton(portal::ImportExportActions* actions, i18n::MessageCatalog const& textCatalog)
       {
-        auto const label = gtkText(textCatalog, i18n::MessageId::GtkShellOpenLibrary);
+        auto const label = gtkText(textCatalog, i18n::MessageId::ShellOpenLibrary);
         _button.set_icon_name("folder-open-symbolic");
         setTooltipAndAccessibleLabel(_button, label);
 
