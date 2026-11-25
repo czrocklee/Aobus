@@ -52,7 +52,7 @@ def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    bazel_workflows.add_arguments(parser, allow_sanitizers=True)
+    bazel_workflows.add_arguments(parser)
     parser.add_argument("--clean", action="store_true", help="clean the selected outputs before complete validation")
     parser.add_argument("--fresh", action="store_true", help="disable Bazel test-result caching")
     parser.add_argument(
@@ -116,12 +116,8 @@ def _completion_request(args: argparse.Namespace) -> completion.Request:
 
 
 def _lint_request(args: argparse.Namespace) -> source_lint.LintRequest:
-    values = options.native_values(args)
-    # Sanitizer execution belongs only to complete validation, not lint contexts.
-    values.pop("asan", None)
-    values.pop("tsan", None)
     return source_lint.LintRequest(
-        **values,
+        **options.native_values(args),
         tidy_check=args.tidy_check,
         tidy_args=tuple(args.tidy_arg),
         owner_targets=tuple(args.owner_targets),

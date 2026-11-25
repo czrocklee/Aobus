@@ -13,7 +13,7 @@ context stay ordinary ``cc_test`` declarations.
 
 load("@aobus_native_tools//:test_tools.bzl", "TEST_TOOLS")
 load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
-load("@rules_cc//cc:defs.bzl", _cc_binary = "cc_binary", _cc_test = "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", _cc_binary = "cc_binary", _cc_test = "cc_test")
 load("//bazel:testing.bzl", "CONTEXT_ENV", "context_environment", "native_context_test")
 load("//bazel:windows_utf8_manifest.bzl", "WINDOWS_UTF8_LINKER_INPUTS", "WINDOWS_UTF8_LINKOPTS")
 
@@ -24,6 +24,53 @@ _SCHEDULING_ATTRIBUTES = ("size", "timeout", "flaky", "shard_count", "exec_prope
 # without propagating the `local` tag to compile, link, and lint actions.
 _SHARED_ATTRIBUTES = ("local", "tags", "target_compatible_with", "testonly", "visibility")
 
+def sanitizer_suppressions(name, profile):
+    """Embed a reviewed rule file in Linux instrumented tests, including child probes.
+
+    Args:
+        name: Sanitizer runtime (lsan or tsan).
+        profile: Config setting in which the runtime is active.
+    """
+    compatible = select({profile: [], "//conditions:default": ["@platforms//:incompatible"]})
+    native.genrule(
+        name = name + "_hook",
+        srcs = ["sanitizer/" + name + ".supp"],
+        outs = [name + "_suppressions.cpp"],
+        cmd = """
+{
+  echo 'extern "C" const char* __%s_default_suppressions() { return R"supp('
+  cat "$<"
+  echo ')supp"; }'
+} > "$@"
+""" % name,
+        target_compatible_with = compatible,
+        testonly = True,
+    )
+    cc_library(
+        name = name + "_defaults",
+        srcs = [":" + name + "_hook"],
+        alwayslink = True,
+        linkstatic = True,
+        target_compatible_with = compatible,
+        testonly = True,
+    )
+
+_SUPPRESSIONS = select({
+    ":linux_asan": [":lsan_defaults"],
+    ":linux_tsan": [":tsan_defaults"],
+    "//conditions:default": [],
+})
+
+def _symbolizer_env(env):
+    tool = TEST_TOOLS.get("symbolizer")
+    if not tool:
+        return env
+    return (env or {}) | select({
+        "//bazel:asan": {key + "_SYMBOLIZER_PATH": tool for key in ["ASAN", "LSAN", "UBSAN"]},
+        "//bazel:tsan": {"TSAN_SYMBOLIZER_PATH": tool},
+        "//conditions:default": {},
+    })
+
 def cc_binary(name, additional_linker_inputs = [], linkopts = [], **kwargs):
     """Declare a cc_binary with the Windows UTF-8 manifest pair applied.
 
@@ -33,6 +80,7 @@ def cc_binary(name, additional_linker_inputs = [], linkopts = [], **kwargs):
         linkopts: Caller-owned options appended to the manifest link options.
         **kwargs: All other native cc_binary attributes, forwarded unchanged.
     """
+    kwargs["deps"] = kwargs.get("deps", []) + _SUPPRESSIONS
     _cc_binary(
         name = name,
         additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS + additional_linker_inputs,
@@ -121,13 +169,18 @@ def cc_test(
         args: Test arguments; the wrapper forwards them to the wrapped test.
         **kwargs: All other native cc_test attributes, forwarded unchanged.
     """
+    kwargs["deps"] = kwargs.get("deps", []) + _SUPPRESSIONS
+    kwargs["env_inherit"] = kwargs.get("env_inherit", []) + select({":windows_asan": ["PATH"], "//conditions:default": []})
+    if TEST_TOOLS.get("symbolizer"):
+        tool = ["@aobus_native_tools//:sanitizer_symbolizer"]
+        kwargs["data"] = kwargs.get("data", []) + select({"//bazel:asan": tool, "//bazel:tsan": tool, "//conditions:default": []})
     if not context:
         _cc_test(
             name = name,
             additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS + additional_linker_inputs,
             linkopts = WINDOWS_UTF8_LINKOPTS + linkopts,
             args = args,
-            env = env,
+            env = _symbolizer_env(env),
             **kwargs
         )
         return
@@ -148,6 +201,7 @@ def cc_test(
     inner_attributes["env"] = env
     inner_attributes["tags"] = (shared.get("tags") or []) + ["manual"]
     _add_linux_fixture_inputs(name, environment[CONTEXT_ENV], inner_attributes)
+    inner_attributes["env"] = _symbolizer_env(inner_attributes["env"])
     _cc_test(
         name = inner,
         additional_linker_inputs = WINDOWS_UTF8_LINKER_INPUTS + additional_linker_inputs,

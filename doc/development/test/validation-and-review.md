@@ -73,8 +73,11 @@ Do not perform a broad test-file split as drive-by cleanup unless it is necessar
 
 ## Validation
 
-During development, build or test the affected Bazel targets. Check platform-specific changes early on their native host, such as WinUI on Windows.
-Before delivering the finished change or pushing it for review, select all rows below that apply to the behavior and execution boundaries changed. A local commit or backup push alone does not require the native matrix.
+During implementation, debugging, and review-fix rounds, build or test the affected Bazel targets rather than running the completion gate after each turn. Check platform-specific changes early on their native host, such as WinUI on Windows.
+
+Run the applicable checks below before opening a ready-for-review PR, marking a draft ready, or delivering a final local commit. Run full validation earlier on explicit request.
+After review fixes settle, rerun any checks they invalidated before sign-off.
+Checkpoint commits and backup pushes alone do not require the native matrix. When handing back uncommitted work, report any required checks not run.
 
 | Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -103,10 +106,10 @@ It never rewrites source. Sanitizer execution remains separate from the normal
 lint configuration; a sanitizer result cannot stand in for native lint.
 
 For a C++ memory-safety fix, run [fresh native ASan](concurrency-and-sanitizer.md#sanitizer-findings)
-on the affected supported hosts. For a C++ concurrency-sensitive change,
+on the affected tests and supported hosts. For a C++ concurrency-sensitive change,
 follow [concurrency validation](concurrency-and-sanitizer.md#validation): exercise
 the affected binary (for example, `bazel test //test:async_test --test_filter='[concurrency]~[.]'`)
-and run fresh managed TSan on affected supported hosts. A compile-contract check
+and rerun the owning tests under TSan with `--nocache_test_results` on affected supported hosts. A compile-contract check
 is not an instrumented execution.
 
 Python subprocess or thread changes need native process-level regressions;
@@ -124,7 +127,7 @@ test wrapper starts only the [private fixtures](../bazel.md#direct-bazel-without
 declared by the selected target. Do not start the services yourself.
 A focused test or narrower CI job does not replace a required full gate.
 Reuse a passing result while its source, tests, dependencies, configuration, platform, and scope remain unchanged.
-After a correction, rerun affected checks; broaden the scope only if another boundary is involved.
+After a correction, converge with the narrowest check that covers it (such as the owning `bazel test` target or `./ao check lint <paths>`) before rerunning a required full gate; broaden the scope only if another boundary is involved.
 
 `check lint` is read-only, resolves its source scope once, and skips empty stage
 subsets. It performs no formatting or global documentation check; use
@@ -223,7 +226,7 @@ Before finishing, confirm:
 - Mutations have postconditions.
 - Async/GTK behavior is deterministic.
 - Concurrent cancellation and teardown cover the applicable race matrix.
-- C++ concurrency changes pass the applicable TSan gate; Python process/thread changes use native regressions.
+- The affected C++ concurrency tests pass under TSan; Python process/thread changes use native regressions.
 - Fixtures reduce noise without hiding the behavior under test.
 - GTK tests do not duplicate policy better tested in `uimodel`.
 - Testability seams follow [fixtures and helpers](fixture-and-helper.md).

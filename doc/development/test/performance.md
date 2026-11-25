@@ -397,7 +397,7 @@ Do not remove outliers manually; the report's median and p95 are calculated from
 - [`script/ao/command/measure.py`](../../../script/ao/command/measure.py) owns measurement CLI arguments; [`script/ao/portal/performance_review.py`](../../../script/ao/portal/performance_review.py) owns performance build/run selection, metadata injection, report provenance, and summary output.
 - [`test/perf/baseline/`](../../../test/perf/baseline) contains the standalone Catch2 workloads.
 - [`test/perf/report/`](../../../test/perf/report) contains shared report support and `PerformanceReportTest.cpp`, whose cases run in the core suite.
-- [`test/tui/TrackTableBenchmark.cpp`](../../../test/tui/TrackTableBenchmark.cpp) is the standalone `ao_tui_bench` target: allocation-bound TUI render micro-benchmarks that link mimalloc to mirror the shipping terminal allocator. It stays manual and is built explicitly and run directly, never by the ordinary runtime or sanitizer gates. Its registrations are part of the same content audit as every other test source.
+- [`test/tui/TrackTableBenchmark.cpp`](../../../test/tui/TrackTableBenchmark.cpp) is the standalone `ao_tui_bench` target: allocation-bound TUI render micro-benchmarks that link mimalloc to mirror the shipping terminal allocator. It stays manual and is built explicitly and run directly, never by the ordinary or sanitizer test suites. Its registrations are part of the same content audit as every other test source.
 - [`test/script/test_cli.py`](../../../test/script/test_cli.py) and [`test/script/test_build_env.py`](../../../test/script/test_build_env.py) protect command registration and native-environment classification.
 
 ## Related documents

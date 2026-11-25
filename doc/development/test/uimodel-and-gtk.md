@@ -193,7 +193,7 @@ case or a custom GTK build: popup and toplevel surfaces share a frame clock and
 can resubmit before after-paint fills the completeness metadata. See
 [the submission-accounting introduction](https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10035).
 Remove the exception and its dedicated probes once the pinned SDK passes the
-standalone popup/no-popup controls without it, then the GTK and ASan gates.
+standalone popup/no-popup controls without it, then `//test:gtk_test` normally and under ASan.
 
 The GApplication replacement probe and its instance children borrow the
 portal-owned bus after the same admission check. Direct unowned launches are

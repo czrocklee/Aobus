@@ -113,7 +113,6 @@ _PORTAL = [
     "script/ao/portal/bazel_provision.py",
     "script/ao/portal/bazel_remote_cache.py",
     "script/ao/portal/bazel_resolver.py",
-    "script/ao/portal/bazel_sanitizers.py",
     "script/ao/portal/bazel_test_ownership.py",
     "script/ao/portal/bazel_validation.py",
     "script/ao/portal/bazel_verify.py",

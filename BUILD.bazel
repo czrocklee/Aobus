@@ -149,13 +149,13 @@ test_suite(
     ],
 )
 
-# Managed sanitizer tests add the configured check_native_tests backend roots.
-# They are scoped instrumentation runs, not the whole completion ownership gate.
+# Instrumented suites are independent of normal completion and lint.
 test_suite(
     name = "asan_tests",
     tests = [
         ":application_tests",
         ":core_tests",
+        "//test:backend_test",
         "//test:cli_test",
         "//test:gtk_test",
         "//test:systemmedia_test",
@@ -168,6 +168,7 @@ test_suite(
     tests = [
         ":application_tests",
         ":core_tests",
+        "//test:backend_test",
         "//test:gtk_test",
     ],
 )

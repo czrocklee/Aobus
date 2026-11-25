@@ -69,7 +69,7 @@ bazel test //test:query_test \
 Use name globs for a family of cases. Explicitly exclude hidden probes with
 `~[.]` when a filter would otherwise select them. To run retained concurrency
 cases in an owning binary, use `--test_filter='[concurrency]~[.]'`; use
-`ao check --tsan` for managed whole-scope sanitizer validation.
+`bazel test --config=tsan //:tsan_tests` for the broader instrumented suite.
 
 Bazel owns scheduling, output, result caching, and repetition. For example,
 `--runs_per_test=20 --nocache_test_results` requests 20 fresh runs of each

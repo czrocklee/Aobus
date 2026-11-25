@@ -200,11 +200,11 @@
   "moduleExtensions": {
     "//bazel:dependencies.bzl%dependencies": {
       "general": {
-        "bzlTransitiveDigest": "0s/zamtlgAmJ6ERvLQ90ngrJ5Bfng/AlDyuag8Bry54=",
+        "bzlTransitiveDigest": "9QtpL6V/gjpj8cwl68AoDJbU9sOGtu/ClyoJeUlEE/U=",
         "usagesDigest": "xq8tDLFxkt99+Cam7irGlY+r5AqIF1Jz2wKQMKyaC90=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment",
-          "FILE:@@//.bazelrc 1003e98d726f33ce3b1618605489be8910ac8accab9edfb41ee8f7c2009040e9"
+          "FILE:@@//.bazelrc a82adf98405ae177a7b67fc529ae1801ed114d43b1bd2cd8ef8c7fab8c850faf"
         ],
         "generatedRepoSpecs": {
           "aobus_environment": {

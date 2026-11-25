@@ -96,8 +96,7 @@ or the native SDK prerequisites.
 `./ao setup bazel` prepares the pinned executable, `./ao setup deps`
 explicitly provisions vcpkg/NuGet/LLVM, and `./ao check contracts` runs
 [compile-contract analysis](#compile-contract-verification). `./ao check`
-accepts `--config fastbuild|debug|release` and
-optional `--asan`/`--tsan`, whose normal completion defaults to fastbuild.
+accepts `--config fastbuild|debug|release` and defaults to fastbuild.
 See [completion](#completion-gate) for CI selections and evidence.
 Common project-command options include `--path`, `--vcpkg-prefix`, `--jobs`,
 `--remote-cache`, and the Linux target-compiler selector `--compiler=gcc|clang`
@@ -493,9 +492,8 @@ platform compatibility belongs to the member executables.
 [test/BUILD.bazel](../../test/BUILD.bazel) declares test membership by module.
 Ordinary tests use `bazel test //:tests`; products are selected by their
 native labels. The broader [completion roots](#completion-gate) supply selections
-for compile-contract analysis, sanitizers, concept measurement and lint.
-Raw sanitizer labels remain explicitly selected,
-caller-owned runs ([sanitizer scope](#sanitizer-profiles)), excluding the
+for compile-contract analysis, concept measurement and lint.
+[Sanitizer tests](#sanitizer-profiles) select the affected targets, excluding the
 uninstrumented lint host. Runtime keeps its
 fatal self-reentering main; catalog and shared desktop contracts have their
 own module tests. The portable WinUI model is shared by product and
@@ -552,9 +550,7 @@ remain explicit on the backend suite.
 platform build root supplies the per-configuration default tree named
 `bazel-<config>`. Source-contained trees and ancestors
 of the checkout are rejected. An explicitly selected tree is mode-neutral: the
-selected profile, not the tree, picks the compilation mode, and the composite
-sanitizer check runs normal completion first (fastbuild by default, Debug with
-`--config debug`), then the managed sanitizer profile in that same tree.
+selected profile, not the tree, picks the compilation mode.
 Do not reconfigure a tree during another invocation or remove an active tree or
 lock: the portal serializes writers and Bazel owns its server/output-base lock.
 
@@ -1281,8 +1277,7 @@ request passes its Debug analysis name, and the instrumented Debug facts
 satisfy it). The single configured `DefaultInfo` output file is located by one
 exact `cquery --output=files` of the facts target, never by guessing an
 output-tree layout; the declared output filename stays the Starlark macro's
-contract. The managed sanitizer route forwards the caller's trusted remote
-cache to the facts build; the standalone CLI passes none. The test roots
+contract. The standalone CLI passes no remote cache to the facts build. The test roots
 cover the backend, CLI, lint and TUI members, plus GTK and system-media tests
 when enabled on Linux. Native process tests own no C++ compile actions of
 their own; they reuse the TUI executable and WinUI probes covered by the
@@ -1358,33 +1353,24 @@ the ordinary fastbuild/Debug/Release modes. `./ao check lint` and
 Instrumentation does not substitute for ordinary completion. Task-level
 validation guidance lives in [concurrency and sanitizer
 validation](test/concurrency-and-sanitizer.md) and the [coverage
-workflow](test/coverage-workflow.md). Sanitizer and coverage profiles use the
-same `--path`/`BUILD_DIR` selection; without an explicit selection the
-per-configuration default tree names apply, and the composite sanitizer check
-uses one selected tree for normal completion and the managed profile.
+workflow](test/coverage-workflow.md). Coverage uses the portal's `--path`/`BUILD_DIR`
+selection; native sanitizer tests use Bazel's output base.
 
 ### Sanitizer profiles
 
-`./ao check --asan` and `./ao check --tsan` run normal completion first (fastbuild by default, Debug with `--config debug`), then the fixed Debug-based sanitizer scope in the same selected tree. `./ao check contracts`
-accepts `--config asan|tsan` for analysis only. Native explicit builds/runs use
-Bazel's named rc profiles and remain caller-owned; building a test does not
-admit its sanitizer runtime.
+Run the test that owns the changed behavior under the appropriate profile. Neither
+invocation runs normal completion or lint. Request fresh execution when validating
+a fix: a cached pass cannot sample another interleaving or heap layout.
 
 ```bash
-./ao check --asan
-./ao check --tsan
-./ao check contracts --config asan --jobs 2
-bazel build --config=tsan //app/tui:aobus-tui  # caller-owned runtime
+bazel test --config=asan --nocache_test_results //test:utility_test
+bazel test --config=tsan --nocache_test_results //test:async_test
 ```
 
-Managed sanitizer completion accepts no labels, test filters, or forwarded
-Bazel arguments: narrowing the instrumentation scope would silently change
-what was measured. The [root
-BUILD](../../BUILD.bazel) owns the suites: `//:asan_tests` covers Core, the
-application layer, CLI and TUI; `//:tsan_tests` covers Core and the application layer. Both also select GTK tests on Linux when GTK is enabled; ASan additionally selects Linux system-media tests when that feature is enabled. The managed test adds the
-`//:check_native_tests` backend selection through `cquery`, so every host adds
-the native backend suite; a raw `//:asan_tests` invocation alone therefore
-excludes the backend. Manual GUI and performance
+For broader coverage the [root BUILD](../../BUILD.bazel) declares `//:asan_tests`
+and `//:tsan_tests`. Both include core, application and native backend tests and
+select GTK on Linux when enabled. ASan also covers CLI, TUI and enabled Linux
+system-media tests. Manual GUI and performance
 targets and hidden hardware cases stay outside the sanitizer scope. The C++
 fatal-contract sibling probes are transitive test dependencies. The ASan
 profile sets `STBIR_NO_SIMD` on the TUI cover-art target.
@@ -1397,11 +1383,7 @@ bazel build -c dbg --config=asan //:asan_tests //test:sanitizer_profile
 bazel test -c dbg --config=tsan //:tsan_tests
 ```
 
-The bare suites do not include the compiler probe. A bare run gets none of
-the managed runtime admission below — no
-frozen rc, forced report status or suppression merge; context-bearing tests
-still start their own fixtures. The caller owns the remaining runtime, and a
-bare success is not a managed gate result.
+The suites do not include the compiler probe. Context-bearing tests start their own fixtures.
 
 The [repository rc](../../.bazelrc) turns each profile into the
 `//bazel:asan_enabled`/`//bazel:tsan_enabled` bool build settings, a sanitizer
@@ -1433,58 +1415,25 @@ Nix probes. The TSan compile profile
 also explicitly admits the selected compiler's pinned sanitizer header
 interface used by
 libstdc++'s atomic-shared-pointer mutex annotations; clearing ambient Nix flags
-does not remove those annotations. The governed LLVM symbolizer stays a
-runtime selection of the managed sanitizer environment, never a toolchain
-tool beside the archiver. Neither mechanism adds a project report
-suppression or substitutes the production atomic implementation.
+does not remove those annotations. The selected LLVM symbolizer is a native test input, not a tool derived from the compiler's archiver.
 
-The managed test runtime is owned by
-[bazel_sanitizers.py](../../script/ao/portal/bazel_sanitizers.py). It freezes
-one per-attempt rc with the explicit sanitizer option variables before the
-configured queries, and the build and test phases reuse the same rc. Individual
-context-bearing tests own their Linux services. It forces
-`halt_on_error=1` and positive report exit codes, adds UBSan stack traces, and
-preserves other caller-supplied options. Caller TSan suppression files are
-merged with the governed project rules into one immutable file without adding
-suppressions. Managed Linux ASan replaces the caller's `LSAN_OPTIONS` rather
-than merging it; managed TSan does not override it. Caller ASan, UBSan and
-macOS LSan suppression files are each frozen in place as separate copies,
-preserving option order. Every frozen copy is content-addressed under
-`<tree>/sanitizers/<profile>/runtime/<sha256>/`: Bazel hashes the path in
-`--test_env`, not the bytes behind it, so unchanged rules keep one path and
-changed rules always miss the test-result cache.
-Tests use `--test_strategy=standalone` with `--strategy=TestRunner=local`:
-the standalone runner alone can still delegate to a sandboxed spawn. Local
-execution preserves absolute suppression paths and native fatal-child
-contracts; a trusted remote action cache stays optional for the build phase.
-Linux and macOS select the governed LLVM symbolizer. macOS adds no service
-context and requires the same console-user audio admission;
-Windows freezes the already-selected MSVC runtime `PATH` and provisions no
-additional DLL. Attempt receipts live under
-`<tree>/sanitizers/<profile>/run-*/receipt.json`.
-
-The `./ao check --asan` and `./ao check --tsan` commands run the full
-normal completion gate first — including its completion products — then
-a separate managed sanitizer profile in the same selected tree. Both use the same
-[test-result cache admission](#test-result-cache-admission): a cached sanitizer
-PASS belongs to the sanitizer-configured binary and runtime environment Bazel
-hashed, so a Debug result is never relabeled as a sanitized one. `--fresh` requires new executions in both; the receipts record
-executed and cached runs. Rerunning an unchanged binary only samples another
-interleaving, random test order or heap layout; ask for that with `--fresh`.
-Windows rejects `--tsan` before any tree or SDK work, exactly like the managed
-route.
+The test profiles set `halt_on_error=1` and nonzero report exit codes; UBSan prints
+stack traces and TSan records the second deadlock stack. Linux instrumented test
+executables and their test-package child probes embed the reviewed LSan or TSan
+rules as runtime defaults. The rule bytes are build inputs, so a change invalidates
+the test without relying on the working directory or an absolute file path.
+Windows ASan tests inherit the selected VS runtime `PATH`. Native backend tests
+still require their usual host audio environment.
 
 `check contracts --config asan|tsan` runs only the ordinary Debug compile-contract
 oracle over the sanitizer-configured graph, admitting the selected compiler-rt
-interface root as a compiler include root under Linux TSan; the managed test
-runs the same phase before building. It performs no compilation or linking and
+interface root as a compiler include root under Linux TSan. It performs no compilation or linking and
 does not examine sanitizer flags.
 
 For a compile-only check, build `//test:sanitizer_profile` with the desired
 `--config`. Its [static assertions](../../test/helper/SanitizerProfile.cpp)
 compare the selected profile with the compiler's instrumentation for one
-translation unit. The managed sanitizer build includes this probe; its test
-phase runs the selected test suites, not the probe.
+translation unit. The Linux completion graph also builds the probe under both profiles.
 
 Sanitizer runtime compatibility and symbolization require [native
 validation](#completion); compile and analysis checks alone are not acceptance.
@@ -1541,8 +1490,8 @@ verdicts:
 
 The daily sanitizer links cover only the probe, not the libraries linked by
 `//test:utility_test` or other test binaries. To catch sanitizer-specific link
-or runtime failures in those suites, run `./ao check --asan --fresh` or
-`./ao check --tsan --fresh` on a [supported host](#sanitizer-profiles).
+or runtime failures, run the affected test under `--config=asan` or `--config=tsan`
+with `--nocache_test_results` on a [supported host](#sanitizer-profiles).
 The coverage analysis does not produce a coverage report.
 
 ### Focused instrumentation analysis
@@ -1985,21 +1934,20 @@ The [tooling BUILD](../../test/script/BUILD.bazel) owns suite membership;
 `//test/script:format` checks both the documentation inventory and the
 remaining source files.
 
-Use ordinary `check --config release` for the full Release graph. `--asan` and
-`--tsan` add the [instrumented scope](#sanitizer-profiles) after normal completion.
+Use ordinary `check --config release` for the full Release graph. Run
+[instrumented tests](#sanitizer-profiles) separately.
 No completion command takes a diff, targets, forwarded Bazel arguments or test
 filters. Checks lock the selected tree and use `--lockfile_mode=error` to avoid
 rewriting the module lock. They load only the checked-in repository rc and the
 tree's launch rc, excluding system and personal rc files and removing `BAZELRC`
 (including Windows case variants) so local options cannot silently filter tests.
-Standalone `check contracts`, managed sanitizer admission and coverage use the
+Standalone `check contracts` and coverage use the
 same isolation. Ordinary build/test invocations retain their personal rc behavior.
 
 The [root BUILD](../../BUILD.bazel) declares the completion roots other
 tools select. `//:check_tests` groups the portable default aggregate with the
 Linux GTK test, the native backend suite and the lint fixtures;
-`//:check_native_tests` is the backend filegroup the managed sanitizer route
-adds. `//:check_products` groups the CLI/TUI entrypoints, the enabled host
+`//:check_native_tests` is the native backend filegroup. `//:check_products` groups the CLI/TUI entrypoints, the enabled host
 product (GTK, AppKit or WinUI), the GUI probes and the performance benchmarks
 as build inputs. The filegroup does not run them; the test graph separately
 launches applicable native process probes. `//:check_runs` names the two
@@ -2060,8 +2008,7 @@ the UIA probe's smoke entrypoint performs the Windows App Runtime and
 interactive-session admission itself.
 
 On Linux the isolated launcher selects the pinned Nix JDK through
-`AOBUS_BAZEL_SERVER_JAVABASE`. Managed sanitizer and coverage runs keep their
-own per-attempt rc snapshots.
+`AOBUS_BAZEL_SERVER_JAVABASE`. Coverage keeps its own per-attempt rc snapshots.
 
 Each attempt writes `tests.bep.json`, `profile.json.gz` and `test.log` under
 `<tree>/checks/<config>/check-*` or, for `check repository`,
@@ -2113,10 +2060,8 @@ does not change the gate's scope or expose test filters, and lint producers and
 other actions may still be legitimately cached, so the gate makes no
 fresh-producer claim beyond test results.
 
-The managed sanitizer and coverage routes keep the stricter binding: they
-reconcile passing BEP summaries against their exact configured selection,
-record run/cached/executed counts in their receipts, and reject cached results
-under their own fresh proof ([sanitizer and coverage
+Coverage reconciles passing BEP summaries against its exact configured selection,
+records run/cached/executed counts in its receipt, and rejects cached results ([sanitizer and coverage
 instrumentation](#sanitizer-and-coverage-instrumentation)). The CI summary
 reads the standard BEP test summaries of a check attempt instead of a receipt.
 
@@ -2158,9 +2103,7 @@ native policy test catches orphans applicable to its analyzed host. The
 [configured native CI matrix](test/validation-and-review.md#continuous-integration)
 covers the paths that a single host's policy test cannot reconcile. The audit combines the declared sources from the supplied
 configured graphs, including their `select()` results; diagnostics name the
-source or label, not a per-source configuration matrix. Source ownership is not a line-coverage claim. The
-managed sanitizer route uses the test ownership helper's configured-target
-identities to bind its selection to BEP summaries.
+source or label, not a per-source configuration matrix. Source ownership is not a line-coverage claim.
 
 ### Shared audits and the root version
 

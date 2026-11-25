@@ -212,7 +212,6 @@ def verify(
     *,
     isolate_rc: bool = False,
     compiler_include_roots: Sequence[str] = (),
-    remote_cache: str | None = None,
 ) -> int:
     """Analyze the folded native policy facts of the requested configuration.
 
@@ -236,9 +235,7 @@ def verify(
     Debug analysis name, and the instrumented dbg facts satisfy it). The single
     configured DefaultInfo output file is located by one exact cquery of the
     facts target, never by guessing an output-tree layout; the declared output
-    filename stays the Starlark macro's contract. remote_cache forwards the
-    managed caller's trusted cache to the facts build; the standalone CLI has
-    no such option and passes none. config names the requested analysis
+    filename stays the Starlark macro's contract. config names the requested analysis
     (debug/fastbuild/release/profile). Retain each invocation's stdout/stderr
     and actual exits in a unique directory. No stage runs after the first
     failure. This is analysis evidence, not a product build/test.
@@ -320,7 +317,6 @@ def verify(
         "facts": facts,
         "files": files,
         "execution_root": execution_root,
-        "remote_cache": remote_cache,
         "driver": driver,
         "status": "incomplete",
         "exit": None,
@@ -387,7 +383,6 @@ def verify(
             *workspace.invocation(executable, prepared, isolate_rc=isolate_rc),
             "build",
             f"--jobs={jobs}",
-            *([f"--remote_cache={remote_cache}"] if remote_cache else []),
             FACTS_TARGET,
         ]
         status = capture(facts, f"Bazel native policy facts ({config}); receipt: {receipt_path}")

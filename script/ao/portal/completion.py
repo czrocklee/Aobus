@@ -6,7 +6,7 @@ import json
 import shutil
 import sys
 import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -15,7 +15,6 @@ from ao.core.build_lock import build_tree_lock
 from ao.portal import (
     bazel_attempt,
     bazel_ci_summary,
-    bazel_sanitizers,
     bazel_test_ownership,
     bazel_workflows,
     bazel_workspace,
@@ -34,6 +33,8 @@ def validate(request: Request) -> str:
     config, _host = bazel_workflows.validate_request(request)
     if config == "profile":
         raise native.BazelWorkspaceError("sampling is not a validation profile; use ao measure performance")
+    if config not in ("fastbuild", "debug", "release"):
+        raise native.BazelWorkspaceError(f"{config} is not a completion profile; select a native Bazel test instead")
     if request.ci and config != "fastbuild":
         raise native.BazelWorkspaceError("daily CI uses fastbuild; select other profiles explicitly outside CI")
     return config
@@ -335,20 +336,8 @@ def run(request: Request) -> int:
 
 
 def _run(request: Request, config: str, selection: _CheckSelection) -> int:
-    normal_config = (
-        "debug"
-        if request.config == "debug"
-        else "fastbuild"
-        if config in bazel_sanitizers.SANITIZER_CONFIGS
-        else config
-    )
-    tree = bazel_workspace.workspace_path(request.path, normal_config)
+    tree = bazel_workspace.workspace_path(request.path, config)
     with build_tree_lock(tree):
         native.require_supported_source()
         tree.mkdir(parents=True, exist_ok=True)
-        if status := _test_graph(request, tree, normal_config, selection):
-            return status
-        if config in bazel_sanitizers.SANITIZER_CONFIGS:
-            instrumented = replace(request, path=str(tree), config=config, asan=False, tsan=False)
-            return bazel_sanitizers.run(instrumented)
-        return 0
+        return _test_graph(request, tree, config, selection)

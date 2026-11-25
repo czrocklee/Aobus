@@ -116,8 +116,7 @@ Without an explicit selection, each configuration gets its own default tree name
 `AOBUS_BUILD_ROOT` replaces the `/tmp/build` base while retaining that
 component; `--path`/`-p` or `BUILD_DIR` selects one exact tree, and an
 explicitly selected tree is mode-neutral: the profile is selected per
-invocation, not by the tree, so one explicit tree can host Debug, Release and
-managed sanitizer runs.
+invocation, not by the tree, so one explicit tree can host Debug and Release checks.
 A native Bazel invocation can use a prepared tree's generated rc explicitly;
 see [trees and direct Bazel](bazel.md#trees-and-direct-bazel). Running a test
 binary directly from an output tree is a debugging technique, not completion evidence.

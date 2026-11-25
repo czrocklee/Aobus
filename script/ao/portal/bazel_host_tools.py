@@ -12,6 +12,7 @@ from typing import Any
 
 from ao.core import bazel_native as native
 from ao.policy import dependency_policy
+from ao.portal import bazel_compiler_probe
 from ao.portal import bazel_providers as providers
 
 
@@ -517,6 +518,16 @@ def resolve_host_tools(tree: Path, prefix: Path | None, host: str, *, source: ob
         "manifest_tools": {},
         "test_tools": {},
     }
+    if host != "windows":
+        symbolizer = (
+            Path(bazel_compiler_probe.nix_symbolizer())
+            if host == "linux"
+            else Path(os.environ.get("AOBUS_LLVM_ROOT", "")) / "bin/llvm-symbolizer"
+        )
+        if not symbolizer.is_absolute() or not symbolizer.is_file() or not os.access(symbolizer, os.X_OK):
+            raise native.BazelWorkspaceError(f"selected LLVM symbolizer is missing or not executable: {symbolizer}")
+        result["test_tools"]["symbolizer"] = str(symbolizer)
+        files.update({symbolizer, symbolizer.resolve()})
     if host == "windows":
         system = Path(os.environ.get("SYSTEMROOT", ""))
         powershell = native.probe(system / "System32/WindowsPowerShell/v1.0/powershell.exe")

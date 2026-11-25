@@ -92,10 +92,13 @@ build:asan --compilation_mode=dbg
 build:asan --//bazel:asan_enabled=true
 build:asan --platforms=//bazel:asan_platform
 build:asan --aspects=//bazel:sanitizers.bzl%sanitizer_admission
+test:asan --test_env=ASAN_OPTIONS=halt_on_error=1:exitcode=1
+test:asan --test_env=UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:exitcode=1
 build:tsan --compilation_mode=dbg
 build:tsan --//bazel:tsan_enabled=true
 build:tsan --platforms=//bazel:tsan_platform
 build:tsan --aspects=//bazel:sanitizers.bzl%sanitizer_admission
+test:tsan --test_env=TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:exitcode=66
 
 # REPO.bazel selects owned-target warning promotion. Unix keeps its existing
 # compiler-owned policy rather than enabling the upstream MSVC warning feature.

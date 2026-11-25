@@ -87,15 +87,18 @@ bazel build //app/cli:aobus //app/tui:aobus-tui
 bazel build --config=release //app/tui:aobus-tui
 bazel run //app/cli:aobus -- --help
 bazel run //app/tui:aobus-tui
+
 bazel test //:tests
-ao.bat check
-ao.bat check --config release
-ao.bat check --asan
+bazel test --config=asan //test:utility_test
+
 ao.bat setup llvm-sdk
 ao.bat setup prettier
 ao.bat check format
 ao.bat check lint
 ao.bat check deps
+
+ao.bat check
+ao.bat check --config release
 ```
 
 Use
@@ -224,9 +227,7 @@ For managed project commands, without an explicit selection each configuration
 gets its own default tree
 named `bazel-<config>` under that checkout-isolated build root. An explicitly
 selected tree (`-p`/`BUILD_DIR`) is mode-neutral: the `debug`/`release`/`asan`
-profile is selected per invocation, not by the tree, and the composite
-sanitizer check uses one selected tree for its normal fastbuild completion and the
-managed sanitizer profile.
+profile is selected per invocation, not by the tree.
 
 Overrides apply in this order:
 
@@ -812,14 +813,13 @@ formatting. The portal uses its managed environment for scoped Python checks;
 Bazel tests use the governed base interpreter and the
 [separate repository tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
 
-`ao.bat check --asan` runs the full normal fastbuild completion first, then a
-separate managed MSVC AddressSanitizer profile in the same selected
-tree.
+Run the affected native tests with `bazel test --config=asan` from the selected
+VS/SDK environment. Use `//:asan_tests` for the broader instrumented suite.
+Neither route runs normal completion or lint.
 Third-party vcpkg libraries are not instrumented, so cross-boundary STL
 container annotations are disabled. MSVC provides neither UBSan nor TSan, and
 resumable coroutine instrumentation is incomplete; Linux ASan/UBSan and TSan
-remain complementary. Windows `--tsan` and application `--compiler clang` selections
-fail before tree or SDK work.
+remain complementary. Bazel rejects `--config=tsan` on Windows. The portal also rejects an application `--compiler clang` selection before SDK work.
 
 Source inspection and portal tests do not certify native builds, GUI behavior,
 audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe

@@ -21,18 +21,23 @@ REPOSITORY_SUITE = "//test/script:ci_repository_checks"
 
 
 class CheckCommandTest(unittest.TestCase):
-    def test_cli_preserves_sanitizer_and_fresh_requests_without_allowing_a_partial_check(self):
+    def test_cli_preserves_fresh_requests_without_allowing_a_partial_check(self):
         parser = make_parser()
-        args = parser.parse_args(["check", "--asan", "--fresh", "--jobs", "3", "-p", "selected"])
+        args = parser.parse_args(["check", "--fresh", "--jobs", "3", "-p", "selected"])
         with (
             mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE),
             mock.patch.object(completion, "run", return_value=7) as run,
         ):
             self.assertEqual(check_command.run_command(args), 7)
         request = run.call_args.args[0]
-        self.assertEqual((request.asan, request.fresh, request.jobs, request.path), (True, True, 3, "selected"))
-        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-            parser.parse_args(["check", "//test:unit"])
+        self.assertEqual((request.fresh, request.jobs, request.path), (True, 3, "selected"))
+        for arguments in (["//test:unit"], ["--asan"], ["--tsan"], ["--config", "asan"], ["--config", "tsan"]):
+            with (
+                self.subTest(arguments=arguments),
+                self.assertRaises(SystemExit),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                parser.parse_args(["check", *arguments])
 
     def test_repository_rejects_full_check_flags_on_either_side_of_the_subject(self):
         for flags in (["--fresh", "repository"], ["repository", "--ci"]):
@@ -58,22 +63,6 @@ class CheckCommandTest(unittest.TestCase):
             for request in (completion.Request(config="profile"), completion.Request(ci=True, config="debug")):
                 with self.subTest(request=request), self.assertRaises(bazel_native.BazelWorkspaceError):
                     completion.validate(request)
-
-    def test_sanitizer_runs_in_the_selected_tree_only_after_normal_completion_passes(self):
-        with (
-            tempfile.TemporaryDirectory() as temp,
-            mock.patch.object(build_dir, "platform_profile", return_value=build_dir.LINUX_PROFILE),
-            mock.patch.object(bazel_workspace, "workspace_path", return_value=Path(temp)),
-            mock.patch.object(completion, "_test_graph", side_effect=[3, 0]) as normal,
-            mock.patch.object(completion.bazel_sanitizers, "run", return_value=9) as sanitizer,
-        ):
-            self.assertEqual(completion.run(completion.Request(asan=True)), 3)
-            self.assertEqual(normal.call_args.args[2], "fastbuild")
-            sanitizer.assert_not_called()
-            self.assertEqual(completion.run(completion.Request(config="debug", asan=True, fresh=True)), 9)
-            self.assertEqual(normal.call_args.args[1:3], (Path(temp), "debug"))
-            instrumented = sanitizer.call_args.args[0]
-            self.assertEqual((instrumented.path, instrumented.config, instrumented.fresh), (temp, "asan", True))
 
     def test_personal_rc_and_ambient_repo_selectors_cannot_filter_managed_checks(self):
         with (

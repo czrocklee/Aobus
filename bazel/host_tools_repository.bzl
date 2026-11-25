@@ -92,6 +92,7 @@ def materialize_host_tools(ctx, data):
         "python_inputs": python_inputs,
         "resource_executable": resource_executable,
         "resource_inputs": resource_inputs,
+        "symbolizer_inputs": _fixture_inputs(ctx, test_tools, ["symbolizer"], links) if "symbolizer" in test_tools else [],
         "dbus_inputs": dbus_inputs,
         "pipewire_inputs": pipewire_inputs,
         "xvfb_inputs": xvfb_inputs,
