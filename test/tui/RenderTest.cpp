@@ -299,7 +299,7 @@ namespace ao::tui::test
       CHECK(rendered.contains("quick filter"));
       CHECK(rendered.contains("choose list"));
       CHECK(rendered.contains("playback"));
-      CHECK(rendered.contains(kCellEllipsis) == (panelColumns == 40));
+      CHECK(rendered.contains("show selected track detail") == (panelColumns == 60));
       CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "choose list"));
       CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "playback"));
     }
@@ -1022,7 +1022,7 @@ namespace ao::tui::test
                                                       defaultKeymapPlan()),
                                             columns,
                                             1);
-        CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiSettingsTitle)));
+        CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::SettingsTitle)));
         CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellStatusHelp)));
         REQUIRE(hasHitArea(box));
         CHECK(box.x_min >= 0);

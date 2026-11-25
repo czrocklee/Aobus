@@ -23,6 +23,7 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackMode.h>
@@ -345,19 +346,23 @@ namespace ao::uimodel::test
   {
     auto fixture = ApplicationPlaybackFixture{};
 
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const connectingText = i18n::requiredText(catalog, i18n::MessageId::PlaybackConnectingAudioEngine);
+    auto const notPlayingText = i18n::requiredText(catalog, i18n::MessageId::PlaybackNotPlaying);
+
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{
-      fixture.playback, ao::test::englishMessageCatalog(), [&log](auto const& view) { log.render(view); }};
+    auto const viewModel =
+      NowPlayingViewModel{fixture.playback, catalog, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
-    CHECK(log.last().streamInfo == "Connecting to audio engine...");
+    CHECK(log.last().streamInfo == connectingText);
 
     log.clear();
     fixture.addReadyProvider();
 
     REQUIRE(fixture.playback.snapshot().transport.ready);
     REQUIRE_FALSE(log.empty());
-    CHECK(log.last().title == "Not Playing");
+    CHECK(log.last().title == notPlayingText);
     CHECK(log.last().streamInfo.empty());
 
     auto const readyState = fixture.playback.snapshot().transport;
@@ -375,8 +380,8 @@ namespace ao::uimodel::test
     CHECK(pendingState.output.optPendingOutputSelection->deviceId == audio::DeviceId{"pending-readiness-device"});
     CHECK(pendingState.quality == readyState.quality);
     REQUIRE_FALSE(log.empty());
-    CHECK(log.last().title == "Not Playing");
-    CHECK(log.last().streamInfo == "Connecting to audio engine...");
+    CHECK(log.last().title == notPlayingText);
+    CHECK(log.last().streamInfo == connectingText);
 
     log.clear();
     fixture.commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);

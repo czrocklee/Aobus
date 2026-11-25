@@ -20,7 +20,6 @@ de:table {
     track_credits_replace { "Ersetzen…" }
     track_credits_clear { "Diesen Bereich leeren" }
     track_credits_commit { "Mitwirkende speichern" }
-    track_credits_cancel { "Abbrechen" }
     track_credit_delete { "Mitwirkung löschen" }
     track_credit_blank_name { "Zeile {row}: Geben Sie einen Namen ein." }
     track_credit_invalid_name_text { "Zeile {row}: Der Name enthält ungültigen Text." }
@@ -45,7 +44,6 @@ de:table {
     track_number_invalid { "Geben Sie eine ganze Zahl von 0 bis 65535 ein." }
     tui_go_to_back { "Zurück" }
     tui_go_to_forward { "Vorwärts" }
-    tui_go_to_cancel { "Abbrechen" }
     tui_navigation_pin { "Angeheftete Listen ein-/ausblenden" }
     tui_go_to_title { "Gehe zu" }
     tui_go_to_status { "Gehe zu" }
@@ -73,11 +71,11 @@ de:table {
     tui_settings_load_failed { "Gespeicherte Einstellungen konnten nicht geladen werden; Standardwerte werden verwendet. {detail}" }
     tui_config_newer_settings { "Die Einstellungen wurden von einer neueren Version von Aobus gespeichert. Diese Version verwendet die Standardeinstellungen und speichert keine Änderungen daran." }
     tui_config_newer_output { "Das bevorzugte Ausgabegerät wurde von einer neueren Version von Aobus gespeichert. Diese Version ignoriert es und speichert keine neue Auswahl." }
-    tui_settings_title { "Einstellungen" }
-    tui_settings_general { "Allgemein" }
-    tui_settings_appearance { "Darstellung" }
+    settings_title { "Einstellungen" }
+    settings_page_general { "Allgemein" }
+    settings_page_appearance { "Darstellung" }
     tui_settings_interaction { "Bedienung" }
-    tui_settings_keyboard { "Tastatur" }
+    settings_page_keyboard { "Tastatur" }
     tui_settings_language { "Sprache" }
     tui_settings_system { "Systemsprache" }
     tui_settings_global { "Globale TUI-Einstellungen" }
@@ -100,15 +98,10 @@ de:table {
     tui_settings_invalid_chord { "Gültige Tastenkombination eingeben, zum Beispiel {example}." }
     tui_settings_action_change { "Ändern" }
     tui_settings_action_choose { "Auswählen" }
-    tui_settings_action_apply { "Anwenden" }
-    tui_settings_action_save { "Speichern" }
-    tui_settings_action_cancel { "Abbrechen" }
+    common_apply { "Anwenden" }
     tui_settings_action_pages { "Seiten" }
-    tui_settings_action_close { "Schließen" }
     tui_settings_action_edit { "Bearbeiten" }
-    tui_settings_action_add { "Hinzufügen" }
-    tui_settings_action_remove { "Entfernen" }
-    tui_settings_action_reset { "Zurücksetzen" }
+    common_reset { "Zurücksetzen" }
     tui_settings_action_search { "Suchen" }
     tui_settings_action_clear { "Leeren" }
     tui_settings_action_retry { "Speichern wiederholen" }
@@ -206,7 +199,7 @@ de:table {
     track_presentation_description_tagging { "Liste mit unformatierter Disc-/Titelnummer, Genre, Jahr und Tags zur Katalogpflege." }
     track_presentation_technical { "Technisch" }
     track_presentation_description_technical { "Liste mit Codec, Bitrate, Größe und Pfad zur Dateiprüfung." }
-    create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen..." }
+    create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen…" }
     track_presentation_picker_label { "Ansicht" }
     track_presentation_all_tracks_manual_order_unavailable { "Für „Alle Titel“ ist keine Reihenfolge gespeichert. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
     audio_backend_pipewire_description { "Moderner Linux-Audioserver mit niedriger Latenz" }
@@ -326,7 +319,7 @@ de:table {
     track_channel_count { "{count, plural, one {# Kanal} other {# Kanäle}}" }
     track_technical_unknown { "Unbekannt" }
     playback_not_playing { "Keine Wiedergabe" }
-    playback_connecting_audio_engine { "Verbindung zur Audio-Engine wird hergestellt..." }
+    playback_connecting_audio_engine { "Verbindung zur Audio-Engine wird hergestellt…" }
     playback_unknown_artist { "Unbekannter Interpret" }
     playback_audio_pipeline { "Audiokette" }
     audio_node_source { "[Quelle]" }
@@ -379,56 +372,54 @@ de:table {
     playback_action_toggle_shuffle { "Zufallswiedergabe ein-/ausschalten" }
     playback_action_cycle_repeat { "Wiederholungsmodus wechseln" }
     playback_volume_tooltip { "Lautstärke: {percent}%{state, select, muted { (Stumm)} hardware { (Hardware)} other {}}" }
-    gtk_shell_menu_file { "Datei" }
-    gtk_shell_open_library { "Bibliothek öffnen..." }
-    gtk_shell_scan_library { "Bibliothek scannen" }
-    gtk_shell_import_library_data { "Bibliotheksdaten importieren..." }
-    gtk_shell_export_library_data { "Bibliotheksdaten exportieren..." }
+    shell_menu_file { "Datei" }
+    shell_scan_library { "Bibliothek scannen" }
+    shell_import_library_data { "Bibliotheksdaten importieren…" }
+    shell_export_library_data { "Bibliotheksdaten exportieren…" }
     gtk_shell_quit { "Beenden" }
-    gtk_shell_menu_edit { "Bearbeiten" }
-    gtk_shell_preferences { "Einstellungen..." }
-    gtk_shell_menu_view { "Ansicht" }
-    gtk_shell_edit_layout { "Layout bearbeiten..." }
+    shell_menu_edit { "Bearbeiten" }
+    gtk_shell_preferences { "Einstellungen…" }
+    shell_menu_view { "Ansicht" }
+    gtk_shell_edit_layout { "Layout bearbeiten…" }
     gtk_shell_save_panel_sizes_as_layout_defaults { "Aktuelle Bereichsgrößen als Layout-Standard speichern" }
     gtk_shell_reset_runtime_layout_state { "Laufzeit-Layoutzustand zurücksetzen" }
-    gtk_shell_menu_help { "Hilfe" }
+    shell_menu_help { "Hilfe" }
     gtk_shell_about { "Über" }
     gtk_shell_application_menu { "Anwendungsmenü" }
     gtk_playback_reveal_playing_track { "Aktuell wiedergegebenen Titel anzeigen" }
     gtk_playback_toggle_mute { "Stumm ein-/ausschalten" }
     gtk_playback_show_current_album { "Aktuelles Album anzeigen" }
     gtk_playback_now_playing_cover_art { "Cover der aktuellen Wiedergabe" }
-    gtk_playback_position { "Wiedergabeposition" }
-    gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags durchsuchen..." }
+    playback_position { "Wiedergabeposition" }
+    gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags filtern…" }
     gtk_library_clear_filter { "Filter löschen" }
-    gtk_library_create_list_from_filter { "Liste aus aktuellem Filter erstellen" }
-    list_new { "Neue Liste..." }
-    gtk_list_new_playlist { "Neue Wiedergabeliste..." }
-    list_edit { "Liste bearbeiten..." }
+    list_create_from_filter { "Liste aus aktuellem Filter erstellen" }
+    list_new { "Neue Liste…" }
+    gtk_list_new_playlist { "Neue Wiedergabeliste…" }
+    list_edit { "Liste bearbeiten…" }
     list_delete { "Liste löschen" }
-    list_delete_subtree { "Liste und Unterlisten löschen..." }
-    gtk_smart_list_new_title { "Neue Liste" }
-    gtk_smart_list_edit_title { "Liste bearbeiten" }
+    list_delete_subtree { "Liste und Unterlisten löschen…" }
+    list_editor_new_title { "Neue Liste" }
+    list_editor_edit_title { "Liste bearbeiten" }
     gtk_smart_list_new_playlist_title { "Neue Wiedergabeliste" }
-    gtk_common_cancel { "Abbrechen" }
-    gtk_common_create { "Erstellen" }
-    gtk_common_save { "Speichern" }
-    gtk_common_close { "Schließen" }
-    gtk_smart_list_name_placeholder { "Listenname" }
-    gtk_smart_list_name { "Name" }
-    gtk_smart_list_description_placeholder { "Optionale Beschreibung" }
-    gtk_smart_list_description { "Beschreibung" }
+    common_cancel { "Abbrechen" }
+    common_create { "Erstellen" }
+    common_save { "Speichern" }
+    common_close { "Schließen" }
+    list_field_name_placeholder { "Listenname" }
+    list_field_name { "Name" }
+    list_field_description_placeholder { "Optionale Beschreibung" }
+    list_field_description { "Beschreibung" }
     gtk_smart_list_membership_tag_placeholder { "Sichtbares Tag für die Mitgliedschaft" }
     gtk_smart_list_membership_tag { "Mitgliedschafts-Tag" }
-    gtk_smart_list_inherited_filter { "Geerbter Filter" }
-    gtk_smart_list_filter_expression_placeholder { "Filterausdruck ($, @, # oder % eingeben)" }
-    gtk_smart_list_local_filter { "Lokaler Filter" }
-    gtk_smart_list_effective_filter { "Wirksamer Filter" }
-    gtk_smart_list_membership { "Mitgliedschaft" }
-    gtk_smart_list_auto_presentation { "Automatisch" }
-    gtk_smart_list_unavailable_presentation { "Nicht verfügbar: {id} (Automatisch)" }
-    gtk_smart_list_presentation { "Ansicht" }
-    gtk_smart_list_preview { "Vorschau" }
+    list_field_inherited_filter { "Geerbter Filter" }
+    list_field_filter_placeholder { "Filterausdruck ($, @, # oder % eingeben)" }
+    list_field_local_filter { "Lokaler Filter" }
+    list_field_effective_filter { "Wirksamer Filter" }
+    list_field_membership { "Mitgliedschaft" }
+    track_presentation_auto { "Automatisch" }
+    track_presentation_unavailable { "Nicht verfügbar: {id} (Automatisch)" }
+    list_field_preview { "Vorschau" }
     gtk_smart_list_track { "Titel" }
     gtk_smart_list_invalid_source { "(ungültige Quelle)" }
     gtk_smart_list_choose_membership_tag { "Sichtbares Tag für die Wiedergabelisten-Mitgliedschaft wählen" }
@@ -458,7 +449,7 @@ de:table {
     list_delete_action { "Löschen" }
     list_delete_all_action { "Alle löschen" }
     gtk_list_unable_to_delete_title { "Liste kann nicht gelöscht werden" }
-    list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
+    list_delete_question { "„{name}“ löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
     list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
     list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
     list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
@@ -466,8 +457,8 @@ de:table {
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Andere Listen haben eine berechnete Mitgliedschaft; bearbeiten Sie stattdessen deren Ausdruck oder die Titel-Tags." }
     list_no_membership_add_targets { "Keine Wiedergabeliste als Ziel verfügbar" }
-    gtk_list_create_playlist { "Wiedergabeliste erstellen..." }
-    gtk_list_manage_lists { "Listen verwalten..." }
+    gtk_list_create_playlist { "Wiedergabeliste erstellen…" }
+    gtk_list_manage_lists { "Listen verwalten…" }
     list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
     list_remove_from_current { "Aus {name} ({tag}) entfernen" }
@@ -485,17 +476,13 @@ de:table {
     gtk_list_move_to_top_action { "An den Anfang der manuellen Reihenfolge verschieben" }
     gtk_list_move_to_bottom_action { "An das Ende der manuellen Reihenfolge verschieben" }
     gtk_list_reset_order_action { "Manuelle Reihenfolge zurücksetzen" }
-    gtk_preferences_title { "Einstellungen" }
-    gtk_preferences_page_general { "Allgemein" }
-    gtk_preferences_page_appearance { "Erscheinungsbild" }
     gtk_preferences_page_playback_output { "Wiedergabe/Ausgabe" }
     gtk_preferences_page_layout { "Layout" }
-    gtk_preferences_page_keyboard { "Tastatur" }
     gtk_preferences_theme { "Design" }
     gtk_preferences_theme_classic { "Klassisch" }
     gtk_preferences_theme_modern { "Modern" }
-    gtk_preferences_output_device { "Ausgabegerät" }
-    gtk_preferences_choose_output_device { "Ausgabegerät auswählen..." }
+    playback_output_device { "Ausgabegerät" }
+    gtk_preferences_choose_output_device { "Ausgabegerät auswählen…" }
     gtk_preferences_output_unavailable { "Nicht verfügbar" }
     gtk_preferences_default_layout_preset { "Standardvorgabe" }
     gtk_preferences_layout_preset_classic { "Klassisch" }
@@ -514,7 +501,6 @@ de:table {
     gtk_shortcut_remove { "{chord} entfernen" }
     gtk_shortcut_add { "Hinzufügen…" }
     gtk_shortcut_add_tooltip { "Ein neues Tastaturkürzel für diese Aktion aufnehmen" }
-    gtk_shortcut_reset { "Zurücksetzen" }
     gtk_shortcut_reset_tooltip { "Diese Aktion auf ihren Standard zurücksetzen" }
     gtk_shortcut_capture_title { "Tastaturkürzel festlegen" }
     gtk_shortcut_capture_prompt { "Drücken Sie die neue Tastenkombination." }
@@ -528,10 +514,9 @@ de:table {
     gtk_action_category_shell { "Oberfläche" }
     gtk_action_category_workspace { "Arbeitsbereich" }
     gtk_action_category_tracks { "Titel" }
-    gtk_action_output_devices { "Ausgabegeräte" }
+    playback_output_devices { "Ausgabegeräte" }
     gtk_action_system_menu { "Systemmenü" }
     gtk_action_reveal_track { "Titel anzeigen" }
-    gtk_action_track_properties { "Eigenschaften" }
     gtk_action_edit_tags { "Tags bearbeiten" }
     gtk_custom_view_title { "Benutzerdefinierte Ansicht bearbeiten" }
     gtk_custom_view_label_placeholder { "Ansichtsbezeichnung" }
@@ -543,7 +528,7 @@ de:table {
     gtk_custom_view_visible_columns { "Sichtbare Spalten" }
     gtk_custom_view_sort_ascending { "Aufsteigend sortieren" }
     gtk_custom_view_sort_descending { "Absteigend sortieren" }
-    gtk_common_remove { "Entfernen" }
+    common_remove { "Entfernen" }
     gtk_presentation_view_inactive { "Die ausgewählte Titelansicht ist nicht mehr aktiv." }
     gtk_presentation_unable_to_change { "Titelansicht kann nicht geändert werden" }
     gtk_presentation_copy_label { "Kopie von {label}" }
@@ -559,15 +544,10 @@ de:table {
     tui_navigation_sync_failed { "Aktive Liste konnte nicht angezeigt werden: {detail}" }
     tui_list_search_hint { "/ suchen · Esc löschen" }
     tui_list_search_empty { "Keine Treffer" }
-    tui_list_editor_new_title { "Neue Liste" }
-    tui_list_editor_edit_title { "Liste bearbeiten" }
-    tui_list_field_name { "Name" }
-    tui_list_field_description { "Beschreibung" }
-    tui_list_field_expression { "Filterausdruck" }
+    list_field_expression { "Filterausdruck" }
     tui_list_inherited_expression { "Geerbt" }
     tui_list_effective_expression { "Wirksam" }
-    tui_list_save_action { "Speichern" }
-    tui_list_status_saving { "Wird gespeichert…" }
+    common_saving { "Wird gespeichert…" }
     tui_list_status_deleting { "Wird gelöscht…" }
     tui_list_delete_more { "+{count, plural, one {# weitere Liste} other {# weitere Listen}}" }
     tui_list_delete_cancelled { "Die Löschung wurde abgebrochen; es wurde nichts entfernt" }
@@ -631,7 +611,6 @@ de:table {
     tui_shell_detail_select_visual { "eine visuelle Auswahl ab dem fokussierten Titel starten oder bestätigen" }
     tui_shell_detail_select_all { "alle Titel dieser Ansicht markieren" }
     tui_shell_detail_select_clear { "Markierungen löschen" }
-    tui_shell_output_devices_title { "Ausgabegeräte" }
     tui_playback_no_active_track { "Kein aktiver Titel" }
     tui_playback_volume { "Lautst. {percent}%" }
     tui_playback_no_output_device_selected { "Kein Ausgabegerät ausgewählt" }
@@ -679,7 +658,7 @@ de:table {
     tui_library_no_tracks_found { "Diese Liste enthält keine Titel. Wählen Sie eine andere Liste." }
     tui_library_marked_count { "{count, plural, one {# markiert} other {# markiert}}" }
     tui_library_visual_mode { "VISUELL" }
-    tui_library_ready { "Bereit" }
+    common_ready { "Bereit" }
     tui_library_scan_already_running { "Ein Bibliotheksscan läuft bereits" }
     tui_library_scan_cancelling { "Scanabbruch läuft bereits" }
     tui_library_section { "Abschnitt: {name}" }
@@ -696,8 +675,6 @@ de:table {
     tui_editor_title { "Titeleigenschaften" }
     tui_editor_title_multiple { "{count, plural, one {# Titel} other {# Titel}} bearbeiten" }
     tui_editor_applies_to_all { "Änderungen gelten für alle {count, plural, one {# Titel} other {# Titel}}" }
-    tui_editor_tab_metadata { "Metadaten" }
-    tui_editor_tab_tags { "Tags" }
     tui_editor_tab_properties { "Eigenschaften" }
     tui_editor_tab_tracks { "Titel" }
     tui_editor_clear_for_all { "Für {count, plural, one {# Titel} other {alle # Titel}} leeren" }
@@ -735,37 +712,21 @@ de:table {
     tui_editor_no_change { "Keine Änderungen erforderlich" }
     tui_editor_busy { "Die Bibliothek ist beschäftigt; erneut versuchen" }
     tui_editor_exit_waiting { "Speichern wird abgeschlossen … Ctrl-C beendet das Warten" }
-    winui_shell_menu_file { "Datei" }
-    winui_shell_open_library { "Bibliothek öffnen..." }
-    winui_shell_rescan { "Neu scannen" }
-    winui_shell_rescan_library { "Bibliothek neu scannen" }
-    winui_shell_import_library_data { "Bibliotheksdaten importieren..." }
-    winui_shell_export_library_data { "Bibliotheksdaten exportieren..." }
+    library_scan_action { "Scannen" }
     winui_library_select_import_mode { "Importmodus auswählen" }
     winui_library_choose_import_mode { "Diese Sicherung zusammenführen oder ihren Bereich wiederherstellen:" }
     winui_library_import_mode_merge { "Zusammenführen (Datensätze außerhalb der Sicherung behalten)" }
     winui_library_import_mode_restore { "Wiederherstellen (Sicherungsbereich nach Vorschau ersetzen)" }
-    winui_shell_menu_view { "Ansicht" }
     winui_shell_modern_mode { "Moderner Modus" }
-    winui_shell_columns { "Spalten..." }
+    winui_shell_columns { "Spalten…" }
     winui_shell_reload_theme { "Design neu laden" }
-    winui_shell_menu_playback { "Wiedergabe" }
-    winui_shell_play_pause { "Wiedergabe/Pause" }
-    winui_shell_stop { "Stopp" }
+    shell_menu_playback { "Wiedergabe" }
     winui_shell_reveal_current_track { "Aktuellen Titel anzeigen" }
-    winui_track_properties_command { "Eigenschaften..." }
-    winui_track_properties_title { "Eigenschaften" }
-    winui_track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
-    winui_track_properties_save { "Speichern" }
-    winui_track_properties_cancel { "Abbrechen" }
-    winui_track_properties_tags { "Tags" }
+    winui_track_properties_command { "Eigenschaften…" }
     winui_track_properties_tags_hint { "Tags, die alle ausgewählten Titel gemeinsam haben" }
-    winui_track_properties_custom_metadata { "Benutzerdefinierte Metadaten" }
     winui_track_properties_custom_key { "Neuer Schlüssel" }
     winui_track_properties_custom_value { "Neuer Wert" }
     winui_track_properties_delete { "Löschen" }
-    winui_track_properties_add { "Hinzufügen" }
-    winui_track_properties_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
     winui_track_properties_save_failed { "Speichern fehlgeschlagen: {detail}" }
     winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Wählen Sie „Neu laden“, um die aktuellen Werte anzuzeigen." }
     track_properties_unstaged_input_hint { "Fügen Sie das Tag oder das benutzerdefinierte Feld hinzu oder löschen Sie die unvollständige Eingabe vor dem Speichern." }
@@ -773,40 +734,18 @@ de:table {
     winui_track_properties_invalid_value { "Ungültiger Wert: {detail}" }
     winui_track_properties_reload { "Neu laden" }
     winui_track_properties_discard_question { "Diese Änderungen verwerfen?" }
-    winui_track_properties_discard { "Änderungen verwerfen" }
-    winui_track_properties_keep_editing { "Weiter bearbeiten" }
-    winui_list_create_from_filter { "Liste aus aktuellem Filter erstellen" }
-    winui_list_editor_new_title { "Neue Liste" }
-    winui_list_editor_edit_title { "Liste bearbeiten" }
-    winui_common_cancel { "Abbrechen" }
-    winui_common_create { "Erstellen" }
-    winui_common_save { "Speichern" }
-    winui_list_name_placeholder { "Listenname" }
-    winui_list_name { "Name" }
-    winui_list_description_placeholder { "Optionale Beschreibung" }
-    winui_list_description { "Beschreibung" }
-    winui_list_inherited_filter { "Geerbter Filter" }
-    winui_list_filter_placeholder { "Filterausdruck ($, @, # oder % eingeben)" }
-    winui_list_local_filter { "Lokaler Filter" }
-    winui_list_effective_filter { "Wirksamer Filter" }
-    winui_list_membership { "Mitgliedschaft" }
-    winui_list_auto_presentation { "Automatisch" }
-    winui_list_presentation { "Ansicht" }
-    winui_list_preview { "Vorschau" }
-    winui_shell_track_details { "Titeldetails" }
+    common_discard_changes { "Änderungen verwerfen" }
+    common_keep_editing { "Weiter bearbeiten" }
+    track_details_title { "Titeldetails" }
     winui_shell_track_details_resize { "Breite der Titeldetails anpassen" }
     winui_shell_classic_mode { "Klassischer Modus" }
-    winui_playback_output_device { "Ausgabegerät" }
-    winui_playback_volume { "Lautstärke" }
-    winui_playback_position { "Wiedergabeposition" }
+    playback_volume { "Lautstärke" }
     winui_playback_no_output_devices { "Keine Ausgabegeräte" }
     winui_library_open_label { "Öffnen" }
-    winui_library_rescan_label { "Neu scannen" }
     winui_library_navigation_pane_title { "Bibliothek" }
     winui_library_navigation_pane_resize { "Breite des Navigationsbereichs anpassen" }
-    winui_library_quick_filter_placeholder { "Titel filtern" }
-    winui_library_ready { "Bereit" }
-    winui_library_rescanning { "Bibliothek wird neu gescannt..." }
+    library_filter_placeholder { "Titel filtern" }
+    winui_library_rescanning { "Bibliothek wird gescannt…" }
     winui_track_move_column_left { "Nach links verschieben" }
     winui_track_move_column_right { "Nach rechts verschieben" }
     winui_track_resize_column { "Breite der Spalte {column} anpassen" }
@@ -826,7 +765,6 @@ de:table {
     winui_shell_layout_failed { "Das Shell-Layout konnte nicht erstellt werden: {detail}" }
     winui_activity_details { "Aktivitätsdetails anzeigen" }
     winui_activity_notifications { "Benachrichtigungen" }
-    winui_activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
     winui_library_ready_at { "Bibliothek bereit: {root}" }
     winui_list_status { "Liste: {list}" }
     winui_presentation_failed { "Ansicht fehlgeschlagen: {detail}" }
@@ -839,7 +777,7 @@ de:table {
     winui_unavailable_track { "Nicht verfügbarer Titel" }
     winui_theme_file_not_found { "Designdatei nicht gefunden: {path}" }
     winui_startup_failure { "Aobus konnte nicht gestartet werden:\n\n{detail}" }
-    winui_column_sort_presentation { "Spaltensortierung" }
+    track_presentation_column_sort { "Spaltensortierung" }
     track_multiple_values { "<Mehrere Werte>" }
     track_metadata_heading { "Metadaten" }
     track_audio_properties_heading { "Audioeigenschaften" }
@@ -870,29 +808,26 @@ de:table {
     track_edit_stale { "Die Bibliothek wurde während dieser Bearbeitung geändert. Laden Sie den Wert neu und versuchen Sie es erneut." }
     track_editing_unavailable { "Die Bearbeitung der Bibliothek ist derzeit nicht verfügbar." }
     track_clear_field_for_tracks { "„{field}“ für {count, plural, one {# Titel} other {# Titel}} leeren" }
-    gtk_track_properties_title { "Eigenschaften" }
-    gtk_track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
-    gtk_track_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
+    track_properties_title { "Eigenschaften" }
+    track_properties_selected_title { "Eigenschaften — {count, plural, one {# Titel ausgewählt} other {# Titel ausgewählt}}" }
+    track_properties_editing_unavailable { "Bearbeitung nicht verfügbar: {detail}" }
     gtk_track_save_failed { "Speichern fehlgeschlagen" }
     gtk_track_save_stale_title { "Speichern konnte nicht angewendet werden" }
     gtk_track_save_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Laden Sie die Eigenschaften neu und versuchen Sie es erneut." }
     gtk_track_credits_discard_title { "Änderungen an den Mitwirkenden verwerfen?" }
     gtk_track_credits_discard_message { "Wenn Sie die Eigenschaften jetzt schließen, gehen nicht gespeicherte Änderungen an den Mitwirkenden verloren." }
-    gtk_track_credits_discard { "Änderungen verwerfen" }
-    gtk_track_credits_keep_editing { "Weiter bearbeiten" }
     gtk_tag_add { "Hinzufügen…" }
     gtk_tag_add_placeholder { "Tag hinzufügen…" }
     gtk_tag_remove { "Tag {tag} entfernen" }
-    gtk_custom_metadata_title { "Benutzerdefinierte Metadaten" }
+    track_custom_metadata_title { "Benutzerdefinierte Metadaten" }
     gtk_custom_metadata_key { "Schlüssel" }
     gtk_custom_metadata_value { "Wert" }
     gtk_custom_metadata_deleted { "Benutzerdefinierte Metadaten ''{key}'' entfernt" }
     gtk_custom_metadata_delete { "Benutzerdefinierte Metadaten löschen" }
     gtk_activity_hide_status { "Status ausblenden" }
-    gtk_activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
+    activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
     gtk_manual_order_drag { "Ziehen, um Titel in der manuellen Reihenfolge neu anzuordnen" }
     gtk_manual_order_rearrange { "Titel neu anordnen" }
-    gtk_status_ready { "Aobus ist bereit" }
     gtk_edit_value { "Wert bearbeiten" }
     gtk_collapse_panel { "Bereich einklappen" }
     gtk_expand_panel { "Bereich ausklappen" }
@@ -907,7 +842,6 @@ de:table {
     gtk_startup_activate_library_failed { "Aobus konnte die Bibliothek nicht aktivieren: {detail}" }
     gtk_startup_launch_library_failed { "Aobus konnte die ausgewählte Bibliothek nicht starten: {detail}" }
     gtk_layout_editor_title { "Layout-Editor" }
-    gtk_layout_apply { "Anwenden" }
     gtk_layout_unable_to_save { "Layout kann nicht gespeichert werden" }
     gtk_config_newer_layout { "Ein benutzerdefiniertes Layout wurde von einer neueren Version von Aobus gespeichert. Diese Version zeigt stattdessen das integrierte Layout an und speichert keine Änderungen am benutzerdefinierten Layout." }
     gtk_layout_tree_node { "Knoten" }
@@ -927,7 +861,7 @@ de:table {
     gtk_layout_invalid_component_ids { "Ungültige Layout-Komponenten-IDs" }
     gtk_layout_validation_component { "Validierung der Vorgabe ''{preset}'', Komponente ''{component}'', Typ ''{type}'' fehlgeschlagen:\n\n{detail}" }
     gtk_common_ok { "OK" }
-    gtk_common_add { "Hinzufügen" }
+    common_add { "Hinzufügen" }
     gtk_common_undo { "Rückgängig" }
     gtk_common_no { "Nein" }
     gtk_common_yes { "Ja" }
@@ -1081,7 +1015,6 @@ de:table {
     gtk_layout_value_compact { "Kompakt" }
     gtk_layout_value_tooltip { "Kurzinfo" }
     gtk_layout_value_reveal { "Aktuellen Titel anzeigen" }
-    gtk_layout_value_play_pause { "Wiedergabe/Pause" }
     gtk_layout_value_filter_by_field { "Nach Feld filtern" }
     gtk_layout_value_start { "Anfang" }
     gtk_layout_value_end { "Ende" }
@@ -1113,11 +1046,7 @@ de:table {
     tui_detail_focus { "Titeldetails fokussieren" }
     tui_detail_keys { "Shift+←/→ Breite · j/k Abschnitte · Enter umschalten · ←/→ zu/auf · PgUp/PgDn scrollen · Esc Titel" }
     tui_detail_keys_compact { "Shift+←/→ Breite · Enter auf/zu · Esc Titel" }
-    tui_shell_tags { "Tags" }
-    tui_tag_popover_cancel { "Änderungen verwerfen" }
-    tui_tag_popover_close { "Schließen" }
     tui_tag_popover_title { "Tags · {count, plural, one {# Titel} other {# Titel}}" }
-    tui_tag_popover_apply { "Anwenden" }
     tui_tag_popover_add_apply { "Hinzufügen & anwenden" }
     tui_shell_detail_edit_tags { "Tags der Titel bearbeiten" }
     tui_settings_terminal_title { "Format des Terminaltitels" }
@@ -1126,13 +1055,11 @@ de:table {
     tui_settings_title_preview { "Vorschau: {title}" }
     tui_settings_invalid_title_format { "Ungültiges Format: {detail}" }
 
-    appkit_collection_hint { "Geben Sie der Sammlung einen Namen und legen Sie fest, was dazugehört." }
-    appkit_track_details { "Titeldetails" }
+    appkit_collection_hint { "Geben Sie dieser Liste einen Namen und legen Sie fest, was dazugehört." }
     appkit_selected_music { "Ausgewählte Musik" }
     appkit_saved_list { "Gespeicherte Liste" }
     appkit_delete_list_question { "Liste löschen?" }
     appkit_delete_list_hint { "Die Liste und ihre untergeordneten Listen werden entfernt." }
-    appkit_cancel { "Abbrechen" }
     appkit_delete_list { "Liste löschen" }
     appkit_save_changes { "Änderungen speichern" }
     appkit_field_actions { "Feldaktionen" }
@@ -1144,24 +1071,16 @@ de:table {
     appkit_add_shared_tags { "Gemeinsame Tags hinzufügen" }
     appkit_shared_tags { "Gemeinsame Tags" }
     appkit_list_details { "Listendetails" }
-    appkit_name { "Name" }
-    appkit_description { "Beschreibung" }
-    appkit_expression { "Filterausdruck" }
-    appkit_list_name { "Listenname" }
-    appkit_optional_description { "Optionale Beschreibung" }
     appkit_list_expression_hint { "Verwenden Sie ein Tag wie #favorites, um Titel direkt hinzuzufügen. Eine Abfrage kann passende Musik auch automatisch sammeln." }
     appkit_collapse_section { "Abschnitt einklappen" }
     appkit_expand_section { "Abschnitt ausklappen" }
     appkit_edits_storage_hint { "Änderungen werden in Aobus gespeichert. Die Audiodateien bleiben unverändert." }
     appkit_deletion_keeps_media { "Ihre Titel, Tags und Audiodateien bleiben erhalten." }
-    appkit_saving { "Wird gespeichert …" }
     appkit_will_clear { "Wird geleert" }
     appkit_list { "Liste" }
     appkit_discard_question { "Diese Änderungen verwerfen?" }
     appkit_discard_hint { "Ihre nicht gespeicherten Eingaben werden verworfen." }
-    appkit_keep_editing { "Weiter bearbeiten" }
     appkit_keep_open { "Geöffnet lassen" }
-    appkit_discard_changes { "Änderungen verwerfen" }
     appkit_clear_selected_field { "Für ausgewählte Titel leeren" }
     appkit_restore_field_value { "Ursprüngliche Werte wiederherstellen" }
     appkit_edit_tracks { "{count, plural, one {# Titel} other {# Titel}} bearbeiten" }
@@ -1169,8 +1088,6 @@ de:table {
     appkit_deleting_lists { "{count, plural, one {# Liste wird entfernt} other {# Listen werden entfernt}}" }
     appkit_field_actions_for { "Aktionen für {field}" }
     appkit_properties_selection { "Eigenschaften — {count, plural, one {# ausgewählter Titel} other {# ausgewählte Titel}}" }
-    appkit_new_list { "Neue Liste" }
-    appkit_edit_list { "Liste bearbeiten" }
     appkit_remove_from_list { "Aus Liste entfernen" }
     appkit_properties_stale { "Die Bibliothek wurde geändert. Ihre Eingaben bleiben erhalten; öffnen Sie die Eigenschaften erneut, um den aktuellen Stand zu bearbeiten." }
     appkit_editor_busy { "Die Bibliothek ist beschäftigt. Ihre Eingaben bleiben erhalten; versuchen Sie erneut zu speichern." }
@@ -1182,9 +1099,8 @@ de:table {
     appkit_show_all { "Alle einblenden" }
     appkit_quit { "Aobus beenden" }
     appkit_menu_file { "Ablage" }
-    appkit_open_library_action { "Bibliothek öffnen …" }
+    shell_open_library { "Bibliothek öffnen…" }
     appkit_open_recent { "Benutzte Bibliotheken" }
-    appkit_rescan_library { "Bibliothek neu scannen" }
     appkit_close_window { "Fenster schließen" }
     appkit_menu_edit { "Bearbeiten" }
     appkit_undo { "Widerrufen" }
@@ -1196,12 +1112,12 @@ de:table {
     appkit_delete { "Löschen" }
     appkit_select_all { "Alles auswählen" }
     appkit_filter_tracks { "Titel filtern" }
-    appkit_properties_action { "Eigenschaften …" }
+    appkit_properties_action { "Eigenschaften…" }
     appkit_lists { "Listen" }
-    appkit_new_list_action { "Neue Liste …" }
-    appkit_new_child_list_action { "Neue untergeordnete Liste …" }
-    appkit_edit_list_action { "Liste bearbeiten …" }
-    appkit_delete_list_action { "Liste löschen …" }
+    appkit_new_list_action { "Neue Liste…" }
+    appkit_new_child_list_action { "Neue untergeordnete Liste…" }
+    appkit_edit_list_action { "Liste bearbeiten…" }
+    appkit_delete_list_action { "Liste löschen…" }
     appkit_menu_view { "Darstellung" }
     appkit_modern { "Modern" }
     appkit_classic { "Klassisch" }
@@ -1211,12 +1127,11 @@ de:table {
     appkit_hide_sidebar { "Seitenleiste ausblenden" }
     appkit_show_activity { "Aktivität einblenden" }
     appkit_enter_full_screen { "Vollbildmodus" }
-    appkit_customize_toolbar { "Symbolleiste anpassen …" }
+    appkit_customize_toolbar { "Symbolleiste anpassen…" }
     appkit_appearance_system { "Systemeinstellung" }
     appkit_appearance_light { "Hell" }
     appkit_appearance_dark { "Dunkel" }
-    appkit_menu_playback { "Wiedergabe" }
-    appkit_output_device_action { "Ausgabegerät …" }
+    appkit_output_device_action { "Ausgabegerät…" }
     appkit_menu_window { "Fenster" }
     appkit_minimize { "Minimieren" }
     appkit_zoom { "Zoomen" }
@@ -1228,17 +1143,13 @@ de:table {
     appkit_saved_lists { "Gespeicherte Listen" }
     appkit_playing_artwork { "Cover der aktuellen Wiedergabe" }
     appkit_selected_artwork { "Cover des ausgewählten Titels" }
-    appkit_filter_placeholder { "Titel filtern" }
     appkit_tracks { "Titel" }
     appkit_empty_library_title { "Öffnen Sie einen Musikordner, um Ihre Bibliothek aufzubauen" }
-    appkit_ready { "Bereit" }
     appkit_reveal_in_finder { "Im Finder anzeigen" }
-    appkit_edit_properties_action { "Eigenschaften bearbeiten …" }
+    appkit_edit_properties_action { "Eigenschaften bearbeiten…" }
     appkit_choose_music { "Wählen Sie etwas zum Anhören aus" }
     appkit_output_device { "Ausgabegerät" }
-    appkit_volume { "Lautstärke" }
     appkit_playback_options { "Wiedergabeoptionen" }
-    appkit_playback_position { "Wiedergabeposition" }
     appkit_repeat_off { "Wiederholung aus" }
     appkit_repeat_all { "Alle wiederholen" }
     appkit_repeat_one { "Einen Titel wiederholen" }
@@ -1255,10 +1166,6 @@ de:table {
     appkit_list_empty { "Diese Liste ist leer" }
     appkit_empty_list_hint { "Fügen Sie dieser Liste Musik hinzu oder durchsuchen Sie alle Ihre Titel." }
     appkit_show_all_tracks { "Alle Titel anzeigen" }
-    appkit_invalid_filter { "Ungültiger Filter" }
-    appkit_auto_presentation { "Automatisch" }
-    appkit_unavailable_presentation { "Nicht verfügbar: {id} (Automatisch)" }
-    appkit_column_sort_presentation { "Spaltensortierung" }
     appkit_no_activity { "Keine aktuelle Aktivität" }
     appkit_audio { "Audio" }
     appkit_file_label { "Datei" }

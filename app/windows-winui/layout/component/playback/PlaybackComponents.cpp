@@ -137,7 +137,7 @@ namespace ao::winui::layout
                 },
                 playback}
       {
-        AutomationProperties::SetName(_slider, resourceHstring(L"winui_playback_position"));
+        AutomationProperties::SetName(_slider, resourceHstring(L"playback_position"));
       }
 
       FrameworkElement element() const override { return _slider; }
@@ -221,7 +221,7 @@ namespace ao::winui::layout
         if (flyout)
         {
           auto heading = TextBlock{};
-          heading.Text(winrt::to_hstring(resourceString("winui_playback_volume")));
+          heading.Text(winrt::to_hstring(resourceString("playback_volume")));
           heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
 
           auto content = StackPanel{};
@@ -235,7 +235,7 @@ namespace ao::winui::layout
           popup.Placement(FlyoutPlacementMode::Top);
           popup.Content(content);
 
-          auto const label = resourceHstring(L"winui_playback_volume");
+          auto const label = resourceHstring(L"playback_volume");
           _button = makeNamed<Button>(label);
           _button.Content(SymbolIcon{Symbol::Volume});
           _button.Flyout(popup);

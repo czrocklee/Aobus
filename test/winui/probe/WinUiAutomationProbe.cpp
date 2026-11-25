@@ -1905,9 +1905,8 @@ namespace
       check(static_cast<bool>(views.setSelection(_allTracksViewId, {_seed.summaryTracks.front()})),
             "could not select a Classic track");
       auto const play = findVisualById<Button>(_root, L"classic-play-pause");
-      auto const menu =
-        findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_playback"));
-      auto const playItem = menu ? findMenuItem(menu.Items(), L"winui_shell_play_pause") : nullptr;
+      auto const menu = findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"shell_menu_playback"));
+      auto const playItem = menu ? findMenuItem(menu.Items(), L"playback_action_play_pause") : nullptr;
       check(play && play.IsEnabled() && playItem && playItem.IsEnabled(),
             "Classic primary Play must accept the selected row");
       check(controls.IsEnabled() && controls.IsPlayEnabled(), "SMTC must offer Play for the selected row");
@@ -2104,11 +2103,11 @@ namespace
           popup,
           [&header](auto const& field) { return winrt::unbox_value_or<winrt::hstring>(field.Header(), {}) == header; });
       };
-      auto const name = inputWithHeader(listEditorText(ao::i18n::MessageId::WinUiListName));
-      _previewFilter = inputWithHeader(listEditorText(ao::i18n::MessageId::WinUiListLocalFilter));
+      auto const name = inputWithHeader(listEditorText(ao::i18n::MessageId::ListFieldName));
+      _previewFilter = inputWithHeader(listEditorText(ao::i18n::MessageId::ListFieldLocalFilter));
       _previewStatus = findVisualById<Controls::TextBlock>(popup, kPreviewStatusId);
-      _previewCreate = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::WinUiCommonCreate));
-      auto const cancel = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::WinUiCommonCancel));
+      _previewCreate = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::CommonCreate));
+      auto const cancel = findVisual<Button>(popup, listEditorText(ao::i18n::MessageId::CommonCancel));
 
       if (!name || !_previewFilter || !_previewCreate || !cancel || !_previewStatus.IsLoaded())
       {
@@ -2293,7 +2292,7 @@ namespace
       revokeListPreviewObserver();
       auto const popup = listEditorPopup();
       auto const cancel =
-        popup ? findVisual<Button>(popup.Child(), listEditorText(ao::i18n::MessageId::WinUiCommonCancel)) : nullptr;
+        popup ? findVisual<Button>(popup.Child(), listEditorText(ao::i18n::MessageId::CommonCancel)) : nullptr;
 
       if (!cancel)
       {
@@ -2815,7 +2814,7 @@ namespace
     void moreOpened()
     {
       auditShell("Modern menu popup");
-      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
+      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"shell_scan_library");
       check(rescan && rescan.IsEnabled(), "Modern's idle Rescan menu item must be enabled");
       check(static_cast<bool>(_sessionPtr->runtime().views().setSelection(
               _allTracksViewId, {_seed.summaryTracks.at(kRescanTrackIndex)})),
@@ -2834,7 +2833,7 @@ namespace
       check(state.id == _allTracksViewId && state.selection == std::vector{_seed.summaryTracks.at(kRescanTrackIndex)},
             "the rescan changed the active view or selected IDs");
       checkSelectionSummary("same selected track after rescan", "1 item selected (0:01)");
-      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"winui_shell_rescan_library");
+      auto const rescan = findMenuItem(_flyout.as<Controls::MenuFlyout>().Items(), L"shell_scan_library");
       check(rescan && rescan.IsEnabled(), "Modern's settled Rescan menu item must be re-enabled");
       auto classic = Controls::MenuFlyoutItem{nullptr};
 
@@ -2887,13 +2886,13 @@ namespace
 
     Controls::MenuFlyoutItem classicRescanMenuItem() const
     {
-      auto const file = findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"winui_shell_menu_file"));
-      return file ? findMenuItem(file.Items(), L"winui_shell_rescan") : nullptr;
+      auto const file = findVisual<Controls::MenuBarItem>(_root, ao::winui::resourceHstring(L"shell_menu_file"));
+      return file ? findMenuItem(file.Items(), L"library_scan_action") : nullptr;
     }
 
     void checkClassicRescanControls(bool const enabled)
     {
-      auto const toolbar = findVisual<Button>(_root, ao::winui::resourceHstring(L"winui_library_rescan_label"));
+      auto const toolbar = findVisual<Button>(_root, ao::winui::resourceHstring(L"library_scan_action"));
       auto const menu = classicRescanMenuItem();
       auto const open = findVisual<Button>(_root, ao::winui::resourceHstring(L"winui_library_open_label"));
       check(toolbar && toolbar.IsEnabled() == enabled, "Classic toolbar Rescan has the wrong availability");

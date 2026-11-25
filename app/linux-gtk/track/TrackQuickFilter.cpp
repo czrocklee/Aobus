@@ -100,8 +100,7 @@ namespace ao::gtk
     _createSmartListButton.add_css_class("ao-quick-filter-create");
     _createSmartListButton.set_icon_name("list-add-symbolic");
     _createSmartListButton.set_has_frame(false);
-    setTooltipAndAccessibleLabel(
-      _createSmartListButton, gtkText(textCatalog, i18n::MessageId::GtkLibraryCreateListFromFilter));
+    setTooltipAndAccessibleLabel(_createSmartListButton, gtkText(textCatalog, i18n::MessageId::ListCreateFromFilter));
     _createSmartListButton.set_sensitive(false);
     _createSmartListButton.signal_clicked().connect(
       sigc::mem_fun(*this, &TrackQuickFilter::handleCreateSmartListClicked));

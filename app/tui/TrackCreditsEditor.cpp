@@ -387,7 +387,7 @@ namespace ao::tui
                                                     {Control::Replace, MessageId::TrackCreditsReplaceScope},
                                                     {Control::Clear, MessageId::TrackCreditsClear},
                                                     {Control::Commit, MessageId::TrackCreditsCommit},
-                                                    {Control::Cancel, MessageId::TrackCreditsCancel}});
+                                                    {Control::Cancel, MessageId::CommonCancel}});
 
     for (auto const& [control, id] : kActions)
     {

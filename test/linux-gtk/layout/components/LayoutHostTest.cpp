@@ -25,6 +25,7 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackRowCache.h"
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -223,7 +224,8 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(host2.get_first_child());
       REQUIRE(label != nullptr);
-      CHECK(label->get_text() == "Aobus Ready");
+      CHECK(label->get_text().raw() ==
+            i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::CommonReady));
     }
   }
 

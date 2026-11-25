@@ -27,7 +27,7 @@ namespace ao::gtk::layout::track_field_grid
     _button.set_has_frame(false);
     _button.add_css_class("ao-icon-button");
     _button.add_css_class("ao-detail-add-custom-metadata-button");
-    setTooltipAndAccessibleLabel(_button, gtkText(textCatalog, i18n::MessageId::GtkCustomMetadataTitle));
+    setTooltipAndAccessibleLabel(_button, gtkText(textCatalog, i18n::MessageId::TrackCustomMetadataTitle));
     _button.signal_clicked().connect([this] { openPopover(); });
 
     _popover.set_parent(_button);
@@ -39,7 +39,7 @@ namespace ao::gtk::layout::track_field_grid
     _box.add_css_class("ao-detail-custom-metadata-popover-box");
 
     _titleLabel.set_halign(Gtk::Align::START);
-    _titleLabel.set_text(gtkText(textCatalog, i18n::MessageId::GtkCustomMetadataTitle));
+    _titleLabel.set_text(gtkText(textCatalog, i18n::MessageId::TrackCustomMetadataTitle));
     _titleLabel.add_css_class("ao-detail-custom-metadata-popover-title");
     _box.append(_titleLabel);
 
@@ -50,12 +50,12 @@ namespace ao::gtk::layout::track_field_grid
     _valueEntry.set_hexpand(true);
     _valueEntry.add_css_class("ao-detail-custom-metadata-popover-entry");
 
-    _submitButton.set_label(gtkText(textCatalog, i18n::MessageId::GtkCommonAdd));
+    _submitButton.set_label(gtkText(textCatalog, i18n::MessageId::CommonAdd));
     _submitButton.set_halign(Gtk::Align::END);
     _submitButton.set_hexpand(false);
     _submitButton.add_css_class("suggested-action");
     _submitButton.add_css_class("ao-detail-custom-metadata-popover-submit");
-    _submitButton.set_tooltip_text(gtkText(textCatalog, i18n::MessageId::GtkCustomMetadataTitle));
+    _submitButton.set_tooltip_text(gtkText(textCatalog, i18n::MessageId::TrackCustomMetadataTitle));
 
     _submitButton.signal_clicked().connect([this] { handleAddRequested(); });
     _keyEntry.signal_activate().connect([this] { _valueEntry.grab_focus(); });

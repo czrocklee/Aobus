@@ -247,7 +247,7 @@ namespace ao::gtk
                 }
               });
     addAction(menuModelPtr,
-              gtkText(_textCatalog, i18n::MessageId::GtkActionTrackProperties),
+              gtkText(_textCatalog, i18n::MessageId::TrackPropertiesTitle),
               "properties",
               [this]
               {

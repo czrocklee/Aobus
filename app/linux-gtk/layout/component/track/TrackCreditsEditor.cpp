@@ -228,7 +228,7 @@ namespace ao::gtk::layout
     _addButton.set_label(gtkText(_textCatalog, MessageId::TrackCreditsAdd));
     _clearButton.set_label(gtkText(_textCatalog, MessageId::TrackCreditsClear));
     _commitButton.set_label(gtkText(_textCatalog, MessageId::TrackCreditsCommit));
-    _cancelButton.set_label(gtkText(_textCatalog, MessageId::TrackCreditsCancel));
+    _cancelButton.set_label(gtkText(_textCatalog, MessageId::CommonCancel));
     _editButton.add_css_class("ao-credits-edit");
     _replaceButton.add_css_class("ao-credits-replace");
     _addButton.add_css_class("ao-credits-add");

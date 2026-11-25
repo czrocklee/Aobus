@@ -51,7 +51,7 @@ namespace ao::gtk
 
     // The scale has no visible label of its own; give assistive technology a name
     // and a hover tooltip consistent with the volume control.
-    setTooltipAndAccessibleLabel(_scale, gtkText(textCatalog, i18n::MessageId::GtkPlaybackPosition));
+    setTooltipAndAccessibleLabel(_scale, gtkText(textCatalog, i18n::MessageId::PlaybackPosition));
 
     // GtkRange still tracks the physical drag after its occurrence is replaced. Veto its
     // native changes before they move the thumb; live position updates can still set it.

@@ -163,7 +163,7 @@ namespace ao::i18n::test
     for (auto const& forms : std::array{Forms{"en", "1 track", "2 tracks", "1 second", "2 seconds"},
                                         Forms{"de", "1 Titel", "2 Titel", "1 Sekunde", "2 Sekunden"},
                                         Forms{"es", "1 pista", "2 pistas", "1 segundo", "2 segundos"},
-                                        Forms{"fr", "1 piste", "2 pistes", "1 seconde", "2 secondes"}})
+                                        Forms{"fr", "1 morceau", "2 morceaux", "1 seconde", "2 secondes"}})
     {
       INFO(forms.locale);
       auto catalogRes = MessageCatalog::create(forms.locale);
@@ -281,7 +281,7 @@ namespace ao::i18n::test
       {MessageId::TrackCreditsClear, {}},
       {MessageId::TrackCreditsCleared, {}},
       {MessageId::TrackCreditsCommit, {}},
-      {MessageId::TrackCreditsCancel, {}},
+      {MessageId::CommonCancel, {}},
       {MessageId::TrackCreditsAllKinds, {}},
       {MessageId::TrackCreditDelete, {}},
       {MessageId::TrackCreditMoveUp, {}},
@@ -301,12 +301,12 @@ namespace ao::i18n::test
       {MessageId::TrackCreditNameRole, {{"name", "N"}, {"role", "R"}}},
       {MessageId::GtkTrackCreditsDiscardTitle, {}},
       {MessageId::GtkTrackCreditsDiscardMessage, {}},
-      {MessageId::GtkTrackCreditsDiscard, {}},
-      {MessageId::GtkTrackCreditsKeepEditing, {}},
+      {MessageId::CommonDiscardChanges, {}},
+      {MessageId::CommonKeepEditing, {}},
       {MessageId::WinUiTrackPropertiesReload, {}},
       {MessageId::WinUiTrackPropertiesDiscardQuestion, {}},
-      {MessageId::WinUiTrackPropertiesDiscard, {}},
-      {MessageId::WinUiTrackPropertiesKeepEditing, {}},
+      {MessageId::CommonDiscardChanges, {}},
+      {MessageId::CommonKeepEditing, {}},
     };
 
     for (auto const& locale : availableCatalogLocales())
@@ -648,7 +648,7 @@ namespace ao::i18n::test
   {
     auto englishRes = MessageCatalog::create("en");
     REQUIRE(englishRes);
-    auto selectedTitleRes = englishRes->format(MessageId::GtkTrackPropertiesSelectedTitle, {{"count", 2}});
+    auto selectedTitleRes = englishRes->format(MessageId::TrackPropertiesSelectedTitle, {{"count", 2}});
     REQUIRE(selectedTitleRes);
     CHECK(selectedTitleRes->text == "Properties — 2 tracks selected");
 
@@ -760,12 +760,12 @@ namespace ao::i18n::test
     auto germanRes = MessageCatalog::create("de-DE");
     REQUIRE(germanRes);
     auto const& german = *germanRes;
-    CHECK(requiredText(german, MessageId::GtkShellMenuFile) == "Datei");
-    CHECK(requiredText(german, MessageId::GtkShellOpenLibrary) == "Bibliothek öffnen...");
+    CHECK(requiredText(german, MessageId::ShellMenuFile) == "Datei");
+    CHECK(requiredText(german, MessageId::ShellOpenLibrary) == "Bibliothek öffnen…");
     CHECK(requiredText(german, MessageId::GtkShellApplicationMenu) == "Anwendungsmenü");
     CHECK(requiredText(german, MessageId::GtkLibraryQuickFilterPlaceholder) ==
-          "Titel, Interpreten, Alben und Tags durchsuchen...");
-    CHECK(requiredText(german, MessageId::GtkSmartListPreview) == "Vorschau");
+          "Titel, Interpreten, Alben und Tags filtern…");
+    CHECK(requiredText(german, MessageId::ListFieldPreview) == "Vorschau");
     CHECK(requiredText(german, MessageId::ListManualOrder) == "Manuelle Reihenfolge");
     CHECK(requiredText(german, MessageId::GtkListMoveToTopAction) ==
           "An den Anfang der manuellen Reihenfolge verschieben");
@@ -773,8 +773,8 @@ namespace ao::i18n::test
     auto pseudoRes = MessageCatalog::create("qps-ploc");
     REQUIRE(pseudoRes);
     auto const& pseudo = *pseudoRes;
-    CHECK(requiredText(pseudo, MessageId::GtkShellMenuFile) != "File");
-    CHECK(requiredText(pseudo, MessageId::GtkShellOpenLibrary).contains("..."));
-    CHECK(requiredText(pseudo, MessageId::GtkSmartListNewTitle) != "New List");
+    CHECK(requiredText(pseudo, MessageId::ShellMenuFile) != "File");
+    CHECK(requiredText(pseudo, MessageId::ShellOpenLibrary).contains("…"));
+    CHECK(requiredText(pseudo, MessageId::ListEditorNewTitle) != "New List");
   }
 } // namespace ao::i18n::test

@@ -288,7 +288,7 @@ namespace ao::gtk
       dismissButton->add_css_class("flat");
       dismissButton->add_css_class("ao-activity-detail-dismiss");
       dismissButton->set_icon_name("window-close-symbolic");
-      setTooltipAndAccessibleLabel(*dismissButton, gtkText(_textCatalog, MessageId::GtkActivityHideNotification));
+      setTooltipAndAccessibleLabel(*dismissButton, gtkText(_textCatalog, MessageId::ActivityHideNotification));
       dismissButton->signal_clicked().connect([this, id = item.id] { handleDetailDismissClicked(id); });
       header->append(*dismissButton);
     }

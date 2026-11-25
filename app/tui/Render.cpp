@@ -180,7 +180,7 @@ namespace ao::tui
       {.descriptionId = i18n::MessageId::TuiShellHelpNotifications, .command = ":notifications"},
       {.descriptionId = i18n::MessageId::TuiShellHelpSwitchPresentation, .command = ":view <id>"},
       {.groupId = i18n::MessageId::TuiKeyGroupApplication,
-       .descriptionId = i18n::MessageId::TuiSettingsTitle,
+       .descriptionId = i18n::MessageId::SettingsTitle,
        .command = ":settings"},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuit, .command = ":quit"},
     });

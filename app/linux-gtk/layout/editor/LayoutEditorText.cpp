@@ -163,7 +163,7 @@ namespace ao::gtk::layout::editor
       {.source = "compact", .messageId = MessageId::GtkLayoutValueCompact},
       {.source = "tooltip", .messageId = MessageId::GtkLayoutValueTooltip},
       {.source = "reveal", .messageId = MessageId::GtkLayoutValueReveal},
-      {.source = "playPause", .messageId = MessageId::GtkLayoutValuePlayPause},
+      {.source = "playPause", .messageId = MessageId::PlaybackActionPlayPause},
       {.source = "filterByField", .messageId = MessageId::GtkLayoutValueFilterByField},
       {.source = "start", .messageId = MessageId::GtkLayoutValueStart},
       {.source = "end", .messageId = MessageId::GtkLayoutValueEnd},

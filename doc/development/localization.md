@@ -19,6 +19,7 @@ Do not localize a token merely because it appears next to localized text.
 
 Equal English wording is not enough to share an id.
 Compare meaning, grammatical role, arguments, and frontend behavior before deduplicating.
+When meaning, grammatical role, and arguments do match across frontends, prefer a shared prefixless key (for example `common_*`, `settings_*`, `shell_*`, `list_*`, or `playback_*`) over per-frontend duplicates; reserve `gtk_*`, `tui_*`, `winui_*`, and `appkit_*` prefixes for frontend-specific interactions or platform-native conventions (such as macOS system menus like `appkit_menu_file`, `appkit_menu_edit`, `appkit_menu_view`, and `appkit_menu_help`).
 Conversely, do not add a feature helper for a fixed one-id lookup: use the canonical typed id unless domain state must select a message, derive a selector, or apply an open-id fallback.
 
 ## Add or change a message
@@ -54,6 +55,7 @@ Use named ICU MessageFormat arguments, never numbered arguments.
 - Encode a literal apostrophe as `''` and preserve ICU quoting around braces or `#`.
 - Pass external values as arguments instead of interpolating them into an authored fragment before formatting.
 - Keep selectors such as `yes`/`no` or state names stable and untranslated.
+- Use the typographic ellipsis `…` (U+2026) rather than three ASCII periods `...` in menu actions, placeholders, and progress copy.
 
 The complete argument and failure rules are in the [message contract](../system/presentation/localization.md#message-and-argument-contract).
 
@@ -122,6 +124,11 @@ Do not duplicate script-qualified resources as regional assets unless the locale
 Follow [test validation and review](test/validation-and-review.md); choose the route by behavior, not by file extension alone.
 Run from the repository root with pinned native Bazel for ordinary build/test/run;
 project checks use `./ao`, or `ao.bat` on Windows.
+
+### Test assertion boundary
+
+- **Behavior and widget wiring tests** should assert against `i18n::requiredText` / `i18n::requiredFormat` using the expected `MessageId` rather than hardcoding catalog copy literals, so phrasing and punctuation refinements do not break unrelated tests.
+- **Catalog and semantic formatter tests** (such as `i18n_test` and formatter unit tests) keep focused literal assertions on representative patterns to guard plural rules, argument interpolation, fallback behavior, pseudo-localization, and normative domain terminology.
 
 ### Existing-locale message changes
 

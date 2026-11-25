@@ -155,7 +155,7 @@ namespace ao::winui::layout
         dismissGlyph.Glyph(winrt::hstring{kDismissGlyph});
         dismissGlyph.FontSize(kDismissGlyphFontSize);
         _dismissButton.Content(dismissGlyph);
-        auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+        auto const hideLabel = resourceHstring(L"activity_hide_notification");
         ToolTipService::SetToolTip(_dismissButton, winrt::box_value(hideLabel));
         Grid::SetColumn(_dismissButton, 1);
 
@@ -191,7 +191,7 @@ namespace ao::winui::layout
       FontIcon _statusIcon{};
       TextBlock _label{};
       ProgressBar _progress{};
-      Button _dismissButton{chromeLessButton(resourceHstring(L"winui_activity_hide_notification"))};
+      Button _dismissButton{chromeLessButton(resourceHstring(L"activity_hide_notification"))};
       std::optional<ActivityStatusControl> _optControl;
     };
 

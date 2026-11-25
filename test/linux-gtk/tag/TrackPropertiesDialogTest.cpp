@@ -483,7 +483,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     auto const label = clearFieldLabel(catalog, MessageId::TrackFieldTitle, targetIds.size());
     auto* const clear = dynamic_cast<Gtk::ToggleButton*>(findButtonByLabel(dialog, label));
-    auto* const save = findButtonByLabel(dialog, std::string{i18n::requiredText(catalog, MessageId::GtkCommonSave)});
+    auto* const save = findButtonByLabel(dialog, std::string{i18n::requiredText(catalog, MessageId::CommonSave)});
     auto* const title = findEntryForLabel(dialog, std::string{i18n::requiredText(catalog, MessageId::TrackFieldTitle)});
     REQUIRE(clear != nullptr);
     REQUIRE(save != nullptr);
@@ -536,7 +536,7 @@ namespace ao::gtk::test
     using i18n::MessageId;
     auto const fieldLabel = [&](MessageId id) { return std::string{i18n::requiredText(catalog, id)}; };
     auto const clearLabel = [&](MessageId id) { return clearFieldLabel(catalog, id, 2); };
-    auto* const save = findButtonByLabel(dialog, fieldLabel(MessageId::GtkCommonSave));
+    auto* const save = findButtonByLabel(dialog, fieldLabel(MessageId::CommonSave));
     auto* const album = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldAlbum));
     auto* const genre = findEntryForLabel(dialog, fieldLabel(MessageId::TrackFieldGenre));
     REQUIRE(save != nullptr);

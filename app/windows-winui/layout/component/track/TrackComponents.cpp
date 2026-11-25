@@ -100,10 +100,10 @@ namespace ao::winui::layout
         _root.ColumnDefinitions().Append(buttonColumn);
         _root.ColumnSpacing(kQuickFilterColumnSpacing);
         _input.QueryIcon(SymbolIcon{winrt::Microsoft::UI::Xaml::Controls::Symbol::Find});
-        _input.PlaceholderText(winrt::to_hstring(resourceString("winui_library_quick_filter_placeholder")));
+        _input.PlaceholderText(winrt::to_hstring(resourceString("library_filter_placeholder")));
         _root.Children().Append(_input);
 
-        auto const createLabel = i18n::requiredText(textCatalog, i18n::MessageId::WinUiListCreateFromFilter);
+        auto const createLabel = i18n::requiredText(textCatalog, i18n::MessageId::ListCreateFromFilter);
         _createButton.Content(winrt::box_value(winrt::to_hstring(createLabel)));
         _createButton.Visibility(Visibility::Collapsed);
         ToolTipService::SetToolTip(_createButton, winrt::box_value(winrt::to_hstring(createLabel)));
@@ -218,7 +218,7 @@ namespace ao::winui::layout
         // of the committed workspace focus.
         auto const stateRes = _views.findTrackListState(_state.activeViewId);
         auto const label = stateRes && stateRes->presentation.id == kColumnSortPresentationId
-                             ? resourceString("winui_column_sort_presentation")
+                             ? resourceString("track_presentation_column_sort")
                              : _state.label;
         _button.Content(winrt::box_value(winrt::to_hstring(label)));
         _button.IsEnabled(_state.enabled);

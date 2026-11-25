@@ -59,10 +59,10 @@ namespace ao::tui
     constexpr std::int32_t kPreferenceControlColumns = 6;
 
     using i18n::MessageId;
-    constexpr auto kPages = std::to_array<MessageId>({MessageId::TuiSettingsGeneral,
-                                                      MessageId::TuiSettingsAppearance,
+    constexpr auto kPages = std::to_array<MessageId>({MessageId::SettingsPageGeneral,
+                                                      MessageId::SettingsPageAppearance,
                                                       MessageId::TuiSettingsInteraction,
-                                                      MessageId::TuiSettingsKeyboard});
+                                                      MessageId::SettingsPageKeyboard});
     constexpr auto kAppearanceRows = std::to_array<AppearanceRow>({
       {.preference = AppearancePreference::DimBackdrop, .label = MessageId::TuiSettingsDim},
       {.preference = AppearancePreference::ReducedMotion, .label = MessageId::TuiSettingsMotion},
@@ -305,7 +305,7 @@ namespace ao::tui
                      ftxui::reflect(_tabBoxes[index]));
     }
 
-    auto title = std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsTitle)};
+    auto title = std::string{i18n::requiredText(_textCatalog, MessageId::SettingsTitle)};
     auto context = std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsGlobal)};
 
     title += " · " + context;
@@ -1042,7 +1042,7 @@ namespace ao::tui
     {
       button("Ctrl+R", MessageId::TuiSettingsActionRetry, Event::CtrlR);
       button("Ctrl+G", MessageId::TuiSettingsActionDiscard, Event::CtrlG);
-      button("Esc", MessageId::TuiSettingsActionClose, Event::Escape);
+      button("Esc", MessageId::CommonClose, Event::Escape);
       return finish();
     }
 
@@ -1050,18 +1050,18 @@ namespace ao::tui
     {
       if (!_editingTitle || _titleError.empty())
       {
-        button("Enter", MessageId::TuiSettingsActionSave, Event::Return);
+        button("Enter", MessageId::CommonSave, Event::Return);
       }
 
-      button("Esc", MessageId::TuiSettingsActionCancel, Event::Escape);
+      button("Esc", MessageId::CommonCancel, Event::Escape);
       return finish();
     }
 
     if (_choosingLanguage)
     {
       arrows(true, MessageId::TuiSettingsActionChoose);
-      button("Enter", MessageId::TuiSettingsActionApply, Event::Return);
-      button("Esc", MessageId::TuiSettingsActionCancel, Event::Escape);
+      button("Enter", MessageId::CommonApply, Event::Return);
+      button("Esc", MessageId::CommonCancel, Event::Escape);
       return finish();
     }
 
@@ -1088,14 +1088,14 @@ namespace ao::tui
       }
 
       button("Enter", MessageId::TuiSettingsActionEdit, Event::Return);
-      button("a", MessageId::TuiSettingsActionAdd, Event::Character("a"));
+      button("a", MessageId::CommonAdd, Event::Character("a"));
 
       if (!chords.empty())
       {
-        button("Delete", MessageId::TuiSettingsActionRemove, Event::Delete);
+        button("Delete", MessageId::CommonRemove, Event::Delete);
       }
 
-      button("r", MessageId::TuiSettingsActionReset, Event::Character("r"));
+      button("r", MessageId::CommonReset, Event::Character("r"));
     }
     else if (_page == SettingsPage::Appearance &&
              kAppearanceRows[_row].preference == AppearancePreference::TerminalTitle)
@@ -1112,7 +1112,7 @@ namespace ao::tui
     }
 
     button("Tab", MessageId::TuiSettingsActionPages, Event::Tab);
-    button("Esc", MessageId::TuiSettingsActionClose, Event::Escape);
+    button("Esc", MessageId::CommonClose, Event::Escape);
     return finish();
   }
 

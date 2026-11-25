@@ -183,14 +183,12 @@ namespace ao::winui
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
     _dialog.MinWidth(kEditorMinWidth);
-    _dialog.Title(winrt::box_value(winrt::to_hstring(
-      i18n::requiredText(_textCatalog,
-                         _editListId == kInvalidListId ? i18n::MessageId::WinUiListEditorNewTitle
-                                                       : i18n::MessageId::WinUiListEditorEditTitle))));
-    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
+    _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(
       _textCatalog,
-      _editListId == kInvalidListId ? i18n::MessageId::WinUiCommonCreate : i18n::MessageId::WinUiCommonSave)));
-    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
+      _editListId == kInvalidListId ? i18n::MessageId::ListEditorNewTitle : i18n::MessageId::ListEditorEditTitle))));
+    _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
+      _textCatalog, _editListId == kInvalidListId ? i18n::MessageId::CommonCreate : i18n::MessageId::CommonSave)));
+    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::CommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Primary);
 
     auto content = StackPanel{};
@@ -202,16 +200,16 @@ namespace ao::winui
 
     _nameInput = TextBox{};
     _nameInput.Header(
-      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListName))));
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldName))));
     _nameInput.PlaceholderText(
-      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListNamePlaceholder)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldNamePlaceholder)));
     content.Children().Append(_nameInput);
 
     _descriptionInput = TextBox{};
     _descriptionInput.Header(
-      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDescription))));
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldDescription))));
     _descriptionInput.PlaceholderText(
-      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDescriptionPlaceholder)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldDescriptionPlaceholder)));
     content.Children().Append(_descriptionInput);
 
     _inheritedFilterText = makeWrappedText(kContextTextOpacity);
@@ -219,9 +217,9 @@ namespace ao::winui
 
     _filterInput = TextBox{};
     _filterInput.Header(
-      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListLocalFilter))));
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldLocalFilter))));
     _filterInput.PlaceholderText(
-      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListFilterPlaceholder)));
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldFilterPlaceholder)));
     content.Children().Append(_filterInput);
 
     _effectiveFilterText = makeWrappedText(kContextTextOpacity);
@@ -230,13 +228,13 @@ namespace ao::winui
     content.Children().Append(_membershipText);
 
     _presentationInput = ComboBox{};
-    _presentationInput.Header(
-      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListPresentation))));
+    _presentationInput.Header(winrt::box_value(
+      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPresentationPickerLabel))));
     _presentationInput.HorizontalAlignment(HorizontalAlignment::Stretch);
     _presentationIds.clear();
     _presentationIds.emplace_back();
-    _presentationInput.Items().Append(winrt::box_value(
-      winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListAutoPresentation))));
+    _presentationInput.Items().Append(
+      winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPresentationAuto))));
 
     for (auto const& item : _presentationCatalog.menuItems())
     {
@@ -252,7 +250,7 @@ namespace ao::winui
     content.Children().Append(_presentationInput);
 
     auto previewHeading = TextBlock{};
-    previewHeading.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListPreview)));
+    previewHeading.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldPreview)));
     previewHeading.FontSize(kPreviewHeadingFontSize);
     content.Children().Append(previewHeading);
     _previewText = makeWrappedText(kSupportingTextOpacity);
@@ -406,11 +404,11 @@ namespace ao::winui
                     : uimodel::formatSmartListExpressionDisplayText(
                         _textCatalog, uimodel::combineSmartListEffectiveExpression(parentExpression, expression));
     _inheritedFilterText.Text(winrt::to_hstring(
-      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListInheritedFilter), inherited)));
+      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldInheritedFilter), inherited)));
     _effectiveFilterText.Text(winrt::to_hstring(
-      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListEffectiveFilter), effective)));
+      labeled(i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldEffectiveFilter), effective)));
     _membershipText.Text(winrt::to_hstring(labeled(
-      i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMembership), editorState.membershipEditingText)));
+      i18n::requiredText(_textCatalog, i18n::MessageId::ListFieldMembership), editorState.membershipEditingText)));
     _previewText.Text(winrt::to_hstring(editorState.previewStatusText));
 
     setDialogError(uimodel::formatSmartListEditorErrorText(_mutationError, editorState));
@@ -585,7 +583,7 @@ namespace ao::winui
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
     _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, description.labels.title))));
     _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, description.labels.action)));
-    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
+    _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::CommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Close);
 
     auto content = StackPanel{};

@@ -184,7 +184,7 @@ namespace ao::tui
           KeyAction::BeginPanelResize, i18n::requiredText(textCatalog, i18n::MessageId::TuiPanelResizeStatus));
       }
 
-      appendActionChip(KeyAction::EditTags, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellTags));
+      appendActionChip(KeyAction::EditTags, i18n::requiredText(textCatalog, i18n::MessageId::TrackFieldTags));
 
       if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
       {
@@ -209,7 +209,7 @@ namespace ao::tui
       using namespace ftxui;
 
       auto settingsPtr = style::shortcutChip(keymapPlan.shortcutFor(KeyAction::OpenSettings),
-                                             i18n::requiredText(textCatalog, i18n::MessageId::TuiSettingsTitle));
+                                             i18n::requiredText(textCatalog, i18n::MessageId::SettingsTitle));
 
       if (state.settingsHovered)
       {

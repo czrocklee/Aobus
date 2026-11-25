@@ -519,8 +519,8 @@ namespace ao::tui
       parts.push_back(std::move(labelPtr) | inverted | bold | ftxui::reflect(_tabBoxes[static_cast<std::size_t>(tab)]));
     };
 
-    appendTab(TrackEditorTab::Metadata, MessageId::TuiEditorTabMetadata);
-    appendTab(TrackEditorTab::Tags, MessageId::TuiEditorTabTags);
+    appendTab(TrackEditorTab::Metadata, MessageId::TrackMetadataHeading);
+    appendTab(TrackEditorTab::Tags, MessageId::TrackFieldTags);
     appendTab(TrackEditorTab::Properties, MessageId::TuiEditorTabProperties);
 
     if (hasTracksTab())

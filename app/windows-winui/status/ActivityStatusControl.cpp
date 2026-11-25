@@ -121,7 +121,7 @@ namespace ao::winui
 
     Button detailDismissButton()
     {
-      auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+      auto const hideLabel = resourceHstring(L"activity_hide_notification");
       auto button = makeNamed<Button>(hideLabel);
       button.MinWidth(kDetailDismissButtonSide);
       button.MinHeight(kDetailDismissButtonSide);

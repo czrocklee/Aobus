@@ -182,8 +182,8 @@ namespace ao::appkit
 
     _state = {.kind = LibraryEditorKind::List,
               .title = listId == kInvalidListId
-                         ? std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitNewList)}
-                         : std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitEditList)},
+                         ? std::string{i18n::requiredText(_catalog, i18n::MessageId::ListEditorNewTitle)}
+                         : std::string{i18n::requiredText(_catalog, i18n::MessageId::ListEditorEditTitle)},
               .list = std::move(draft)};
     publishChange();
     return {};

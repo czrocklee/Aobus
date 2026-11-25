@@ -108,8 +108,8 @@ namespace ao::gtk
     auto const titleCount = prepareRes ? _formModel.targetCount() : trackIds.size();
     auto const title =
       titleCount > 1
-        ? i18n::requiredFormat(_textCatalog, MessageId::GtkTrackPropertiesSelectedTitle, {{"count", titleCount}})
-        : gtkText(_textCatalog, MessageId::GtkTrackPropertiesTitle);
+        ? i18n::requiredFormat(_textCatalog, MessageId::TrackPropertiesSelectedTitle, {{"count", titleCount}})
+        : gtkText(_textCatalog, MessageId::TrackPropertiesTitle);
 
     set_title(title);
     configureForParent(parent);
@@ -124,7 +124,7 @@ namespace ao::gtk
     else
     {
       _sessionErrorLabel.set_text(i18n::requiredFormat(
-        _textCatalog, MessageId::GtkTrackEditingUnavailable, {{"detail", prepareRes.error().message}}));
+        _textCatalog, MessageId::TrackPropertiesEditingUnavailable, {{"detail", prepareRes.error().message}}));
       _sessionErrorLabel.set_visible(true);
     }
 
@@ -173,8 +173,8 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::buildUi()
   {
-    addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonClose), Gtk::ResponseType::CLOSE);
-    _saveButton = addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
+    addCancelAction(gtkText(_textCatalog, MessageId::CommonClose), Gtk::ResponseType::CLOSE);
+    _saveButton = addPrimaryAction(gtkText(_textCatalog, MessageId::CommonSave), Gtk::ResponseType::OK);
     _saveButton->set_sensitive(false);
 
     _notebook.add_css_class("ao-properties-notebook");
@@ -285,7 +285,7 @@ namespace ao::gtk
     }
 
     _propertiesBox.append(*list);
-    _notebook.append_page(_propertiesScroll, gtkText(_textCatalog, MessageId::GtkTrackPropertiesTitle));
+    _notebook.append_page(_propertiesScroll, gtkText(_textCatalog, MessageId::TrackPropertiesTitle));
   }
 
   Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
@@ -437,7 +437,7 @@ namespace ao::gtk
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
                                     replyRes.error().message,
-                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::CommonClose),
                                                      .responseId = Gtk::ResponseType::CLOSE,
                                                      .role = AppDialogActionRole::Cancel}},
                                     Gtk::ResponseType::CLOSE);
@@ -450,7 +450,7 @@ namespace ao::gtk
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
                                     gtkText(owner->_textCatalog, MessageId::LibraryBusyTryAgain),
-                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::CommonClose),
                                                      .responseId = Gtk::ResponseType::CLOSE,
                                                      .role = AppDialogActionRole::Cancel}},
                                     Gtk::ResponseType::CLOSE);
@@ -463,7 +463,7 @@ namespace ao::gtk
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStaleTitle),
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStale),
-                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::GtkCommonClose),
+                                    {AppDialogAction{.label = gtkText(owner->_textCatalog, MessageId::CommonClose),
                                                      .responseId = Gtk::ResponseType::CLOSE,
                                                      .role = AppDialogActionRole::Cancel}},
                                     Gtk::ResponseType::CLOSE);
@@ -497,10 +497,10 @@ namespace ao::gtk
       AppDialog::presentMessage(*this,
                                 gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscardTitle),
                                 gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscardMessage),
-                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkTrackCreditsKeepEditing),
+                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::CommonKeepEditing),
                                                  .responseId = Gtk::ResponseType::CANCEL,
                                                  .role = AppDialogActionRole::Cancel},
-                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscard),
+                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::CommonDiscardChanges),
                                                  .responseId = Gtk::ResponseType::REJECT,
                                                  .role = AppDialogActionRole::Primary}},
                                 Gtk::ResponseType::CANCEL,

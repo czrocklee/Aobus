@@ -290,16 +290,16 @@ namespace ao::winui::layout
   {
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
-    appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
+    appendItem(items, "shell_open_library", _config.commands.openLibrary);
 
-    if (auto const rescan = appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
+    if (auto const rescan = appendItem(items, "shell_scan_library", _config.commands.rescanLibrary);
         rescan && ctx.bindRescanControl)
     {
       ctx.bindRescanControl(rescan);
     }
 
-    appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
-    appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
+    appendItem(items, "shell_import_library_data", _config.commands.importLibrary);
+    appendItem(items, "shell_export_library_data", _config.commands.exportLibrary);
     appendSeparator(items);
     appendItem(items, "winui_track_properties_command", _config.commands.presentTrackProperties, "Alt+Enter");
     appendItem(items, "winui_shell_columns", _config.commands.chooseColumns);
@@ -312,7 +312,7 @@ namespace ao::winui::layout
   {
     auto flyout = MenuFlyout{};
     auto const items = flyout.Items();
-    appendItem(items, "winui_shell_stop", _config.commands.stop);
+    appendItem(items, "playback_control_stop", _config.commands.stop);
     appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
     return flyout;
   }
@@ -332,44 +332,44 @@ namespace ao::winui::layout
       }
     };
 
-    appendMenu("winui_shell_menu_file",
+    appendMenu("shell_menu_file",
                [this, &ctx](auto const& items)
                {
-                 appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
+                 appendItem(items, "shell_open_library", _config.commands.openLibrary);
 
-                 if (auto const rescan = appendItem(items, "winui_shell_rescan", _config.commands.rescanLibrary);
+                 if (auto const rescan = appendItem(items, "library_scan_action", _config.commands.rescanLibrary);
                      rescan && ctx.bindRescanControl)
                  {
                    ctx.bindRescanControl(rescan);
                  }
 
                  appendSeparator(items);
-                 appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
-                 appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
+                 appendItem(items, "shell_import_library_data", _config.commands.importLibrary);
+                 appendItem(items, "shell_export_library_data", _config.commands.exportLibrary);
                });
-    appendMenu("winui_shell_menu_view",
+    appendMenu("shell_menu_view",
                [this](auto const& items)
                {
                  appendItem(items, "winui_shell_columns", _config.commands.chooseColumns);
                  // Classic authors no inspector toggle of its own, so the menu
                  // is the only place the overlay can be asked for at the widths
                  // that do not seat the inspector inline.
-                 appendItem(items, "winui_shell_track_details", _config.commands.toggleInspector);
+                 appendItem(items, "track_details_title", _config.commands.toggleInspector);
                  appendItem(
                    items, "winui_track_properties_command", _config.commands.presentTrackProperties, "Alt+Enter");
                  appendItem(items, "winui_shell_modern_mode", _config.commands.toggleShellMode);
                  appendItem(items, "winui_shell_reload_theme", _config.commands.reloadTheme);
                });
-    appendMenu("winui_shell_menu_playback",
+    appendMenu("shell_menu_playback",
                [this, &ctx](auto const& items)
                {
-                 if (auto const play = appendItem(items, "winui_shell_play_pause", _config.commands.playPause);
+                 if (auto const play = appendItem(items, "playback_action_play_pause", _config.commands.playPause);
                      play && ctx.bindPlayPauseControl)
                  {
                    ctx.bindPlayPauseControl(play);
                  }
 
-                 appendItem(items, "winui_shell_stop", _config.commands.stop);
+                 appendItem(items, "playback_control_stop", _config.commands.stop);
                  appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
                });
   }

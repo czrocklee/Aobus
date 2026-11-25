@@ -542,7 +542,7 @@ namespace
         "a cleared Credits list must not leave ordered or duplicate rows");
     }
     auto const emptySelection =
-      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::AppKitTrackDetails)) + "\n" +
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackDetailsTitle)) + "\n" +
       utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::AppKitSelectionDetailsHint)) + "\n";
     auto const multipleSelection =
       utf8Of(ao::appkit::catalogFormat(

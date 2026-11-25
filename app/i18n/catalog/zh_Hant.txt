@@ -20,7 +20,6 @@ zh_Hant:table {
     track_credits_replace { "取代…" }
     track_credits_clear { "清空此範圍" }
     track_credits_commit { "儲存製作人員" }
-    track_credits_cancel { "取消" }
     track_credit_delete { "刪除製作人員" }
     track_credit_blank_name { "第 {row} 行：請輸入名稱。" }
     track_credit_invalid_name_text { "第 {row} 行：名稱包含無效文字。" }
@@ -45,7 +44,6 @@ zh_Hant:table {
     track_number_invalid { "請輸入 0 至 65535 的整數。" }
     tui_go_to_back { "後退" }
     tui_go_to_forward { "前進" }
-    tui_go_to_cancel { "取消" }
     tui_navigation_pin { "顯示或隱藏常駐列表" }
     tui_go_to_title { "跳轉" }
     tui_go_to_status { "跳轉" }
@@ -66,18 +64,18 @@ zh_Hant:table {
     tui_workspace_history_unavailable { "沒有可切換的歷史檢視。" }
     tui_settings_keyboard_scope { "工作區快捷鍵。編輯器和選擇面板使用各自的按鍵。" }
     tui_playback_modes { "隨機播放：{shuffle, select, on {開} other {關}} · 循環：{repeat, select, one {單曲} all {全部} other {關}}" }
-    tui_playback_mode { "{mode, select, order {依序播放} all {列表循環} shuffle {隨機播放} shuffle_all {隨機循環} one {單曲循環} shuffle_one {隨機播放與單曲循環} other {依序播放}}" }
+    tui_playback_mode { "{mode, select, order {依序播放} all {全部循環} shuffle {隨機播放} shuffle_all {隨機循環} one {單曲循環} shuffle_one {隨機播放與單曲循環} other {依序播放}}" }
     tui_playback_mode_hint { "{current} · 點擊切換為「{next}」" }
 
     tui_settings_save_failed { "無法儲存設定。{detail}" }
-    tui_settings_load_failed { "無法讀取已儲存的偏好設定，已使用預設值。{detail}" }
+    tui_settings_load_failed { "無法讀取已儲存的設定，已使用預設值。{detail}" }
     tui_config_newer_settings { "設定由較新版本的 Aobus 儲存。此版本使用預設設定，且不會儲存對其所做的變更。" }
     tui_config_newer_output { "偏好的輸出裝置由較新版本的 Aobus 儲存。此版本會忽略它，且不會儲存新的偏好。" }
-    tui_settings_title { "設定" }
-    tui_settings_general { "一般" }
-    tui_settings_appearance { "外觀" }
+    settings_title { "設定" }
+    settings_page_general { "一般" }
+    settings_page_appearance { "外觀" }
     tui_settings_interaction { "操作" }
-    tui_settings_keyboard { "快捷鍵" }
+    settings_page_keyboard { "快捷鍵" }
     tui_settings_language { "語言" }
     tui_settings_system { "跟隨系統" }
     tui_settings_global { "TUI 全域設定" }
@@ -95,20 +93,15 @@ zh_Hant:table {
     tui_settings_hover { "懸停顯示音訊詳情" }
     tui_settings_on { "開啟" }
     tui_settings_off { "關閉" }
-    tui_settings_unbound { "未繫結" }
+    tui_settings_unbound { "未綁定" }
     tui_settings_language_hint { "語言立即生效，包括文字排序。播放不會中斷。" }
     tui_settings_invalid_chord { "請輸入有效的按鍵組合，例如 {example}。" }
     tui_settings_action_change { "修改" }
     tui_settings_action_choose { "選擇" }
-    tui_settings_action_apply { "套用" }
-    tui_settings_action_save { "儲存" }
-    tui_settings_action_cancel { "取消" }
+    common_apply { "套用" }
     tui_settings_action_pages { "切頁" }
-    tui_settings_action_close { "關閉" }
     tui_settings_action_edit { "編輯" }
-    tui_settings_action_add { "新增" }
-    tui_settings_action_remove { "移除" }
-    tui_settings_action_reset { "重設" }
+    common_reset { "重設" }
     tui_settings_action_search { "搜尋" }
     tui_settings_action_clear { "清除" }
     tui_settings_action_retry { "重試儲存" }
@@ -128,9 +121,9 @@ zh_Hant:table {
     tui_settings_tracks { "{count, plural, other {# 首曲目}}" }
     tui_settings_seconds { "{count, plural, other {# 秒}}" }
     tui_settings_effective_cover { "目前顯示模式：{mode}" }
-    tui_settings_conflict { "已由 {detail} 使用，請先移除該繫結。" }
+    tui_settings_conflict { "已由 {detail} 使用，請先移除該綁定。" }
     tui_settings_unsupported { "終端不支援或保留此按鍵：{detail}" }
-    tui_settings_stored_issue { "既有繫結需要處理：{detail}" }
+    tui_settings_stored_issue { "既有綁定需要處理：{detail}" }
 
     pilot_library_title { "音樂庫" }
     pilot_greeting { "歡迎，{name}" }
@@ -187,7 +180,7 @@ zh_Hant:table {
     track_presentation_songs { "歌曲" }
     track_presentation_description_songs { "以列表顯示按標題排序的所有曲目。" }
     track_presentation_albums { "專輯" }
-    track_presentation_description_albums { "按專輯分組，並顯示曲目相關欄位。" }
+    track_presentation_description_albums { "按專輯分組，展示曲目資訊欄位。" }
     track_presentation_artists { "藝人" }
     track_presentation_description_artists { "按專輯藝人分組，並依唱片目錄排序。" }
     track_presentation_performers { "演出者" }
@@ -197,16 +190,16 @@ zh_Hant:table {
     track_presentation_years { "年份" }
     track_presentation_description_years { "按年份分組。" }
     track_presentation_classical_composers { "古典：作曲家" }
-    track_presentation_description_classical_composers { "按作曲家分組，並顯示作品相關欄位。" }
+    track_presentation_description_classical_composers { "按作曲家分組，展示作品資訊欄位。" }
     track_presentation_classical_conductors { "古典：指揮" }
-    track_presentation_description_classical_conductors { "按指揮分組，並顯示作品和樂團欄位。" }
+    track_presentation_description_classical_conductors { "按指揮分組，展示作品與樂團欄位。" }
     track_presentation_classical_works { "古典：作品" }
-    track_presentation_description_classical_works { "按作品分組，並顯示作曲家相關欄位。" }
+    track_presentation_description_classical_works { "按作品分組，展示作曲家資訊欄位。" }
     track_presentation_tagging { "標籤整理" }
     track_presentation_description_tagging { "以列表顯示光碟和曲目編號、曲風、年份及標籤，方便整理。" }
     track_presentation_technical { "技術資訊" }
     track_presentation_description_technical { "以列表顯示編解碼器、位元率、檔案大小和路徑，方便檢查檔案。" }
-    create_custom_track_presentation { "建立自訂檢視..." }
+    create_custom_track_presentation { "建立自訂檢視…" }
     track_presentation_picker_label { "檢視" }
     track_presentation_all_tracks_manual_order_unavailable { "「所有曲目」沒有已儲存的順序。請建立並儲存列表，以手動排列整個音樂庫。" }
     audio_backend_pipewire_description { "低延遲的現代 Linux 音訊伺服器" }
@@ -282,15 +275,15 @@ zh_Hant:table {
     library_export_failed { "匯出失敗：{error}" }
     library_exported { "音樂庫匯出成功" }
     library_import_failed { "匯入失敗：{error}" }
-    library_import_confirmation_unavailable { "匯入失敗：確認無法使用" }
+    library_import_confirmation_unavailable { "匯入失敗：無法完成匯入確認" }
     library_imported { "音樂庫匯入成功" }
     track_filter_error { "篩選錯誤：{diagnostic}" }
     track_count { "{count, plural, one {# 首曲目} other {# 首曲目}}" }
     track_selection_summary { "{count, plural, one {已選 # 項} other {已選 # 項}}{hasDuration, select, yes { ({duration})} other {}}" }
     smart_list_membership_direct { "透過 {expression} 直接編輯成員" }
-    smart_list_membership_computed { "成員由系統計算 — 請編輯標籤或表示式" }
-    smart_list_expression_none { "(無)" }
-    smart_list_no_tracks { "{source, select, library {音樂庫中無曲目} other {源中無曲目}}" }
+    smart_list_membership_computed { "動態計算成員 — 請編輯標籤或篩選表示式" }
+    smart_list_expression_none { "（無）" }
+    smart_list_no_tracks { "{source, select, library {音樂庫中無曲目} other {源列表中無曲目}}" }
     smart_list_showing_source { "{source, select, library {顯示全部 {count, plural, one {# 首曲目} other {# 首曲目}}} other {從源顯示全部 {count, plural, one {# 首曲目} other {# 首曲目}}}}" }
     smart_list_invalid_filter { "無效的篩選條件" }
     smart_list_no_matches { "無匹配項" }
@@ -298,7 +291,7 @@ zh_Hant:table {
     smart_list_showing_all_matches { "顯示全部 {count, plural, one {# 個匹配項} other {# 個匹配項}}" }
     smart_list_showing_first_matches { "{scope, select, library {音樂庫預覽：{count, plural, other {# 首曲目}}中的 {visible} 首} source {源列表預覽：{count, plural, other {# 首曲目}}中的 {visible} 首} other {預覽：{count, plural, other {# 個匹配項}}中的 {visible} 個}}" }
     smart_list_preview_unavailable { "無法預覽：{diagnostic}" }
-    smart_list_untitled_track { "(無標題)" }
+    smart_list_untitled_track { "（無標題）" }
     list_order_saved_lists_only { "手動排序僅適用於已儲存的列表。" }
     list_order_library_busy { "音樂庫正忙。維護完成後將提供手動排序。" }
     list_order_authoring_unavailable { "目前無法修改音樂庫。" }
@@ -326,7 +319,7 @@ zh_Hant:table {
     track_channel_count { "{count, plural, one {# 聲道} other {# 聲道}}" }
     track_technical_unknown { "未知" }
     playback_not_playing { "未在播放" }
-    playback_connecting_audio_engine { "正在連線音訊引擎..." }
+    playback_connecting_audio_engine { "正在連線音訊引擎…" }
     playback_unknown_artist { "未知藝人" }
     playback_audio_pipeline { "音訊鏈路" }
     audio_node_source { "[源]" }
@@ -372,65 +365,63 @@ zh_Hant:table {
     playback_control_next_track { "下一首" }
     playback_control_previous_track { "上一首" }
     playback_control_shuffle { "隨機播放" }
-    playback_control_repeat { "重複播放" }
+    playback_control_repeat { "循環播放" }
     playback_action_play_pause { "播放/暫停" }
     playback_action_next { "下一首" }
     playback_action_previous { "上一首" }
     playback_action_toggle_shuffle { "切換隨機播放" }
-    playback_action_cycle_repeat { "切換重複播放模式" }
+    playback_action_cycle_repeat { "切換循環模式" }
     playback_volume_tooltip { "音量：{percent}%{state, select, muted { (已靜音)} hardware { (硬體)} other {}}" }
-    gtk_shell_menu_file { "檔案" }
-    gtk_shell_open_library { "開啟音樂庫..." }
-    gtk_shell_scan_library { "掃描音樂庫" }
-    gtk_shell_import_library_data { "匯入音樂庫資料..." }
-    gtk_shell_export_library_data { "匯出音樂庫資料..." }
+    shell_menu_file { "檔案" }
+    shell_scan_library { "掃描音樂庫" }
+    shell_import_library_data { "匯入音樂庫資料…" }
+    shell_export_library_data { "匯出音樂庫資料…" }
     gtk_shell_quit { "結束" }
-    gtk_shell_menu_edit { "編輯" }
-    gtk_shell_preferences { "偏好設定..." }
-    gtk_shell_menu_view { "檢視" }
-    gtk_shell_edit_layout { "編輯版面配置..." }
+    shell_menu_edit { "編輯" }
+    gtk_shell_preferences { "設定…" }
+    shell_menu_view { "檢視" }
+    gtk_shell_edit_layout { "編輯版面配置…" }
     gtk_shell_save_panel_sizes_as_layout_defaults { "將目前的面板大小儲存為版面配置預設值" }
     gtk_shell_reset_runtime_layout_state { "重設執行階段版面配置狀態" }
-    gtk_shell_menu_help { "說明" }
+    shell_menu_help { "說明" }
     gtk_shell_about { "關於" }
     gtk_shell_application_menu { "應用程式選單" }
     gtk_playback_reveal_playing_track { "定位目前播放的曲目" }
     gtk_playback_toggle_mute { "切換靜音" }
     gtk_playback_show_current_album { "顯示目前專輯" }
     gtk_playback_now_playing_cover_art { "目前播放曲目的封面" }
-    gtk_playback_position { "播放位置" }
-    gtk_library_quick_filter_placeholder { "搜尋歌曲、藝人、專輯、標籤..." }
+    playback_position { "播放位置" }
+    gtk_library_quick_filter_placeholder { "篩選曲目、藝人、專輯、標籤…" }
     gtk_library_clear_filter { "清除篩選" }
-    gtk_library_create_list_from_filter { "依目前的篩選條件建立列表" }
-    list_new { "新建列表..." }
-    gtk_list_new_playlist { "新建播放清單..." }
-    list_edit { "編輯列表..." }
+    list_create_from_filter { "依目前的篩選條件建立列表" }
+    list_new { "新建列表…" }
+    gtk_list_new_playlist { "新建播放清單…" }
+    list_edit { "編輯列表…" }
     list_delete { "刪除列表" }
-    list_delete_subtree { "刪除列表及其子項..." }
-    gtk_smart_list_new_title { "新建列表" }
-    gtk_smart_list_edit_title { "編輯列表" }
+    list_delete_subtree { "刪除列表及其子項…" }
+    list_editor_new_title { "新建列表" }
+    list_editor_edit_title { "編輯列表" }
     gtk_smart_list_new_playlist_title { "新建播放清單" }
-    gtk_common_cancel { "取消" }
-    gtk_common_create { "建立" }
-    gtk_common_save { "儲存" }
-    gtk_common_close { "關閉" }
-    gtk_smart_list_name_placeholder { "列表名稱" }
-    gtk_smart_list_name { "名稱" }
-    gtk_smart_list_description_placeholder { "可選描述" }
-    gtk_smart_list_description { "描述" }
+    common_cancel { "取消" }
+    common_create { "建立" }
+    common_save { "儲存" }
+    common_close { "關閉" }
+    list_field_name_placeholder { "列表名稱" }
+    list_field_name { "名稱" }
+    list_field_description_placeholder { "可選描述" }
+    list_field_description { "描述" }
     gtk_smart_list_membership_tag_placeholder { "用於確定成員資格的可見標籤" }
     gtk_smart_list_membership_tag { "成員標籤" }
-    gtk_smart_list_inherited_filter { "繼承的篩選條件" }
-    gtk_smart_list_filter_expression_placeholder { "篩選表示式（輸入 $、@、# 或 %）" }
-    gtk_smart_list_local_filter { "本機篩選條件" }
-    gtk_smart_list_effective_filter { "實際篩選條件" }
-    gtk_smart_list_membership { "成員資格" }
-    gtk_smart_list_auto_presentation { "自動" }
-    gtk_smart_list_unavailable_presentation { "無法使用：{id}（自動）" }
-    gtk_smart_list_presentation { "檢視" }
-    gtk_smart_list_preview { "預覽" }
+    list_field_inherited_filter { "繼承的篩選條件" }
+    list_field_filter_placeholder { "篩選表示式（輸入 $、@、# 或 %）" }
+    list_field_local_filter { "本機篩選條件" }
+    list_field_effective_filter { "實際篩選條件" }
+    list_field_membership { "成員資格" }
+    track_presentation_auto { "自動" }
+    track_presentation_unavailable { "無法使用：{id}（自動）" }
+    list_field_preview { "預覽" }
     gtk_smart_list_track { "曲目" }
-    gtk_smart_list_invalid_source { "(無效源)" }
+    gtk_smart_list_invalid_source { "（無效源列表）" }
     gtk_smart_list_choose_membership_tag { "選取一個可見標籤作為播放清單成員資格" }
     gtk_library_open_music_library { "開啟音樂庫" }
     library_select_export_mode { "選取匯出模式" }
@@ -458,20 +449,20 @@ zh_Hant:table {
     list_delete_action { "刪除" }
     list_delete_all_action { "全部刪除" }
     gtk_list_unable_to_delete_title { "無法刪除列表" }
-    list_delete_question { "刪除“{name}”？\n\n該列表將被移除，音樂檔案將予以保留。" }
+    list_delete_question { "刪除「{name}」？\n\n該列表將被移除，音樂檔案將予以保留。" }
     list_delete_subtree_question { "刪除此衍生子樹中的 {count, plural, one {# 個列表} other {# 個列表}}？\n\n{entries}\n巢狀播放清單使用的標籤將會保留。\n音樂檔案也會保留。" }
     list_remove_tag { "同時從 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
     list_tag_references { "{tag} 仍由下列項目參照：{references}。移除它可能會變更這些列表。" }
     library_restore_confirmation { "此還原操作將取代以下內容：{scope}。\n\n資料：YAML v{version}，模式 ''{mode}''。\n預覽：建立 {tracksCreated} 首、更新 {tracksUpdated} 首、刪除 {tracksDeleted} 首；建立 {listsCreated} 個列表、刪除 {listsDeleted} 個列表；忽略 {dangling} 個懸空參照；依原樣保留 {invalidFilters} 個無效的列表篩選條件。\n\n請只在此內容與所選備份相符時繼續。" }
     library_file_selection_error { "{operation}：{message}" }
-    gtk_list_other_computed_membership { "其他列表的成員由系統計算；請改為編輯其表示式或曲目標籤。" }
+    gtk_list_other_computed_membership { "其他列表的成員由篩選條件自動計算，請直接修改其篩選表示式或曲目標籤。" }
     list_no_membership_add_targets { "沒有可接收這些曲目的播放清單" }
-    gtk_list_create_playlist { "建立播放清單..." }
-    gtk_list_manage_lists { "管理列表..." }
+    gtk_list_create_playlist { "建立播放清單…" }
+    gtk_list_manage_lists { "管理列表…" }
     list_membership_add_target { "{name} ({tag})" }
     list_add_to_playlist { "新增到播放清單" }
     list_remove_from_current { "從 {name} ({tag}) 中移除" }
-    gtk_list_remove_computed_unavailable { "無法從此列表中移除，因為其成員資格是透過計算得出的。" }
+    gtk_list_remove_computed_unavailable { "此列表的成員由篩選條件自動計算，無法直接從中移除曲目。" }
     list_move_up { "上移" }
     list_move_down { "下移" }
     list_move_to_top { "移至最上方" }
@@ -485,17 +476,13 @@ zh_Hant:table {
     gtk_list_move_to_top_action { "移至手動排序的最上方" }
     gtk_list_move_to_bottom_action { "移至手動排序的最下方" }
     gtk_list_reset_order_action { "重設手動排序" }
-    gtk_preferences_title { "偏好設定" }
-    gtk_preferences_page_general { "一般" }
-    gtk_preferences_page_appearance { "外觀" }
     gtk_preferences_page_playback_output { "播放/輸出" }
     gtk_preferences_page_layout { "版面配置" }
-    gtk_preferences_page_keyboard { "鍵盤" }
     gtk_preferences_theme { "主題" }
     gtk_preferences_theme_classic { "經典" }
     gtk_preferences_theme_modern { "現代" }
-    gtk_preferences_output_device { "輸出裝置" }
-    gtk_preferences_choose_output_device { "選取輸出裝置..." }
+    playback_output_device { "輸出裝置" }
+    gtk_preferences_choose_output_device { "選取輸出裝置…" }
     gtk_preferences_output_unavailable { "無法使用" }
     gtk_preferences_default_layout_preset { "預設範本" }
     gtk_preferences_layout_preset_classic { "經典" }
@@ -506,15 +493,14 @@ zh_Hant:table {
     gtk_shortcut_reset_all { "全部重設" }
     gtk_shortcut_reset_all_tooltip { "將所有快捷鍵重設為預設值" }
     gtk_shortcut_other_category { "其他" }
-    gtk_shortcut_conflict_title { "重新分配快捷鍵？" }
-    gtk_shortcut_conflict_message { "{chord} 已指派給「{owner}」。要改為指派給此操作嗎？" }
-    gtk_shortcut_reassign { "重新分配" }
+    gtk_shortcut_conflict_title { "重新綁定快捷鍵？" }
+    gtk_shortcut_conflict_message { "{chord} 已綁定給「{owner}」。要改為綁定至此操作嗎？" }
+    gtk_shortcut_reassign { "重新綁定" }
     gtk_shortcut_conflicts { "衝突的快捷鍵：{chords}" }
-    gtk_shortcut_unassigned { "未分配" }
+    gtk_shortcut_unassigned { "未綁定" }
     gtk_shortcut_remove { "移除 {chord}" }
     gtk_shortcut_add { "新增…" }
     gtk_shortcut_add_tooltip { "為此操作錄製新快捷鍵" }
-    gtk_shortcut_reset { "重設" }
     gtk_shortcut_reset_tooltip { "將此操作重設為預設值" }
     gtk_shortcut_capture_title { "設定快捷鍵" }
     gtk_shortcut_capture_prompt { "請按下新的快捷鍵組合。" }
@@ -528,10 +514,9 @@ zh_Hant:table {
     gtk_action_category_shell { "視窗/介面" }
     gtk_action_category_workspace { "工作區" }
     gtk_action_category_tracks { "曲目" }
-    gtk_action_output_devices { "輸出裝置" }
+    playback_output_devices { "輸出裝置" }
     gtk_action_system_menu { "系統選單" }
     gtk_action_reveal_track { "定位曲目" }
-    gtk_action_track_properties { "屬性" }
     gtk_action_edit_tags { "編輯標籤" }
     gtk_custom_view_title { "編輯自訂檢視" }
     gtk_custom_view_label_placeholder { "檢視名稱" }
@@ -543,8 +528,8 @@ zh_Hant:table {
     gtk_custom_view_visible_columns { "可見欄" }
     gtk_custom_view_sort_ascending { "遞增排序" }
     gtk_custom_view_sort_descending { "遞減排序" }
-    gtk_common_remove { "移除" }
-    gtk_presentation_view_inactive { "所選曲目檢視已不再活躍。" }
+    common_remove { "移除" }
+    gtk_presentation_view_inactive { "所選曲目檢視目前未啟用。" }
     gtk_presentation_unable_to_change { "無法更改曲目檢視" }
     gtk_presentation_copy_label { "{label} 複本" }
     tui_shell_command_palette_title { "命令面板" }
@@ -559,15 +544,10 @@ zh_Hant:table {
     tui_navigation_sync_failed { "無法顯示目前列表：{detail}" }
     tui_list_search_hint { "/ 搜尋 · Esc 清除" }
     tui_list_search_empty { "無符合項目" }
-    tui_list_editor_new_title { "新建列表" }
-    tui_list_editor_edit_title { "編輯列表" }
-    tui_list_field_name { "名稱" }
-    tui_list_field_description { "描述" }
-    tui_list_field_expression { "篩選表示式" }
+    list_field_expression { "篩選表示式" }
     tui_list_inherited_expression { "繼承" }
     tui_list_effective_expression { "實際" }
-    tui_list_save_action { "儲存" }
-    tui_list_status_saving { "正在儲存…" }
+    common_saving { "正在儲存…" }
     tui_list_status_deleting { "正在刪除…" }
     tui_list_delete_more { "{count, plural, other {另外 # 個列表}}" }
     tui_list_delete_cancelled { "刪除已取消；未移除任何內容" }
@@ -631,7 +611,6 @@ zh_Hant:table {
     tui_shell_detail_select_visual { "從目前曲目開始或確認視覺選取" }
     tui_shell_detail_select_all { "標記此檢視中的全部曲目" }
     tui_shell_detail_select_clear { "清除標記" }
-    tui_shell_output_devices_title { "輸出裝置" }
     tui_playback_no_active_track { "目前沒有播放曲目" }
     tui_playback_volume { "音量 {percent}%" }
     tui_playback_no_output_device_selected { "未選取輸出裝置" }
@@ -679,7 +658,7 @@ zh_Hant:table {
     tui_library_no_tracks_found { "此列表中沒有曲目。可選擇其他列表瀏覽。" }
     tui_library_marked_count { "{count, plural, other {已標記 # 首}}" }
     tui_library_visual_mode { "可視選擇" }
-    tui_library_ready { "就緒" }
+    common_ready { "就緒" }
     tui_library_scan_already_running { "音樂庫掃描已在進行中" }
     tui_library_scan_cancelling { "正在取消掃描" }
     tui_library_section { "分節：{name}" }
@@ -696,8 +675,6 @@ zh_Hant:table {
     tui_editor_title { "曲目屬性" }
     tui_editor_title_multiple { "編輯 {count, plural, other {# 首曲目}}" }
     tui_editor_applies_to_all { "變更將套用至全部 {count, plural, other {# 首曲目}}" }
-    tui_editor_tab_metadata { "後設資料" }
-    tui_editor_tab_tags { "標籤" }
     tui_editor_tab_properties { "屬性" }
     tui_editor_tab_tracks { "曲目" }
     tui_editor_clear_for_all { "清空全部 {count, plural, other {# 首曲目}}" }
@@ -733,39 +710,23 @@ zh_Hant:table {
     tui_editor_open_incomplete { "無法開啟完整的選取範圍" }
     tui_editor_applied { "已更新 {count, plural, other {# 首曲目}}" }
     tui_editor_no_change { "無需變更" }
-    tui_editor_busy { "音樂庫忙碌中，請重試" }
+    tui_editor_busy { "音樂庫正忙，請重試" }
     tui_editor_exit_waiting { "正在完成儲存… Ctrl-C 停止等待" }
-    winui_shell_menu_file { "檔案" }
-    winui_shell_open_library { "開啟音樂庫..." }
-    winui_shell_rescan { "重新掃描" }
-    winui_shell_rescan_library { "重新掃描音樂庫" }
-    winui_shell_import_library_data { "匯入音樂庫資料..." }
-    winui_shell_export_library_data { "匯出音樂庫資料..." }
+    library_scan_action { "掃描" }
     winui_library_select_import_mode { "選取匯入模式" }
     winui_library_choose_import_mode { "將此備份合併到音樂庫，或還原其資料範圍：" }
     winui_library_import_mode_merge { "合併（保留備份範圍外的資料）" }
     winui_library_import_mode_restore { "還原（預覽後取代備份範圍）" }
-    winui_shell_menu_view { "檢視" }
     winui_shell_modern_mode { "現代模式" }
-    winui_shell_columns { "欄設定..." }
+    winui_shell_columns { "欄設定…" }
     winui_shell_reload_theme { "重新載入主題" }
-    winui_shell_menu_playback { "播放" }
-    winui_shell_play_pause { "播放/暫停" }
-    winui_shell_stop { "停止" }
+    shell_menu_playback { "播放" }
     winui_shell_reveal_current_track { "定位目前曲目" }
-    winui_track_properties_command { "屬性..." }
-    winui_track_properties_title { "屬性" }
-    winui_track_properties_selected_title { "屬性 — 已選取 {count, plural, one {# 首曲目} other {# 首曲目}}" }
-    winui_track_properties_save { "儲存" }
-    winui_track_properties_cancel { "取消" }
-    winui_track_properties_tags { "標籤" }
+    winui_track_properties_command { "屬性…" }
     winui_track_properties_tags_hint { "所有已選曲目共有的標籤" }
-    winui_track_properties_custom_metadata { "自訂後設資料" }
     winui_track_properties_custom_key { "新鍵" }
     winui_track_properties_custom_value { "新值" }
     winui_track_properties_delete { "刪除" }
-    winui_track_properties_add { "新增" }
-    winui_track_properties_editing_unavailable { "無法編輯：{detail}" }
     winui_track_properties_save_failed { "儲存失敗：{detail}" }
     winui_track_properties_stale { "開啟此對話框期間，音樂庫已發生變更。請選擇「重新載入」查看最新值。" }
     track_properties_unstaged_input_hint { "儲存前，請新增標籤或自訂欄位，或清除未完成的輸入。" }
@@ -773,40 +734,18 @@ zh_Hant:table {
     winui_track_properties_invalid_value { "值無效：{detail}" }
     winui_track_properties_reload { "重新載入" }
     winui_track_properties_discard_question { "捨棄這些修改？" }
-    winui_track_properties_discard { "捨棄修改" }
-    winui_track_properties_keep_editing { "繼續編輯" }
-    winui_list_create_from_filter { "依目前的篩選條件建立列表" }
-    winui_list_editor_new_title { "新建列表" }
-    winui_list_editor_edit_title { "編輯列表" }
-    winui_common_cancel { "取消" }
-    winui_common_create { "建立" }
-    winui_common_save { "儲存" }
-    winui_list_name_placeholder { "列表名稱" }
-    winui_list_name { "名稱" }
-    winui_list_description_placeholder { "可選描述" }
-    winui_list_description { "描述" }
-    winui_list_inherited_filter { "繼承的篩選條件" }
-    winui_list_filter_placeholder { "篩選表示式（輸入 $、@、# 或 %）" }
-    winui_list_local_filter { "本機篩選條件" }
-    winui_list_effective_filter { "實際篩選條件" }
-    winui_list_membership { "成員資格" }
-    winui_list_auto_presentation { "自動" }
-    winui_list_presentation { "檢視" }
-    winui_list_preview { "預覽" }
-    winui_shell_track_details { "曲目詳情" }
+    common_discard_changes { "捨棄修改" }
+    common_keep_editing { "繼續編輯" }
+    track_details_title { "曲目詳情" }
     winui_shell_track_details_resize { "調整曲目詳情面板寬度" }
     winui_shell_classic_mode { "經典模式" }
-    winui_playback_output_device { "輸出裝置" }
-    winui_playback_volume { "音量" }
-    winui_playback_position { "播放位置" }
+    playback_volume { "音量" }
     winui_playback_no_output_devices { "無輸出裝置" }
     winui_library_open_label { "開啟" }
-    winui_library_rescan_label { "重新掃描" }
     winui_library_navigation_pane_title { "音樂庫" }
     winui_library_navigation_pane_resize { "調整導航面板寬度" }
-    winui_library_quick_filter_placeholder { "篩選曲目" }
-    winui_library_ready { "就緒" }
-    winui_library_rescanning { "正在重新掃描音樂庫..." }
+    library_filter_placeholder { "篩選曲目" }
+    winui_library_rescanning { "正在掃描音樂庫…" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
     winui_track_resize_column { "調整欄 {column} 的寬度" }
@@ -827,7 +766,6 @@ zh_Hant:table {
     winui_shell_layout_failed { "無法建立介面版面配置：{detail}" }
     winui_activity_details { "檢視活動詳情" }
     winui_activity_notifications { "通知" }
-    winui_activity_hide_notification { "在狀態列中隱藏此通知" }
     winui_library_ready_at { "音樂庫已就緒：{root}" }
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "載入檢視失敗：{detail}" }
@@ -837,10 +775,10 @@ zh_Hant:table {
     winui_column_visibility_failed { "更改欄可見性失敗：{detail}" }
     winui_column_not_sortable { "欄 ''{column}'' 不支援排序" }
     winui_sort_failed { "排序失敗：{detail}" }
-    winui_unavailable_track { "無法使用曲目" }
+    winui_unavailable_track { "無法使用的曲目" }
     winui_theme_file_not_found { "未找到主題檔案：{path}" }
     winui_startup_failure { "Aobus 無法啟動：\n\n{detail}" }
-    winui_column_sort_presentation { "欄排序" }
+    track_presentation_column_sort { "欄排序" }
     track_multiple_values { "<多個值>" }
     track_metadata_heading { "後設資料" }
     track_audio_properties_heading { "音訊屬性" }
@@ -849,10 +787,10 @@ zh_Hant:table {
     library_scan_cue_ambiguous { "{uri}：有多個 CUE 檔案與此檔案相符。請僅保留一個相符的 CUE 檔案。" }
     library_scan_cue_unsupported { "{uri}：無法透過 CUE 分割此檔案。請刪除 CUE 檔案或為其重新命名，以匯入整個音訊檔案。" }
     library_scan_cue_no_matching_audio { "{uri}：沒有支援的音訊檔案與此 CUE 檔案同名。" }
-    library_scan_cue_whole_file { "{uri}：已作為整個檔案匯入。請移除該音軌後重新掃描以分割檔案。" }
+    library_scan_cue_whole_file { "{uri}：已作為整個檔案匯入。請移除該曲目後重新掃描以分割檔案。" }
     library_scan_cue_missing { "{uri}：沒有用於分割此檔案的 CUE 檔案。已保留匯入的片段。" }
-    library_scan_cue_layout_mismatch { "{uri}：CUE 分段無效，或與已匯入的範圍不一致。請檢查 CUE 檔案後重新掃描。若要替換既有範圍，請先移除已匯入的音軌。" }
-    library_scan_cue_carrier_mismatch { "{uri}：無法確認檔案的影格數和取樣率是否與已匯入的片段一致。未變更已匯入的音軌。" }
+    library_scan_cue_layout_mismatch { "{uri}：CUE 分段無效，或與已匯入的範圍不一致。請檢查 CUE 檔案後重新掃描。若要替換既有範圍，請先移除已匯入的曲目。" }
+    library_scan_cue_carrier_mismatch { "{uri}：無法確認檔案的影格數和取樣率是否與已匯入的片段一致。未變更已匯入的曲目。" }
     library_scan_cue_detail { " 詳細資訊：{detail}" }
     library_scan_cue_additional_issues { "{count, plural, other {另有 # 個 CUE 問題；詳情請查看記錄。}}" }
     track_cue_number { "CUE 音軌編號" }
@@ -871,29 +809,26 @@ zh_Hant:table {
     track_edit_stale { "編輯此項目期間，音樂庫已變更。請重新載入值後再試一次。" }
     track_editing_unavailable { "目前無法編輯音樂庫。" }
     track_clear_field_for_tracks { "清除 {count, plural, other {# 首曲目}}的「{field}」" }
-    gtk_track_properties_title { "屬性" }
-    gtk_track_properties_selected_title { "屬性 — 已選取 {count, plural, one {# 首曲目} other {# 首曲目}}" }
-    gtk_track_editing_unavailable { "無法編輯：{detail}" }
+    track_properties_title { "屬性" }
+    track_properties_selected_title { "屬性 — 已選取 {count, plural, one {# 首曲目} other {# 首曲目}}" }
+    track_properties_editing_unavailable { "無法編輯：{detail}" }
     gtk_track_save_failed { "儲存失敗" }
     gtk_track_save_stale_title { "無法儲存變更" }
     gtk_track_save_stale { "此對話框開啟期間，音樂庫已變更。請重新載入屬性後再試一次。" }
     gtk_track_credits_discard_title { "捨棄對製作人員名單的修改？" }
     gtk_track_credits_discard_message { "現在關閉屬性會遺失對製作人員名單尚未儲存的修改。" }
-    gtk_track_credits_discard { "捨棄修改" }
-    gtk_track_credits_keep_editing { "繼續編輯" }
     gtk_tag_add { "新增…" }
     gtk_tag_add_placeholder { "新增標籤…" }
     gtk_tag_remove { "移除標籤 {tag}" }
-    gtk_custom_metadata_title { "自訂後設資料" }
+    track_custom_metadata_title { "自訂後設資料" }
     gtk_custom_metadata_key { "鍵" }
     gtk_custom_metadata_value { "值" }
     gtk_custom_metadata_deleted { "已移除自訂後設資料 ''{key}''" }
     gtk_custom_metadata_delete { "刪除自訂後設資料" }
     gtk_activity_hide_status { "隱藏狀態" }
-    gtk_activity_hide_notification { "在狀態列中隱藏此通知" }
+    activity_hide_notification { "在狀態列中隱藏此通知" }
     gtk_manual_order_drag { "拖曳以調整曲目的手動排序" }
     gtk_manual_order_rearrange { "重新排列曲目" }
-    gtk_status_ready { "Aobus 已就緒" }
     gtk_edit_value { "編輯值" }
     gtk_collapse_panel { "收合面板" }
     gtk_expand_panel { "展開面板" }
@@ -908,7 +843,6 @@ zh_Hant:table {
     gtk_startup_activate_library_failed { "Aobus 無法啟用音樂庫：{detail}" }
     gtk_startup_launch_library_failed { "Aobus 無法啟動所選音樂庫：{detail}" }
     gtk_layout_editor_title { "版面配置編輯器" }
-    gtk_layout_apply { "套用" }
     gtk_layout_unable_to_save { "無法儲存版面配置" }
     gtk_config_newer_layout { "自訂版面配置由較新版本的 Aobus 儲存。此版本將改為顯示內建版面配置，且不會儲存對自訂版面配置所做的變更。" }
     gtk_layout_tree_node { "節點" }
@@ -928,8 +862,8 @@ zh_Hant:table {
     gtk_layout_invalid_component_ids { "無效的版面配置元件 ID" }
     gtk_layout_validation_component { "預設 ''{preset}'' 元件 ''{component}'' 型別 ''{type}'' 驗證失敗：\n\n{detail}" }
     gtk_common_ok { "確定" }
-    gtk_common_add { "新增" }
-    gtk_common_undo { "撤銷" }
+    common_add { "新增" }
+    gtk_common_undo { "還原" }
     gtk_common_no { "否" }
     gtk_common_yes { "是" }
     gtk_layout_id { "ID" }
@@ -937,7 +871,7 @@ zh_Hant:table {
     gtk_layout_capability_anchor { "錨點" }
     gtk_layout_capability_menu { "選單" }
     gtk_layout_unknown_id { "⚠ 未知 ID：{id}" }
-    gtk_layout_unsupported_editor { "(不受支援的編輯器)" }
+    gtk_layout_unsupported_editor { "（不受支援的編輯器）" }
     gtk_layout_no_selection { "無選取項" }
     gtk_layout_general { "一般" }
     gtk_layout_properties { "版面配置屬性" }
@@ -951,7 +885,7 @@ zh_Hant:table {
     gtk_layout_category_application { "應用程式" }
     gtk_layout_category_library { "音樂庫" }
     gtk_layout_category_layout { "版面配置" }
-    gtk_layout_component_box { "盒子" }
+    gtk_layout_component_box { "容器框" }
     gtk_layout_component_split_pane { "分割面板" }
     gtk_layout_component_label { "標籤" }
     gtk_layout_component_action_button { "操作按鈕" }
@@ -986,7 +920,7 @@ zh_Hant:table {
     gtk_layout_component_scroll_window { "捲動視窗" }
     gtk_layout_component_tabs { "分頁" }
     gtk_layout_component_responsive_class { "回應式類別" }
-    gtk_layout_component_center_box { "置中方塊" }
+    gtk_layout_component_center_box { "置中容器框" }
     gtk_layout_component_open_library_button { "開啟音樂庫按鈕" }
     gtk_layout_component_workspace_with_detail { "帶詳情工作區" }
     gtk_layout_component_collapsible_split { "可收合分割區" }
@@ -994,7 +928,7 @@ zh_Hant:table {
     gtk_layout_component_field_grid { "欄位格線" }
     gtk_layout_component_tag_editor { "標籤編輯器" }
     gtk_layout_component_selection_region { "選取區域" }
-    gtk_layout_component_detail_undo_bar { "詳情撤銷欄" }
+    gtk_layout_component_detail_undo_bar { "詳情還原欄" }
     gtk_layout_property_text { "文字" }
     gtk_layout_property_orientation { "方向" }
     gtk_layout_property_spacing { "間距" }
@@ -1049,22 +983,22 @@ zh_Hant:table {
     gtk_layout_property_expand_vertical { "垂直擴展" }
     gtk_layout_property_horizontal_align { "水平對齊" }
     gtk_layout_property_vertical_align { "垂直對齊" }
-    gtk_layout_property_width_request { "請求寬度" }
-    gtk_layout_property_height_request { "請求高度" }
+    gtk_layout_property_width_request { "最小寬度" }
+    gtk_layout_property_height_request { "最小高度" }
     gtk_layout_property_x { "X" }
     gtk_layout_property_y { "Y" }
     gtk_layout_property_width { "寬度" }
     gtk_layout_property_height { "高度" }
     gtk_layout_property_z_index { "Z-Index" }
-    gtk_layout_value_ambient { "環境" }
+    gtk_layout_value_ambient { "氛圍" }
     gtk_layout_value_classic_inline { "經典內聯" }
     gtk_layout_value_hidden { "隱藏" }
     gtk_layout_value_reserve { "保留空間" }
     gtk_layout_value_small { "小" }
     gtk_layout_value_normal { "普通" }
     gtk_layout_value_large { "大" }
-    gtk_layout_value_flat { "平坦" }
-    gtk_layout_value_raised { "凸起" }
+    gtk_layout_value_flat { "扁平" }
+    gtk_layout_value_raised { "立體" }
     gtk_layout_value_circular { "圓形" }
     gtk_layout_value_suggested { "建議" }
     gtk_layout_value_destructive { "破壞性" }
@@ -1082,7 +1016,6 @@ zh_Hant:table {
     gtk_layout_value_compact { "精簡" }
     gtk_layout_value_tooltip { "工具提示" }
     gtk_layout_value_reveal { "定位目前曲目" }
-    gtk_layout_value_play_pause { "播放/暫停" }
     gtk_layout_value_filter_by_field { "按欄位篩選" }
     gtk_layout_value_start { "起始" }
     gtk_layout_value_end { "結束" }
@@ -1112,13 +1045,9 @@ zh_Hant:table {
     tui_panel_resize { "移動目前側欄的分隔線" }
     tui_detail_file_name { "檔案名稱" }
     tui_detail_focus { "進入曲目詳情" }
-    tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
+    tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分節 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
-    tui_shell_tags { "標籤" }
-    tui_tag_popover_cancel { "捨棄變更" }
-    tui_tag_popover_close { "關閉" }
     tui_tag_popover_title { "標籤 · {count, plural, other {# 首曲目}}" }
-    tui_tag_popover_apply { "套用" }
     tui_tag_popover_add_apply { "新增並套用" }
     tui_shell_detail_edit_tags { "編輯曲目標籤" }
     tui_settings_terminal_title { "終端標題格式" }
@@ -1127,13 +1056,11 @@ zh_Hant:table {
     tui_settings_title_preview { "預覽：{title}" }
     tui_settings_invalid_title_format { "格式無效：{detail}" }
 
-    appkit_collection_hint { "為收藏命名，並選擇其中包含的內容。" }
-    appkit_track_details { "曲目詳情" }
+    appkit_collection_hint { "為此列表命名，並選擇其中包含的內容。" }
     appkit_selected_music { "所選音樂" }
     appkit_saved_list { "已儲存的列表" }
     appkit_delete_list_question { "刪除列表？" }
     appkit_delete_list_hint { "此列表及其子列表將被移除。" }
-    appkit_cancel { "取消" }
     appkit_delete_list { "刪除列表" }
     appkit_save_changes { "儲存修改" }
     appkit_field_actions { "欄位操作" }
@@ -1145,24 +1072,16 @@ zh_Hant:table {
     appkit_add_shared_tags { "新增共有標籤" }
     appkit_shared_tags { "共有標籤" }
     appkit_list_details { "列表詳情" }
-    appkit_name { "名稱" }
-    appkit_description { "描述" }
-    appkit_expression { "篩選表示式" }
-    appkit_list_name { "列表名稱" }
-    appkit_optional_description { "可選描述" }
     appkit_list_expression_hint { "使用 #favorites 這類標籤可直接加入曲目。也可以使用查詢自動收集符合條件的音樂。" }
     appkit_collapse_section { "收合此部分" }
     appkit_expand_section { "展開此部分" }
     appkit_edits_storage_hint { "編輯內容會儲存在 Aobus 中，音訊檔案保持不變。" }
     appkit_deletion_keeps_media { "曲目、標籤和音訊檔案都會保留。" }
-    appkit_saving { "正在儲存⋯" }
     appkit_will_clear { "將清除" }
     appkit_list { "列表" }
     appkit_discard_question { "捨棄這些修改？" }
     appkit_discard_hint { "未儲存的輸入將被捨棄。" }
-    appkit_keep_editing { "繼續編輯" }
     appkit_keep_open { "保持開啟" }
-    appkit_discard_changes { "捨棄修改" }
     appkit_clear_selected_field { "清除所選曲目的此欄位" }
     appkit_restore_field_value { "還原各曲目的原值" }
     appkit_edit_tracks { "編輯 {count, plural, other {# 首曲目}}" }
@@ -1170,11 +1089,9 @@ zh_Hant:table {
     appkit_deleting_lists { "{count, plural, other {將移除 # 個列表}}" }
     appkit_field_actions_for { "{field} 操作" }
     appkit_properties_selection { "屬性 — 已選取 {count, plural, other {# 首曲目}}" }
-    appkit_new_list { "新建列表" }
-    appkit_edit_list { "編輯列表" }
     appkit_remove_from_list { "從列表中移除" }
     appkit_properties_stale { "音樂庫已變更。輸入內容已保留；請重新開啟屬性以編輯目前版本。" }
-    appkit_editor_busy { "音樂庫忙碌中。輸入內容已保留；請再次嘗試儲存。" }
+    appkit_editor_busy { "音樂庫正忙。輸入內容已保留；請再次嘗試儲存。" }
     appkit_editor_stale { "音樂庫已變更。輸入內容已保留；請重新開啟編輯器以繼續。" }
     appkit_about { "關於 Aobus" }
     appkit_services { "服務" }
@@ -1183,9 +1100,8 @@ zh_Hant:table {
     appkit_show_all { "顯示全部" }
     appkit_quit { "結束 Aobus" }
     appkit_menu_file { "檔案" }
-    appkit_open_library_action { "開啟音樂庫⋯" }
+    shell_open_library { "開啟音樂庫…" }
     appkit_open_recent { "打開最近使用過的項目" }
-    appkit_rescan_library { "重新掃描音樂庫" }
     appkit_close_window { "關閉視窗" }
     appkit_menu_edit { "編輯" }
     appkit_undo { "還原" }
@@ -1197,12 +1113,12 @@ zh_Hant:table {
     appkit_delete { "刪除" }
     appkit_select_all { "全選" }
     appkit_filter_tracks { "篩選曲目" }
-    appkit_properties_action { "屬性⋯" }
+    appkit_properties_action { "屬性…" }
     appkit_lists { "列表" }
-    appkit_new_list_action { "新建列表⋯" }
-    appkit_new_child_list_action { "新建子列表⋯" }
-    appkit_edit_list_action { "編輯列表⋯" }
-    appkit_delete_list_action { "刪除列表⋯" }
+    appkit_new_list_action { "新建列表…" }
+    appkit_new_child_list_action { "新建子列表…" }
+    appkit_edit_list_action { "編輯列表…" }
+    appkit_delete_list_action { "刪除列表…" }
     appkit_menu_view { "顯示方式" }
     appkit_modern { "現代" }
     appkit_classic { "經典" }
@@ -1212,12 +1128,11 @@ zh_Hant:table {
     appkit_hide_sidebar { "隱藏側邊欄" }
     appkit_show_activity { "顯示活動" }
     appkit_enter_full_screen { "進入全螢幕" }
-    appkit_customize_toolbar { "自訂工具列⋯" }
+    appkit_customize_toolbar { "自訂工具列…" }
     appkit_appearance_system { "跟隨系統" }
     appkit_appearance_light { "淺色" }
     appkit_appearance_dark { "深色" }
-    appkit_menu_playback { "播放" }
-    appkit_output_device_action { "輸出裝置⋯" }
+    appkit_output_device_action { "輸出裝置…" }
     appkit_menu_window { "視窗" }
     appkit_minimize { "縮到最小" }
     appkit_zoom { "縮放" }
@@ -1229,20 +1144,16 @@ zh_Hant:table {
     appkit_saved_lists { "已儲存的列表" }
     appkit_playing_artwork { "目前播放曲目的封面" }
     appkit_selected_artwork { "所選曲目的封面" }
-    appkit_filter_placeholder { "篩選曲目" }
     appkit_tracks { "曲目" }
     appkit_empty_library_title { "開啟音樂資料夾以建立音樂庫" }
-    appkit_ready { "就緒" }
     appkit_reveal_in_finder { "在 Finder 中顯示" }
-    appkit_edit_properties_action { "編輯屬性⋯" }
+    appkit_edit_properties_action { "編輯屬性…" }
     appkit_choose_music { "選擇想聽的音樂" }
     appkit_output_device { "輸出裝置" }
-    appkit_volume { "音量" }
     appkit_playback_options { "播放選項" }
-    appkit_playback_position { "播放位置" }
-    appkit_repeat_off { "關閉重複播放" }
-    appkit_repeat_all { "全部重複播放" }
-    appkit_repeat_one { "單曲重複播放" }
+    appkit_repeat_off { "關閉循環" }
+    appkit_repeat_all { "全部循環" }
+    appkit_repeat_one { "單曲循環" }
     appkit_filter { "篩選" }
     appkit_filter_this_view { "篩選此檢視" }
     appkit_current_view { "目前檢視" }
@@ -1256,10 +1167,6 @@ zh_Hant:table {
     appkit_list_empty { "此列表是空的" }
     appkit_empty_list_hint { "請將音樂加入此列表，或瀏覽所有曲目。" }
     appkit_show_all_tracks { "顯示所有曲目" }
-    appkit_invalid_filter { "無效的篩選條件" }
-    appkit_auto_presentation { "自動" }
-    appkit_unavailable_presentation { "無法使用：{id}（自動）" }
-    appkit_column_sort_presentation { "欄排序" }
     appkit_no_activity { "目前沒有活動" }
     appkit_audio { "音訊" }
     appkit_file_label { "檔案" }

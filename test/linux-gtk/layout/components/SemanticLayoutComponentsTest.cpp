@@ -31,6 +31,7 @@
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -197,14 +198,16 @@ namespace ao::gtk::layout::test
 
     auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
     REQUIRE(label != nullptr);
-    CHECK(label->get_text() == "Aobus Ready");
+    CHECK(label->get_text().raw() ==
+          i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::CommonReady));
   }
 
   TEST_CASE("SemanticLayoutComponents - open library button invokes its action service")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto actions = RecordingImportExportActions{};
-    registerOpenLibraryButtonComponent(fixture.components(), &actions, ao::test::englishMessageCatalog());
+    auto const& catalog = ao::test::englishMessageCatalog();
+    registerOpenLibraryButtonComponent(fixture.components(), &actions, catalog);
     auto const node = LayoutNode{.type = "library.openLibraryButton"};
     auto const compPtr = fixture.create(node);
 
@@ -212,9 +215,10 @@ namespace ao::gtk::layout::test
 
     auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
     REQUIRE(btn != nullptr);
+    auto const openLibraryLabel = i18n::requiredText(catalog, i18n::MessageId::ShellOpenLibrary);
     CHECK(btn->get_icon_name() == "folder-open-symbolic");
-    CHECK(btn->get_tooltip_text() == "Open Library...");
-    CHECK(ao::gtk::test::hasAccessibleLabel(*btn, "Open Library..."));
+    CHECK(btn->get_tooltip_text().raw() == openLibraryLabel);
+    CHECK(ao::gtk::test::hasAccessibleLabel(*btn, openLibraryLabel));
     CHECK(btn->get_sensitive());
 
     emitClicked(*btn);

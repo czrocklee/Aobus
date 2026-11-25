@@ -18,6 +18,7 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -390,10 +391,11 @@ namespace ao::gtk::test
     CHECK(menuLabelForAction(*allTracksMenu, std::format("ctx.add-to-list-{}", writableId.raw())) ==
           std::optional<std::string>{R"label(Road Trip (#"旅程 \"A\"\\B"))label"});
     CHECK_FALSE(menuLabelForAction(*allTracksMenu, std::format("ctx.add-to-list-{}", computedId.raw())));
-    CHECK(
-      menuLabelForAction(*allTracksMenu, "ctx.computed-lists-omitted") ==
-      std::optional<std::string>{"Other Lists have computed membership; edit their expression or track tags instead."});
-    CHECK(menuLabelForAction(*allTracksMenu, "ctx.manage-lists") == std::optional<std::string>{"Manage Lists..."});
+    auto const& catalog = ao::test::englishMessageCatalog();
+    CHECK(menuLabelForAction(*allTracksMenu, "ctx.computed-lists-omitted") ==
+          std::optional<std::string>{i18n::requiredText(catalog, i18n::MessageId::GtkListOtherComputedMembership)});
+    CHECK(menuLabelForAction(*allTracksMenu, "ctx.manage-lists") ==
+          std::optional<std::string>{i18n::requiredText(catalog, i18n::MessageId::GtkListManageLists)});
     CHECK(allTracksMenu->activate_action("ctx.manage-lists"));
     CHECK(requestCount == 1);
     drainGtkEvents();

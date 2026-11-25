@@ -31,7 +31,7 @@ namespace ao::gtk::layout
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
-        _label.set_text(gtkText(textCatalog, i18n::MessageId::GtkStatusReady));
+        _label.set_text(gtkText(textCatalog, i18n::MessageId::CommonReady));
       }
 
       Gtk::Widget& widget() override { return _label; }

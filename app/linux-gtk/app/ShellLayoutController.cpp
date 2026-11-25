@@ -326,7 +326,7 @@ namespace ao::gtk
     }
 
     registerAction("playback.showOutputDeviceSelector",
-                   gtkText(_textCatalog, MessageId::GtkActionOutputDevices),
+                   gtkText(_textCatalog, MessageId::PlaybackOutputDevices),
                    gtkText(_textCatalog, MessageId::GtkActionCategoryPlayback),
                    uimodel::ActionCapability::RequiresAnchor | uimodel::ActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
@@ -465,7 +465,7 @@ namespace ao::gtk
   {
     registerAction(
       "track.presentProperties",
-      gtkText(_textCatalog, MessageId::GtkActionTrackProperties),
+      gtkText(_textCatalog, MessageId::TrackPropertiesTitle),
       gtkText(_textCatalog, MessageId::GtkActionCategoryTracks),
       0,
       [this](layout::ActionActivationContext&)

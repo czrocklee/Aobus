@@ -133,7 +133,7 @@ namespace ao::tui
       parts.push_back(text(" · ") | dim);
     }
 
-    auto cancelPtr = chip("Esc", i18n::MessageId::TuiGoToCancel);
+    auto cancelPtr = chip("Esc", i18n::MessageId::CommonCancel);
 
     if (hitRegions != nullptr)
     {

@@ -418,7 +418,7 @@ namespace ao::gtk
         AppDialog::presentMessage(*this,
                                   gtkText(_textCatalog, i18n::MessageId::GtkUnableSwitchLibraries),
                                   discardedRes.error().message,
-                                  {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonClose),
+                                  {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::CommonClose),
                                                    .responseId = Gtk::ResponseType::CLOSE,
                                                    .role = AppDialogActionRole::Cancel}},
                                   Gtk::ResponseType::CLOSE);

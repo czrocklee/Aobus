@@ -305,7 +305,7 @@ namespace ao::gtk::test
 
     // Compare through the catalog id, not the English copy, so the oracle
     // follows the message the widget actually renders.
-    auto const expectedLabel = std::string{i18n::requiredText(textCatalog, i18n::MessageId::GtkPlaybackPosition)};
+    auto const expectedLabel = std::string{i18n::requiredText(textCatalog, i18n::MessageId::PlaybackPosition)};
     CHECK(scale->get_tooltip_text() == Glib::ustring{expectedLabel});
     CHECK(hasAccessibleLabel(*scale, expectedLabel));
   }

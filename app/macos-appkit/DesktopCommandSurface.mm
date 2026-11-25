@@ -94,12 +94,12 @@ namespace
   [app addItem:NSMenuItem.separatorItem];
   addStandardItem(app, [self text:MessageId::AppKitQuit], @selector(terminate:), @"q");
   auto* const file = addMenu([self text:MessageId::AppKitMenuFile]);
-  addItem(file, [self text:MessageId::AppKitOpenLibraryAction], @selector(openLibrary:), @"o");
+  addItem(file, [self text:MessageId::ShellOpenLibrary], @selector(openLibrary:), @"o");
   auto* const recent = [file addItemWithTitle:[self text:MessageId::AppKitOpenRecent] action:nil keyEquivalent:@""];
   _recentLibrariesMenu = [[NSMenu alloc] initWithTitle:[self text:MessageId::AppKitOpenRecent]];
   _recentLibrariesMenu.delegate = self;
   recent.submenu = _recentLibrariesMenu;
-  addItem(file, [self text:MessageId::AppKitRescanLibrary], @selector(rescan:), @"r");
+  addItem(file, [self text:MessageId::ShellScanLibrary], @selector(rescan:), @"r");
   [file addItem:NSMenuItem.separatorItem];
   addStandardItem(file, [self text:MessageId::AppKitCloseWindow], @selector(performClose:), @"w");
   auto* const edit = addMenu([self text:MessageId::AppKitMenuEdit]);
@@ -164,7 +164,7 @@ namespace
     item.representedObject = title;
   }
 
-  _playbackMenu = addMenu([self text:MessageId::AppKitMenuPlayback]);
+  _playbackMenu = addMenu([self text:MessageId::ShellMenuPlayback]);
 
   for (auto command : ao::uimodel::playbackCommands())
   {
@@ -236,7 +236,7 @@ namespace
   if ([identifier isEqual:@"search"] != NO)
   {
     auto* const search = [[NSSearchField alloc] initWithFrame:NSZeroRect];
-    search.placeholderString = [self text:MessageId::AppKitFilterPlaceholder];
+    search.placeholderString = [self text:MessageId::LibraryFilterPlaceholder];
     search.target = self;
     search.action = @selector(filterTracks:);
     search.delegate = self;

@@ -535,7 +535,7 @@ namespace ao::gtk
     dialog->set_title(gtkText(_textCatalog, description.labels.title));
     dialog->configureForParent(_parent);
     dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
-    dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
+    dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::CommonCancel), Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction(gtkText(_textCatalog, description.labels.action), Gtk::ResponseType::YES);
     dialog->setDefaultResponse(Gtk::ResponseType::CANCEL);
 
@@ -615,7 +615,7 @@ namespace ao::gtk
       AppDialog::presentMessage(_parent,
                                 gtkText(_textCatalog, i18n::MessageId::GtkListUnableToDeleteTitle),
                                 std::string{message},
-                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonClose),
+                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::CommonClose),
                                                  .responseId = Gtk::ResponseType::CLOSE,
                                                  .role = AppDialogActionRole::Cancel}},
                                 Gtk::ResponseType::CLOSE);

@@ -57,7 +57,7 @@ namespace ao::winui
     {
       _presenter.Content(winrt::box_value(L"--"));
       winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-        _presenter, winrt::box_value(resourceHstring(L"winui_playback_output_device")));
+        _presenter, winrt::box_value(resourceHstring(L"playback_output_device")));
     }
   }
 
@@ -72,7 +72,7 @@ namespace ao::winui
 
     _presenter.Content(winrt::box_value(winrt::to_hstring(state.outputBackendSummary)));
     auto tooltip =
-      winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"winui_playback_output_device"))};
+      winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"playback_output_device"))};
 
     if (!state.outputDeviceStatus.empty())
     {

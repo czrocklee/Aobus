@@ -173,7 +173,7 @@ namespace ao::winui
                          }
                        });
     _root.Children().Append(_save);
-    _cancelButton = makeButton(MessageId::TrackCreditsCancel, [this] { _cancel(); });
+    _cancelButton = makeButton(MessageId::CommonCancel, [this] { _cancel(); });
     _root.Children().Append(_cancelButton);
     _keyRevoker =
       _root.KeyDown(winrt::auto_revoke,

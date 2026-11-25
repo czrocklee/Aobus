@@ -108,7 +108,7 @@ root:
                     - id: modern-inspector-toggle
                       type: actionButton
                       props:
-                        textResourceKey: winui_shell_track_details
+                        textResourceKey: track_details_title
                         glyph: ""
                         primaryAction: shell.toggleInspector
                       layout:
