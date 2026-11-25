@@ -34,6 +34,7 @@ namespace ao::uimodel
     std::chrono::milliseconds duration{0};
     std::chrono::milliseconds elapsed{0};
     bool hasTrack = false;
+    // Controls clock interpolation, not whether the transport can be paused.
     bool isPlaying = false;
     // A retained track can still display its clock after seek ownership ends.
     bool seekable = false;

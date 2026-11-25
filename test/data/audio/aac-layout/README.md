@@ -46,7 +46,8 @@ Tests require one of those measured delays and the exact packet boundary, with n
 Only the two 32-sample cross-implementation reference-window comparisons allow an absolute difference of one native signed-16 LSB; all literal values and exact nonzero counts are retained.
 This bound follows an observed ARM64 `front3.m4a` packet-1 sample at zero-based index 21: native and Aobus both return 21, while the x86-64 reference is 22.
 The precise architecture/compiler arithmetic cause has not been established; this is not permission to alter production PCM or decoder parameters.
-A separate file-local raw FDK decode supplies complete packet PCM for first-block preservation, contiguous output, flush and pristine initial-seek checks, all compared exactly on the executing host.
+A separate file-local uninterrupted raw FDK decode supplies complete packet PCM for first-block preservation, contiguous output and flush, all compared exactly on the executing host.
+Seek checks compare against that same decode at the requested frame. Restarts at the beginning preserve its PCM exactly; the stereo mid-stream seek comparison allows low-level native noise differences after bounded preroll.
 Every integer and floating-point output-adaptation comparison also remains exact.
 It does not use Aobus channel planning or output adaptation; identified role expectations remain literal.
 This test-only phase coordinate neither changes production decoder parameters nor trims delay/padding, and does not enable vcpkg's optional HE-AAC feature.

@@ -44,7 +44,7 @@ namespace ao::systemmedia
                                                  rt::PlaybackTransportSnapshot const& state) const;
 
   private:
-    static std::optional<uimodel::PlaybackCommand> commandForPlayerMethod(std::string_view methodName) noexcept;
+    std::optional<uimodel::PlaybackCommand> commandForPlayerMethod(std::string_view methodName) const;
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _playbackCommands;

@@ -144,7 +144,8 @@ Previous is different: when neither restart nor a predecessor exists, it is a no
 - `hasNext` and `hasPrevious` report the exact availability implied by these rules and the current restart policy.
 
 The previous restart threshold is strict: exactly 3000 ms remains unavailable and elapsed time greater than 3000 ms enables restart.
-Pause, resume, final seek, current-track change, session replacement, and shutdown reschedule or cancel the executor-affine deadline.
+A final seek updates restart eligibility from the requested position even while `Buffering`. No deadline runs while the playback clock is held, including when resuming or reopening an output leaves the current track `Buffering`. When that occurrence reaches `Playing`, succession checks live elapsed time and arms one deadline if the threshold has not yet been crossed.
+Pause, current-track change, session replacement, and shutdown also reschedule or cancel the deadline.
 The deadline returns through a cancellation-checked callback-executor hop, so an obsolete task cannot change availability; a separate synchronization revision detects only synchronous reentrancy from availability publication.
 
 ### Source invalidation

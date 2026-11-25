@@ -20,6 +20,11 @@
 #include <span>
 #include <vector>
 
+#ifdef __linux__
+#include <chrono>
+#include <utility>
+#endif
+
 namespace ao::audio::test
 {
   namespace
@@ -80,7 +85,7 @@ namespace ao::audio::test
       else
       {
         stblBody.append_range(ao::test::mp4::makeSttsAtom(options.sampleCount, 1024));
-        stblBody.append_range(ao::test::mp4::makeStscAtom());
+        stblBody.append_range(ao::test::mp4::makeStscAtom(options.sampleCount));
         stblBody.append_range(ao::test::mp4::makeStcoAtom(options.chunkOffset));
       }
 
@@ -243,6 +248,54 @@ namespace ao::audio::test
       CHECK(factoryRes.error().code == Error::Code::NotSupported);
     }
   }
+
+#ifdef __linux__
+  // The Linux provider decodes HE-AAC; the native vcpkg dependency does not
+  // require SBR. Expanded output exercises the seek-time native-length scan.
+  TEST_CASE("AacDecoderSession - a corrupt packet during seek preserves the decode error and playback position")
+  {
+    // First raw access unit of stereo 48 kHz silence, encoded with FDK 2.0.3
+    // (HE-AAC, VBR 1, implicit SBR). The LC core is at 24 kHz.
+    auto const silence = std::vector<std::uint8_t>{0x21, 0x11, 0x45, 0x00, 0x14, 0x50, 0x01, 0x46, 0xDD, 0xEA, 0x40,
+                                                   0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0xC0, 0x00, 0x60, 0x0E};
+    auto packets = silence;
+    packets.append_range(silence);
+    packets.insert(packets.end(), silence.size(), 0xA5);
+    packets.append_range(silence);
+    auto const data = makeSyntheticAacMp4({.asc = {0x13, 0x10},
+                                           .payload = std::move(packets),
+                                           .optSampleSize = static_cast<std::uint32_t>(silence.size()),
+                                           .sampleCount = 4});
+    auto const temp = ao::test::TempFile{data, ".m4a"};
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    REQUIRE(decoderPtr->streamInfo().sourceFormat.sampleRate == 48000);
+    auto const firstRes = decoderPtr->readNextBlock();
+    REQUIRE(firstRes);
+    REQUIRE(firstRes->frames == 2048);
+
+    auto const checkFailurePreservesRead = [&](std::uint64_t frame, std::uint32_t frames)
+    {
+      auto const seekRes = decoderPtr->seek(std::chrono::milliseconds{144});
+      REQUIRE_FALSE(seekRes);
+      CHECK(seekRes.error().code == Error::Code::DecodeFailed);
+      auto const next = ao::test::requireValue(decoderPtr->readNextBlock());
+      CHECK(next.firstFrameIndex == frame);
+      CHECK(next.frames == frames);
+    };
+    checkFailurePreservesRead(2048, 2048);
+    // A failed scan must not discard a pending rewind behind the FDK cursor.
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds{20}));
+    checkFailurePreservesRead(960, 1088);
+
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds::max()));
+    auto const seekFromEndRes = decoderPtr->seek(std::chrono::milliseconds{144});
+    REQUIRE_FALSE(seekFromEndRes);
+    CHECK(seekFromEndRes.error().code == Error::Code::DecodeFailed);
+    auto const eof = ao::test::requireValue(decoderPtr->readNextBlock());
+    CHECK(eof.endOfStream);
+    CHECK(eof.bytes.empty());
+  }
+#endif
 
   TEST_CASE("AacDecoderSession - corrupt sample after a valid first packet fails at read time")
   {

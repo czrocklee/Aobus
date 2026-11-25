@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <vector>
 
 namespace ao::audio::test
@@ -46,12 +47,17 @@ namespace ao::audio::test
     // post-seek stream independently of initial playback (e.g. an empty script
     // makes every seek land at end-of-stream).
     void setSeekReadScript(std::vector<ReadScriptEntry> script);
+    // Only this offset needs a worker. A successful operation applies the
+    // ordinary seek script; a failed or cancelled one leaves it untouched.
+    void setWorkerSeek(std::chrono::milliseconds offset, std::function<Result<>(std::stop_token)> operation);
     void setSeekObserver(std::function<void(std::chrono::milliseconds)> observer);
     void setReadObserver(std::function<void(std::size_t)> observer);
     void setDestroyCounter(std::shared_ptr<std::atomic<std::size_t>> counterPtr);
 
     void flush() noexcept override;
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
+    bool needsSeekWorker(std::chrono::milliseconds offset) const noexcept override;
+    Result<> seekInterruptibly(std::chrono::milliseconds offset, std::stop_token token) noexcept override;
     Result<PcmBlock> readNextBlock() noexcept override;
     DecodedStreamInfo streamInfo() const noexcept override;
 
@@ -68,6 +74,8 @@ namespace ao::audio::test
     DecodedStreamInfo _info;
     std::vector<ReadScriptEntry> _script;
     std::optional<std::vector<ReadScriptEntry>> _optSeekScript;
+    std::optional<std::chrono::milliseconds> _optWorkerOffset;
+    std::function<Result<>(std::stop_token)> _workerSeek;
     std::function<void(std::chrono::milliseconds)> _seekObserver;
     std::function<void(std::size_t)> _readObserver;
     std::size_t _scriptIndex = 0;

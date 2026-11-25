@@ -28,11 +28,16 @@ namespace ao::audio
     PcmSource(PcmSource&&) = delete;
     PcmSource& operator=(PcmSource&&) = delete;
 
+    /// Success accepts the offset. If isPreparingSeek() is true, keep render stopped until preroll finishes.
     virtual Result<> seek(std::chrono::milliseconds offset) noexcept = 0;
 
     // Returns whole PCM frames only, as the RenderTarget contract requires.
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;
+    /// True only at EOF with no queued PCM left to render.
     virtual bool isDrained() const noexcept = 0;
+    /// Extended seek/preroll is pending; do not start a render consumer yet.
+    virtual bool isPreparingSeek() const noexcept { return false; }
+    /// Duration of queued PCM, including frames buffered before seek readiness.
     virtual std::chrono::milliseconds bufferedDuration() const noexcept = 0;
 
   protected:

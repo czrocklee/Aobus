@@ -18,6 +18,7 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -26,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -244,6 +246,42 @@ namespace ao::audio::test
 
       return makeError(Error::Code::NotSupported, "No scripted decoder is registered for the requested path");
     };
+  }
+
+  Result<> SeekTestGate::enterAndWait(std::stop_token token)
+  {
+    auto const wake = std::stop_callback{token, [this] { release(); }};
+    _entered.release();
+
+    if (!_release.try_acquire_for(std::chrono::seconds{10}))
+    {
+      _outcome.store(Outcome::TimedOut);
+      return makeError(Error::Code::InvalidState, "Seek test gate timed out");
+    }
+
+    if (token.stop_requested())
+    {
+      _outcome.store(Outcome::Cancelled);
+      return makeError(Error::Code::Conflict, "Seek test gate cancelled");
+    }
+
+    _outcome.store(Outcome::Released);
+    return {};
+  }
+
+  bool SeekTestGate::tryWaitForEntry()
+  {
+    return _entered.try_acquire_for(std::chrono::seconds{10});
+  }
+
+  void SeekTestGate::release()
+  {
+    _release.release();
+  }
+
+  SeekTestGate::Outcome SeekTestGate::outcome() const
+  {
+    return _outcome.load();
   }
 
   void StagedFailureGate::notifyReadEntered()

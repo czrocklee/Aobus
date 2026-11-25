@@ -20,7 +20,7 @@
 #include <exception>
 #include <expected>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <thread>
@@ -62,46 +62,33 @@ namespace ao::audio
     stopDecodeThread();
   }
 
-  Result<> StreamingSource::prepare()
+  Result<> StreamingSource::prepare(std::chrono::milliseconds initialOffset)
   {
-    AO_EXPECTS((!_prepared && !_activated && !_failed.load(std::memory_order_relaxed)),
-               "Streaming source preparation requires a fresh inactive source");
+    AO_EXPECTS(_phase == Phase::Fresh, "Streaming source preparation requires a fresh inactive source");
 
     auto const seekToken = _seekStopSource.get_token();
 
     try
     {
-      fillUntil(_prerollDuration, seekToken);
+      positionAndPreroll(initialOffset.count() > 0 ? std::optional{initialOffset} : std::nullopt, seekToken);
 
-      if (_failed.load(std::memory_order_relaxed))
-      {
-        auto const lock = std::scoped_lock{_errorMutex};
-        return std::unexpected(_optLastError.value_or(
-          Error{.code = Error::Code::InvalidState, .message = "Streaming source failed during preparation"}));
-      }
-
-      _prepared = true;
+      _phase = Phase::Prepared;
       return {};
     }
     catch (detail::DecoderException const& ex)
     {
-      _failed.store(true, std::memory_order_relaxed);
-
-      {
-        auto const lock = std::scoped_lock{_errorMutex};
-        _optLastError = ex.error();
-      }
-
+      _phase = Phase::PreparationFailed;
       return std::unexpected{ex.error()};
     }
   }
 
-  void StreamingSource::activate(OnSourceError onError)
+  void StreamingSource::activate(OnSourceError onError, OnReady onReady)
   {
-    AO_EXPECTS((_prepared && !_activated), "Streaming source activation requires one prepared source");
+    AO_EXPECTS(_phase == Phase::Prepared, "Streaming source activation requires one prepared source");
 
     _onError = std::move(onError);
-    _activated = true;
+    _onReady = std::move(onReady);
+    _phase = Phase::Active;
 
     if (!_decoderReachedEof.load(std::memory_order_relaxed))
     {
@@ -111,12 +98,18 @@ namespace ao::audio
 
   std::size_t StreamingSource::read(std::span<std::byte> output) noexcept
   {
-    return _frameRing.read(output);
+    return isPreparingSeek() ? 0 : _frameRing.read(output);
   }
 
   bool StreamingSource::isDrained() const noexcept
   {
-    return _decoderReachedEof.load(std::memory_order_relaxed) && _frameRing.readableByteCount() == 0;
+    return !isPreparingSeek() && _decoderReachedEof.load(std::memory_order_relaxed) &&
+           _frameRing.readableByteCount() == 0;
+  }
+
+  bool StreamingSource::isPreparingSeek() const noexcept
+  {
+    return _preparingSeek.load(std::memory_order_acquire);
   }
 
   std::chrono::milliseconds StreamingSource::bufferedDuration() const noexcept
@@ -128,19 +121,12 @@ namespace ao::audio
   // streaming source intentionally fails fast if that escapes its noexcept contract.
   Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
-    AO_EXPECTS((_prepared && _activated), "Streaming source seek requires an activated source");
+    AO_EXPECTS(_phase == Phase::Active, "Streaming source seek requires an activated source");
 
     stopDecodeThread();
-
-    _seekStopSource.request_stop();
     _seekStopSource = std::stop_source{};
     auto const seekToken = _seekStopSource.get_token();
 
-    {
-      auto const lock = std::scoped_lock{_errorMutex};
-      _optLastError.reset();
-      _failed.store(false, std::memory_order_relaxed);
-    }
     _decoderReachedEof = false;
     _frameRing.clear();
     _previousBlockByteCount = 0;
@@ -148,41 +134,20 @@ namespace ao::audio
 
     try
     {
-      {
-        auto lock = std::scoped_lock{_decoderMutex};
-
-        if (auto const res = _decoderPtr->seek(offset); !res)
-        {
-          detail::throwDecoderError(res.error());
-        }
-      }
-
-      fillUntil(_prerollDuration, seekToken);
+      positionAndPreroll(offset, seekToken);
 
       if (!_decoderReachedEof.load(std::memory_order_relaxed))
       {
         startDecodeThread();
       }
 
-      if (_failed.load(std::memory_order_relaxed))
-      {
-        auto const lock = std::scoped_lock{_errorMutex};
-        return std::unexpected(_optLastError.value_or(
-          Error{.code = Error::Code::InvalidState, .message = "Streaming source is in failed state"}));
-      }
-
+      // All failures from the newly started worker use the attempt-tagged
+      // callback; its scheduling must not change this command's result.
       return {};
     }
     catch (detail::DecoderException const& ex)
     {
-      bool const failedExchanged = !_failed.exchange(true, std::memory_order_relaxed);
-
-      {
-        auto const lock = std::scoped_lock{_errorMutex};
-        _optLastError = ex.error();
-      }
-
-      if (failedExchanged && _onError)
+      if (_onError)
       {
         _onError(ex.error(), seekToken);
       }
@@ -191,11 +156,36 @@ namespace ao::audio
     }
   }
 
+  void StreamingSource::positionAndPreroll(std::optional<std::chrono::milliseconds> optOffset,
+                                           std::stop_token const& seekToken)
+  {
+    // Called only with the producer quiescent. Never expose old buffered PCM
+    // while a superseding seek is waiting for the worker.
+    _optWorkerSeek.reset();
+    _preparingSeek.store(false, std::memory_order_relaxed);
+
+    if (optOffset)
+    {
+      if (_decoderPtr->needsSeekWorker(*optOffset))
+      {
+        _optWorkerSeek = optOffset;
+        _preparingSeek.store(true, std::memory_order_release);
+        return;
+      }
+
+      if (auto const res = _decoderPtr->seek(*optOffset); !res)
+      {
+        detail::throwDecoderError(res.error());
+      }
+    }
+
+    fillUntil(_prerollDuration, seekToken);
+  }
+
   void StreamingSource::startDecodeThread()
   {
-    stopDecodeThread();
-
-    _decodeThread = std::jthread{[this](std::stop_token const& token)
+    AO_INVARIANT(!_decodeThread.joinable(), "Streaming source already has a decode worker");
+    _decodeThread = std::jthread{[this, token = _seekStopSource.get_token()]
                                  {
                                    setCurrentThreadName("StreamingSource-Decode");
 
@@ -212,21 +202,54 @@ namespace ao::audio
 
   void StreamingSource::stopDecodeThread()
   {
+    // Invalidate queued callbacks even when the attempt has no live worker.
+    _seekStopSource.request_stop();
+
     if (_decodeThread.joinable())
     {
-      _decodeThread.request_stop();
       _decodeThread.join();
     }
   }
 
-  void StreamingSource::decodeLoop(std::stop_token const& threadStopToken)
+  void StreamingSource::decodeLoop(std::stop_token const& seekToken)
   {
-    auto const seekToken = _seekStopSource.get_token();
-
     try
     {
-      while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
-             !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
+      if (auto const optOffset = std::exchange(_optWorkerSeek, std::nullopt); optOffset)
+      {
+        // No previous PCM can be consumed here. A cancelled worker is joined
+        // before another seek, and a failing attempt never opens the render gate.
+        auto const res = _decoderPtr->seekAfterDiscard(*optOffset, seekToken);
+
+        if (seekToken.stop_requested())
+        {
+          return;
+        }
+
+        if (!res)
+        {
+          detail::throwDecoderError(res.error());
+        }
+
+        // No render consumer before readiness. Retain an oversized block's
+        // unwritten tail exactly as in synchronous preroll, and observe stop
+        // between reads so a replacement seek can promptly join this worker.
+        fillUntil(_prerollDuration, seekToken);
+
+        if (seekToken.stop_requested())
+        {
+          return;
+        }
+
+        _preparingSeek.store(false, std::memory_order_release);
+
+        if (_onReady)
+        {
+          _onReady(seekToken);
+        }
+      }
+
+      while (!_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
       {
         // An already decoded block must finish before admission of another
         // read, even when its original size exceeds the remaining capacity.
@@ -239,7 +262,7 @@ namespace ao::audio
           continue;
         }
 
-        auto const status = decodeNextBlock(seekToken, &threadStopToken);
+        auto const status = decodeNextBlock(seekToken, OnRingFull::WaitForSpace);
 
         if (status == StreamingSource::DecodeBlockStatus::Stopped)
         {
@@ -249,17 +272,9 @@ namespace ao::audio
     }
     catch (detail::DecoderException const& ex)
     {
+      if (!seekToken.stop_requested() && _onError)
       {
-        auto const lock = std::scoped_lock{_errorMutex};
-        _optLastError = ex.error();
-      }
-
-      if (!_failed.exchange(true, std::memory_order_relaxed))
-      {
-        if (_onError)
-        {
-          _onError(ex.error(), seekToken);
-        }
+        _onError(ex.error(), seekToken);
       }
     }
   }
@@ -269,29 +284,20 @@ namespace ao::audio
     auto const targetByteCount =
       detail::bufferByteCountForDuration(_bytesPerSecond, targetBufferedThreshold, _frameRing.byteCapacity());
 
-    while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           !seekToken.stop_requested() &&
+    while (!_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested() &&
            detail::canDecode(
              targetByteCount, _frameRing.readableByteCount(), _frameRing.writableByteCount(), _previousBlockByteCount))
     {
-      if (auto const status = decodeNextBlock(seekToken, nullptr);
+      if (auto const status = decodeNextBlock(seekToken, OnRingFull::RetainRemainder);
           status == StreamingSource::DecodeBlockStatus::Stopped)
       {
         break;
       }
     }
-
-    if (_failed.load(std::memory_order_relaxed))
-    {
-      auto const lock = std::scoped_lock{_errorMutex};
-      auto const err = _optLastError.value_or(
-        Error{.code = Error::Code::InvalidState, .message = "Streaming source is in failed state"});
-      detail::throwDecoderError(err);
-    }
   }
 
   StreamingSource::DecodeBlockStatus StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
-                                                                      std::stop_token const* threadStopToken)
+                                                                      OnRingFull onFull)
   {
     if (seekToken.stop_requested())
     {
@@ -300,13 +306,6 @@ namespace ao::audio
 
     if (!_optPendingBlock)
     {
-      auto lock = std::scoped_lock{_decoderMutex};
-
-      if (seekToken.stop_requested())
-      {
-        return DecodeBlockStatus::Stopped;
-      }
-
       auto const blockRes = _decoderPtr->readNextBlock();
 
       if (!blockRes)
@@ -334,7 +333,7 @@ namespace ao::audio
 
     auto& pendingBlock = *_optPendingBlock;
 
-    if (!tryWriteBlock(pendingBlock.bytes, seekToken, threadStopToken))
+    if (!tryWriteBlock(pendingBlock.bytes, seekToken, onFull))
     {
       return DecodeBlockStatus::Stopped;
     }
@@ -353,21 +352,17 @@ namespace ao::audio
 
   bool StreamingSource::tryWriteBlock(std::span<std::byte const>& bytes,
                                       std::stop_token const& seekToken,
-                                      std::stop_token const* threadStopToken)
+                                      OnRingFull onFull)
   {
-    auto const stopRequested = [&]
-    { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };
-
-    while (!bytes.empty() && !stopRequested())
+    while (!bytes.empty() && !seekToken.stop_requested())
     {
       auto const written = _frameRing.write(bytes);
       bytes = bytes.subspan(written);
 
       if (!bytes.empty())
       {
-        // Synchronous preroll has no consumer. Retain the borrowed remainder
-        // for activation instead of waiting for space that cannot appear yet.
-        if (threadStopToken == nullptr)
+        // Preroll has no render consumer to make space, even when run on the worker.
+        if (onFull == OnRingFull::RetainRemainder)
         {
           return false;
         }

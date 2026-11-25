@@ -681,6 +681,7 @@ namespace ao::rt
 
       subscriptions.push_back(transport.onPreparing(markChanged));
       subscriptions.push_back(transport.onStarted(markChanged));
+      subscriptions.push_back(transport.onBufferingFinished(markChanged));
       subscriptions.push_back(transport.onPaused(markChanged));
       subscriptions.push_back(transport.onIdle([this] { onTransportIdle(); }));
       subscriptions.push_back(transport.onStopped(markChanged));

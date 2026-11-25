@@ -35,6 +35,7 @@ namespace ao::rt
 namespace ao::audio::test
 {
   struct BlockingPreparationGate;
+  class SeekTestGate;
   class StagedFailureGate;
 }
 
@@ -121,6 +122,8 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path stagedFailureFileName{};
     audio::test::StagedFailureGate* stagedFailureGate = nullptr;
     std::filesystem::path lossyFileName{};
+    std::shared_ptr<audio::test::SeekTestGate> seekGatePtr{};
+    std::chrono::milliseconds gatedSeekOffset{};
   };
 
   struct PlaybackSuccessionTransportFixture final

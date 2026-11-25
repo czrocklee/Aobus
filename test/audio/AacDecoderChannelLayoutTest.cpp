@@ -10,6 +10,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/media/mp4/Demuxer.h>
@@ -28,11 +29,18 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#ifdef __linux__
+#include <ao/Error.h>
+
+#include <stop_token>
+#endif
 
 namespace ao::audio::test
 {
@@ -49,6 +57,7 @@ namespace ao::audio::test
 
     struct NativeAacPcm final
     {
+      bool hasDrc = false;
       std::uint32_t addedDelayFrames = 0;
       std::uint32_t sampleRate = 0;
       std::uint32_t framesPerPacket = 0;
@@ -165,14 +174,13 @@ namespace ao::audio::test
       return samples;
     }
 
-    NativeAacPcm decodeNativeFixture(std::string_view fixtureName, std::uint32_t firstPacketIndex = 0)
+    NativeAacPcm decodeNativeFixture(std::string_view fixtureName)
     {
       auto const fileData = readFileBytes(requireAudioFixture(fixtureName));
       auto const demuxerRes =
         media::mp4::Demuxer::parse(utility::bytes::view(std::span<std::uint8_t const>{fileData}), "mp4a");
       REQUIRE(demuxerRes);
-      REQUIRE(demuxerRes->sampleCount() == kAacPacketCount);
-      REQUIRE(firstPacketIndex < demuxerRes->sampleCount());
+      REQUIRE(demuxerRes->sampleCount() > 0);
 
       // This oracle uses only the public native decoder API, without channel
       // interpretation, permutation, or Aobus decode/output helpers.
@@ -192,7 +200,7 @@ namespace ao::audio::test
       auto native = NativeAacPcm{};
       auto pcm = std::array<::INT_PCM, 16384>{};
 
-      for (auto packetIndex = firstPacketIndex; packetIndex < demuxerRes->sampleCount(); ++packetIndex)
+      for (std::uint32_t packetIndex = 0; packetIndex < demuxerRes->sampleCount(); ++packetIndex)
       {
         CAPTURE(packetIndex);
         auto input = copyBytes(demuxerRes->samplePayload(packetIndex));
@@ -224,6 +232,9 @@ namespace ao::audio::test
           native.channels = static_cast<std::uint8_t>(info->numChannels);
         }
 
+#ifdef AC_DRC_PRESENT
+        native.hasDrc = native.hasDrc || (info->flags & AC_DRC_PRESENT) != 0;
+#endif
         REQUIRE(info->outputDelay == native.addedDelayFrames);
         REQUIRE(std::cmp_equal(info->sampleRate, native.sampleRate));
         REQUIRE(std::cmp_equal(info->frameSize, native.framesPerPacket));
@@ -235,14 +246,93 @@ namespace ao::audio::test
       return native;
     }
 
-    void requireNativeFixtureGeometry(NativeAacPcm const& native,
-                                      std::uint8_t channels,
-                                      std::uint32_t firstPacketIndex = 0)
+    struct FixturePackets final
+    {
+      std::vector<std::uint8_t> table;
+      std::vector<std::uint8_t> payload;
+      std::uint32_t count = 0;
+    };
+
+    FixturePackets remuxFixturePackets(std::string_view name, std::uint32_t rate, std::uint32_t copies)
+    {
+      auto const fileData = readFileBytes(requireAudioFixture(name));
+      auto const demuxerRes =
+        media::mp4::Demuxer::parse(utility::bytes::view(std::span<std::uint8_t const>{fileData}), "mp4a");
+      REQUIRE(demuxerRes);
+      REQUIRE(demuxerRes->sampleCount() > 0);
+      auto const count = demuxerRes->sampleCount() * copies;
+      auto const cookie = copyBytes(demuxerRes->magicCookie());
+      auto config = std::vector<std::uint8_t>{0, 0, 0, 0, 5, static_cast<std::uint8_t>(cookie.size())};
+      config.append_range(cookie);
+      auto table = ao::test::mp4::makeStsdAtom("mp4a", ao::test::mp4::makeAtom("esds", config), rate);
+      auto sizes = std::vector<std::uint8_t>(8, 0);
+      ao::test::mp4::appendBe32(sizes, count);
+      auto payload = std::vector<std::uint8_t>{};
+
+      for (std::uint32_t index = 0; index < count; ++index)
+      {
+        auto const packet = copyBytes(demuxerRes->samplePayload(index % demuxerRes->sampleCount()));
+        ao::test::mp4::appendBe32(sizes, static_cast<std::uint32_t>(packet.size()));
+        payload.append_range(packet);
+      }
+
+      ao::test::mp4::addAtom(table, "stsz", sizes);
+      table.append_range(ao::test::mp4::makeStscAtom(count));
+      table.append_range(ao::test::mp4::makeStcoAtom(kMdatPayloadOffset));
+      return {.table = std::move(table), .payload = std::move(payload), .count = count};
+    }
+
+#ifdef __linux__
+    constexpr std::uint32_t kRewindFixturePackets = 800;
+
+    std::vector<std::uint8_t> heRewindFixture()
+    {
+      auto [table, payload, count] = remuxFixturePackets("aac-seek/he-single-rate.m4a", 32000, 10);
+      REQUIRE(count == kRewindFixturePackets);
+      table.append_range(ao::test::mp4::makeSttsAtom(count, 1024));
+      auto data = ao::test::mp4::makeAtom("mdat", payload);
+      auto const track =
+        ao::test::mp4::makeTrackAtom("soun", ao::test::mp4::makeAtom("stbl", table), 32000, count * 1024);
+      ao::test::mp4::addAtom(data, "moov", track);
+      return data;
+    }
+#endif
+
+    // Remux unchanged access units under either a millisecond track clock or
+    // no packet timing at all. The original fixture remains the native oracle.
+    std::vector<std::uint8_t> stereoFixtureWithTiming(bool hasTiming)
+    {
+      auto [table, payload, count] = remuxFixturePackets("aac-layout/stereo.m4a", kAacFixtureSampleRate, 1);
+      REQUIRE(count == kAacPacketCount);
+
+      if (hasTiming)
+      {
+        // Each three 1024-frame packets take exactly 64 ms at 48 kHz.
+        auto timing = std::vector<std::uint8_t>(4, 0);
+        ao::test::mp4::appendBe32(timing, kAacPacketCount);
+
+        for (std::uint32_t index = 0; index < kAacPacketCount; ++index)
+        {
+          ao::test::mp4::appendBe32(timing, 1);
+          ao::test::mp4::appendBe32(timing, index % 3 == 1 ? 22 : 21);
+        }
+
+        ao::test::mp4::addAtom(table, "stts", timing);
+      }
+
+      auto data = ao::test::mp4::makeAtom("mdat", payload);
+      auto const track =
+        ao::test::mp4::makeTrackAtom("soun", ao::test::mp4::makeAtom("stbl", table), 1000, hasTiming ? 277 : 0);
+      ao::test::mp4::addAtom(data, "moov", track);
+      return data;
+    }
+
+    void requireNativeFixtureGeometry(NativeAacPcm const& native, std::uint8_t channels)
     {
       REQUIRE(native.sampleRate == kAacFixtureSampleRate);
       REQUIRE(native.framesPerPacket == kAacFramesPerPacket);
       REQUIRE(native.channels == channels);
-      REQUIRE(native.packets.size() == kAacPacketCount - firstPacketIndex);
+      REQUIRE(native.packets.size() == kAacPacketCount);
     }
 
     std::uint32_t goldenPacketIndex(NativeAacPcm const& native)
@@ -578,7 +668,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("AacDecoderSession - initial seek covering the first packet returns the pristine primed block")
+  TEST_CASE("AacDecoderSession - seek returns uninterrupted PCM from the requested decoded frame")
   {
     auto const native = decodeNativeFixture("aac-layout/stereo.m4a");
     requireNativeFixtureGeometry(native, 2);
@@ -587,85 +677,361 @@ namespace ao::audio::test
     auto& decoder = *decoderPtr;
     auto const info = decoder.streamInfo();
 
-    SECTION("Seek to the start")
+    // A bounded restart need not reproduce low-level native noise bit for bit.
+    // On the stereo tones, preroll measured at most 7 s16 LSB of error; stale
+    // history and cold-at-target decode both exceeded 8700 on the forward seek.
+    constexpr std::int32_t kSeekToleranceLsb = 16;
+    auto const checkSeek = [&](std::chrono::milliseconds offset, std::int32_t toleranceLsb)
     {
-      REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
+      CAPTURE(offset);
+      REQUIRE(decoder.seek(offset));
+      auto frame = static_cast<std::uint64_t>(offset.count()) * kAacFixtureSampleRate / 1000U;
+
+      // Compare from the very first returned sample, across the delay and overlap
+      // windows. The oracle never seeks and does not use the reported position.
+      for (std::uint32_t index = 0; index < 3; ++index)
+      {
+        CAPTURE(index, frame);
+        auto const blockRes = decoder.readNextBlock();
+        REQUIRE(blockRes);
+        CHECK(blockRes->firstFrameIndex == frame);
+        REQUIRE(frame < kAacTotalFrames);
+        auto const packetOffset = frame % kAacFramesPerPacket;
+        REQUIRE(blockRes->frames == kAacFramesPerPacket - packetOffset);
+        auto const expected = std::span<std::int16_t const>{native.packets[frame / kAacFramesPerPacket]}.subspan(
+          packetOffset * native.channels);
+        auto const actual = copySigned16LeSamples(blockRes->bytes);
+        REQUIRE(actual.size() == expected.size());
+        std::int32_t peakError = 0;
+
+        for (std::size_t sample = 0; sample < actual.size(); ++sample)
+        {
+          auto const error = static_cast<std::int32_t>(actual[sample]) - expected[sample];
+          peakError = std::max(peakError, std::abs(error));
+        }
+
+        CHECK(peakError <= toleranceLsb);
+        frame += blockRes->frames;
+        CHECK(blockRes->endOfStream == (frame == kAacTotalFrames));
+
+        if (frame == kAacTotalFrames)
+        {
+          auto const eofRes = decoder.readNextBlock();
+          REQUIRE(eofRes);
+          CHECK(eofRes->endOfStream);
+          CHECK(eofRes->bytes.empty());
+          break;
+        }
+      }
+
       CHECK(decoder.streamInfo() == info);
+    };
 
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-      CHECK(blockRes->frames == kAacFramesPerPacket);
-      CHECK(blockRes->firstFrameIndex == 0);
-      CHECK_FALSE(blockRes->endOfStream);
-      auto const packet0 = copySigned16LeSamples(blockRes->bytes);
-      CHECK(packet0 == native.packets[0]);
-
-      auto const nextRes = decoder.readNextBlock();
-      REQUIRE(nextRes);
-      CHECK(nextRes->firstFrameIndex == kAacFramesPerPacket);
-      CHECK(copySigned16LeSamples(nextRes->bytes) == native.packets[1]);
+    SECTION("Initial seek to the start")
+    {
+      checkSeek(std::chrono::milliseconds{0}, 0);
     }
 
-    SECTION("Seek within the first packet")
+    SECTION("Initial seek inside the primed block")
     {
-      auto const offset = std::chrono::milliseconds{5};
-      auto const targetFrame = static_cast<std::uint64_t>(offset.count()) * kAacFixtureSampleRate / 1000U;
+      checkSeek(std::chrono::milliseconds{5}, 0);
+    }
 
-      REQUIRE(decoder.seek(offset));
-      CHECK(decoder.streamInfo() == info);
+    SECTION("Initial seek beyond the primed block")
+    {
+      checkSeek(std::chrono::milliseconds{100}, kSeekToleranceLsb);
+    }
 
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-      CHECK(blockRes->frames == kAacFramesPerPacket);
-      CHECK(blockRes->firstFrameIndex <= targetFrame);
-      CHECK(blockRes->firstFrameIndex + blockRes->frames > targetFrame);
-      CHECK_FALSE(blockRes->endOfStream);
-      auto const packet0 = copySigned16LeSamples(blockRes->bytes);
-      CHECK(packet0 == native.packets[0]);
+    SECTION("Seek forward and backward after decoding active audio")
+    {
+      for (std::uint32_t index = 0; index < 4; ++index)
+      {
+        auto const blockRes = decoder.readNextBlock();
+        REQUIRE(blockRes);
+        REQUIRE(copySigned16LeSamples(blockRes->bytes) == native.packets[index]);
+      }
 
-      auto const nextRes = decoder.readNextBlock();
-      REQUIRE(nextRes);
-      CHECK(nextRes->firstFrameIndex == kAacFramesPerPacket);
-      CHECK(copySigned16LeSamples(nextRes->bytes) == native.packets[1]);
+      REQUIRE(nonzeroSampleCount(native.packets[3]) > 0);
+      checkSeek(std::chrono::milliseconds{192}, kSeekToleranceLsb); // Packet boundary.
+      checkSeek(std::chrono::milliseconds{90}, kSeekToleranceLsb);  // Inside a packet.
+      checkSeek(std::chrono::milliseconds{275}, kSeekToleranceLsb); // Inside the final packet.
     }
   }
 
-  TEST_CASE("AacDecoderSession - initial mid-stream seek matches a fresh native decode from the target packet")
+#ifdef __linux__
+  TEST_CASE("AacDecoderSession - a ten-second HE-AAC rewind with read-ahead replays exact PCM without a scan")
   {
-    auto const testFile = requireAudioFixture("aac-layout/stereo.m4a");
-    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
-    auto& decoder = *decoderPtr;
-    auto const info = decoder.streamInfo();
+    using std::chrono::milliseconds;
+    constexpr std::uint64_t kFramesPerMs = 32;
+    auto const temp = ao::test::TempFile{heRewindFixture(), ".m4a"};
 
-    auto const native = decodeNativeFixture("aac-layout/stereo.m4a", 4);
-    requireNativeFixtureGeometry(native, 2, 4);
+    auto const open = [&]
+    { return ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed24PackedLe)); };
+    auto decoderPtr = open();
+    auto const bytesPerFrame = frameBytes(decoderPtr->streamInfo().outputFormat);
+    auto reference = std::vector<std::byte>{};
+    {
+      auto linearPtr = open();
 
-    constexpr auto kOffset = std::chrono::milliseconds{100};
-    auto const targetFrame = static_cast<std::uint64_t>(kOffset.count()) * kAacFixtureSampleRate / 1000U;
+      for (std::uint32_t index = 0; index < kRewindFixturePackets; ++index)
+      {
+        auto const block = ao::test::requireValue(linearPtr->readNextBlock());
+        REQUIRE(block.frames == 1024);
+        reference.append_range(block.bytes);
+      }
+    }
+    auto const checkNext = [&](std::uint64_t frame)
+    {
+      auto const block = ao::test::requireValue(decoderPtr->readNextBlock());
+      REQUIRE(block.firstFrameIndex == frame);
+      REQUIRE(block.frames == 1024 - (frame % 1024));
+      auto const expected =
+        std::span<std::byte const>{reference}.subspan(frame * bytesPerFrame, block.frames * bytesPerFrame);
+      REQUIRE(std::ranges::equal(block.bytes, expected));
+      CHECK(block.endOfStream == (frame + block.frames == kRewindFixturePackets * kAacFramesPerPacket));
+      return frame + block.frames;
+    };
 
-    REQUIRE(decoder.seek(kOffset));
-    CHECK(decoder.streamInfo() == info);
+    SECTION("After uninterrupted playback")
+    {
+      for (std::uint64_t frame = 0; frame < 600 * kAacFramesPerPacket;)
+      {
+        frame = checkNext(frame);
+      }
+    }
 
-    auto const blockRes = decoder.readNextBlock();
+    SECTION("Immediately after a cold seek")
+    {
+      REQUIRE(decoderPtr->needsSeekWorker(milliseconds{19168}));
+      REQUIRE(decoderPtr->seek(milliseconds{19168}));
+      REQUIRE(checkNext(19168 * kFramesPerMs) == 600 * kAacFramesPerPacket);
+    }
+
+    // Producer at 19.2 s; playhead at 17.701 s. Verify both the replay and
+    // its handoff to fresh native packets past the previous high-water mark.
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{7701}));
+    REQUIRE(decoderPtr->seek(milliseconds{7701}));
+
+    // Cancelling a different target must leave this pending mid-packet replay intact.
+    auto stop = std::stop_source{};
+    stop.request_stop();
+    auto const cancelledRes = decoderPtr->seekInterruptibly(milliseconds{3001}, stop.get_token());
+    REQUIRE_FALSE(cancelledRes);
+    CHECK(cancelledRes.error().code == Error::Code::Conflict);
+
+    for (std::uint64_t frame = 7701 * kFramesPerMs; frame < 602 * kAacFramesPerPacket;)
+    {
+      frame = checkNext(frame);
+    }
+
+    REQUIRE(decoderPtr->needsSeekWorker(milliseconds{3001}));
+    REQUIRE(decoderPtr->seek(milliseconds{3001}));
+    checkNext(3001 * kFramesPerMs);
+    // Return to PCM behind the displaced decoder, not just its next AU.
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{18333}));
+    REQUIRE(decoderPtr->seek(milliseconds{18333}));
+    REQUIRE(decoderPtr->seek(milliseconds{26000}));
+    CHECK(ao::test::requireValue(decoderPtr->readNextBlock()).bytes.empty());
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{3001}));
+    REQUIRE(decoderPtr->seek(milliseconds{3001}));
+    checkNext(3001 * kFramesPerMs);
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{18333}));
+    REQUIRE(decoderPtr->seek(milliseconds{18333}));
+
+    for (std::uint64_t frame = 18333 * kFramesPerMs; frame < kRewindFixturePackets * kAacFramesPerPacket;)
+    {
+      frame = checkNext(frame);
+    }
+
+    REQUIRE(decoderPtr->seek(milliseconds{26000}));
+    auto const eof = ao::test::requireValue(decoderPtr->readNextBlock());
+    CHECK(eof.endOfStream);
+    CHECK(eof.bytes.empty());
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{25599}));
+    REQUIRE(decoderPtr->seek(milliseconds{25599}));
+    checkNext(25599 * kFramesPerMs);
+  }
+
+  TEST_CASE("AacDecoderSession - borrowed native replay PCM survives replacement of both seek windows")
+  {
+    using std::chrono::milliseconds;
+    auto const temp = ao::test::TempFile{heRewindFixture(), ".m4a"};
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    REQUIRE(decoderPtr->seek(milliseconds{19168}));
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(milliseconds{8192}));
+    REQUIRE(decoderPtr->seek(milliseconds{8192}));
+    auto const replay = ao::test::requireValue(decoderPtr->readNextBlock());
+    REQUIRE(replay.firstFrameIndex == 256 * kAacFramesPerPacket);
+    REQUIRE(std::ranges::any_of(replay.bytes, [](std::byte byte) { return byte != std::byte{0}; }));
+    auto const saved = std::vector<std::byte>{replay.bytes.begin(), replay.bytes.end()};
+
+    // The first scan displaces the replay window into the checkpoint. The
+    // second target is ahead of the new cursor, but before that checkpoint's window.
+    REQUIRE(decoderPtr->seek(milliseconds{3001}));
+    REQUIRE(decoderPtr->seek(milliseconds{5001}));
+    CHECK(std::ranges::equal(replay.bytes, saved));
+  }
+
+  // The upstream FDK provider implements HE-AAC; the native vcpkg profile is LC-only.
+  TEST_CASE("AacDecoderSession - single-rate HE-AAC seek preserves the uninterrupted SBR signal")
+  {
+    using namespace std::string_view_literals;
+    constexpr auto kFixture = "aac-seek/he-single-rate.m4a"sv;
+    auto const native = decodeNativeFixture(kFixture);
+    REQUIRE(native.sampleRate == 32000);
+    REQUIRE(native.framesPerPacket == 1024);
+    REQUIRE(native.packets.size() == 80);
+    auto decoderPtr =
+      ao::test::requireValue(AacDecoderSession::open(requireAudioFixture(kFixture), SampleEncoding::Signed16Le));
+
+    // 641 ms starts 32 frames inside packet 20. The core geometry matches LC,
+    // but a short LC-style restart cannot reconstruct the SBR signal here.
+    auto const offset = std::chrono::milliseconds{641};
+    CHECK(decoderPtr->needsSeekWorker(offset));
+    CHECK_FALSE(decoderPtr->needsSeekWorker(decoderPtr->streamInfo().duration));
+    REQUIRE(decoderPtr->seek(offset));
+
+    for (std::size_t packet = 20; packet < 23; ++packet)
+    {
+      CAPTURE(packet);
+      auto const prefix = packet == 20 ? std::size_t{32} : std::size_t{0};
+      auto const expected = std::span<std::int16_t const>{native.packets[packet]}.subspan(prefix * native.channels);
+      REQUIRE(std::ranges::any_of(expected, [](auto sample) { return sample > 4096; }));
+      auto const blockRes = decoderPtr->readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->firstFrameIndex == (packet * 1024) + prefix);
+      CHECK(blockRes->frames == 1024 - prefix);
+      CHECK(std::ranges::equal(copySigned16LeSamples(blockRes->bytes), expected));
+    }
+
+    // Abandon a pending rewind and resume near the live native cursor.
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds{0}));
+    auto const revisitOffset = std::chrono::milliseconds{737};
+    CHECK_FALSE(decoderPtr->needsSeekWorker(revisitOffset));
+    REQUIRE(decoderPtr->seek(revisitOffset));
+    auto const blockRes = decoderPtr->readNextBlock();
     REQUIRE(blockRes);
-    CHECK(blockRes->frames == kAacFramesPerPacket);
-    CHECK(blockRes->firstFrameIndex == 4U * kAacFramesPerPacket);
-    CHECK(blockRes->firstFrameIndex <= targetFrame);
-    CHECK(blockRes->firstFrameIndex + blockRes->frames > targetFrame);
-    CHECK_FALSE(blockRes->endOfStream);
+    CHECK(blockRes->firstFrameIndex == 23584);
+    auto const expected = std::span<std::int16_t const>{native.packets[23]}.subspan(std::size_t{32} * native.channels);
+    CHECK(std::ranges::equal(copySigned16LeSamples(blockRes->bytes), expected));
+  }
+#endif
 
-    // Compare the entire packet against a fresh native handle starting at raw
-    // packet 4, without assuming that cold-start PCM is universally silent.
-    REQUIRE(blockRes->bytes.size() == 4096);
-    auto const packet4 = copySigned16LeSamples(blockRes->bytes);
-    CHECK(packet4 == native.packets[0]);
+  TEST_CASE("AacDecoderSession - DRC appearing after a short LC restart keeps PCM and changes later seeks")
+  {
+    constexpr auto kFixture = "aac-seek/lc-drc.m4a";
+    auto const native = decodeNativeFixture(kFixture);
+    REQUIRE(native.packets.size() == 30);
+#ifdef __linux__
+    REQUIRE(native.hasDrc);
+#endif
+    auto decoderPtr =
+      ao::test::requireValue(AacDecoderSession::open(requireAudioFixture(kFixture), SampleEncoding::Signed16Le));
+    auto const info = decoderPtr->streamInfo();
 
-    auto const nextRes = decoder.readNextBlock();
+    // Start at packet 12 with a nonzero LC restart. Packet 15 introduces DRC
+    // metadata, not a different output geometry or a reason to stop playback.
+    auto const offset = std::chrono::milliseconds{256};
+    REQUIRE_FALSE(decoderPtr->needsSeekWorker(offset));
+    REQUIRE(decoderPtr->seek(offset));
+
+    for (std::size_t packet = 12; packet <= 18; ++packet)
+    {
+      CAPTURE(packet);
+      auto const blockRes = decoderPtr->readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->firstFrameIndex == packet * kAacFramesPerPacket);
+      CHECK(copySigned16LeSamples(blockRes->bytes) == native.packets[packet]);
+    }
+
+    CHECK(decoderPtr->streamInfo() == info);
+    // An observed DRC declaration rules out future short restarts, even into
+    // the LC prefix. A provider without DRC still plays the entire interval.
+    CHECK(decoderPtr->needsSeekWorker(offset) == native.hasDrc);
+    REQUIRE(decoderPtr->seek(offset));
+    auto const replayRes = decoderPtr->readNextBlock();
+    REQUIRE(replayRes);
+    CHECK(replayRes->firstFrameIndex == 12288);
+    CHECK(copySigned16LeSamples(replayRes->bytes) == native.packets[12]);
+  }
+
+  TEST_CASE("AacDecoderSession - a packed-24 mid-packet seek drops whole adapted frames")
+  {
+    constexpr auto kFixture = "aac-layout/stereo.m4a";
+    auto const native = decodeNativeFixture(kFixture);
+    requireNativeFixtureGeometry(native, 2);
+    auto decoderPtr =
+      ao::test::requireValue(AacDecoderSession::open(requireAudioFixture(kFixture), SampleEncoding::Signed24PackedLe));
+
+    // 50 ms starts 352 frames inside packet 2, with non-silent PCM on both
+    // supported providers. The byte prefix is six bytes per stereo frame, not four.
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds{50}));
+    auto const blockRes = decoderPtr->readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->firstFrameIndex == 2400);
+    CHECK(blockRes->frames == 672);
+    auto const expected = std::span<std::int16_t const>{native.packets[2]}.subspan(std::size_t{352} * native.channels);
+    REQUIRE(blockRes->bytes.size() == expected.size() * 3);
+
+    for (std::size_t sample = 0; sample < expected.size(); ++sample)
+    {
+      REQUIRE(readSigned24PackedLePcmSample(blockRes->bytes, sample) ==
+              static_cast<std::int32_t>(expected[sample]) * 256);
+    }
+  }
+
+  TEST_CASE("AacDecoderSession - a coarse MP4 clock does not move native PCM frame boundaries")
+  {
+    auto const temp = ao::test::TempFile{stereoFixtureWithTiming(true), ".m4a"};
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    auto const native = decodeNativeFixture("aac-layout/stereo.m4a");
+
+    for (std::uint32_t index = 0; index < 4; ++index)
+    {
+      auto const blockRes = decoderPtr->readNextBlock();
+      REQUIRE(blockRes);
+      CHECK(blockRes->firstFrameIndex == index * kAacFramesPerPacket);
+      REQUIRE(copySigned16LeSamples(blockRes->bytes) == native.packets[index]);
+    }
+
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds{22}));
+    auto const suffixRes = decoderPtr->readNextBlock();
+    REQUIRE(suffixRes);
+    CHECK(suffixRes->firstFrameIndex == 1056);
+    REQUIRE(suffixRes->frames == 992);
+    auto const expected = std::span<std::int16_t const>{native.packets[1]}.subspan(std::size_t{32} * native.channels);
+    CHECK(std::ranges::equal(copySigned16LeSamples(suffixRes->bytes), expected));
+    auto const nextRes = decoderPtr->readNextBlock();
     REQUIRE(nextRes);
-    CHECK(nextRes->frames == kAacFramesPerPacket);
-    CHECK(nextRes->firstFrameIndex == blockRes->firstFrameIndex + kAacFramesPerPacket);
-    CHECK(copySigned16LeSamples(nextRes->bytes) == native.packets[1]);
-    CHECK(decoder.streamInfo() == info);
+    CHECK(nextRes->firstFrameIndex == 2048);
+    CHECK(copySigned16LeSamples(nextRes->bytes) == native.packets[2]);
+  }
+
+  TEST_CASE("AacDecoderSession - a seek without MP4 timing skips unrelated earlier packets")
+  {
+    auto data = stereoFixtureWithTiming(false);
+    auto const demuxerRes =
+      media::mp4::Demuxer::parse(utility::bytes::view(std::span<std::uint8_t const>{data}), "mp4a");
+    REQUIRE(demuxerRes);
+    auto const packet = demuxerRes->sampleInfo(1);
+    REQUIRE(packet.size > 0);
+    REQUIRE(packet.offset + packet.size <= data.size());
+    // Reading from zero to find the requested packet would hit this corruption.
+    std::ranges::fill(std::span<std::uint8_t>{data}.subspan(packet.offset, packet.size), 0xA5);
+    auto const temp = ao::test::TempFile{data, ".m4a"};
+    auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    CHECK(decoderPtr->streamInfo().duration == std::chrono::milliseconds{0});
+    CHECK_FALSE(decoderPtr->needsSeekWorker(std::chrono::milliseconds{192}));
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds{192}));
+    auto const blockRes = decoderPtr->readNextBlock();
+    REQUIRE(blockRes);
+    CHECK(blockRes->firstFrameIndex == 9216);
+    CHECK(blockRes->frames == kAacFramesPerPacket);
+    REQUIRE(decoderPtr->seek(std::chrono::milliseconds::max()));
+    auto const eofRes = decoderPtr->readNextBlock();
+    REQUIRE(eofRes);
+    CHECK(eofRes->endOfStream);
+    CHECK(eofRes->bytes.empty());
   }
 
   TEST_CASE("AacDecoderSession - seeking back to the start after end of stream retains the published identity")
@@ -680,13 +1046,12 @@ namespace ao::audio::test
 
     REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
 
-    // Packet 0 is re-decoded on the primed handle whose filter history already
-    // advanced past it, so only the packet extent and identity are pinned here.
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
     CHECK(blockRes->frames == kAacFramesPerPacket);
     CHECK(blockRes->firstFrameIndex == 0);
     CHECK_FALSE(blockRes->endOfStream);
+    CHECK(copySigned16LeSamples(blockRes->bytes) == decodeNativeFixture("aac-layout/stereo.m4a").packets.front());
     CHECK(decoder.streamInfo() == info);
   }
 

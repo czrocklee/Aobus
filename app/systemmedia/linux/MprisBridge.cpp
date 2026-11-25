@@ -395,7 +395,8 @@ namespace ao::systemmedia
             return;
           }
 
-          if (snapshot.transport.transport != lastSnapshot.transport.transport)
+          if (MprisBridge::playbackStatus(snapshot.transport.transport) !=
+              MprisBridge::playbackStatus(lastSnapshot.transport.transport))
           {
             emitPlayerPropertiesChanged({"PlaybackStatus"});
           }
@@ -901,9 +902,10 @@ namespace ao::systemmedia
     switch (transport)
     {
       case audio::Transport::Opening:
-      case audio::Transport::Buffering:
       case audio::Transport::Seeking:
       case audio::Transport::Playing: return "Playing";
+      // MPRIS clients extrapolate Position while Playing, but preroll holds the clock.
+      case audio::Transport::Buffering:
       case audio::Transport::Paused: return "Paused";
       case audio::Transport::Idle:
       case audio::Transport::Stopping:

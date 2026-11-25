@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/audio/EngineTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/audio/Device.h>
 #include <ao/audio/RenderTarget.h>
@@ -54,6 +55,167 @@ namespace ao::rt::test
     CHECK(playback.elapsed() == paused.elapsed);
     playback.commands().stop();
     CHECK(playback.elapsed() == std::chrono::milliseconds{0});
+  }
+
+  TEST_CASE("PlaybackService - deferred seek readiness publishes Playing without a second start", "[concurrency]")
+  {
+    constexpr auto kSeekOffset = std::chrono::milliseconds{3000};
+    using audio::test::SeekTestGate;
+    auto const gatePtr = std::make_shared<SeekTestGate>();
+    auto fixture = PlaybackSuccessionTransportFixture{{.seekGatePtr = gatePtr, .gatedSeekOffset = kSeekOffset}};
+    auto const trackId = fixture.addPlayableTrack("Positioning");
+    fixture.openManualView(std::array{trackId});
+    auto playback = fixture.createPlayback();
+    REQUIRE(fixture.playAndWait(trackId));
+    auto& executor = fixture.transport.executor;
+    executor.drain();
+    auto const occurrence = playback.snapshot().transport.occurrenceId;
+    REQUIRE(playback.commands().trySeek(occurrence, std::chrono::milliseconds{3200}));
+    REQUIRE(playback.snapshot().succession.hasPrevious);
+    std::size_t starts = 0;
+    auto const started = fixture.transport.playbackTransport.onStarted([&] { ++starts; });
+    REQUIRE(playback.commands().trySeek(occurrence, kSeekOffset));
+    REQUIRE(gatePtr->tryWaitForEntry());
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Buffering);
+    CHECK_FALSE(playback.snapshot().succession.hasPrevious);
+    std::size_t expectedStarts = 0;
+
+    SECTION("Uninterrupted positioning preserves playing intent")
+    {
+    }
+
+    SECTION("Resume keeps the deadline suspended until the decoder is ready")
+    {
+      playback.commands().pause();
+      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
+      playback.commands().resume();
+      playback.commands().resume();
+      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Buffering);
+      expectedStarts = 1;
+      CHECK(starts == expectedStarts);
+    }
+
+    SECTION("A replacement seek cancels positioning without waiting for the gate to be released")
+    {
+      constexpr auto kReplacementOffset = std::chrono::milliseconds{50};
+      REQUIRE(playback.commands().trySeek(occurrence, kReplacementOffset));
+      executor.drain();
+      CHECK(gatePtr->outcome() == SeekTestGate::Outcome::Cancelled);
+      CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+      CHECK(playback.snapshot().transport.elapsed == kReplacementOffset);
+      CHECK(starts == 0);
+      return;
+    }
+
+    SECTION("A ready callback queued before same-track replay does not finish buffering on the new occurrence")
+    {
+      std::size_t finishes = 0;
+      auto const finished = fixture.transport.playbackTransport.onBufferingFinished([&] { ++finishes; });
+      executor.drain();
+      gatePtr->release();
+      REQUIRE(executor.tryWaitUntilQueued());
+      CHECK(gatePtr->outcome() == SeekTestGate::Outcome::Released);
+      REQUIRE(fixture.transport.playbackTransport.playTrack(trackId, fixture.listId));
+      executor.drain();
+      CHECK(playback.snapshot().transport.nowPlaying.trackId == trackId);
+      CHECK(playback.snapshot().transport.occurrenceId != occurrence);
+      CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+      CHECK(finishes == 0);
+      CHECK(starts == 1);
+      return;
+    }
+
+    // Fence the single timer worker so a wrongly queued 1 ms wait cannot
+    // escape the assertion just because its coroutine hasn't started yet.
+    runQueuedTask(fixture.asyncRuntime, executor, fixture.asyncRuntime.resumeOnWorkerAsync());
+    CHECK(fixture.sleeper.pendingDelays().empty());
+    auto const beforeReady = fixture.sleeper.callCount();
+    auto const buffering = playback.snapshot().transport;
+    auto publications = std::vector<PlaybackTransportSnapshot>{};
+    auto const subscription =
+      playback.events().onSnapshot([&](auto const& value) { publications.push_back(value.transport); });
+    gatePtr->release();
+    REQUIRE(
+      executor.tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    executor.drain();
+    CHECK(gatePtr->outcome() == SeekTestGate::Outcome::Released);
+    REQUIRE(publications.size() == 1);
+    CHECK(publications.front().occurrenceId == occurrence);
+    CHECK(publications.front().transport == audio::Transport::Playing);
+    CHECK(publications.front().elapsed == kSeekOffset);
+    CHECK(publications.front().positionRevision == buffering.positionRevision);
+    CHECK(publications.front().finalSeekRevision == buffering.finalSeekRevision);
+    CHECK(starts == expectedStarts);
+    REQUIRE(fixture.sleeper.tryWaitForPendingDelay(std::chrono::milliseconds{1}));
+    CHECK(fixture.sleeper.callCount() == beforeReady + 1);
+    auto output = std::array<std::byte, 4096>{};
+    auto* const target = fixture.transport.renderTarget;
+    REQUIRE(target != nullptr);
+    auto const rendered = target->renderPcm(output);
+    REQUIRE(rendered.bytesWritten > 0);
+    target->handlePositionAdvanced(rendered.positionFrames);
+    REQUIRE(fixture.sleeper.tryFireNext(std::chrono::milliseconds{1}));
+    CHECK(executor.tryDrainUntil([&] { return playback.snapshot().succession.hasPrevious; }));
+  }
+
+  TEST_CASE("PlaybackService - output reopen holds the restart deadline until PCM is ready", "[concurrency]")
+  {
+    using std::chrono::milliseconds;
+    auto const gatePtr = std::make_shared<audio::test::SeekTestGate>();
+    auto fixture = PlaybackSuccessionTransportFixture{{.seekGatePtr = gatePtr, .gatedSeekOffset = milliseconds{3000}}};
+    auto const trackId = fixture.addPlayableTrack("Reopen");
+    fixture.openManualView(std::array{trackId});
+    auto playback = fixture.createPlayback();
+    REQUIRE(fixture.playAndWait(trackId));
+    auto& executor = fixture.transport.executor;
+    auto const selected = playback.snapshot().transport.output.selectedDevice;
+    auto const dac = audio::Device{.id = audio::DeviceId{"studio-dac"}, .backendId = selected.backendId};
+    fixture.transport.onDevicesChangedCb({fixture.transport.status.devices.front(), dac});
+    executor.drain();
+
+    auto const occurrence = playback.snapshot().transport.occurrenceId;
+    REQUIRE(playback.commands().trySeek(occurrence, milliseconds{2990}));
+    // Only the reopen at 3000 ms needs a worker. Advance the 44.1 kHz device clock
+    // without issuing a seek to that offset on the original device.
+    auto const renderTenMilliseconds = [&]
+    {
+      auto* const target = fixture.transport.renderTarget;
+      REQUIRE(target != nullptr);
+      auto output = std::array<std::byte, std::size_t{441} * 4>{};
+      auto const rendered = target->renderPcm(output);
+      REQUIRE(rendered.positionFrames == 441);
+      target->handlePositionAdvanced(rendered.positionFrames);
+    };
+    renderTenMilliseconds();
+    REQUIRE(playback.elapsed() == milliseconds{3000});
+    REQUIRE(fixture.sleeper.tryWaitForPendingDelay(milliseconds{11}));
+    auto const beforeSwitch = fixture.sleeper.callCount();
+    executor.drain();
+    REQUIRE(fixture.sleeper.tryFireNext(milliseconds{11}));
+    REQUIRE(executor.tryWaitUntilQueued());
+
+    // Change the route before delivering the deadline for the old running clock.
+    playback.commands().setOutputDevice(dac.backendId, dac.id, selected.profileId);
+    REQUIRE(gatePtr->tryWaitForEntry());
+    auto const& held = playback.snapshot().transport;
+    REQUIRE(held.output.selectedDevice.deviceId == dac.id);
+    REQUIRE(held.transport == audio::Transport::Buffering);
+    CHECK(held.occurrenceId == occurrence);
+    CHECK(playback.elapsed() == milliseconds{3000});
+    executor.drain();
+    runQueuedTask(fixture.asyncRuntime, executor, fixture.asyncRuntime.resumeOnWorkerAsync());
+    CHECK(fixture.sleeper.pendingDelays().empty());
+    CHECK(fixture.sleeper.callCount() == beforeSwitch);
+    CHECK_FALSE(playback.snapshot().succession.hasPrevious);
+
+    gatePtr->release();
+    REQUIRE(
+      executor.tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    REQUIRE(fixture.sleeper.tryWaitForPendingDelay(milliseconds{1}));
+    CHECK(fixture.sleeper.callCount() == beforeSwitch + 1);
+    renderTenMilliseconds();
+    REQUIRE(fixture.sleeper.tryFireNext(milliseconds{1}));
+    CHECK(executor.tryDrainUntil([&] { return playback.snapshot().succession.hasPrevious; }));
   }
 
   TEST_CASE("PlaybackService - elapsed does not attribute a pending realtime splice to old metadata", "[concurrency]")

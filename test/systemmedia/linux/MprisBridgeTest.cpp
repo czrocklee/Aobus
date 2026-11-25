@@ -229,7 +229,7 @@ namespace ao::systemmedia::test
   TEST_CASE("MprisBridge - playback status maps transport to MPRIS states")
   {
     CHECK(MprisBridge::playbackStatus(audio::Transport::Opening) == "Playing");
-    CHECK(MprisBridge::playbackStatus(audio::Transport::Buffering) == "Playing");
+    CHECK(MprisBridge::playbackStatus(audio::Transport::Buffering) == "Paused");
     CHECK(MprisBridge::playbackStatus(audio::Transport::Playing) == "Playing");
     CHECK(MprisBridge::playbackStatus(audio::Transport::Paused) == "Paused");
     CHECK(MprisBridge::playbackStatus(audio::Transport::Idle) == "Stopped");
@@ -853,6 +853,8 @@ namespace ao::systemmedia::test
     CHECK(endpoint.tryDispatchPlayerMethod("PlayPause"));
     REQUIRE(tryWaitForPlayback(fixture, secondTrack));
     CHECK(selectionStartCount == 1);
+    CHECK(endpoint.tryDispatchPlayerMethod("PlayPause"));
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
     CHECK(endpoint.tryDispatchPlayerMethod("Stop"));
     REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
 

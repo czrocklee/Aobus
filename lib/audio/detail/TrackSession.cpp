@@ -113,15 +113,7 @@ namespace ao::audio::detail
         throwDecoderError(Error::Code::FormatRejected, "Decoder output format has no whole PCM frame");
       }
 
-      if (initialOffset > std::chrono::milliseconds{0})
-      {
-        if (auto const seekRes = decoderPtr->seek(initialOffset); !seekRes)
-        {
-          throwDecoderError(seekRes.error());
-        }
-      }
-
-      auto sourcePtr = preparePcmSource(std::move(decoderPtr), info);
+      auto sourcePtr = preparePcmSource(std::move(decoderPtr), info, initialOffset);
 
       return PreparedTrack{.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};
     }
@@ -132,24 +124,26 @@ namespace ao::audio::detail
   }
 
   TrackSession::OpenedTrack TrackSession::activate(PreparedTrack preparedTrack,
-                                                   StreamingSource::OnSourceError onSourceError)
+                                                   StreamingSource::OnSourceError onSourceError,
+                                                   StreamingSource::OnReady onReady)
   {
     AO_INVARIANT(preparedTrack.sourcePtr, "Prepared track has no streaming source");
 
     auto sourcePtr = std::shared_ptr<StreamingSource>{std::move(preparedTrack.sourcePtr)};
-    sourcePtr->activate(std::move(onSourceError));
+    sourcePtr->activate(std::move(onSourceError), std::move(onReady));
 
     return OpenedTrack{
       .sourcePtr = std::move(sourcePtr), .backendFormat = preparedTrack.backendFormat, .info = preparedTrack.info};
   }
 
   std::unique_ptr<StreamingSource> TrackSession::preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
-                                                                  DecodedStreamInfo const& info)
+                                                                  DecodedStreamInfo const& info,
+                                                                  std::chrono::milliseconds initialOffset)
   {
     auto streamingSourcePtr =
       std::make_unique<StreamingSource>(std::move(decoderPtr), info, kPrerollDuration, kDecodeHighWatermarkThreshold);
 
-    if (auto const prepareRes = streamingSourcePtr->prepare(); !prepareRes)
+    if (auto const prepareRes = streamingSourcePtr->prepare(initialOffset); !prepareRes)
     {
       throwDecoderError(prepareRes.error());
     }

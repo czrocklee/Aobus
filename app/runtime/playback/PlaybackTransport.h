@@ -142,6 +142,7 @@ namespace ao::rt
 
     async::Subscription onPreparing(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onStarted(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onBufferingFinished(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onPaused(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onIdle(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onNowPlayingChanged(compat::MoveOnlyFunction<void(NowPlayingChanged const&)> handler);

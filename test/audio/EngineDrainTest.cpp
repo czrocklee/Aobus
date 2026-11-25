@@ -33,6 +33,7 @@
 #include <memory>
 #include <optional>
 #include <semaphore>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -324,15 +325,41 @@ namespace ao::audio::test
     REQUIRE(workerEntered.tryWaitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
-    REQUIRE(target->renderPcm(out).bytesWritten == out.size());
-    CHECK(std::vector<std::byte>{out.begin(), out.end()} == initialData);
-    CHECK(target->renderPcm(out).drained);
-    backendRaw->emitDrainComplete();
+    auto const finishOldRun = [&]
+    {
+      auto const rendered = target->renderPcm(out);
+      REQUIRE(rendered.bytesWritten == out.size());
+      CHECK(std::vector<std::byte>{out.begin(), out.end()} == initialData);
+      target->handlePositionAdvanced(rendered.positionFrames);
+      REQUIRE(target->renderPcm(out).drained);
+      target->handleDrainComplete();
+    };
+    auto clearObserver = utility::ScopedRegistration{[&] { backendRaw->setEventObserver({}); }};
 
-    // seek() keeps the same render session, so generation alone cannot identify
-    // the old drain completion as stale. It must cancel that drain before
-    // repositioning the source.
+    if (auto const renderDuringStop = GENERATE(false, true); renderDuringStop)
+    {
+      // stop() may have to wait for one last render callback. Model its final
+      // position and drain reports before stop has acknowledged quiescence.
+      backendRaw->setEventObserver(
+        [&](std::string_view event)
+        {
+          if (event == "stop")
+          {
+            finishOldRun();
+          }
+        });
+    }
+    else
+    {
+      finishOldRun();
+    }
+
     engine.seek(std::chrono::milliseconds{2});
+    clearObserver.reset();
+    CHECK(engine.status().elapsed == std::chrono::milliseconds{2});
+    // A control command moves any mid-stop RT signal onto the event queue
+    // before the route notification below fences delivery.
+    REQUIRE(engine.setVolume(0.5F));
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == seekData);
 

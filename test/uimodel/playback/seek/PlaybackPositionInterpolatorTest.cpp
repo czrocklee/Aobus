@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/CoreIds.h>
+#include <ao/audio/Transport.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -10,6 +14,31 @@
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("PlaybackPositionView - holds the seek position during buffering and advances once playing")
+  {
+    auto snapshot = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Buffering,
+                                                  .occurrenceId = {1},
+                                                  .elapsed = std::chrono::seconds{4},
+                                                  .duration = std::chrono::seconds{10},
+                                                  .nowPlaying = {.trackId = TrackId{1}}};
+    auto clock = PlaybackPositionInterpolator{};
+    auto const buffering = playbackPositionView(snapshot);
+    CHECK(buffering.seekable);
+    clock.updateState(buffering.elapsed, buffering.duration, buffering.isPlaying);
+
+    auto const firstFrameTime = FrameClock::fromMicros(1'000'000);
+    CHECK(clock.interpolateElapsed(firstFrameTime) == std::chrono::seconds{4});
+    CHECK(clock.interpolateElapsed(firstFrameTime + std::chrono::seconds{2}) == std::chrono::seconds{4});
+
+    snapshot.transport = audio::Transport::Playing;
+    auto const playing = playbackPositionView(snapshot);
+    clock.updateState(playing.elapsed, playing.duration, playing.isPlaying);
+
+    auto const resumedFrameTime = firstFrameTime + std::chrono::seconds{3};
+    CHECK(clock.interpolateElapsed(resumedFrameTime) == std::chrono::seconds{4});
+    CHECK(clock.interpolateElapsed(resumedFrameTime + std::chrono::seconds{1}) == std::chrono::seconds{5});
+  }
+
   TEST_CASE("PlaybackPositionInterpolator - calculations")
   {
     auto interpolator = PlaybackPositionInterpolator{};

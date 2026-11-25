@@ -5,7 +5,6 @@
 
 #include "AudioTime.h"
 #include "PcmSource.h"
-#include "StreamingSource.h"
 #include "detail/DecoderOutput.h"
 #include "detail/EngineEventQueueInvariants.h"
 #include "detail/EngineRtSignalRing.h"
@@ -102,6 +101,13 @@ namespace ao::audio
       Error error;
     };
 
+    struct SourceReadyEvent final
+    {
+      std::uint64_t sourceGeneration = 0;
+      std::uint64_t playbackGeneration = 0;
+      std::stop_token decodeAttempt;
+    };
+
     // Wait-free render-thread -> event-thread notification. Posted by the RT
     // render callback at a gapless boundary (Spliced) or when the current source
     // finishes with no gapless successor (Drained). Spliced carries a non-owning
@@ -160,6 +166,7 @@ namespace ao::audio
 
     using PlaybackEvent = std::variant<BackendErrorEvent,
                                        SourceErrorEvent,
+                                       SourceReadyEvent,
                                        DrainCompleteEvent,
                                        RouteReadyEvent,
                                        FormatChangedEvent,
@@ -1207,6 +1214,19 @@ namespace ao::audio
 
     Notifications processPlaybackEvent(SourceErrorEvent const& event) { return processSourceErrorEvent(event); }
 
+    Notifications processPlaybackEvent(SourceReadyEvent const& event)
+    {
+      if (event.decodeAttempt.stop_requested() || event.sourceGeneration != timeline.activeSourceGeneration() ||
+          event.playbackGeneration != currentPlaybackGeneration.load(std::memory_order_acquire))
+      {
+        return {};
+      }
+
+      auto notifications = Notifications{};
+      std::ignore = trySettlePositioning(notifications, true);
+      return notifications;
+    }
+
     Notifications processPlaybackEvent(DrainCompleteEvent const& event) { return processDrainCompleteEvent(event); }
 
     Notifications processPlaybackEvent(RouteReadyEvent const& event) { return processRouteReadyEvent(event); }
@@ -1645,16 +1665,25 @@ namespace ao::audio
     }
 
     // ── Track opening ──────────────────────────────────────────────
-    StreamingSource::OnSourceError makeSourceErrorHandler(std::uint64_t const sourceGeneration,
-                                                          std::uint64_t const playbackGeneration)
+    detail::TrackSession::OpenedTrack activateTrack(detail::TrackSession::PreparedTrack prepared,
+                                                    std::uint64_t sourceGeneration,
+                                                    std::uint64_t playbackGeneration)
     {
-      return [this, sourceGeneration, playbackGeneration](Error const& error, std::stop_token decodeAttempt)
-      {
-        enqueuePlaybackEvent(SourceErrorEvent{.sourceGeneration = sourceGeneration,
-                                              .playbackGeneration = playbackGeneration,
-                                              .decodeAttempt = std::move(decodeAttempt),
-                                              .error = error});
-      };
+      return detail::TrackSession::activate(
+        std::move(prepared),
+        [this, sourceGeneration, playbackGeneration](Error const& error, std::stop_token attempt)
+        {
+          enqueuePlaybackEvent(SourceErrorEvent{.sourceGeneration = sourceGeneration,
+                                                .playbackGeneration = playbackGeneration,
+                                                .decodeAttempt = std::move(attempt),
+                                                .error = error});
+        },
+        [this, sourceGeneration, playbackGeneration](std::stop_token attempt)
+        {
+          enqueuePlaybackEvent(SourceReadyEvent{.sourceGeneration = sourceGeneration,
+                                                .playbackGeneration = playbackGeneration,
+                                                .decodeAttempt = std::move(attempt)});
+        });
     }
 
     static TrackNode makeTrackNode(PlaybackItem const& item,
@@ -1685,8 +1714,7 @@ namespace ao::audio
         return std::unexpected{preparedRes.error()};
       }
 
-      auto session = detail::TrackSession::activate(
-        std::move(*preparedRes), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
+      auto session = activateTrack(std::move(*preparedRes), sourceGeneration, playbackGeneration);
 
       return makeTrackNode(item, std::move(session), sourceGeneration, playbackGeneration);
     }
@@ -1731,6 +1759,8 @@ namespace ao::audio
     std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
+    bool trySettlePositioning(Notifications& notifications, bool notifyPlaying);
+    bool trySettlePositioningFromCommand();
     void stopPlaybackUnlocked();
     void stopUnlocked();
     Result<bool> startInspectedPlaybackUnlocked(
@@ -1976,7 +2006,7 @@ namespace ao::audio
           auto const sr = engineSampleRate.load(std::memory_order_relaxed);
           return samplesToDuration(frames, sr);
         }(),
-        .wasPlaying = (status.transport == Transport::Playing),
+        .wasPlaying = status.transport == Transport::Playing || status.transport == Transport::Buffering,
       };
     }();
 
@@ -2176,8 +2206,7 @@ namespace ao::audio
     {
       if (optPreparedTrack && isSamePcmMode(optPreparedTrack->backendFormat, clientFormat))
       {
-        auto session = detail::TrackSession::activate(
-          std::move(*optPreparedTrack), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
+        auto session = activateTrack(std::move(*optPreparedTrack), sourceGeneration, playbackGeneration);
         optPreparedTrack.reset();
 
         return makeTrackNode(item, std::move(session), sourceGeneration, playbackGeneration);
@@ -2221,44 +2250,8 @@ namespace ao::audio
       applyBackendControls(controls);
     }
 
-    auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrackRes));
-    auto* const currentNode = openedNodePtr.get();
-    publishCurrentNode(std::move(openedNodePtr));
-
-    auto const bufferedDuration =
-      currentNode->sourcePtr ? currentNode->sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
-
-    if (auto const drained = !currentNode->sourcePtr || currentNode->sourcePtr->isDrained();
-        drained && bufferedDuration == std::chrono::milliseconds{0})
-    {
-      auto notifications = completeCurrentPlayback(playbackGeneration);
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return false;
-    }
-
-    {
-      auto const lock = std::scoped_lock{stateMutex};
-
-      // Error is terminal: if an already-applied error moved the transport to
-      // Error, never clobber it with Playing. Source/backend errors that arrive
-      // while this control command is running are queued behind controlMutex and
-      // will be applied after this command returns.
-      if (status.transport == Transport::Error)
-      {
-        return makeError(Error::Code::InvalidState, status.statusText);
-      }
-
-      status.transport = Transport::Playing;
-      backendStarted = true;
-    }
-
-    backendPtr->start();
-    return true;
+    publishCurrentNode(std::make_unique<TrackNode>(std::move(*openedTrackRes)));
+    return trySettlePositioningFromCommand();
   }
 
   std::optional<Engine::PlaybackItemId> Engine::Impl::clearNextUnlocked()
@@ -2287,7 +2280,6 @@ namespace ao::audio
 
   void Engine::Impl::resumeUnlocked()
   {
-    auto const sourcePtr = currentSource();
     auto lock = std::unique_lock{stateMutex};
 
     if (status.transport != Transport::Paused)
@@ -2303,25 +2295,60 @@ namespace ao::audio
       return;
     }
 
-    if (auto const drained = !sourcePtr || sourcePtr->isDrained();
-        drained &&
-        (sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0}) == std::chrono::milliseconds{0})
+    status.transport = Transport::Buffering;
+    lock.unlock();
+    std::ignore = trySettlePositioningFromCommand();
+  }
+
+  bool Engine::Impl::trySettlePositioningFromCommand()
+  {
+    auto notifications = Notifications{};
+    auto const active = trySettlePositioning(notifications, false);
+
+    if (!notifications.empty())
     {
-      lock.unlock();
-      auto notifications = completeCurrentPlayback(currentPlaybackGeneration.load(std::memory_order_acquire));
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return;
+      enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
     }
 
-    status.transport = Transport::Playing;
-    backendStarted = true;
-    lock.unlock();
-    backendPtr->start();
+    return active;
+  }
+
+  bool Engine::Impl::trySettlePositioning(Notifications& notifications, bool notifyPlaying)
+  {
+    auto const sourcePtr = currentSource();
+    auto lock = std::unique_lock{stateMutex};
+
+    // A fast worker can finish before its initiating command checks readiness.
+    // Its eventual notification must not restart a live backend or mistake a
+    // consumed ring for EOF before the device has drained.
+    if (backendStarted || (status.transport != Transport::Buffering && status.transport != Transport::Paused) ||
+        (sourcePtr && sourcePtr->isPreparingSeek()))
+    {
+      return true;
+    }
+
+    if (!sourcePtr || sourcePtr->isDrained())
+    {
+      lock.unlock();
+      notifications = completeCurrentPlayback(currentPlaybackGeneration.load(std::memory_order_acquire));
+      return false;
+    }
+
+    if (status.transport == Transport::Buffering)
+    {
+      status.transport = Transport::Playing;
+      backendStarted = true;
+
+      if (notifyPlaying)
+      {
+        appendStateChangedNotification(notifications, onStateChanged);
+      }
+
+      lock.unlock();
+      backendPtr->start();
+    }
+
+    return true;
   }
 
   void Engine::Impl::stopPlaybackUnlocked()
@@ -2395,8 +2422,13 @@ namespace ao::audio
       return false;
     }
 
-    cancelPendingDrainSignal();
+    backendPtr->stop();
+    backendPtr->flush();
+    backendStarted = false;
 
+    // Only reset the drain epoch and clock after stop quiesces the old run's
+    // final render, position and drain callbacks on this same target.
+    cancelPendingDrainSignal();
     auto const wasPaused = [this, offset]
     {
       auto const lock = std::scoped_lock{stateMutex};
@@ -2409,10 +2441,6 @@ namespace ao::audio
       return paused;
     }();
 
-    backendPtr->stop();
-    backendPtr->flush();
-    backendStarted = false;
-
     if (auto const seekRes = sourcePtr->seek(offset); !seekRes)
     {
       auto const lock = std::scoped_lock{stateMutex};
@@ -2421,35 +2449,13 @@ namespace ao::audio
       return true;
     }
 
-    auto const bufferedDuration = sourcePtr->bufferedDuration();
-
-    if (auto const drained = sourcePtr->isDrained(); drained && bufferedDuration == std::chrono::milliseconds{0})
-    {
-      auto notifications = completeCurrentPlayback(currentPlaybackGeneration.load(std::memory_order_acquire));
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return true;
-    }
-
     if (wasPaused)
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Paused;
-      return true;
     }
 
-    {
-      auto const lock = std::scoped_lock{stateMutex};
-
-      status.transport = Transport::Playing;
-      backendStarted = true;
-    }
-
-    backendPtr->start();
+    std::ignore = trySettlePositioningFromCommand();
     return true;
   }
 
@@ -2738,9 +2744,8 @@ namespace ao::audio
       {
         auto const sourceGeneration = engine._implPtr->nextSourceGeneration++;
 
-        auto activatedTrack =
-          detail::TrackSession::activate(std::move(*preparationImpl->optPreparedTrack),
-                                         engine._implPtr->makeSourceErrorHandler(sourceGeneration, currentGeneration));
+        auto activatedTrack = engine._implPtr->activateTrack(
+          std::move(*preparationImpl->optPreparedTrack), sourceGeneration, currentGeneration);
         preparationImpl->optPreparedTrack.reset();
 
         nodePtr = std::make_unique<Engine::Impl::TrackNode>(Engine::Impl::makeTrackNode(

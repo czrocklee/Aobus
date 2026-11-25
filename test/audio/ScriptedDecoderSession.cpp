@@ -15,6 +15,7 @@
 #include <expected>
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -41,6 +42,13 @@ namespace ao::audio::test
   void ScriptedDecoderSession::setSeekReadScript(std::vector<ReadScriptEntry> script)
   {
     _optSeekScript = std::move(script);
+  }
+
+  void ScriptedDecoderSession::setWorkerSeek(std::chrono::milliseconds offset,
+                                             std::function<Result<>(std::stop_token)> operation)
+  {
+    _optWorkerOffset = offset;
+    _workerSeek = std::move(operation);
   }
 
   void ScriptedDecoderSession::setSeekObserver(std::function<void(std::chrono::milliseconds)> observer)
@@ -80,6 +88,29 @@ namespace ao::audio::test
 
     _scriptIndex = 0;
     return _seekRes;
+  }
+
+  bool ScriptedDecoderSession::needsSeekWorker(std::chrono::milliseconds offset) const noexcept
+  {
+    return _optWorkerOffset == offset;
+  }
+
+  Result<> ScriptedDecoderSession::seekInterruptibly(std::chrono::milliseconds offset, std::stop_token token) noexcept
+  {
+    if (!token.stop_requested() && needsSeekWorker(offset))
+    {
+      if (auto res = _workerSeek(token); !res)
+      {
+        return res;
+      }
+    }
+
+    if (token.stop_requested())
+    {
+      return makeError(Error::Code::Conflict, "Scripted seek cancelled");
+    }
+
+    return seek(offset);
   }
 
   Result<PcmBlock> ScriptedDecoderSession::readNextBlock() noexcept

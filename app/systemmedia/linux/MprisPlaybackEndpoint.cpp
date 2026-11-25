@@ -170,13 +170,16 @@ namespace ao::systemmedia
   }
 
   std::optional<uimodel::PlaybackCommand> MprisPlaybackEndpoint::commandForPlayerMethod(
-    std::string_view const methodName) noexcept
+    std::string_view const methodName) const
   {
     using Command = uimodel::PlaybackCommand;
 
     if (methodName == "PlayPause")
     {
-      return Command::PlayPause;
+      // Toggle the advertised status: Play is already satisfied while Buffering,
+      // even though the held clock makes the player appear Paused on the bus.
+      auto const status = MprisBridge::playbackStatus(_playback.snapshot().transport.transport);
+      return status == "Playing" ? Command::Pause : Command::Play;
     }
 
     if (methodName == "Play")
