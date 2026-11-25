@@ -125,17 +125,23 @@ For local initialization:
 - When a container's braces are ambiguous with `std::initializer_list`, use `auto value = T(args);` unless list initialization is intended.
 - For primitive types, use `T value = initial;`; do not use braces or `auto` with a literal or functional-cast initializer. Other deduced expressions, such as function results and `static_cast`, may keep `auto`.
 - For string constants, import the standard literal namespace and prefer `"text"s` or `"text"sv` to explicit construction.
-- Treat enums and `std::byte` as non-primitive types and use `auto value = T{...};`.
+- For initialization style, scoped and unscoped enums, including `std::byte`, are non-primitive.
+  For a by-value enum local with automatic storage, prefer `auto mode = E::A;`; `E mode = E::A;` is also fine. Preserve qualifiers: write `constexpr E mode = E::A;` rather than `constexpr E mode{E::A};`.
+  Do not wrap a single enumerator in its own enum type or use braces or parentheses to initialize an explicitly typed local from it.
+  Keep intentional numeric construction (`E{number}` or `std::byte{0xff}`), actual conversions, and class wrappers. For other braced enum locals, keep the braces on the initializer: for example, write `constexpr auto mask = std::byte{0xff};`. A function returning the enum type does not need another construction around it.
+  Do not add an initializer to an uninitialized enum just to satisfy this style.
 - Use class template argument deduction only when every template argument is non-primitive; spell the arguments when any is primitive, as in `auto count = std::atomic<std::size_t>{0};`.
   Keep explicit arguments when deduction would change the type: write `std::atomic<T*>{nullptr}`, not a cast just to enable deduction.
   For an `std::array` of primitive elements, use `std::to_array<T>({...})` so the size stays deduced.
 - Use an explicit type when a C API requires a pointer to that exact C type.
 - Initialize a null pointer as `T* pointer = nullptr;`.
 
-A namespace-scope variable, static data member, or static local follows the same primitive rule: write `constexpr std::size_t kCount = 263;` and `constexpr double kRatio = 0.5;`, not `auto` with a literal or functional cast, or braced initialization of an explicit primitive type.
+Only the primitive rule extends to namespace-scope variables, static data members, and static locals: write `constexpr std::size_t kCount = 263;` and `constexpr double kRatio = 0.5;`, not `auto` with a literal or functional cast, or braced initialization of an explicit primitive type.
 Choose the type from the quantity and its consumers; native geometry may use `CGFloat`, while counts and timer durations have different contracts.
 A cast inside a larger expression, such as `std::size_t{8} * 1024`, stays where it prevents `int` overflow; the declaration's type alone does not control the arithmetic on its right-hand side.
-The `aobus-modernize-local-initialization-style` check is diagnostic-only: changing types or removing conversions requires source review. The non-primitive preference remains limited to locals.
+The `aobus-modernize-local-initialization-style` check is diagnostic-only: changing types or removing conversions requires source review.
+The enum rules do not apply to namespace-scope variables, static data members, or locals with static or thread storage duration.
+The enumerator diagnostic identifies redundant initialization without prescribing a rewrite. It skips explicitly typed volatile locals, inline enum definitions, and declarations that share an explicit type with other declarators.
 
 ## Ownership and class design
 

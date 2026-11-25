@@ -11,7 +11,7 @@
 #include <tuple>
 #include <vector>
 
-#define AOBUS_AUTO auto
+#define FIXTURE_AUTO auto
 
 void testLocalInitialization()
 {
@@ -70,7 +70,7 @@ void testLocalInitialization()
   [[maybe_unused]] auto parenthesizedCast = (std::int32_t{5});
 
   // POSITIVE
-  [[maybe_unused]] auto listLiteral{263};
+  [[maybe_unused]] auto listLiteral{3};
 
   // POSITIVE
   [[maybe_unused]] auto listBool{true};
@@ -114,7 +114,7 @@ void testLocalInitialization()
   [[maybe_unused]] auto prev = start;
 
   // POSITIVE
-  [[maybe_unused]] AOBUS_AUTO macroPrimitiveAuto = 2;
+  [[maybe_unused]] FIXTURE_AUTO macroPrimitiveAuto = 2;
 
   // NEGATIVE
   [[maybe_unused]] auto optStr = "hello"s;
@@ -129,6 +129,239 @@ void testLocalInitialization()
 
 namespace
 {
+  enum Axis
+  {
+    Horizontal,
+  };
+
+  constexpr Axis pickAxis()
+  {
+    return Horizontal;
+  }
+
+  // NEGATIVE
+  [[maybe_unused]] constexpr auto kNamespaceAxis = Axis{Horizontal};
+
+  struct Palette
+  {
+    // NEGATIVE
+    static constexpr Axis kAxis{Horizontal};
+  };
+} // namespace
+
+void testEnumeratorInitialization()
+{
+  enum class Color
+  {
+    Red,
+  };
+  enum Flag : unsigned
+  {
+  };
+  using Alias = Color;
+  using VolatileColor = Color volatile;
+  using enum Color;
+  struct Swatch
+  {
+    Color color;
+    operator Color() const { return color; }
+  };
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto color = Color{Color::Red};
+
+  // NEGATIVE
+  [[maybe_unused]] auto direct = Color::Red;
+
+  // NEGATIVE
+  [[maybe_unused]] Color typed = Color::Red;
+
+  // NEGATIVE
+  [[maybe_unused]] auto deduced(Color::Red);
+
+  // NEGATIVE
+  [[maybe_unused]] auto deducedList{Color::Red};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto wrappedList{Color{Color::Red}};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto nested = Color{Color{Color::Red}};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto nestedParens = Color(Color(Color::Red));
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color const nestedTyped = {Color{Color::Red}};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] constexpr Color nestedConstant(Color{Color::Red});
+
+  // NEGATIVE
+  [[maybe_unused]] Color const directConstant = Color::Red;
+
+  // NEGATIVE
+  [[maybe_unused]] auto nestedConversion = Color{Color(Horizontal)};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto const aliased = Alias(Red);
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] constexpr auto axis = Axis{Horizontal};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color listed{Color::Red};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color copyListed = {Color::Red};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color parenthesized(Color::Red);
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color grouped((Color::Red));
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Color copyWrapped = Color{Color::Red};
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  for (Color index{Color::Red}; index == Color::Red;)
+  {
+    break;
+  }
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  if (Axis axisCondition = Axis{Horizontal})
+  {
+    (void)axisCondition;
+  }
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] Axis parenthesizedAxis(Horizontal);
+
+  // NEGATIVE
+  [[maybe_unused]] Axis selected(pickAxis());
+
+  // POSITIVE | for a braced enum local, prefer auto with the enum type on the initializer
+  [[maybe_unused]] Axis bracedResult{pickAxis()};
+
+  // POSITIVE | for a braced enum local, prefer auto with the enum type on the initializer
+  [[maybe_unused]] Color bracedCopy{direct};
+
+  // NEGATIVE
+  [[maybe_unused]] VolatileColor polled{Color::Red};
+
+  enum
+  {
+    Ready,
+  } anonymous{Ready}; // NEGATIVE
+
+  enum class State
+  {
+    Idle,
+  } state{State::Idle}; // NEGATIVE
+
+  // NEGATIVE
+  [[maybe_unused]] Color first{Color::Red}, *next = nullptr;
+
+  // NEGATIVE
+  [[maybe_unused]] Flag uninitialized;
+
+  // NEGATIVE
+  [[maybe_unused]] Color uninitializedScoped;
+
+  // NEGATIVE
+  [[maybe_unused]] std::byte uninitializedByte;
+
+  // NEGATIVE
+  [[maybe_unused]] auto number = Flag{1u};
+
+  // NEGATIVE
+  [[maybe_unused]] auto mask = std::byte{0x01};
+
+  // POSITIVE | for a braced enum local, prefer auto with the enum type on the initializer
+  [[maybe_unused]] constexpr std::byte typedMask{0xff};
+
+  // POSITIVE | for a braced enum local, prefer auto with the enum type on the initializer
+  [[maybe_unused]] Color empty{};
+
+  // NEGATIVE
+  [[maybe_unused]] auto converted = Color(Horizontal);
+
+  // NEGATIVE
+  [[maybe_unused]] auto swatch = Swatch{Color::Red};
+
+  // NEGATIVE
+  [[maybe_unused]] Color fromProxy(swatch);
+
+  // NEGATIVE
+  [[maybe_unused]] auto copied = Color{direct};
+
+  // NEGATIVE
+  [[maybe_unused]] auto cast = static_cast<Color>(Color::Red);
+
+  // NEGATIVE
+  [[maybe_unused]] auto const& reference = Color{Color::Red};
+
+  // NEGATIVE
+  [[maybe_unused]] Color const& bound(Color{Color::Red});
+
+  // NEGATIVE
+  [[maybe_unused]] decltype(auto) preserved = Color{Color::Red};
+
+  // NEGATIVE
+  [[maybe_unused]] static constexpr auto kStaticColor = Color{Color::Red};
+
+  // NEGATIVE
+  [[maybe_unused]] static constexpr Axis kStaticAxis{Horizontal};
+
+  // NEGATIVE
+  [[maybe_unused]] thread_local Color threadColor{Color::Red};
+
+#define FIXTURE_RED (Color{Color::Red})
+  // NEGATIVE
+  [[maybe_unused]] auto macroColor = FIXTURE_RED;
+  // NEGATIVE
+  [[maybe_unused]] auto nestedMacro = Color{FIXTURE_RED};
+#undef FIXTURE_RED
+
+#define FIXTURE_VALUE(value) value
+  // NEGATIVE
+  [[maybe_unused]] Color fromArgument(FIXTURE_VALUE(Color::Red));
+  // NEGATIVE
+  [[maybe_unused]] auto deducedArgument(FIXTURE_VALUE(Color::Red));
+#undef FIXTURE_VALUE
+
+#define FIXTURE_OPEN_PAREN (
+#define FIXTURE_CLOSE_PAREN )
+  // NEGATIVE
+  [[maybe_unused]] Color macroParens FIXTURE_OPEN_PAREN Color::Red FIXTURE_CLOSE_PAREN;
+  // NEGATIVE
+  [[maybe_unused]] auto macroOpen = Color FIXTURE_OPEN_PAREN Color::Red);
+  // NEGATIVE
+  [[maybe_unused]] auto macroClose = Color(Color::Red FIXTURE_CLOSE_PAREN;
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto groupedOperand = Color{FIXTURE_OPEN_PAREN Color::Red FIXTURE_CLOSE_PAREN};
+  // POSITIVE | redundant initialization from a same-type enumerator
+  [[maybe_unused]] auto groupedCast = FIXTURE_OPEN_PAREN Color{Color::Red} FIXTURE_CLOSE_PAREN;
+#undef FIXTURE_CLOSE_PAREN
+#undef FIXTURE_OPEN_PAREN
+
+// The braces in each declaration balance only after preprocessing.
+// clang-format off
+#define FIXTURE_OPEN_BRACE {
+#define FIXTURE_CLOSE_BRACE }
+  // NEGATIVE
+  [[maybe_unused]] auto macroOpenBrace = Color FIXTURE_OPEN_BRACE Color::Red};
+  // NEGATIVE
+  [[maybe_unused]] auto macroCloseBrace = Color{Color::Red FIXTURE_CLOSE_BRACE;
+#undef FIXTURE_CLOSE_BRACE
+#undef FIXTURE_OPEN_BRACE
+  // clang-format on
+}
+
+namespace
+{
   // Namespace-scope, static member, and static local primitives follow the
   // same literal and whole-initializer cast rules as ordinary locals.
   constexpr std::int32_t fixtureSum(std::int32_t lhs, std::int32_t rhs)
@@ -137,7 +370,7 @@ namespace
   }
 
   // POSITIVE
-  [[maybe_unused]] constexpr auto kNamespaceCount = std::size_t{263};
+  [[maybe_unused]] constexpr auto kNamespaceCount = std::size_t{3};
 
   // POSITIVE
   [[maybe_unused]] inline constexpr auto kInlineVersion = std::uint32_t(1);
@@ -188,7 +421,7 @@ namespace
   [[maybe_unused]] constexpr auto kNamespaceListArithmetic{fixtureSum(2, 3) * 2};
 
   // NEGATIVE
-  [[maybe_unused]] constexpr std::size_t kExplicitCount = 263;
+  [[maybe_unused]] constexpr std::size_t kExplicitCount = 3;
 
   // NEGATIVE
   [[maybe_unused]] constexpr auto kCastProduct = std::size_t{8} * 1024;
