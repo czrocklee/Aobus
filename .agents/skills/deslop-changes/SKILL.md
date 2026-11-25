@@ -1,6 +1,6 @@
 ---
 name: deslop-changes
-description: Use for deslop or patch cleanup requests, or to find leftovers from repeated edits in code, tests, and docs. Not for general PR or documentation reviews, lint-only work, or build-failure diagnosis.
+description: Use for deslop or patch cleanup requests, or to find leftovers and interface drift from repeated edits in code, tests, and docs. Not for general PR or documentation reviews, lint-only work, or build-failure diagnosis.
 ---
 
 # Deslop a change
@@ -14,6 +14,7 @@ For each proposed deletion, ask **what would we lose?** A one-caller API, repeat
 ## Checklist
 
 - [ ] **Iteration residue:** Can each changed file, flag, helper, dependency, and fixture be traced to the final approach? Check callers and build registrations before calling code dead. Flag stray probes or unrelated churn in the patch. An untracked probe may be the user's unfinished work: inspecting it does not authorize changing or deleting it.
+- [ ] **Interface shape and boundaries:** Did repeated edits accrete coupled `bool`/`optional` flags, widened leaf dependencies, pass-through wrappers, one-field ID structs, ungoverned test-only backdoors, or `shared_ptr` used to dodge teardown ownership? Distinguish real composition roots, boundary adapters, contractual observation, and independently retained `State` from patch drift. See [responsibility and boundaries](../../../doc/development/design-review.md#responsibility-and-boundaries), [evaluating abstractions](../../../doc/development/design-review.md#evaluating-abstractions), [published lifetimes](../../../doc/development/coding-style.md#composition-and-published-lifetimes), [types](../../../doc/development/coding-style.md#types-casts-and-output), and [testability seams](../../../doc/development/test/fixture-and-helper.md#testability-seams).
 - [ ] **Duplicate state or machinery:** Is a second set, cache, wrapper, or public accessor doing work an existing owner already does? Name the owner that would take over. Does it live long enough and expose the state each caller actually needs? See [reviewing simplification](../../../doc/development/design-review.md#reviewing-simplification).
 - [ ] **Guards and fallbacks:** What untrusted input or change can reach this [runtime check](../../../doc/development/test/scope.md#runtime-checks)? Look for a redundant check when every path already validated the same condition and its inputs cannot have changed. Before proposing removal, check what failure the caller would see and when. A preview can report a conflict early, but it cannot prevent a later write from committing stale data; the write-time check still has work to do. Treat a catch or fallback that turns failure into success as a possible bug, not cosmetic clutter.
 - [ ] **False greens:** What wrong implementation would still pass? Does an update test start from a different value and read back the result? For a batch operation, what shows that the intended item changed? Exit zero or a nonzero total may say nothing about that item; a preview is not a commit.
