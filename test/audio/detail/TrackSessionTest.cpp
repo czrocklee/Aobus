@@ -21,6 +21,9 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <semaphore>
+#include <stop_token>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -163,6 +166,74 @@ namespace ao::audio::detail::test
     REQUIRE(preparedRes);
     CHECK(preparedRes->info == finalInfo);
     CHECK(preparedRes->backendFormat == outputFormat);
+  }
+
+  TEST_CASE("TrackSession - an expensive initial offset is not decoded until activation", "[concurrency]")
+  {
+    auto const info = stereoStreamInfo(stereoSource(kFrontStereoMask), stereoOutput(kFrontStereoMask), {});
+    auto const offset = std::chrono::milliseconds{250};
+    auto const targetPcm = std::vector{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
+    auto seekThread = std::thread::id{};
+    auto const decoderFactory = [&](std::filesystem::path const&,
+                                    std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
+    {
+      auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(info);
+      decoderPtr->setReadScript({{std::vector(4, std::byte{0x11}), true}});
+      decoderPtr->setSeekReadScript({{targetPcm, true}});
+      decoderPtr->setWorkerSeek(offset,
+                                [&](std::stop_token) -> Result<>
+                                {
+                                  seekThread = std::this_thread::get_id();
+                                  return {};
+                                });
+      return decoderPtr;
+    };
+
+    auto preparedRes = TrackSession::prepare(PlaybackInput{.filePath = "staged.wav"},
+                                             TrackSession::Inspection{.info = info},
+                                             info.outputFormat,
+                                             decoderFactory,
+                                             offset);
+    REQUIRE(preparedRes);
+    auto output = std::vector<std::byte>(targetPcm.size());
+    CHECK(preparedRes->sourcePtr->read(output) == 0);
+    CHECK_FALSE(preparedRes->sourcePtr->isDrained());
+    CHECK(preparedRes->sourcePtr->isPreparingSeek());
+
+    SECTION("discarding the candidate never executes the seek")
+    {
+      preparedRes->sourcePtr.reset();
+      CHECK(seekThread == std::thread::id{});
+    }
+
+    SECTION("activation seeks off the caller thread before publishing the target PCM")
+    {
+      auto ready = std::counting_semaphore{0};
+      auto readyToken = std::stop_token{};
+      std::size_t readyBytes = 0;
+      bool preparingAtReady = true;
+      auto* const source = preparedRes->sourcePtr.get();
+      auto opened = TrackSession::activate(std::move(*preparedRes),
+                                           {},
+                                           [&](std::stop_token token)
+                                           {
+                                             preparingAtReady = source->isPreparingSeek();
+                                             readyBytes = source->read(output);
+                                             readyToken = token;
+                                             ready.release();
+                                           });
+      REQUIRE(ready.try_acquire_for(std::chrono::seconds{5}));
+      CHECK_FALSE(readyToken.stop_requested());
+      REQUIRE(opened.sourcePtr->seek(std::chrono::milliseconds{0}));
+      CHECK(readyToken.stop_requested()); // The seek, not source destruction, retired the previous attempt.
+      opened.sourcePtr.reset();
+      CHECK_FALSE(ready.try_acquire());
+      CHECK_FALSE(preparingAtReady);
+      CHECK(readyBytes == output.size());
+      CHECK(output == targetPcm);
+      CHECK(seekThread != std::thread::id{});
+      CHECK(seekThread != std::this_thread::get_id());
+    }
   }
 
   TEST_CASE("TrackSession - inspection returns the scripted stream facts including channel-layout evidence")

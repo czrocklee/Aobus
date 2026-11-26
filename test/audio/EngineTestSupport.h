@@ -26,6 +26,7 @@
 #include <mutex>
 #include <optional>
 #include <semaphore>
+#include <stop_token>
 #include <string_view>
 #include <vector>
 
@@ -98,6 +99,29 @@ namespace ao::audio::test
   DecoderFactoryFn makeRegisteringDecoderFactory(
     std::vector<RegisteredTrack> tracks,
     std::shared_ptr<std::map<std::filesystem::path, ScriptedDecoderSession*>> registryPtr);
+
+  // One worker step, released by the test or interrupted by seek cancellation.
+  class SeekTestGate final
+  {
+  public:
+    enum class Outcome : std::uint8_t
+    {
+      Pending,
+      Released,
+      Cancelled,
+      TimedOut
+    };
+
+    Result<> enterAndWait(std::stop_token token = {});
+    bool tryWaitForEntry();
+    void release();
+    Outcome outcome() const;
+
+  private:
+    std::binary_semaphore _entered{0};
+    std::counting_semaphore<> _release{0};
+    std::atomic<Outcome> _outcome{Outcome::Pending};
+  };
 
   class StagedFailureGate final
   {

@@ -1774,9 +1774,11 @@ cc_test(
     srcs = select({
         "@platforms//os:linux": [
             "audio/backend/AlsaChannelObservationTest.cpp",
+            "audio/backend/AlsaExclusiveBackendRestartTest.cpp",
             "audio/backend/PipeWireBackendAdmissionTest.cpp",
             "audio/backend/PipeWireChannelObservationTest.cpp",
             "audio/backend/PipeWireProviderDaemonTest.cpp",
+            "linux/audio/AacDecoderWorkerSeekTest.cpp",
         ],
         "@platforms//os:macos": [
             "audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp",
@@ -1809,11 +1811,14 @@ cc_test(
     }),
     linkopts = select({
         "@platforms//os:linux": [
+            "-Wl,--wrap=aacDecoder_DecodeFrame",
             "-Wl,--wrap=pw_stream_add_listener",
             "-Wl,--wrap=pw_stream_connect",
             "-Wl,--wrap=pw_stream_set_active",
             "-Wl,--wrap=pw_stream_dequeue_buffer",
             "-Wl,--wrap=pw_stream_queue_buffer",
+            "-Wl,--wrap=snd_pcm_open",
+            "-Wl,--wrap=snd_pcm_type",
         ],
         "//conditions:default": [],
     }),
@@ -1829,6 +1834,7 @@ cc_test(
     ] + select({
         "@platforms//os:linux": [
             "@aobus_native_deps//:alsa",
+            "@aobus_native_deps//:fdk_aac",
             "@aobus_native_deps//:pipewire",
         ],
         "@platforms//os:macos": [":coreaudio_test_support"],

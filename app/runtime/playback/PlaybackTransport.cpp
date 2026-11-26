@@ -450,6 +450,10 @@ namespace ao::rt
     {};
     struct StartedEvent final
     {};
+    struct BufferingFinishedEvent final
+    {
+      PlaybackOccurrenceId occurrenceId;
+    };
     struct PausedEvent final
     {};
     struct IdleEvent final
@@ -474,6 +478,7 @@ namespace ao::rt
     };
     using OutboundEvent = std::variant<PreparingEvent,
                                        StartedEvent,
+                                       BufferingFinishedEvent,
                                        PausedEvent,
                                        IdleEvent,
                                        RetiredTerminalEvent,
@@ -547,6 +552,7 @@ namespace ao::rt
     bool closing = false;
     async::Signal<> preparingSignal;
     async::Signal<> startedSignal;
+    async::Signal<> bufferingFinishedSignal;
     async::Signal<> pausedSignal;
     async::Signal<> idleSignal;
     async::Signal<PlaybackTransport::NowPlayingChanged const&> nowPlayingChangedSignal;
@@ -577,6 +583,14 @@ namespace ao::rt
       drainOutboundEvents();
     }
 
+    void deliverBufferingFinished(BufferingFinishedEvent const& event)
+    {
+      if (event.occurrenceId == currentOccurrenceId && state.transport == audio::Transport::Playing)
+      {
+        bufferingFinishedSignal.emit();
+      }
+    }
+
     void drainOutboundEvents()
     {
       auto const resetDrainingOnExit = gsl_lite::finally([this] { drainingOutboundEvents = false; });
@@ -603,6 +617,10 @@ namespace ao::rt
             else if constexpr (std::same_as<Value, StartedEvent>)
             {
               startedSignal.emit();
+            }
+            else if constexpr (std::same_as<Value, BufferingFinishedEvent>)
+            {
+              deliverBufferingFinished(value);
             }
             else if constexpr (std::same_as<Value, PausedEvent>)
             {
@@ -668,6 +686,7 @@ namespace ao::rt
     {
       preparingSignal.disconnectAll();
       startedSignal.disconnectAll();
+      bufferingFinishedSignal.disconnectAll();
       pausedSignal.disconnectAll();
       idleSignal.disconnectAll();
       nowPlayingChangedSignal.disconnectAll();
@@ -789,6 +808,14 @@ namespace ao::rt
       else
       {
         lastPlaybackError.clear();
+      }
+
+      // Any refresh can observe readiness before the queued Player callback.
+      // Finishing this occurrence's preroll changes its snapshot, not its play intent.
+      if (previousState.transport == audio::Transport::Buffering && state.transport == audio::Transport::Playing &&
+          previousState.occurrenceId == currentOccurrenceId && playerPtr->isCurrentPlaybackItem(currentPlaybackItemId))
+      {
+        enqueueOutbound(BufferingFinishedEvent{.occurrenceId = currentOccurrenceId});
       }
     }
 
@@ -1714,6 +1741,12 @@ namespace ao::rt
     return impl->startedSignal.connect(std::move(handler));
   }
 
+  async::Subscription PlaybackTransport::onBufferingFinished(compat::MoveOnlyFunction<void()> handler)
+  {
+    auto* const impl = checkedImpl();
+    return impl->bufferingFinishedSignal.connect(std::move(handler));
+  }
+
   async::Subscription PlaybackTransport::onPaused(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
@@ -2212,7 +2245,8 @@ namespace ao::rt
 
     impl->refreshState();
 
-    if (previousTransport != audio::Transport::Playing && impl->state.transport == audio::Transport::Playing)
+    if (previousTransport == audio::Transport::Paused &&
+        (impl->state.transport == audio::Transport::Playing || impl->state.transport == audio::Transport::Buffering))
     {
       impl->enqueueOutbound(Impl::StartedEvent{});
     }

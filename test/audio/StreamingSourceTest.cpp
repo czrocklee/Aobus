@@ -3,6 +3,7 @@
 
 #include "lib/audio/StreamingSource.h"
 
+#include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
 #include "lib/audio/PcmFrameRing.h"
 #include <ao/Error.h>
@@ -20,6 +21,7 @@
 #include <memory>
 #include <semaphore>
 #include <stop_token>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -208,6 +210,163 @@ namespace ao::audio::test
     CHECK(res.error().message == "seek fail");
     sourcePtr.reset();
     CHECK(errorCount.load() == 1);
+  }
+
+  TEST_CASE("StreamingSource - only a current worker seek may report failure", "[concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto const workerOffset = std::chrono::milliseconds{300};
+    auto const timeout = std::chrono::seconds{5};
+    auto entered = std::binary_semaphore{0};
+    auto finish = std::counting_semaphore{0};
+    bool observedStop = false;
+    std::size_t readyCount = 0;
+    auto errors = std::vector<Error>{};
+    auto errorReady = std::counting_semaphore{0};
+    auto const afterSeek = std::vector(20, std::byte{0x22});
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setReadScript({{std::vector(20, std::byte{0x11}), true}});
+    decoderPtr->setSeekReadScript({{afterSeek, true}});
+    decoderPtr->setWorkerSeek(workerOffset,
+                              [&](std::stop_token token) -> Result<>
+                              {
+                                auto wakeOnStop = std::stop_callback{token, [&] { finish.release(); }};
+                                entered.release();
+
+                                if (!finish.try_acquire_for(timeout))
+                                {
+                                  return makeError(Error::Code::InvalidState, "worker seek timed out");
+                                }
+
+                                observedStop = token.stop_requested();
+                                return makeError(Error::Code::SeekFailed, "worker seek failed");
+                              });
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    REQUIRE(sourcePtr->prepare());
+    sourcePtr->activate(
+      [&](Error const& error, std::stop_token)
+      {
+        errors.push_back(error);
+        errorReady.release();
+      },
+      [&](std::stop_token) { ++readyCount; });
+
+    REQUIRE(sourcePtr->seek(workerOffset));
+    REQUIRE(entered.try_acquire_for(timeout));
+    auto output = std::vector<std::byte>(afterSeek.size());
+    CHECK(sourcePtr->read(output) == 0);
+    CHECK_FALSE(sourcePtr->isDrained());
+    CHECK(sourcePtr->isPreparingSeek());
+
+    SECTION("a superseding cheap seek cancels the worker and exposes only its replacement PCM")
+    {
+      REQUIRE(sourcePtr->seek(std::chrono::milliseconds{50}));
+      REQUIRE(sourcePtr->read(output) == output.size());
+      CHECK(output == afterSeek);
+      CHECK(sourcePtr->isDrained());
+      CHECK_FALSE(sourcePtr->isPreparingSeek());
+      sourcePtr.reset();
+      CHECK(observedStop);
+      CHECK(errors.empty());
+    }
+
+    SECTION("destruction cancels the worker without emitting its error")
+    {
+      sourcePtr.reset();
+      CHECK(observedStop);
+      CHECK(errors.empty());
+    }
+
+    SECTION("an uncancelled seek failure reaches the installed callback once")
+    {
+      finish.release();
+      REQUIRE(errorReady.try_acquire_for(timeout));
+      sourcePtr.reset();
+      CHECK_FALSE(observedStop);
+      REQUIRE(errors.size() == 1);
+      CHECK(errors.front().code == Error::Code::SeekFailed);
+      CHECK(errors.front().message == "worker seek failed");
+    }
+
+    CHECK(readyCount == 0);
+  }
+
+  TEST_CASE("StreamingSource - a worker seek returning success after cancellation emits neither ready nor error",
+            "[concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto const offset = std::chrono::milliseconds{200};
+    auto gate = SeekTestGate{};
+    auto workerToken = std::stop_token{};
+    std::size_t errors = 0;
+    std::size_t readyCount = 0;
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setWorkerSeek(offset,
+                              [&](std::stop_token token) -> Result<>
+                              {
+                                workerToken = token;
+                                return {};
+                              });
+    // The ordinary seek has committed past the fake's cancellation check and will return success.
+    decoderPtr->setSeekObserver([&](std::chrono::milliseconds) { std::ignore = gate.enterAndWait(workerToken); });
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    REQUIRE(sourcePtr->prepare(offset));
+    sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; }, [&](std::stop_token) { ++readyCount; });
+    REQUIRE(gate.tryWaitForEntry());
+    sourcePtr.reset();
+    REQUIRE(gate.outcome() == SeekTestGate::Outcome::Cancelled);
+    CHECK(errors == 0);
+    CHECK(readyCount == 0);
+  }
+
+  TEST_CASE("StreamingSource - cancellation during worker preroll delivers neither ready nor the late read failure",
+            "[concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto const offset = std::chrono::milliseconds{200};
+    auto const timeout = std::chrono::seconds{5};
+    auto readEntered = std::binary_semaphore{0};
+    auto workerToken = std::stop_token{};
+    bool cancelledInRead = false;
+    std::size_t errors = 0;
+    std::size_t readyCount = 0;
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setWorkerSeek(offset,
+                              [&](std::stop_token token) -> Result<>
+                              {
+                                workerToken = token;
+                                return {};
+                              });
+    decoderPtr->setSeekReadScript(
+      {{silenceBlock(20), false}, {{}, false, makeError(Error::Code::DecodeFailed, "late preroll failure")}});
+    decoderPtr->setReadObserver(
+      [&](std::size_t read)
+      {
+        if (read != 2)
+        {
+          return;
+        }
+
+        auto stopped = std::binary_semaphore{0};
+        auto wakeOnStop = std::stop_callback{workerToken, [&] { stopped.release(); }};
+        readEntered.release();
+        cancelledInRead = stopped.try_acquire_for(timeout);
+      });
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
+    REQUIRE(sourcePtr->prepare(offset));
+    sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; }, [&](std::stop_token) { ++readyCount; });
+    REQUIRE(readEntered.try_acquire_for(timeout));
+    CHECK(sourcePtr->isPreparingSeek());
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{10});
+    auto output = silenceBlock(20);
+    CHECK(sourcePtr->read(output) == 0);
+    sourcePtr.reset();
+    CHECK(cancelledInRead);
+    CHECK(errors == 0);
+    CHECK(readyCount == 0);
   }
 
   TEST_CASE("StreamingSource - background decode failure after activation notifies error callback", "[concurrency]")

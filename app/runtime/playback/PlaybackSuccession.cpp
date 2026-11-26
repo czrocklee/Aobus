@@ -132,6 +132,8 @@ namespace ao::rt
 
     bool isClosing() const noexcept { return closing; }
 
+    bool isClockRunning() const { return transport.state().transport == audio::Transport::Playing; }
+
     static PlaybackSuccessionSourceState sourceStateFor(PlaybackCursorSession const* session) noexcept
     {
       if (session == nullptr)
@@ -273,7 +275,7 @@ namespace ao::rt
       // A correlated final-setup failure counts afterward; automatic recovery
       // preserves the streak until playback actually starts.
       resetFailureState();
-      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted && isClockRunning());
       tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -618,7 +620,7 @@ namespace ao::rt
         resetFailureState();
       }
 
-      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted && isClockRunning());
       tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -880,7 +882,7 @@ namespace ao::rt
       resetFailureState();
       // A prepared successor starts a new timeline; an explicit resume may reopen at its held offset.
       auto const elapsed = event.optPreparedNextToken ? std::chrono::milliseconds{0} : transport.state().elapsed;
-      restartDeadline.replaceSession(elapsed, true);
+      restartDeadline.replaceSession(elapsed, isClockRunning());
       tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -944,6 +946,32 @@ namespace ao::rt
       return recovered && sessionPtr ? PlaybackFailureDisposition::Recovered : PlaybackFailureDisposition::Stopped;
     }
 
+    void synchronizeRestartClock(bool positionChanged = false)
+    {
+      if (isClosing() || !sessionPtr)
+      {
+        return;
+      }
+
+      // A route reopen or resume can leave play intent active without a running clock.
+      // Read the current state rather than treating the notification as a clock edge.
+      if (auto const running = isClockRunning(); running != restartDeadline.isRunning())
+      {
+        if (running)
+        {
+          restartDeadline.resume(transport.elapsed());
+        }
+        else
+        {
+          restartDeadline.pause(transport.elapsed());
+        }
+      }
+      else if (positionChanged)
+      {
+        restartDeadline.seek(transport.elapsed());
+      }
+    }
+
     void handleRestartAvailabilityChanged(bool const available)
     {
       if (!sessionPtr || isClosing())
@@ -993,6 +1021,7 @@ namespace ao::rt
           if (!isClosing())
           {
             cancelPendingStart();
+            synchronizeRestartClock();
             tryReprepareNext(true);
           }
         });
@@ -1002,7 +1031,7 @@ namespace ao::rt
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
             cancelPendingStart();
-            restartDeadline.seek(transport.elapsed());
+            synchronizeRestartClock(true);
             tryReprepareNext(true);
           }
           else if (!isClosing() && event.mode == PlaybackTransport::SeekMode::Final)
@@ -1010,22 +1039,10 @@ namespace ao::rt
             cancelPendingStart();
           }
         });
-      startedSubscription = transport.onStarted(
-        [this]
-        {
-          if (!isClosing() && sessionPtr)
-          {
-            restartDeadline.resume(transport.elapsed());
-          }
-        });
-      pausedSubscription = transport.onPaused(
-        [this]
-        {
-          if (!isClosing() && sessionPtr)
-          {
-            restartDeadline.pause(transport.elapsed());
-          }
-        });
+      auto const clockChanged = [this] { synchronizeRestartClock(); };
+      startedSubscription = transport.onStarted(clockChanged);
+      bufferingFinishedSubscription = transport.onBufferingFinished(clockChanged);
+      pausedSubscription = transport.onPaused(clockChanged);
       stoppedSubscription = transport.onStopped(
         [this]
         {
@@ -1054,6 +1071,7 @@ namespace ao::rt
       outputSubscription.reset();
       seekSubscription.reset();
       startedSubscription.reset();
+      bufferingFinishedSubscription.reset();
       pausedSubscription.reset();
       stoppedSubscription.reset();
       restartDeadline.shutdown();
@@ -1089,6 +1107,7 @@ namespace ao::rt
     async::Subscription outputSubscription;
     async::Subscription seekSubscription;
     async::Subscription startedSubscription;
+    async::Subscription bufferingFinishedSubscription;
     async::Subscription pausedSubscription;
     async::Subscription stoppedSubscription;
     std::optional<NotificationReportKey> optSkipReportKey;

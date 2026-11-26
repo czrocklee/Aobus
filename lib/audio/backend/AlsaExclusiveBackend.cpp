@@ -888,6 +888,8 @@ namespace ao::audio::backend
 
     if (!_implPtr->thread.joinable())
     {
+      // Pause intent belongs to the previous run, not this new worker.
+      _implPtr->paused.store(false, std::memory_order_relaxed);
       _implPtr->thread = std::jthread{[this](std::stop_token const& st)
                                       {
                                         setCurrentThreadName("AlsaPlayback");

@@ -109,10 +109,11 @@ Once Engine observes `Transport::Error` at control-command admission, `seek()` p
 This rejection preserves the error text and position and does not disarm lookahead, seek the source, or stop, flush, or restart the backend.
 The normal control-entry settlement of already-consumed realtime transitions still precedes admission; rejection is not a rollback of that settlement.
 
-An admitted source seek failure sets Error synchronously and also queues its typed source-error event.
+A failure returned by an admitted source seek sets Error synchronously and also queues its typed source-error event.
 The event worker later retires the failed source and backend through normal failure delivery.
 A seek between those two steps must not erase Error with Buffering or restart the source, including when playback was paused before the failure.
-A matched `trySeek()` that issued the failing seek still returns true; the failure remains observable through status and the existing asynchronous failure channel.
+A matched `trySeek()` reports that the seek was issued, not that target PCM is ready.
+For an extended seek on the decode worker, a failure of the current attempt reaches Engine through the source-error event as a `Decode` playback failure; a superseded attempt cannot fail its replacement.
 
 Recovery establishes a new playback through `play()` or an accepted staged start, including a start chosen by application succession; it is not a same-source seek retry.
 The new start clears the previous playback's error text and retains the existing generation fences against retired failure events.
@@ -249,10 +250,17 @@ A decoded block that is not a whole number of output frames fails the same way i
 The predictive size is producer-confined.
 For an active Engine seek, backend `stop()` first establishes render quiescence and Engine control serialization excludes complete `status()` queue observation.
 `StreamingSource::seek()` then stops and joins the decode worker before resetting the byte ring, predictive size, and pending block borrow.
-The borrow is retired before seeking the decoder; synchronous preroll then becomes the producer until the worker restarts.
+The borrow is retired before seeking the decoder. Normally the caller seeks and prerolls synchronously, then starts the worker.
+When the decoder reports that positioning requires extended work, the source instead starts its worker with the requested offset and an empty ring.
+The worker completes an interruptible seek before producing any PCM. A replacement seek or source retirement requests stop and joins that worker; an AAC history scan checks cancellation between packets rather than holding Engine control through the rest of the scan.
+
+While the worker seeks and prerolls, the source exposes neither PCM nor EOF. Engine anchors elapsed at the requested offset, but keeps the backend stopped and the transport Buffering (or Paused); no rendered frames advance that position.
+Pause preserves the stopped backend, and resume while still positioning returns to Buffering. A ready source starts only if playback is wanted; a ready but drained source completes naturally without a backend start.
+The initiating command or a later ready event can settle the result. Engine rejects ready events for a superseded attempt, source, or playback generation; a late ready event cannot start the same run twice.
+
 The byte ring reset is constant-time for its trivially destructible element type and requires that no read, write, or queue-availability observation overlap it.
 Direct `PcmSource` users must establish the same consumer and observer quiescence before calling seek.
-The realtime consumer still performs only ring reads; it does not update a separate occupancy counter, take a lock, or notify the producer.
+The realtime consumer checks the positioning flag and otherwise reads the ring; it does not update a separate occupancy counter, take a lock, or notify the producer.
 
 ### Prepared lookahead
 
@@ -335,15 +343,15 @@ AAC inspection and final-decoder construction each privately decode and cache on
 That bounded priming is part of decoder open, not realtime rendering or native route observation; a required first-payload failure is an inspection/open error, not a deferred first-read error.
 After inspection, Player returns through a stop-token checkpoint to its callback executor and asks Engine to revalidate the captured route before querying `Backend::prewarmFormatHint` under control serialization.
 The hint query is non-blocking, performs no native I/O, and may use only immutable policy or cached observations; a missing or invalid hint skips optimistic decoder preparation.
-The isolated value then resumes on a worker, opens a final decoder in the valid hinted encoding, applies the initial seek, and prerolls a `StreamingSource` without acquiring a device, changing the active generation, or replacing lookahead.
+The isolated value then resumes on a worker, opens a final decoder in the valid hinted encoding and prepares a `StreamingSource` for the initial offset without acquiring a device, changing the active generation, or replacing lookahead.
 Failure of this optimistic final-decoder step discards only the prepared source and retains the successful inspection, so it does not become a user-visible failure before commit.
 Commit revalidates the token, accepts a new playback generation, retires the old render target, and opens the backend from the inspected `SignalFormat`.
-When the returned `clientFormat` exactly matches the optimistic prepared mode, commit activates that prepared source without another decoder open, seek, or preroll.
-Otherwise commit discards the optimistic source and synchronously opens, seeks, and prerolls a fresh decoder in the returned `SampleEncoding` before activation.
-Source activation installs the Engine error callback and starts the decode thread only after those steps succeed.
+When the returned `clientFormat` exactly matches the optimistic prepared mode, commit activates that source without repeating preparation. Otherwise commit discards it and synchronously opens and prepares a fresh source in the returned `SampleEncoding`.
+Ordinarily preparation applies the initial offset and prerolls the selected decoder. For an extended initial seek it records the offset instead, without prerolling from zero or starting a worker for an uncommitted candidate.
+Activation installs the Engine callbacks before the decode thread begins its pending seek or steady-state decode. A committed source awaiting an extended seek is an accepted active start, not proof that native rendering has begun; the backend remains stopped pending readiness.
 
 For `startFromView`, Player captures a move-only preparation value from Engine and runs inspection on the async worker pool.
-The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional decoder open, seek, and preroll.
+The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional final-decoder open and source preparation.
 Across both worker phases that value owns copied device, backend/profile, input, decoder factory, generation evidence, inspection, and prepared-source values and holds no Player, Engine, runtime, frontend, or Backend reference.
 Final completion resumes on Player's executor through another stop-token checkpoint.
 Player retires the applicable task handle before invoking the upper acceptance predicate. Acceptance
@@ -364,8 +372,8 @@ Engine therefore returns an accepted start receipt for this destructive failure,
 with `playbackStarted == false`, rather than returning the same error channel used
 for a pre-commit rejection. PlaybackTransport installs the accepted candidate
 provenance before the queued typed failure is delivered, but emits neither a
-Started event nor a now-playing announcement. A final decoder, seek, or preroll
-failure consequently remains a recoverable `TrackOpen` failure for that
+Started event nor a now-playing announcement. A failure returned during final
+decoder open or synchronous seek and preroll consequently remains a recoverable `TrackOpen` failure for that
 candidate. A backend's explicit track/selected-route incompatibility has the
 same classification; an output fault or malformed successful backend mode
 remains a non-recoverable `RouteActivation` failure. Error codes or diagnostic
@@ -376,8 +384,7 @@ Engine remains idle and the queued `TrackEnded` event drives normal succession
 without a playback-failure notification.
 A pre-commit `Conflict` or `InvalidState` does not advance the generation and therefore preserves the active session and prepared-request registry.
 
-A nonzero staged offset is applied to the final decoder before `StreamingSource` starts its background thread.
-An error from a discarded pre-seek epoch therefore cannot invalidate the healthy candidate.
+The source never prerolls the unpositioned decoder and then seeks it, so an error from a discarded pre-seek read cannot invalidate a healthy candidate. An extended initial seek can fail after activation instead of during final setup; Engine then reports the current source's `Decode` failure, not a synchronous `TrackOpen` rejection.
 
 ### Identity and callback fences
 
@@ -880,7 +887,7 @@ does not invoke acceptance or completion.
 An inspection failure is a recoverable track-open outcome and does not replace active playback.
 An optimistic explicit-start decoder failure is retained only as a cache miss; commit retries decoder setup after the backend returns its exact PCM mode.
 A backend activation failure classified `OutputFailure` is a non-recoverable route-activation outcome for that start; an explicitly typed `TrackRouteIncompatible` refusal keeps its recoverable track-open classification.
-A final decoder, seek, or preroll failure after backend activation is a recoverable track-open outcome, but the attempted backend is still closed before publication.
+A final decoder, seek, or preroll failure returned during synchronous preparation after backend activation is a recoverable track-open outcome; the attempted backend is still closed before publication. An extended seek completed on the activated source's worker follows the [source-error path](#seek-admission-and-failure) instead.
 A decoded PCM block larger than the source ring is a recoverable `DecodeFailed` media outcome.
 Stale generation events are discarded.
 Terminal events remain asynchronous relative to the producer callback, so queries may briefly show the earlier transport.

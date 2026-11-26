@@ -82,13 +82,12 @@ namespace ao::audio::detail
 
   std::span<std::byte const> Mp4PacketSource::packet() const
   {
-    if (isAtEnd())
-    {
-      return {};
-    }
+    return packetAt(_sampleIndex);
+  }
 
-    AO_INVARIANT(_optDemuxer, "Readable MP4 packet source has no demuxer");
-    return _optDemuxer->samplePayload(_sampleIndex);
+  std::span<std::byte const> Mp4PacketSource::packetAt(std::uint32_t index) const
+  {
+    return _optDemuxer ? _optDemuxer->samplePayload(index) : std::span<std::byte const>{};
   }
 
   std::span<std::byte const> Mp4PacketSource::magicCookie() const
@@ -115,6 +114,11 @@ namespace ao::audio::detail
   std::uint32_t Mp4PacketSource::sampleIndex() const noexcept
   {
     return _sampleIndex;
+  }
+
+  std::uint32_t Mp4PacketSource::sampleCount() const noexcept
+  {
+    return _optDemuxer ? _optDemuxer->sampleCount() : 0;
   }
 
   std::uint32_t Mp4PacketSource::timescale(std::uint32_t fallback) const noexcept
@@ -156,6 +160,12 @@ namespace ao::audio::detail
     }
 
     return static_cast<std::uint64_t>(_sampleIndex) * fallbackFramesPerPacket;
+  }
+
+  void Mp4PacketSource::setSampleIndex(std::uint32_t index) noexcept
+  {
+    AO_EXPECTS(index <= sampleCount(), "MP4 packet cursor exceeds sample count");
+    _sampleIndex = index;
   }
 
   void Mp4PacketSource::advance() noexcept

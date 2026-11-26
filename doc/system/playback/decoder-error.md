@@ -49,6 +49,8 @@ WAV construction uses the RIFF parser's `RequiredAudio` extent and therefore doe
 | `flush()`         | codec buffers reset when supported                    | none; `noexcept`                                                                                 |
 | `streamInfo()`    | complete value established by successful construction | none; `noexcept`                                                                                 |
 
+`needsSeekWorker(offset)` is a scheduling query, not a seek result. For an extended seek, `seekInterruptibly(offset, token)` can propagate the same native preparation and frame errors as `seek(offset)`. AAC returns `Conflict` when cancellation interrupts a history scan. The [streaming source](audio-execution.md#streaming-decode-and-buffering) discards a cancelled attempt's result rather than reporting a playback failure.
+
 Codec-specific initialization-time narrowing includes:
 
 - unsupported output sample representation, valid bits, resampling, remapping, or planar layout: `NotSupported`;

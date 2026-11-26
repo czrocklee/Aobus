@@ -61,8 +61,7 @@ Opus is internally a floating-point codec, but decoding it to float would make i
 The playback path first creates a short-lived inspection decoder with no requested encoding.
 Successful inspection supplies complete source and preferred output formats without a public `readNextBlock()` call.
 AAC construction privately decodes and caches one first packet to establish those facts, including for inspection; inspection is not necessarily a metadata-only operation.
-Explicit-start preparation next creates, seeks, and prerolls an optimistic final decoder in the selected Backend's valid prewarm hint when one is available.
-After a backend selects its exact encoding, playback reuses that prepared decoder on a complete PCM-mode match or creates a fresh ready decoder session with the selected encoding before seeking and preroll.
+With a valid Backend prewarm hint, explicit-start preparation creates an optimistic final decoder and prepares its source for the initial offset. After backend selection, playback reuses that decoder on a complete PCM-mode match or prepares a fresh source in the selected encoding. Normally preparation includes seek and preroll; an [extended seek](audio-execution.md#streaming-decode-and-buffering) stays pending for the activated source's decode worker.
 The backend-selected encoding is always a member of the inspected signal's lossless output set, so the final decoder retains the same precision-preserving contract as optimistic preparation.
 Inspection-to-final stability covers the complete effective source format, including the effective speaker mask: a final session whose source format differs from the inspection is `FormatRejected`.
 A drift limited to the source layout's evidence origin re-describes the same layout, changes no PCM identity, and is accepted.
@@ -114,10 +113,11 @@ A successful native scan alone does not prove complete header coverage; identity
 Published identity is the immutable result of complete native-index header coverage, with the initial native prefix exempt, under the [MP3 source policy](pcm-format.md#mp3-source-interpretation).
 It is not the first frame alone, and it does not establish corruption-free audio or file authenticity.
 Seek rejects negative offsets and offsets beyond a known exact duration.
-Sequential decode and stable EOF behavior remain unchanged.
+For ordinary seeks, mpg123 decodes preroll to rebuild the Layer III bit reservoir and synthesis history. With incomplete index coverage, this preroll is bounded and best effort: some free-format streams can require more history than that bound supplies.
+If a fully indexed stream mixes Layer III with another layer, mpg123 can limit preroll based on the layer being left. When the frames have a common sample count and their total matches the native PCM length, the session seeks earlier and discards the extra decoded PCM before returning the target.
 The session decodes and checks one MPEG frame at a time before exposing PCM, because native gapless trimming can make one read span more than one frame and a bulk read would hide a geometry change.
 Gapless header frames yielding no PCM are consumed rather than mistaken for EOF.
-Returned spans already include the native decoder's in-frame seek skips and gapless trim; PCM positions accumulate those decoded frames, never compressed-frame indices.
+In-frame seek skips and gapless trim are applied by mpg123. Public positions count PCM frames, never compressed frames.
 The native output block may grow after open.
 Signed-16 pass-through copies each span into session storage sized to that span, so a later seek can reallocate the native buffer without invalidating the returned block.
 Wider precision-preserving conversions read the native bytes directly and leave converted storage with the shared adapter.
@@ -138,7 +138,7 @@ Required container/cookie/ConfigRaw failures therefore retain precedence over an
 
 Initialization privately decodes exactly the first required packet through the same packet pipeline used by public reads, with no search for a later usable packet or concealment fallback.
 An empty, inaccessible, corrupt, incompletely consumed, or undecodable payload in the admitted first sample fails `open()` with `DecodeFailed`; there is no ready empty-session fallback.
-Later payload/decode failures remain read failures.
+During sequential playback, a bad later packet fails the read that reaches it. If a seek decodes that packet to rebuild history, the seek itself can report the error.
 A silent first block is still valid PCM, and a one-packet stream needs no second packet to become ready.
 
 ConfigRaw may succeed with zero output rate/count/frame size, so neither those provisional fields nor an ASC fallback is the published format.
@@ -148,7 +148,7 @@ Unsupported or unavailable roles yield zero / `Unknown` rather than a layout ref
 Known noncanonical slots normalize by moving whole native 16-bit samples before encoding adaptation; canonical known and unknown layouts bypass that permutation.
 Decoding uses bounded native scratch storage; normalization and adaptation receive only the active decoded samples, never its unused tail.
 
-Every native handle requests mapping1 and explicitly sets both `AAC_PCM_MAX_OUTPUT_CHANNELS` and `AAC_PCM_MIN_OUTPUT_CHANNELS` to zero, disabling downmix and channel extension; failure during construction is `InitFailed`, while failure to prepare an initial seek is `SeekFailed`.
+Every native handle requests mapping1 and explicitly sets both `AAC_PCM_MAX_OUTPUT_CHANNELS` and `AAC_PCM_MIN_OUTPUT_CHANNELS` to zero, disabling downmix and channel extension; failure to configure these parameters is `InitFailed` during construction or `SeekFailed` on a new seek handle.
 This prevents FDK's default eight-to-six-channel downmix from silently becoming the inspected signal when priming discovers actual geometry.
 Eight-channel FRONT5 or BACK4 output remains eight-channel PCM with unknown roles, rather than a six-channel mix or a guessed canonical eight-channel identity.
 The numerical decoder and ordinary-stream output representation remain unchanged; disabling that default conversion is an explicit channel-preservation change.
@@ -165,16 +165,37 @@ Priming captures its original packet's `firstFrameIndex` and advances the source
 Public read consumes that cache before checking source EOF, without another decode, source advance, or adapter configuration.
 Thus a single-packet file returns its nonempty cached block with EOF before stable empty EOF blocks; repeated information queries do not consume it.
 
-While that first block remains pending, seek prepares a fresh native handle with the same configuration before asking the packet source to seek.
-Native preparation or packet-seek failure preserves the old handle and pending PCM; the source cursor changes only on an admitted packet seek.
-If the covering target is packet0, including offset zero or an offset within that packet, the session retains its original primed handle/cache and restores the next-packet cursor with one advance, without clearing or redecoding packet0.
-For a successful nonzero-packet target, it adopts the fresh handle and only then discards the old pending block.
-Compressed-buffer clearing is not a cold decoder reset: these two paths preserve initial-seek PCM history rather than decoding a target on the handle already warmed by private priming.
-A preparation failure returns `SeekFailed` with its original diagnostic context and location, without losing pending PCM.
+When a seek needs a new handle, it opens and configures it before moving the MP4 cursor. Failure at this step returns `SeekFailed` with its original diagnostic context, without disturbing the current decoder.
+Frame positions count native PCM frames from the start of uninterrupted decoding. MP4 packet timestamps can be rounded or absent; they are not PCM boundaries.
+For plain AAC-LC at the configured core rate and frame length, the session selects the covering access unit by its fixed native stride and backs up enough packets to rebuild transform overlap and FDK's output delay. This locates the requested frame but need not reproduce every low-order sample bit of an uninterrupted decode.
+If FDK later reports dynamic-range control (DRC) without a change to output identity or frame length, the session still returns that packet's PCM at its original position. The declaration rules out short restarts on subsequent seeks.
 
-Healthy `flush()` retains the cached block and requests only `AAC_TPDEC_CLEAR_BUFFER` on the native handle.
-After the pending block has been consumed or discarded, seek uses the MP4 packet source and, on success, requests that buffer clear on the current handle. Subsequent decoded frames are still checked against the initial signature.
-The session uses MP4 duration; when a seek lands on a covering packet, the block reports that packet's `firstFrameIndex`. Seeking is not sample-exact, and a later seek does not guarantee the same PCM as a fresh decoder.
+**Known limitation:** A seek before the decoder has seen any DRC declaration can still use a short AAC-LC restart. If a sparse in-band declaration falls before the restart point, the decoder can miss its gain state and return PCM at a different level from uninterrupted playback. No fixed preroll length guarantees recovery of that state.
+
+A changed frame length after a nonzero short restart contradicts the stride used to infer the packet's position, so the read fails with `DecodeFailed` instead of publishing a speculative frame index.
+
+An SBR extension needs its own signal history even when the core and output rates and frame lengths agree. For history-dependent audio the session retains recent native signed-16 PCM from continuous decoding. A rewind into that window replays the exact samples from the target without moving the native decoder backwards. At the end of the cached PCM, reads continue from the still-positioned decoder. Plain AAC-LC using short restarts does not retain a rewind window.
+
+Each window keeps whole access units and evicts the oldest first. It holds at most 12 seconds of decoded audio, 20 MiB of native sample data, and 2048 access units, whichever limit is reached first. Up to three windows can coexist: the active decoder's, one saved checkpoint's, and a fresh scan candidate's. The limits apply to each window separately, not to total session memory. The time span is measured back from the decoded cursor, including read-ahead, not from the audible position.
+
+A seek can replay either the active or saved window. Otherwise it uses nearby continuous decoder state, scans forward from a suitable saved checkpoint, or starts at the beginning. Throughout the scan, each decoded access unit advances the frame count and enters the rolling window after its output signature is checked. A short rewind after a long seek can replay that recent PCM without repeating the scan. After a history scan for an in-range target, the first read has fewer than 2048 PCM frames left to discard. Plain AAC-LC short restarts instead discard their overlap and delay preroll on read.
+
+An HE-AAC seek validates the access units it needs to reproduce the target PCM, not the whole file. If a required unit is unreadable or fails to decode, the decoder returns `DecodeFailed`; it does not skip that unit, insert silence, or cold-start at a later packet and label the result continuous PCM. A change to the published output identity remains `NotSupported`.
+A target after a damaged unit can be unreachable if every exact replay path crosses it. A target reachable from intact cached PCM or valid history without that unit remains seekable; success does not mean later reads will cross the damage. Seeking to the published end does not validate the skipped audio.
+
+Direct `seek()` and `seekInterruptibly()` leave the previous read position unchanged on failure or cancellation, including any pending rewind. `seek()` waits for the work; a cold scan can take time proportional to the seek position. On cancellation, a scan that borrowed the saved checkpoint returns its validated progress to that slot. An unfinished fresh scan can fill an empty slot but cannot displace a saved checkpoint; a fresh scan that finishes just before cancellation can replace it.
+
+`needsSeekWorker()` distinguishes extended scans from bounded or end requests. The playback [decode worker](audio-execution.md#streaming-decode-and-buffering) uses `seekAfterDiscard()` only after the source has retired the old read position and its borrowed PCM. A forward scan can then advance the active native decoder if it has continuous history and no usable saved checkpoint is as close or closer to the target. Otherwise, an extended seek uses a suitable saved checkpoint or decodes from the beginning; this also covers rewinds outside the retained windows.
+
+Older PCM in the active window can age out as the decoder advances. Cancellation retains validated forward progress rather than restoring the relinquished position. If the scan fails, the active handle and its window are no longer eligible for exact seeks because a failed native decode may have consumed input. After cancellation or failure, the source must successfully seek again before reading, or retire the session.
+
+In playback, failure of the current attempt during seek or preroll follows [Engine's source-error policy](audio-execution.md#seek-admission-and-failure); it does not resume the old audio. A superseded worker attempt cannot fail its replacement.
+If decoding restarts at zero and the primed block is still pending, the session can reuse that block and handle. The first returned block omits all PCM before the target, including any prefix of the covering packet; `firstFrameIndex` names the first frame actually returned.
+
+An offset at or beyond the positive published MP4 duration makes reads return EOF without moving the native cursor. Both the active and saved rewind windows remain available for a later seek. The published duration is in whole milliseconds: an offset equal to it is an end request even if the exact container duration has a fractional millisecond left. For an earlier offset within the decoded audio, the last packet returns its untrimmed native suffix rather than stopping at container duration. With no published duration, only the native packet extent determines EOF.
+These coordinates do not apply edit lists, encoder priming or tail padding.
+
+Healthy `flush()` retains any cached block and only clears compressed input. It is not a seek: it does not reset delayed PCM or transform history.
 Priming neither trims AAC delay/padding nor makes AAC gapless-capable.
 Native default algorithmic delay remains the selected provider's behavior; the cached first block can contain silence or nonzero PCM, and is preserved in either case.
 
@@ -322,8 +343,8 @@ The initial frame-information failure and frame/native geometry-disagreement che
 Foreign native conversion controls are not production-path coverage; no test-only production hook is used to manufacture those failures.
 The encoded MP3 cases in [`Mp3DecoderSessionTest.cpp`](../../../test/audio/Mp3DecoderSessionTest.cpp) retain native gapless-trimmed totals, VBR scan duration, and exact seek positions, including native in-frame seek skips.
 [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC ready-session identity, concrete/factory parity, literal PCM normalization, adaptation, seek-to-zero/flush, and EOF.
-[`AacDecoderChannelLayoutTest.cpp`](../../../test/audio/AacDecoderChannelLayoutTest.cpp) covers final actual-output identity before the first public read, concrete/factory parity, unchanged literal FDK reference windows with a one-native-signed-16-LSB cross-implementation bound at their measured delay-relative phase, exact same-host native PCM and encoding adaptation, all supported encodings, unknown eight-channel output, and independent raw-native packet comparisons for cached first blocks, contiguous output, flush, and pristine initial seeks, plus stable EOF.
-[`AacDecoderMalformedMp4Test.cpp`](../../../test/audio/AacDecoderMalformedMp4Test.cpp) distinguishes rejected zero-sample tables from admitted samples with empty payloads, and covers first-payload failures at open, required-error/request-preflight precedence, and later-payload read failures.
+[`AacDecoderChannelLayoutTest.cpp`](../../../test/audio/AacDecoderChannelLayoutTest.cpp) covers final actual-output identity before the first public read, concrete/factory parity, unchanged literal FDK reference windows with a one-native-signed-16-LSB cross-implementation bound at their measured delay-relative phase, exact same-host native PCM and encoding adaptation, all supported encodings, unknown eight-channel output, and independent raw-native packet comparisons for cached first blocks, contiguous output, flush, and post-seek PCM at the requested frame before and after active decoding, plus stable EOF. It also checks packed-24 mid-packet suffixes, PCM continuity when DRC appears after a nonzero LC restart, and, with the Linux HE-AAC provider, single-rate SBR output against uninterrupted native PCM.
+[`AacDecoderMalformedMp4Test.cpp`](../../../test/audio/AacDecoderMalformedMp4Test.cpp) distinguishes rejected zero-sample tables from admitted samples with empty payloads, and covers first-payload failures at open, required-error/request-preflight precedence, and later-payload read failures. Its Linux HE-AAC case checks that a seek-time decode error preserves the previous read position.
 Linux-only [`AacAlsaChannelLayoutTest.cpp`](../../../test/audio/backend/AacAlsaChannelLayoutTest.cpp) uses real mono AAC PCM and controlled ALSA observations to check FC, ambiguous or missing positions, confirmed conflicts, and a zero-mask format-value control without opening hardware.
 [`DemuxerAlacLayoutTest.cpp`](../../../test/media/mp4/DemuxerAlacLayoutTest.cpp) covers borrowed-entry association, extradata selection, and required container failures.
 [`AlacChannelMetadataTest.cpp`](../../../test/audio/AlacChannelMetadataTest.cpp) covers the ALAC metadata matrix, and [`EngineAlacChannelLayoutTest.cpp`](../../../test/audio/EngineAlacChannelLayoutTest.cpp) covers Engine transitions.

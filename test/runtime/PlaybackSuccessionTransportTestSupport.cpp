@@ -41,6 +41,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -220,7 +221,7 @@ namespace ao::rt::test::playback_succession
         auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
           .sourceFormat = sourceFormat,
           .outputFormat = outputFormat,
-          .duration = std::chrono::seconds{2},
+          .duration = std::chrono::seconds{4},
           .isLossy = isLossy,
           .codec = isLossy ? AudioCodec::Mp3 : AudioCodec::Flac,
         });
@@ -278,6 +279,13 @@ namespace ao::rt::test::playback_succession
               }
             }
           });
+
+        if (config.seekGatePtr)
+        {
+          decoderPtr->setWorkerSeek(config.gatedSeekOffset,
+                                    [gatePtr = config.seekGatePtr](std::stop_token token)
+                                    { return gatePtr->enterAndWait(token); });
+        }
 
         return std::unique_ptr<audio::DecoderSession>{std::move(decoderPtr)};
       };

@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <stop_token>
 
 namespace ao::audio
 {
@@ -27,6 +28,9 @@ namespace ao::audio
     AacDecoderSession& operator=(AacDecoderSession&&) = delete;
 
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
+    bool needsSeekWorker(std::chrono::milliseconds offset) const noexcept override;
+    Result<> seekInterruptibly(std::chrono::milliseconds offset, std::stop_token stopToken) noexcept override;
+    Result<> seekAfterDiscard(std::chrono::milliseconds offset, std::stop_token stopToken) noexcept override;
     void flush() noexcept override;
 
     Result<PcmBlock> readNextBlock() noexcept override;

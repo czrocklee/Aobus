@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <stop_token>
 
 namespace ao::audio
 {
@@ -35,6 +36,24 @@ namespace ao::audio
      * @brief Seeks to a specific playback position.
      */
     virtual Result<> seek(std::chrono::milliseconds offset) noexcept = 0;
+
+    /// A seek requiring extended decode work must not run on the playback control thread.
+    virtual bool needsSeekWorker(std::chrono::milliseconds /*offset*/) const noexcept { return false; }
+
+    /// A decoder requesting a worker must check cancellation between units of work.
+    /// The caller discards a cancelled attempt, including its result.
+    virtual Result<> seekInterruptibly(std::chrono::milliseconds offset, std::stop_token /*stopToken*/) noexcept
+    {
+      return seek(offset);
+    }
+
+    /// Worker seek after the caller has retired the old read position and all PCM borrows.
+    /// Unlike a transactional seek, cancellation or failure may leave the decoder advanced.
+    /// The caller must successfully seek again before reading, or retire the session.
+    virtual Result<> seekAfterDiscard(std::chrono::milliseconds offset, std::stop_token stopToken) noexcept
+    {
+      return seekInterruptibly(offset, stopToken);
+    }
 
     virtual bool supportsFrameSeek() const noexcept { return false; }
     virtual Result<> seekFrame(std::uint64_t /*frameIndex*/) noexcept

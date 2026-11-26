@@ -20,15 +20,6 @@
 
 namespace ao::uimodel
 {
-  namespace
-  {
-    bool isAdvancingTransport(audio::Transport const transport) noexcept
-    {
-      return transport == audio::Transport::Playing || transport == audio::Transport::Buffering ||
-             transport == audio::Transport::Seeking;
-    }
-  } // namespace
-
   PlaybackPositionViewState playbackPositionView(rt::PlaybackTransportSnapshot const& state) noexcept
   {
     if (state.nowPlaying.trackId == kInvalidTrackId)
@@ -40,7 +31,7 @@ namespace ao::uimodel
             .duration = state.duration,
             .elapsed = state.elapsed,
             .hasTrack = true,
-            .isPlaying = isAdvancingTransport(state.transport),
+            .isPlaying = state.transport == audio::Transport::Playing,
             .seekable = state.hasSeekableSubject()};
   }
 

@@ -54,7 +54,7 @@ Aobus installs no TUI desktop file, so the TUI omits the optional `DesktopEntry`
 
 | Method                         | Aobus mapping                                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `PlayPause`                    | `PlaybackCommand::PlayPause`                                                                                               |
+| `PlayPause`                    | Pause if `PlaybackStatus` is `Playing`; otherwise Play                                                                     |
 | `Play`                         | `PlaybackCommand::Play`                                                                                                    |
 | `Pause`                        | `PlaybackCommand::Pause`                                                                                                   |
 | `Stop`                         | `PlaybackCommand::Stop`                                                                                                    |
@@ -88,11 +88,13 @@ Root `Quit` submits its reply before the deferred host callback runs; shutdown s
 
 Transport mapping:
 
-| Aobus transport                              | `PlaybackStatus` |
-| -------------------------------------------- | ---------------- |
-| `Opening`, `Buffering`, `Seeking`, `Playing` | `Playing`        |
-| `Paused`                                     | `Paused`         |
-| `Idle`, `Stopping`, `Error`                  | `Stopped`        |
+| Aobus transport                 | `PlaybackStatus` |
+| ------------------------------- | ---------------- |
+| `Opening`, `Seeking`, `Playing` | `Playing`        |
+| `Buffering`, `Paused`           | `Paused`         |
+| `Idle`, `Stopping`, `Error`     | `Stopped`        |
+
+During `Buffering`, the current item is still active but its playback clock is not advancing. The bridge exports `Paused` so clients do not extrapolate `Position` while waiting for PCM. `PlayPause` therefore requests Play, which leaves the pending start intact. An explicit `Pause` prevents playback from starting when PCM becomes ready.
 
 Repeat mapping:
 
@@ -123,7 +125,7 @@ A memoized path is validated as a regular file with the recorded byte size; it i
 ## Signals
 
 The adapter emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields, including `Metadata` when playback occurrence changes with otherwise repeated track metadata.
-It includes capability fields only when their exported values change.
+`PlaybackStatus` changes only when its mapped wire value changes: a `Buffering` to `Paused` transition alone emits no status change, while `Buffering` to `Playing` does. Capability fields likewise appear only when their exported values change.
 It emits `org.mpris.MediaPlayer2.Player.Seeked(position)` in microseconds for non-preview runtime seek updates.
 For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful completion for the still-current resource emits a later `Metadata` change containing it.
 

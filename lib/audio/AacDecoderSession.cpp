@@ -7,11 +7,13 @@
 #include "detail/DecoderOutput.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/Mp4PacketSource.h"
+#include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/utility/Raii.h>
@@ -20,17 +22,20 @@
 #include <fdk-aac/aacdecoder_lib.h>
 #include <fdk-aac/machine_type.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <expected>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -40,6 +45,7 @@ namespace ao::audio
   {
     constexpr std::uint8_t kAacPcmBitDepth = 16;
     constexpr std::uint32_t kAacMaxFrameSize = 2048;
+    constexpr auto kAacLcFrameLengths = std::to_array<std::int32_t>({960, 1024});
     constexpr std::uint8_t kAacMaxChannels = 8;
     static_assert(sizeof(::INT_PCM) == sizeof(std::int16_t), "AAC native PCM must use 16-bit samples");
 
@@ -59,9 +65,71 @@ namespace ao::audio
     {
       std::uint32_t sampleRate = 0;
       std::uint32_t frames = 0;
+      std::uint32_t outputDelay = 0;
+      bool canRestartLc = false;
       std::uint8_t channels = 0;
       AacChannelSignature channelSignature;
     };
+
+    struct AacRestartPosition final
+    {
+      std::uint32_t packetIndex = 0;
+      std::uint64_t frameIndex = 0;
+    };
+
+    struct AacStoredPacket final
+    {
+      std::uint64_t firstFrameIndex = 0;
+      std::vector<::INT_PCM> samples;
+    };
+
+    using AacRecentPcm = std::deque<AacStoredPacket>;
+
+    struct AacRestart final
+    {
+      AacDecoderPtr decoderPtr;
+      AacRestartPosition position;
+      AacRecentPcm recent;
+    };
+
+    bool containsFrame(AacRecentPcm const& recent, std::uint64_t end, std::uint64_t target) noexcept
+    {
+      return !recent.empty() && recent.front().firstFrameIndex <= target && target < end;
+    }
+
+    // Ten seconds of rewind plus streaming read-ahead. Keep native s16, not
+    // expanded output. Bound storage even for unusual rates or tiny AUs.
+    constexpr std::uint32_t kRewindSeconds = 12;
+    constexpr std::size_t kRewindBytes = std::size_t{20} * 1024 * 1024;
+    constexpr std::size_t kRewindPackets = 2048;
+
+    void rememberPacket(AacRecentPcm& recent,
+                        std::uint32_t frameLimit,
+                        std::uint64_t firstFrameIndex,
+                        std::uint32_t frames,
+                        std::span<::INT_PCM const> samples)
+    {
+      auto const end = firstFrameIndex + frames;
+      auto storage = std::vector<::INT_PCM>{};
+
+      while (!recent.empty() && (end - recent.front().firstFrameIndex > frameLimit || recent.size() >= kRewindPackets))
+      {
+        // Reuse a same-sized AU without retaining oversized allocations when
+        // frame lengths change. A full steady-state window only copies PCM.
+        if (storage.empty() && recent.front().samples.size() == samples.size())
+        {
+          storage = std::move(recent.front().samples);
+        }
+
+        recent.pop_front();
+      }
+
+      if (frames <= frameLimit)
+      {
+        storage.assign(samples.begin(), samples.end());
+        recent.push_back({.firstFrameIndex = firstFrameIndex, .samples = std::move(storage)});
+      }
+    }
 
     struct AacChannelPlan final
     {
@@ -114,6 +182,15 @@ namespace ao::audio
       auto snapshot = AacFrameSnapshot{
         .sampleRate = static_cast<std::uint32_t>(streamInfo->sampleRate),
         .frames = static_cast<std::uint32_t>(streamInfo->frameSize),
+        .outputDelay = streamInfo->outputDelay,
+        // Single-rate HE-AAC also has an LC core and unchanged geometry, but
+        // needs its extension history. An ASC can name SBR solely to signal
+        // its absence. Keep the shortcut exclusive to unextended LC; unknown
+        // flags must not implicitly opt a codec tool into the LC restart rule.
+        .canRestartLc = streamInfo->aot == ::AOT_AAC_LC && streamInfo->extSamplingRate == 0 && streamInfo->flags == 0 &&
+                        streamInfo->aacSampleRate == streamInfo->sampleRate &&
+                        std::ranges::contains(kAacLcFrameLengths, streamInfo->aacSamplesPerFrame) &&
+                        streamInfo->aacSamplesPerFrame == streamInfo->frameSize,
         .channels = static_cast<std::uint8_t>(streamInfo->numChannels),
         .channelSignature =
           {
@@ -287,6 +364,26 @@ namespace ao::audio
     AacChannelSignature channelSignature;
     AacChannelPlan channelPlan;
     std::optional<PcmBlock> optPendingFirstBlock;
+    // One raw ASC configures the LC core rate and 960/1024-frame length
+    // for the session. In-band metadata can disqualify future short restarts
+    // without changing this stride or the cursor of the current decode.
+    std::uint32_t configuredLcFrames = 0;
+    std::uint32_t seekPrerollPackets = 0;
+    std::uint64_t nextFrameIndex = 0;
+    std::uint64_t discardBeforeFrame = 0;
+    // At most one inactive, continuously decoded handle. It can seed a later
+    // forward correction without mutating the active decoder during the scan.
+    AacRestart checkpoint;
+    // Contiguous validated PCM ending at the active decoder's next frame.
+    // Replay moves only the public cursor; the FDK handle stays ready to
+    // continue when replay catches up. Its saved checkpoint can likewise be
+    // revisited on either side of a previous seek.
+    AacRecentPcm recent;
+    std::uint32_t rewindFrameLimit = 0;
+    std::optional<std::size_t> optReplayPacket;
+    bool atExplicitEnd = false;
+    bool hasContinuousHistory = true;
+    bool needsCleanRestart = false;
 
     explicit Impl(std::optional<SampleEncoding> optOutputEncoding)
       : optRequestedEncoding{optOutputEncoding}, outputAdapter{optOutputEncoding}
@@ -351,6 +448,17 @@ namespace ao::audio
 
     void finalizeStreamInfo(AacFrameSnapshot const& snapshot)
     {
+      if (snapshot.canRestartLc)
+      {
+        configuredLcFrames = snapshot.frames;
+        // One transform overlap plus the packets still in FDK's delay line.
+        auto const delayPackets = (snapshot.outputDelay + snapshot.frames - 1U) / snapshot.frames;
+        seekPrerollPackets = 1U + delayPackets;
+      }
+
+      rewindFrameLimit = static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(static_cast<std::uint64_t>(snapshot.sampleRate) * kRewindSeconds,
+                                kRewindBytes / (sizeof(::INT_PCM) * snapshot.channels)));
       channelSignature = snapshot.channelSignature;
       channelPlan = planAacChannels(snapshot);
       info.sourceFormat = SignalFormat{
@@ -399,10 +507,10 @@ namespace ao::audio
       }
     }
 
-    PcmBlock decodePacket(bool isPriming)
+    AacFrameSnapshot decodeNativePacket(::HANDLE_AACDECODER decoder,
+                                        std::span<std::byte const> packet,
+                                        std::vector<::INT_PCM>& pcm)
     {
-      auto const packet = packetSource.packet();
-
       if (packet.empty())
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "AAC sample payload is empty or inaccessible");
@@ -421,7 +529,7 @@ namespace ao::audio
       {
         auto inputData = std::array{inputBuffer.data()};
         auto inputSize = std::to_array<::UINT>({static_cast<::UINT>(inputBuffer.size())});
-        return ::aacDecoder_Fill(decoderPtr.get(), inputData.data(), inputSize.data(), &bytesValid);
+        return ::aacDecoder_Fill(decoder, inputData.data(), inputSize.data(), &bytesValid);
       }();
 
       if (fillRes != AAC_DEC_OK)
@@ -434,7 +542,7 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::DecodeFailed, "AAC decoder did not consume the complete sample");
       }
 
-      if (auto const* streamInfo = ::aacDecoder_GetStreamInfo(decoderPtr.get());
+      if (auto const* streamInfo = ::aacDecoder_GetStreamInfo(decoder);
           streamInfo != nullptr && (std::cmp_greater(streamInfo->numChannels, kAacMaxChannels) ||
                                     std::cmp_greater(streamInfo->frameSize, kAacMaxFrameSize)))
       {
@@ -442,36 +550,224 @@ namespace ao::audio
       }
 
       // ConfigRaw may leave geometry zero; later frames may change frame size.
-      pcmBuffer.resize(static_cast<std::size_t>(kAacMaxFrameSize) * kAacMaxChannels);
+      pcm.resize(static_cast<std::size_t>(kAacMaxFrameSize) * kAacMaxChannels);
 
-      auto const decodeRes =
-        ::aacDecoder_DecodeFrame(decoderPtr.get(), pcmBuffer.data(), static_cast<::INT>(pcmBuffer.size()), 0);
+      auto const decodeRes = ::aacDecoder_DecodeFrame(decoder, pcm.data(), static_cast<::INT>(pcm.size()), 0);
 
       if (decodeRes != AAC_DEC_OK)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "AAC decode failed");
       }
 
-      auto const snapshot = aacFrameSnapshot(decoderPtr.get());
+      return aacFrameSnapshot(decoder);
+    }
+
+    void validateIdentity(AacFrameSnapshot const& snapshot) const
+    {
+      if (snapshot.sampleRate != info.sourceFormat.sampleRate || snapshot.channels != info.sourceFormat.channels ||
+          snapshot.channelSignature != channelSignature)
+      {
+        detail::throwDecoderError(
+          Error::Code::NotSupported, "AAC stream changed output format or channel identity during playback");
+      }
+    }
+
+    std::uint64_t targetFrame(std::chrono::milliseconds offset) const noexcept
+    {
+      return detail::saturatingScale(
+        static_cast<std::uint64_t>(std::max<std::int64_t>(0, offset.count())), info.sourceFormat.sampleRate, 1000);
+    }
+
+    enum class SeekStart : std::uint8_t
+    {
+      End,
+      Active,
+      ShortLc,
+      Checkpoint,
+      Beginning,
+    };
+
+    static bool isWithinRead(std::uint64_t cursor, std::uint64_t target) noexcept
+    {
+      return cursor <= target && target - cursor < kAacMaxFrameSize;
+    }
+
+    static bool needsScan(std::uint64_t cursor, std::uint64_t target) noexcept
+    {
+      return cursor <= target && target - cursor >= kAacMaxFrameSize;
+    }
+
+    SeekStart seekStart(std::chrono::milliseconds offset, std::uint64_t target) const noexcept
+    {
+      if ((info.duration.count() > 0 && offset >= info.duration) ||
+          target >= static_cast<std::uint64_t>(packetSource.sampleCount()) * kAacMaxFrameSize)
+      {
+        return SeekStart::End;
+      }
+
+      if (seekPrerollPackets != 0)
+      {
+        return SeekStart::ShortLc;
+      }
+
+      if (hasContinuousHistory &&
+          (containsFrame(recent, nextFrameIndex, target) || isWithinRead(nextFrameIndex, target)))
+      {
+        return SeekStart::Active;
+      }
+
+      if (checkpoint.decoderPtr && (checkpoint.position.frameIndex <= target ||
+                                    containsFrame(checkpoint.recent, checkpoint.position.frameIndex, target)))
+      {
+        return SeekStart::Checkpoint;
+      }
+
+      return SeekStart::Beginning;
+    }
+
+    void selectReadPosition(std::uint64_t target) noexcept
+    {
+      atExplicitEnd = false;
+      optReplayPacket.reset();
+
+      if (hasContinuousHistory && containsFrame(recent, nextFrameIndex, target))
+      {
+        auto const past = std::ranges::upper_bound(recent, target, {}, &AacStoredPacket::firstFrameIndex);
+        optReplayPacket = static_cast<std::size_t>(past - recent.begin() - 1);
+        optPendingFirstBlock.reset();
+      }
+
+      discardBeforeFrame = target;
+    }
+
+    void prepareRestart(AacRestart& candidate, SeekStart start, std::uint64_t target, std::stop_token const& stopToken)
+    {
+      auto& position = candidate.position;
+
+      if (start == SeekStart::ShortLc)
+      {
+        auto const covering = target / configuredLcFrames;
+
+        if (auto const count = packetSource.sampleCount(); covering >= count)
+        {
+          position = {.packetIndex = count};
+          return;
+        }
+
+        auto const packet = static_cast<std::uint32_t>(covering);
+        auto const index = packet - std::min(packet, seekPrerollPackets);
+        position = {.packetIndex = index, .frameIndex = static_cast<std::uint64_t>(index) * configuredLcFrames};
+        return;
+      }
+
+      scanForward(candidate.decoderPtr.get(), position, candidate.recent, target, stopToken);
+    }
+
+    void scanForward(::HANDLE_AACDECODER decoder,
+                     AacRestartPosition& position,
+                     AacRecentPcm& window,
+                     std::uint64_t target,
+                     std::stop_token const& stopToken)
+    {
+      auto const count = packetSource.sampleCount();
+      // Stop before the next packet could contain the target. The first
+      // public read has less than one maximum frame of discard left.
+      auto scratch = std::vector<::INT_PCM>{};
+
+      while (position.packetIndex < count && needsScan(position.frameIndex, target))
+      {
+        if (stopToken.stop_requested())
+        {
+          break;
+        }
+
+        auto const snapshot = decodeNativePacket(decoder, packetSource.packetAt(position.packetIndex), scratch);
+        validateIdentity(snapshot);
+        // Extend the window AU by AU: a prompt cancellation must
+        // not discard its earlier PCM just because the request was far ahead.
+        auto const samples = static_cast<std::size_t>(snapshot.frames) * snapshot.channels;
+        rememberPacket(window,
+                       rewindFrameLimit,
+                       position.frameIndex,
+                       snapshot.frames,
+                       std::span<::INT_PCM const>{scratch}.first(samples));
+        position.frameIndex += snapshot.frames;
+        ++position.packetIndex;
+      }
+    }
+
+    PcmBlock decodePacket(bool isPriming)
+    {
+      if (needsCleanRestart)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "AAC frame contradicts the configured restart stride");
+      }
+
+      auto const snapshot = decodeNativePacket(decoderPtr.get(), packetSource.packet(), pcmBuffer);
 
       if (isPriming)
       {
         finalizeStreamInfo(snapshot);
       }
-      else if (snapshot.sampleRate != info.sourceFormat.sampleRate || snapshot.channels != info.sourceFormat.channels ||
-               snapshot.channelSignature != channelSignature)
+      else
       {
-        detail::throwDecoderError(
-          Error::Code::NotSupported, "AAC stream changed output format or channel identity during playback");
+        validateIdentity(snapshot);
+
+        if (!snapshot.canRestartLc || snapshot.frames != configuredLcFrames)
+        {
+          // For example, in-band DRC can appear on an ordinary LC access
+          // unit. Its PCM still follows the previous unit at the same rate
+          // and stride; only the eligibility of subsequent seeks changes.
+          seekPrerollPackets = 0;
+        }
+
+        if (!hasContinuousHistory && configuredLcFrames != 0 && snapshot.frames != configuredLcFrames)
+        {
+          // A short restart inferred its origin from this ASC's core stride.
+          // Do not expose speculative frame coordinates if that premise is
+          // contradicted. Continuous decoding counts actual frames instead.
+          needsCleanRestart = true;
+          detail::throwDecoderError(Error::Code::DecodeFailed, "AAC frame contradicts the configured restart stride");
+        }
       }
 
       auto const samples = static_cast<std::size_t>(snapshot.frames) * snapshot.channels;
-      auto const firstFrameIndex = packetSource.firstFrameIndex(snapshot.sampleRate, snapshot.frames);
+      auto const firstFrameIndex = nextFrameIndex;
+      nextFrameIndex += snapshot.frames;
 
       auto const activePcm = std::span<::INT_PCM>{pcmBuffer}.first(samples);
-      normalizePcm(activePcm);
-      packetSource.advance();
 
+      if (seekPrerollPackets == 0 && hasContinuousHistory)
+      {
+        rememberPacket(recent, rewindFrameLimit, firstFrameIndex, snapshot.frames, activePcm);
+      }
+
+      packetSource.advance();
+      return outputBlock(firstFrameIndex, activePcm, packetSource.isAtEnd());
+    }
+
+    PcmBlock nextPacket()
+    {
+      if (!optReplayPacket)
+      {
+        return decodePacket(false);
+      }
+
+      auto const& packet = recent[*optReplayPacket];
+      // Returned spans must survive a later seek, even one replacing recent.
+      pcmBuffer.assign(packet.samples.begin(), packet.samples.end());
+
+      if (++*optReplayPacket == recent.size())
+      {
+        optReplayPacket.reset();
+      }
+
+      return outputBlock(packet.firstFrameIndex, pcmBuffer, !optReplayPacket && packetSource.isAtEnd());
+    }
+
+    PcmBlock outputBlock(std::uint64_t firstFrameIndex, std::span<::INT_PCM> activePcm, bool endOfStream)
+    {
+      normalizePcm(activePcm);
       auto const nativeBytes = std::as_bytes(activePcm);
       auto convertedRes = outputAdapter.convert(nativeBytes);
 
@@ -482,9 +778,9 @@ namespace ao::audio
 
       return PcmBlock{
         .bytes = *convertedRes,
-        .frames = snapshot.frames,
+        .frames = static_cast<std::uint32_t>(activePcm.size() / info.sourceFormat.channels),
         .firstFrameIndex = firstFrameIndex,
-        .endOfStream = packetSource.isAtEnd(),
+        .endOfStream = endOfStream,
       };
     }
   };
@@ -528,52 +824,165 @@ namespace ao::audio
     }
   }
 
-  // Result materialization and initial-seek configuration may allocate;
-  // DecoderSession intentionally fails fast if an allocation escapes this boundary.
+  bool AacDecoderSession::needsSeekWorker(std::chrono::milliseconds offset) const noexcept
+  {
+    switch (auto const target = _implPtr->targetFrame(offset); _implPtr->seekStart(offset, target))
+    {
+      case Impl::SeekStart::Checkpoint: return Impl::needsScan(_implPtr->checkpoint.position.frameIndex, target);
+      case Impl::SeekStart::Beginning: return Impl::needsScan(0, target);
+      default: return false;
+    }
+  }
+
   Result<> AacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
+    return seekInterruptibly(offset, {});
+  }
+
+  Result<> AacDecoderSession::seekInterruptibly(std::chrono::milliseconds offset, std::stop_token stopToken) noexcept
+  {
+    if (stopToken.stop_requested())
+    {
+      return makeError(Error::Code::Conflict, "AAC seek cancelled");
+    }
+
+    auto& source = _implPtr->packetSource;
+    auto const target = _implPtr->targetFrame(offset);
+    auto const start = _implPtr->seekStart(offset, target);
+
+    if (start == Impl::SeekStart::End)
+    {
+      // EOF needs no new decoder or history. Keep both validated windows for
+      // a seek back; hide the old read cursor until a non-end seek succeeds.
+      _implPtr->atExplicitEnd = true;
+      return {};
+    }
+
+    if (start == Impl::SeekStart::Active)
+    {
+      _implPtr->optPendingFirstBlock.reset();
+      _implPtr->selectReadPosition(target);
+      return {};
+    }
+
+    auto candidate = AacRestart{};
+    auto& checkpoint = _implPtr->checkpoint;
+
+    if (start == Impl::SeekStart::Checkpoint)
+    {
+      candidate = std::exchange(checkpoint, AacRestart{});
+    }
+    else
+    {
+      try
+      {
+        candidate.decoderPtr = openAacDecoder();
+        _implPtr->configureDecoder(candidate.decoderPtr.get(), source.magicCookie());
+      }
+      catch (detail::DecoderException const& ex)
+      {
+        auto error = ex.error();
+        error.code = Error::Code::SeekFailed;
+        return std::unexpected{std::move(error)};
+      }
+    }
+
     try
     {
-      if (_implPtr->optPendingFirstBlock)
+      _implPtr->prepareRestart(candidate, start, target, stopToken);
+      auto const& position = candidate.position;
+      bool const needsHistory = start != Impl::SeekStart::ShortLc;
+
+      if (stopToken.stop_requested())
       {
-        // Preserve legacy cold-start history if the first public read is a seek.
-        // Prepare before moving the source cursor so any failure retains packet 0.
-        auto candidatePtr = openAacDecoder();
-        _implPtr->configureDecoder(candidatePtr.get(), _implPtr->packetSource.magicCookie());
-
-        if (auto const res = _implPtr->packetSource.seek(offset); !res)
+        // Restore a borrowed checkpoint or fill an empty slot. An unfinished
+        // fresh scan cannot evict unrelated saved history. A completed one
+        // wins even if stop arrived during the final AU, before installation.
+        if (needsHistory && position.packetIndex != 0 &&
+            (!checkpoint.decoderPtr || position.packetIndex == source.sampleCount() ||
+             Impl::isWithinRead(position.frameIndex, target)))
         {
-          return std::unexpected{res.error()};
+          checkpoint = std::move(candidate);
         }
 
-        if (_implPtr->packetSource.sampleIndex() == 0)
-        {
-          // Keep the original primed PCM and restore its next-packet cursor.
-          _implPtr->packetSource.advance();
-        }
-        else
-        {
-          _implPtr->decoderPtr.swap(candidatePtr);
-          _implPtr->optPendingFirstBlock.reset();
-        }
-
-        return {};
+        return makeError(Error::Code::Conflict, "AAC seek cancelled");
       }
 
-      if (auto const res = _implPtr->packetSource.seek(offset); !res)
+      if (position.packetIndex != 0 || !_implPtr->optPendingFirstBlock)
       {
-        return std::unexpected{res.error()};
+        if (needsHistory && _implPtr->hasContinuousHistory && (!source.isAtEnd() || !_implPtr->recent.empty()))
+        {
+          _implPtr->checkpoint = {
+            .decoderPtr = std::move(_implPtr->decoderPtr),
+            .position = {.packetIndex = source.sampleIndex(), .frameIndex = _implPtr->nextFrameIndex},
+            .recent = std::move(_implPtr->recent)};
+        }
+
+        _implPtr->decoderPtr = std::move(candidate.decoderPtr);
+        _implPtr->recent = std::move(candidate.recent);
+        _implPtr->hasContinuousHistory = needsHistory || position.packetIndex == 0;
+        _implPtr->needsCleanRestart = false;
+        _implPtr->nextFrameIndex = position.frameIndex;
+        _implPtr->optPendingFirstBlock.reset();
+        source.setSampleIndex(position.packetIndex);
       }
 
-      flush();
+      _implPtr->selectReadPosition(target);
       return {};
     }
     catch (detail::DecoderException const& ex)
     {
-      auto error = ex.error();
-      error.code = Error::Code::SeekFailed;
-      return std::unexpected{std::move(error)};
+      return std::unexpected{ex.error()};
     }
+  }
+
+  Result<> AacDecoderSession::seekAfterDiscard(std::chrono::milliseconds offset, std::stop_token stopToken) noexcept
+  {
+    auto const target = _implPtr->targetFrame(offset);
+    auto const start = _implPtr->seekStart(offset, target);
+    // Prefer replay, a bounded restart, or a closer saved decoder. Otherwise
+    // the discarded live cursor can advance exactly without re-decoding its prefix.
+    bool const liveIsCloser =
+      start == Impl::SeekStart::Beginning ||
+      (start == Impl::SeekStart::Checkpoint && _implPtr->nextFrameIndex > _implPtr->checkpoint.position.frameIndex);
+
+    if (!liveIsCloser || !_implPtr->hasContinuousHistory || !Impl::needsScan(_implPtr->nextFrameIndex, target))
+    {
+      return seekInterruptibly(offset, stopToken);
+    }
+
+    if (stopToken.stop_requested())
+    {
+      return makeError(Error::Code::Conflict, "AAC seek cancelled");
+    }
+
+    _implPtr->optPendingFirstBlock.reset();
+    _implPtr->optReplayPacket.reset();
+    auto& source = _implPtr->packetSource;
+    auto position = AacRestartPosition{.packetIndex = source.sampleIndex(), .frameIndex = _implPtr->nextFrameIndex};
+
+    try
+    {
+      _implPtr->scanForward(_implPtr->decoderPtr.get(), position, _implPtr->recent, target, stopToken);
+    }
+    catch (detail::DecoderException const& ex)
+    {
+      // Even a failed FDK call may have consumed input. A superseding seek
+      // must use a validated checkpoint or a fresh handle, never this one.
+      _implPtr->hasContinuousHistory = false;
+      return std::unexpected{ex.error()};
+    }
+
+    source.setSampleIndex(position.packetIndex);
+    _implPtr->nextFrameIndex = position.frameIndex;
+
+    if (stopToken.stop_requested())
+    {
+      return makeError(Error::Code::Conflict, "AAC seek cancelled");
+    }
+
+    _implPtr->selectReadPosition(target);
+    return {};
   }
 
   void AacDecoderSession::flush() noexcept
@@ -590,22 +999,35 @@ namespace ao::audio
   {
     try
     {
-      if (_implPtr->optPendingFirstBlock)
+      while (!_implPtr->atExplicitEnd &&
+             (_implPtr->optPendingFirstBlock || _implPtr->optReplayPacket || !_implPtr->packetSource.isAtEnd()))
       {
-        auto const block = *_implPtr->optPendingFirstBlock;
-        _implPtr->optPendingFirstBlock.reset();
+        auto const optPendingBlock = std::exchange(_implPtr->optPendingFirstBlock, std::nullopt);
+        auto block = optPendingBlock ? *optPendingBlock : _implPtr->nextPacket();
+
+        if (block.firstFrameIndex < _implPtr->discardBeforeFrame)
+        {
+          auto const skip = _implPtr->discardBeforeFrame - block.firstFrameIndex;
+
+          if (skip >= block.frames)
+          {
+            continue;
+          }
+
+          block.bytes = block.bytes.subspan(static_cast<std::size_t>(skip) * frameBytes(_implPtr->info.outputFormat));
+          block.frames -= static_cast<std::uint32_t>(skip);
+          block.firstFrameIndex += skip;
+        }
+
+        _implPtr->discardBeforeFrame = 0;
         return block;
       }
 
-      if (_implPtr->packetSource.isAtEnd())
-      {
-        return PcmBlock{.endOfStream = true};
-      }
-
-      return _implPtr->decodePacket(false);
+      return PcmBlock{.endOfStream = true};
     }
     catch (detail::DecoderException const& ex)
     {
+      _implPtr->hasContinuousHistory = false;
       return std::unexpected{ex.error()};
     }
   }

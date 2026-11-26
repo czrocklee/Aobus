@@ -16,7 +16,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -28,6 +27,7 @@ namespace ao::audio
   {
   public:
     using OnSourceError = std::function<void(Error const&, std::stop_token)>;
+    using OnReady = std::function<void(std::stop_token)>;
 
     enum class DecodeBlockStatus : std::uint8_t
     {
@@ -46,14 +46,13 @@ namespace ao::audio
 
     ~StreamingSource() override;
 
-    /// Fills the initial PCM buffer without installing callbacks or starting
-    /// the source-owned decode thread. May be called once; a failed attempt
-    /// leaves the source unusable.
-    Result<> prepare();
+    /// Normally prerolls synchronously. An extended seek is reserved for the
+    /// decode worker at activation. A failed preparation leaves the source unusable.
+    Result<> prepare(std::chrono::milliseconds initialOffset = {});
 
-    /// Installs the source-error callback and starts steady-state decoding.
-    /// Must be called exactly once after successful prepare().
-    void activate(OnSourceError onError);
+    /// Install error and ready callbacks exactly once after successful prepare().
+    /// Unless already at EOF, start the worker for any pending seek/preroll, then steady-state decoding.
+    void activate(OnSourceError onError, OnReady onReady = {});
 
     // Requires successful prepare() and activate(). The caller quiesces render
     // and query consumers. This method separately stops and joins the
@@ -62,34 +61,46 @@ namespace ao::audio
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
+    bool isPreparingSeek() const noexcept override;
     std::chrono::milliseconds bufferedDuration() const noexcept override;
 
   private:
+    enum class Phase : std::uint8_t
+    {
+      Fresh,
+      Prepared,
+      Active,
+      PreparationFailed
+    };
+
+    enum class OnRingFull : std::uint8_t
+    {
+      RetainRemainder,
+      WaitForSpace
+    };
+
+    void positionAndPreroll(std::optional<std::chrono::milliseconds> optOffset, std::stop_token const& seekToken);
     void startDecodeThread();
     void stopDecodeThread();
-    void decodeLoop(std::stop_token const& threadStopToken);
+    void decodeLoop(std::stop_token const& seekToken);
     void fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
-    DecodeBlockStatus decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
+    DecodeBlockStatus decodeNextBlock(std::stop_token const& seekToken, OnRingFull onFull);
     // Advances bytes in place to the unwritten remainder so retries resume without duplicating PCM.
-    bool tryWriteBlock(std::span<std::byte const>& bytes,
-                       std::stop_token const& seekToken,
-                       std::stop_token const* threadStopToken);
+    bool tryWriteBlock(std::span<std::byte const>& bytes, std::stop_token const& seekToken, OnRingFull onFull);
 
     std::unique_ptr<DecoderSession> _decoderPtr;
     OnSourceError _onError;
+    OnReady _onReady;
+    std::atomic<bool> _preparingSeek = false;
     PcmFrameRing _frameRing;
     std::jthread _decodeThread;
-    mutable std::mutex _decoderMutex;
     std::stop_source _seekStopSource;
     std::atomic<bool> _decoderReachedEof = false;
-    std::atomic<bool> _failed = false;
-    mutable std::mutex _errorMutex;
-    std::optional<Error> _optLastError;
     std::uint64_t _bytesPerSecond = 0;
     std::chrono::milliseconds _prerollDuration{0};
     std::size_t _decodeHighWatermarkByteCount = 0;
-    bool _prepared = false;
-    bool _activated = false;
+    Phase _phase = Phase::Fresh;
+    std::optional<std::chrono::milliseconds> _optWorkerSeek;
 
     // Producer-confined. prepare()/seek() run before the decode worker, and
     // seek stops and joins that worker before resetting these values.

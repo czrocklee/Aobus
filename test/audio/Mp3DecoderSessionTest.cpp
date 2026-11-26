@@ -10,20 +10,112 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace ao::audio::test
 {
+  namespace
+  {
+    constexpr std::size_t kMonoPcmBytesPerFrame = 2; // Signed 16-bit PCM.
+    constexpr std::size_t kVbrFixtureFrames = 885888;
+
+    std::vector<std::byte> collectUninterruptedMonoPcm(std::filesystem::path const& path, std::size_t expectedFrames)
+    {
+      auto referencePtr = ao::test::requireValue(Mp3DecoderSession::open(path, SampleEncoding::Signed16Le));
+      auto referencePcm = std::vector<std::byte>{};
+      referencePcm.reserve(expectedFrames * kMonoPcmBytesPerFrame);
+      bool reachedEnd = false;
+
+      for (std::size_t index = 0; index < 1024 && !reachedEnd; ++index)
+      {
+        auto const blockRes = referencePtr->readNextBlock();
+
+        if (!blockRes)
+        {
+          FAIL("Uninterrupted fixture decode failed: " << blockRes.error().message);
+        }
+
+        referencePcm.insert(referencePcm.end(), blockRes->bytes.begin(), blockRes->bytes.end());
+        reachedEnd = blockRes->endOfStream;
+      }
+
+      REQUIRE(reachedEnd);
+      REQUIRE(referencePcm.size() == expectedFrames * kMonoPcmBytesPerFrame);
+      return referencePcm;
+    }
+
+    enum class SeekCheckExtent : std::uint8_t
+    {
+      FirstTwoBlocks,
+      ThroughEndOfStream,
+    };
+
+    void checkSeekAgainstMonoPcm(Mp3DecoderSession& decoder,
+                                 std::span<std::byte const> referencePcm,
+                                 std::chrono::milliseconds offset,
+                                 std::uint64_t expectedFrame,
+                                 SeekCheckExtent extent = SeekCheckExtent::FirstTwoBlocks)
+    {
+      // Restarted synthesis can differ from uninterrupted decoding by one signed-16 LSB.
+      constexpr std::int32_t kSeekToleranceLsb = 1;
+      CAPTURE(offset);
+      REQUIRE(decoder.seek(offset));
+
+      bool const checkThroughEnd = extent == SeekCheckExtent::ThroughEndOfStream;
+      auto const totalFrames = referencePcm.size() / kMonoPcmBytesPerFrame;
+      REQUIRE(expectedFrame < totalFrames);
+      std::int32_t peakReference = 0;
+
+      // Slice the uninterrupted decode by the requested frame, not the reported seek position or block boundaries.
+      for (std::size_t index = 0; checkThroughEnd ? expectedFrame < totalFrames : index < 2; ++index)
+      {
+        CAPTURE(expectedFrame);
+        auto const blockRes = decoder.readNextBlock();
+        REQUIRE(blockRes);
+        CHECK(blockRes->firstFrameIndex == expectedFrame);
+        REQUIRE(blockRes->frames > 0);
+        REQUIRE(expectedFrame + blockRes->frames <= totalFrames);
+        auto const expected = referencePcm.subspan(
+          static_cast<std::size_t>(expectedFrame) * kMonoPcmBytesPerFrame, blockRes->frames * kMonoPcmBytesPerFrame);
+        REQUIRE(blockRes->bytes.size() == expected.size());
+        std::int32_t peakError = 0;
+
+        for (std::size_t sample = 0; sample < blockRes->frames; ++sample)
+        {
+          auto const expectedSample = static_cast<std::int32_t>(readSigned16LePcmSample(expected, sample));
+          auto const error = readSigned16LePcmSample(blockRes->bytes, sample) - expectedSample;
+          peakError = std::max(peakError, std::abs(error));
+          peakReference = std::max(peakReference, std::abs(expectedSample));
+        }
+
+        CHECK(peakError <= kSeekToleranceLsb);
+        expectedFrame += blockRes->frames;
+      }
+
+      CHECK(peakReference > kSeekToleranceLsb);
+
+      if (checkThroughEnd)
+      {
+        CHECK(readUntilStableEndOfStream(decoder, 1) == 0);
+      }
+    }
+  } // namespace
+
   TEST_CASE("Mp3DecoderSession - decodes happy path")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
@@ -106,7 +198,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
   }
 
-  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks")
+  TEST_CASE("Mp3DecoderSession - seeks to uninterrupted PCM in a VBR stream without a seek table")
   {
     auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
     auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
@@ -115,15 +207,42 @@ namespace ao::audio::test
     CHECK(info.sourceFormat.sampleRate == 44100);
     CHECK(info.duration == std::chrono::milliseconds{20088});
 
-    REQUIRE(decoder.seek(std::chrono::seconds{10}));
-    auto const soughtBlockRes = decoder.readNextBlock();
-    REQUIRE(soughtBlockRes);
-    CHECK(soughtBlockRes->firstFrameIndex == 441000);
-    CHECK(soughtBlockRes->frames > 0);
-
+    auto const referencePcm = collectUninterruptedMonoPcm(testFile, kVbrFixtureFrames);
+    checkSeekAgainstMonoPcm(decoder, referencePcm, std::chrono::seconds{10}, 441000);
+    // Backward, inside an MPEG frame after active decoding.
+    checkSeekAgainstMonoPcm(decoder, referencePcm, std::chrono::milliseconds{5010}, 220941);
     REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
-    CHECK(readUntilStableEndOfStream(decoder, 1024) == 885888);
+    CHECK(readUntilStableEndOfStream(decoder, 1024) == kVbrFixtureFrames);
     CHECK_FALSE(decoder.seek(info.duration + std::chrono::milliseconds{1}));
+  }
+
+  TEST_CASE("Mp3DecoderSession - seeks to uninterrupted Layer III PCM after a Layer II prefix")
+  {
+    // Unprotected MPEG1 Layer II at 64 kb/s, 44.1 kHz mono, with no allocated subbands (silence).
+    constexpr auto kLayerIiFrame = std::array<std::uint8_t, 208>{0xFF, 0xFD, 0x40, 0xC0};
+    constexpr std::size_t kLayerIiFrameCount = 100;
+    constexpr std::size_t kPcmFramesPerLayerIiFrame = 1152;
+    auto const layerIiiBytes = readFileBytes(requireAudioFixture("vbr_no_seek_table.mp3"));
+    auto data = std::vector<std::uint8_t>{};
+    data.reserve((kLayerIiFrameCount * kLayerIiFrame.size()) + layerIiiBytes.size());
+
+    for (std::size_t index = 0; index < kLayerIiFrameCount; ++index)
+    {
+      data.insert(data.end(), kLayerIiFrame.begin(), kLayerIiFrame.end());
+    }
+
+    data.insert(data.end(), layerIiiBytes.begin(), layerIiiBytes.end());
+    auto const temp = ao::test::TempFile{data, ".mp3"};
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(temp.path, SampleEncoding::Signed16Le));
+    auto const info = decoderPtr->streamInfo();
+    CHECK(info.sourceFormat.sampleRate == 44100);
+    CHECK(info.sourceFormat.channels == 1);
+
+    auto const referencePcm =
+      collectUninterruptedMonoPcm(temp.path, (kLayerIiFrameCount * kPcmFramesPerLayerIiFrame) + kVbrFixtureFrames);
+    checkSeekAgainstMonoPcm(*decoderPtr, referencePcm, std::chrono::seconds{10}, 441000);
+    checkSeekAgainstMonoPcm(
+      *decoderPtr, referencePcm, std::chrono::milliseconds{22666}, 999570, SeekCheckExtent::ThroughEndOfStream);
   }
 
   TEST_CASE("Mp3DecoderSession - rejects a midstream format change")

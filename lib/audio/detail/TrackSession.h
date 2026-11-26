@@ -60,10 +60,13 @@ namespace ao::audio::detail
                                          DecoderFactoryFn const& decoderFactory,
                                          std::chrono::milliseconds initialOffset = {});
 
-    static OpenedTrack activate(PreparedTrack preparedTrack, StreamingSource::OnSourceError onSourceError);
+    static OpenedTrack activate(PreparedTrack preparedTrack,
+                                StreamingSource::OnSourceError onSourceError,
+                                StreamingSource::OnReady onReady = {});
 
   private:
     static std::unique_ptr<StreamingSource> preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
-                                                             DecodedStreamInfo const& info);
+                                                             DecodedStreamInfo const& info,
+                                                             std::chrono::milliseconds initialOffset);
   };
 } // namespace ao::audio::detail

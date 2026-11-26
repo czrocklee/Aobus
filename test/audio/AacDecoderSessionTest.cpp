@@ -40,7 +40,7 @@ namespace ao::audio::test
     CHECK(blockRes->firstFrameIndex == 0);
   }
 
-  TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples")
+  TEST_CASE("AacDecoderSession - seeks before the published duration retain the untrimmed final native block")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -48,18 +48,32 @@ namespace ao::audio::test
     auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
-    REQUIRE(info.duration > std::chrono::milliseconds{500});
-    REQUIRE(info.sourceFormat.sampleRate > 0);
-    constexpr auto kSeekOffset = std::chrono::milliseconds{500};
-    auto const targetFrame = (static_cast<std::uint64_t>(kSeekOffset.count()) * info.sourceFormat.sampleRate) / 1000U;
-
-    REQUIRE(decoder.seek(kSeekOffset));
+    // The last of 45 AAC-LC packets declares just 68 media ticks but decodes
+    // to the usual 1024 frames. The published duration is floored to ms.
+    REQUIRE(info.duration == std::chrono::milliseconds{1023});
+    REQUIRE(info.sourceFormat.sampleRate == 44100);
+    REQUIRE(decoder.seek(std::chrono::milliseconds{1022}));
     auto const blockRes = decoder.readNextBlock();
 
     REQUIRE(blockRes);
-    REQUIRE(blockRes->frames > 0);
-    CHECK(blockRes->firstFrameIndex <= targetFrame);
-    CHECK(blockRes->firstFrameIndex + blockRes->frames > targetFrame);
+    CHECK(blockRes->firstFrameIndex == 45070);
+    CHECK(blockRes->frames == 1010);
+    CHECK(blockRes->bytes.size() == std::size_t{1010} * 2 * sizeof(std::int16_t));
+    CHECK(blockRes->endOfStream);
+
+    for (auto const offset : {info.duration, info.duration + std::chrono::milliseconds{1}})
+    {
+      REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
+      auto const interior = ao::test::requireValue(decoder.readNextBlock());
+      REQUIRE(interior.frames > 0);
+      REQUIRE_FALSE(interior.endOfStream);
+      REQUIRE(decoder.seek(offset));
+      auto const eofRes = decoder.readNextBlock();
+      REQUIRE(eofRes);
+      CHECK(eofRes->endOfStream);
+      CHECK(eofRes->frames == 0);
+      CHECK(eofRes->bytes.empty());
+    }
   }
 
   TEST_CASE("AacDecoderSession - 32-bit padded output")

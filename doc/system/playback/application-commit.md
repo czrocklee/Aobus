@@ -143,7 +143,7 @@ boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 [`PlaybackActions`](../../../app/uimodel/playback/command/PlaybackActions.cpp) gives local and system-media commands the same Play target policy:
 
-- During active playback (Opening, Buffering, Playing, or Seeking), Play/Pause pauses; a repeated Play does not restart the track.
+- During active playback (Opening, Buffering, Playing, or Seeking), the shared Play/Pause action pauses; a repeated Play does not restart the track. [MPRIS `PlayPause`](../../reference/linux/mpris.md#player-methods) selects Play or Pause from the advertised status before dispatching the action.
 - Play or the start side of Play/Pause resumes a paused or deferred track first. Clearing succession does not discard a deferred subject or its offset. A pending output request blocks resume without falling back to another track.
 - With no subject to resume, Idle or Error can start a track only when the output is ready. GTK, WinUI, and AppKit use the first selected track still present in the focused view's live projection. The TUI uses the track under its cursor, not its marks. A missing or filtered-out target does not fall back to the first row.
 
@@ -216,9 +216,7 @@ its captured occurrence if replacement has already executed.
 Succession synchronously validates and constructs a cursor candidate, then
 admits isolated audio preparation without replacing public state. An inspection decoder
 opens on an async worker and records logical signal facts.
-Preparation briefly returns to the callback executor so Engine can revalidate its captured route and obtain the selected Backend's non-blocking prewarm hint, then resumes on a worker to open, seek, and preroll an optimistic lossless decoder output while the previous
-succession session, transport subject, snapshot, and audio generation remain
-current.
+Preparation briefly returns to the callback executor so Engine can revalidate its captured route and obtain the selected Backend's non-blocking prewarm hint, then resumes on a worker to prepare an optimistic lossless decoder output while the previous succession session, transport subject, snapshot, and audio generation remain current. Ordinary offsets are sought and prerolled during preparation; an [extended decoder seek](audio-execution.md#streaming-decode-and-buffering) runs after source activation.
 The lower preparing observation may mark an in-progress commit, but it does not
 replace the current public snapshot with a `Preparing` transport snapshot.
 
@@ -240,7 +238,8 @@ to the candidate so policy changes accepted during worker preparation are not
 lost.
 
 The destructive commit has three accepted outcomes. A started receipt installs
-the candidate and emits the normal started/now-playing observations. A source
+the candidate and emits `Started` and the now-playing observation. `Started`
+means playback was accepted; it does not mean the backend is already rendering. A source
 that is already naturally complete returns `playbackStarted == false`, installs
 the candidate provenance, emits no started/now-playing observation or failure,
 and lets its queued track-ended settlement drive normal succession. If backend
@@ -264,9 +263,7 @@ final seek, volume, mute, shuffle, repeat, stop, clear, and output selection
 execute inside a service commit. Lower signals
 mark the commit changed; composition waits until the command returns.
 `setPlaybackMode` settles its shuffle and repeat pair as one mode update.
-Pause and resume publish their lower transient events only when the refreshed
-transport actually enters `Paused` or `Playing`; idle and duplicate commands
-publish no false transition.
+Pause emits `Paused` only when the transport enters `Paused`. Resuming active playback from `Paused` emits `Started` whether the transport enters `Playing` immediately or returns to `Buffering` to wait for PCM. When that occurrence becomes ready, the service publishes `Playing` without a second `Started`. Idle and duplicate commands emit no false transition.
 
 An accepted Final seek advances both revision identities. A target inside the Track preserves its playback occurrence.
 An unguarded Final clamps its target to `[0, duration]`; a guarded seek first requires its nonzero expected occurrence, a valid current subject, positive duration, and a target in that inclusive range, rejecting a target past the duration.

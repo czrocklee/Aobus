@@ -29,16 +29,19 @@ namespace ao::audio::detail
     bool isOpen() const noexcept;
     bool isAtEnd() const noexcept;
     std::span<std::byte const> packet() const;
+    std::span<std::byte const> packetAt(std::uint32_t index) const;
     std::span<std::byte const> magicCookie() const;
     // Borrows the mapped file until close(), the next open(), or destruction.
     // Empty when closed or when the demuxer cannot associate the ALAC entry.
     media::mp4::OptionalAtom alacSampleEntry() const noexcept;
     media::mp4::Demuxer::SampleEntry sampleInfo() const;
     std::uint32_t sampleIndex() const noexcept;
+    std::uint32_t sampleCount() const noexcept;
     std::uint32_t timescale(std::uint32_t fallback = 0) const noexcept;
     std::chrono::milliseconds duration(std::uint32_t fallbackTimescale = 0) const noexcept;
     std::uint64_t firstFrameIndex(std::uint32_t sampleRate, std::uint32_t fallbackFramesPerPacket) const noexcept;
 
+    void setSampleIndex(std::uint32_t index) noexcept;
     void advance() noexcept;
 
   private:

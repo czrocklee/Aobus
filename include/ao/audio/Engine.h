@@ -90,6 +90,7 @@ namespace ao::audio
       ProfileId profileId;
       std::chrono::milliseconds elapsed{0};
       std::chrono::milliseconds duration{0};
+      /// PCM queue occupancy, not render readiness; seek preroll can already have buffered frames.
       std::chrono::milliseconds bufferedDuration{0};
       std::uint32_t underrunCount = 0;
       std::string statusText;
@@ -139,9 +140,9 @@ namespace ao::audio
     /**
      * @brief Move-only, non-published explicit-play candidate.
      *
-     * Staging inspects the candidate source and attempts to optimistically open,
-     * seek, and preroll a final decoder output without changing the active playback
-     * generation, current item, backend, or prepared lookahead. Only
+     * Staging inspects the candidate and may prepare a final decoder without
+     * changing the active playback generation, current item, backend, or prepared
+     * lookahead. An extended initial seek and its preroll wait for activation. Only
      * commitPlayback() may acquire the backend, validate or replace the
      * optimistic decoder output, and publish playback.
      */
@@ -171,6 +172,7 @@ namespace ao::audio
       PlaybackItemId itemId;
       std::uint64_t generation = 0;
       PreparedCancellationBarrier cancellationBarrier;
+      /// True for an active start, including one awaiting seek/preroll with the backend still stopped.
       bool playbackStarted = false;
 
       bool operator==(PlaybackStartReceipt const&) const = default;
