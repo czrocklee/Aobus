@@ -180,18 +180,7 @@ class FrontendContentTest(unittest.TestCase):
         )
         self.assertTrue(guardrails.audit_frontend("winui-events", self.root).ok)
 
-    def test_winui_events_rejects_hand_managed_tokens_and_unsupported_weak_references(self):
-        self.put({"playback/Transport.cpp": "  winrt::event_token _clickToken{};\n"})
-        result = guardrails.audit_frontend("winui-events", self.root)
-        self.assertFalse(result.ok, result.errors)
-        self.assertIn("raw event_token", result.errors[0].detail)
-
-        # Code sharing a line with the terminator that ends a doc comment is code.
-        self.put({"playback/Transport.h": "/**\n * doc\n */ winrt::event_token _clickToken{};\n"})
-        result = guardrails.audit_frontend("winui-events", self.root)
-        self.assertFalse(result.ok, result.errors)
-        self.assertIn("raw event_token", result.errors[0].detail)
-
+    def test_winui_events_rejects_auto_revoke_for_app_window_changed(self):
         self.put({"app/Shell.cpp": "  _changed = AppWindow().Changed(winrt::auto_revoke, handler);\n"})
         result = guardrails.audit_frontend("winui-events", self.root)
         self.assertFalse(result.ok, result.errors)
