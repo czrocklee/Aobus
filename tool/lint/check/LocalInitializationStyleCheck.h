@@ -12,9 +12,9 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces the local-initialization style: non-primitive locals use auto x = Type{args},
-  /// primitives use T x = val (no braces). Namespace-scope, static member, and static
-  /// local primitives follow the same rule. Diagnostics do not offer automatic fixes.
+  /// Checks initialization style for automatic locals, including redundant wrapping of
+  /// a same-type enumerator. Only primitive rules extend to namespace-scope variables,
+  /// static data members, and static locals. Diagnostics do not offer automatic fixes.
   class LocalInitializationStyleCheck : public ClangTidyCheck
   {
   public:

@@ -10,6 +10,7 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/OperationKinds.h>
+#include <clang/AST/ParentMapContext.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/StmtCXX.h>
 #include <clang/AST/Type.h>
@@ -17,7 +18,11 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/LLVM.h>
+#include <clang/Basic/LangOptions.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/TokenKinds.h>
+#include <clang/Lex/Lexer.h>
+#include <clang/Lex/Token.h>
 #include <llvm/ADT/StringSwitch.h>
 
 using clang::ast_matchers::MatchFinder;
@@ -34,9 +39,10 @@ namespace clang::tidy::readability
       {
         return true;
       }
-      // Note: We exclude isEnumeralType() so that enums (like std::byte)
-      // follow the 'auto x = T{...}' rule for non-primitives.
-      return type->isArithmeticType() || type->isAnyCharacterType() || type->isNullPtrType();
+
+      // Clang counts complete unscoped enums as arithmetic; our style treats all enums alike.
+      return !type->isEnumeralType() &&
+             (type->isArithmeticType() || type->isAnyCharacterType() || type->isNullPtrType());
     }
 
     CXXRecordDecl const* getSourceKnownRecordDecl(QualType type)
@@ -115,6 +121,110 @@ namespace clang::tidy::readability
       return typeInfo != nullptr && !typeInfo->getTypeLoc().getContainedAutoTypeLoc().isNull();
     }
 
+    bool hasIndependentEnumType(VarDecl const& var, ASTContext& context)
+    {
+      // Keep volatile locals (including aliases) and shared declarations outside the style rule.
+      if (var.getType().isVolatileQualified())
+      {
+        return false;
+      }
+
+      auto const parents = context.getParents(var);
+      auto const* statement = parents.size() == 1 ? parents[0].get<DeclStmt>() : nullptr;
+      return statement != nullptr && statement->isSingleDecl();
+    }
+
+    bool hasWrittenCallParens(VarDecl const& var, ASTContext const& context)
+    {
+      // The direct-initializer's parentheses aren't represented on its enumerator expression.
+      auto const& source = context.getSourceManager();
+      auto const& language = context.getLangOpts();
+      auto const range = var.getInit()->getSourceRange();
+
+      // Raw token navigation needs file locations, not macro expansion locations.
+      if (range.isInvalid() || !range.getBegin().isFileID() || !range.getEnd().isFileID())
+      {
+        return false;
+      }
+
+      auto const optOpen = Lexer::findPreviousToken(range.getBegin(), source, language, false);
+      auto const optClose = Lexer::findNextToken(range.getEnd(), source, language);
+      return optOpen && optOpen->is(tok::l_paren) && optClose && optClose->is(tok::r_paren);
+    }
+
+    StringRef classifyEnumInitializer(Expr const* expression, QualType enumType, bool repeatsType, bool explicitList)
+    {
+      for (;;)
+      {
+        expression = expression->IgnoreParenImpCasts();
+
+        if (expression->getBeginLoc().isMacroID() || expression->getEndLoc().isMacroID() ||
+            expression->isInstantiationDependent())
+        {
+          return {};
+        }
+
+        if (auto const* cast = dyn_cast<CXXFunctionalCastExpr>(expression); cast != nullptr)
+        {
+          if (cast->getLParenLoc().isMacroID() || !ASTContext::hasSameUnqualifiedType(enumType, cast->getType()))
+          {
+            return {};
+          }
+
+          repeatsType = true;
+          expression = cast->getSubExpr();
+          continue;
+        }
+
+        if (auto const* list = dyn_cast<InitListExpr>(expression); list != nullptr && list->getNumInits() == 1)
+        {
+          expression = list->getInit(0);
+          continue;
+        }
+
+        break;
+      }
+
+      if (auto const* reference = dyn_cast<DeclRefExpr>(expression);
+          repeatsType && reference != nullptr && isa<EnumConstantDecl>(reference->getDecl()) &&
+          ASTContext::hasSameUnqualifiedType(enumType, reference->getType()))
+      {
+        return "redundant initialization from a same-type enumerator";
+      }
+
+      // An explicitly typed list still follows the non-primitive local rule (e.g. std::byte b{0xff}).
+      return explicitList ? "for a braced enum local, prefer auto with the enum type on the initializer" : "";
+    }
+
+    StringRef enumInitializationViolation(VarDecl const& var, Expr const* init, ASTContext& context)
+    {
+      if (init == nullptr || !context.getLangOpts().CPlusPlus || var.getTypeSourceInfo() == nullptr)
+      {
+        return {};
+      }
+
+      auto const typeLoc = var.getTypeSourceInfo()->getTypeLoc();
+      auto const autoLoc = typeLoc.getContainedAutoTypeLoc();
+      auto const* expression = init->IgnoreParenImpCasts();
+
+      if (typeLoc.getBeginLoc().isMacroID() || (!autoLoc.isNull() && autoLoc.isDecltypeAuto()))
+      {
+        return {};
+      }
+
+      bool const explicitType = autoLoc.isNull();
+      bool const callInit = var.getInitStyle() == VarDecl::CallInit;
+
+      if ((explicitType && !hasIndependentEnumType(var, context)) || (callInit && !hasWrittenCallParens(var, context)))
+      {
+        return {};
+      }
+
+      bool const explicitList = explicitType && isa<InitListExpr>(expression);
+      bool const repeatsType = explicitList || (explicitType && callInit);
+      return classifyEnumInitializer(expression, var.getType(), repeatsType, explicitList);
+    }
+
     bool isPrimitiveFunctionalCastInitializer(Expr const* init)
     {
       auto const* clean = init == nullptr ? nullptr : init->IgnoreParenImpCasts();
@@ -179,10 +289,17 @@ namespace clang::tidy::readability
 
     // Include source parentheses for dependent records before constructors can resolve.
     // We want to skip 'auto x = some_function()' which binds a CallExpr to the VarDecl.
-    auto hasBadInit = anyOf(hasInitializer(ignoringImplicit(cxxConstructExpr().bind("init"))),
-                            hasInitializer(ignoringImplicit(initListExpr().bind("init"))),
-                            hasInitializer(ignoringImplicit(parenListExpr().bind("init"))),
-                            unless(hasInitializer(expr())));
+    auto hasBadInit =
+      anyOf(hasInitializer(ignoringImplicit(cxxConstructExpr().bind("init"))),
+            hasInitializer(ignoringImplicit(initListExpr().bind("init"))),
+            hasInitializer(ignoringImplicit(parenListExpr().bind("init"))),
+            allOf(hasType(qualType(hasCanonicalType(enumType()))),
+                  hasInitializer(ignoringParenImpCasts(
+                    expr(anyOf(cxxFunctionalCastExpr(), declRefExpr(to(enumConstantDecl())))).bind("init")))),
+            unless(hasInitializer(expr())));
+
+    auto const primitiveValue = qualType(unless(hasCanonicalType(enumType())),
+                                         anyOf(isInteger(), booleanType(), realFloatingPointType(), isAnyCharacter()));
 
     // Diagnose source patterns only: a dependent T{1} must not acquire a
     // primitive-initialization rule from one of its instantiations.
@@ -190,8 +307,7 @@ namespace clang::tidy::readability
                                unless(isImplicit()),
                                unless(isInstantiated()),
                                hasBadInit,
-                               unless(hasType(isAnyCharacter())),
-                               unless(hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType())))))
+                               unless(hasType(primitiveValue)))
                          .bind("var"),
                        this);
 
@@ -199,14 +315,13 @@ namespace clang::tidy::readability
     // unless(isImplicit()) skips compiler-synthesized VarDecls such as the
     // coroutine parameter-move copies, whose location lands on the first
     // coroutine keyword of the body and which have no stylable spelling.
-    finder->addMatcher(
-      varDecl(unless(parmVarDecl()),
-              unless(isImplicit()),
-              unless(isInstantiated()),
-              hasInitializer(expr().bind("init")),
-              hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType(), isAnyCharacter()))))
-        .bind("var"),
-      this);
+    finder->addMatcher(varDecl(unless(parmVarDecl()),
+                               unless(isImplicit()),
+                               unless(isInstantiated()),
+                               hasInitializer(expr().bind("init")),
+                               hasType(primitiveValue))
+                         .bind("var"),
+                       this);
   }
 
   namespace
@@ -356,6 +471,16 @@ namespace clang::tidy::readability
     SourceLocation const loc = var->getLocation();
     QualType const varType = var->getType();
     bool const hasAuto = hasAutoTypeSpelling(var);
+
+    if (varType->isEnumeralType())
+    {
+      if (auto const message = enumInitializationViolation(*var, init, *result.Context); !message.empty())
+      {
+        diag(loc, message);
+      }
+
+      return;
+    }
 
     if (bool const primitive = isPrimitiveType(varType); !primitive)
     {

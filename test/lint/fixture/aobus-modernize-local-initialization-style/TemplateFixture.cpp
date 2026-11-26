@@ -88,6 +88,9 @@ void initializeTemplateStatics()
 
   // POSITIVE
   auto localLiteral = 1;
+
+  // POSITIVE | redundant initialization from a same-type enumerator
+  auto fixed = DependentMode{DependentMode::One};
 }
 
 template void initializeTemplateStatics<std::int32_t>();
@@ -256,6 +259,15 @@ template struct SourceRecord<std::int32_t>;
 template struct SourceRecord<std::int32_t*>;
 template void initializeSourceKnownRecords<std::int32_t>(std::int32_t);
 template void initializeSourceKnownRecords<std::int32_t*>(std::int32_t*);
+
+template<typename T>
+void initializeDependentEnumerator()
+{
+  // NEGATIVE
+  auto value = T{T::One};
+}
+
+template void initializeDependentEnumerator<DependentMode>();
 
 template<typename T>
 using UnknownAlias = T;
