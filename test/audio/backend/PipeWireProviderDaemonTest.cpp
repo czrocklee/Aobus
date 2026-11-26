@@ -145,10 +145,10 @@ namespace ao::audio::backend::test
         return _cv.wait_for(lock, kRouteTimeout, [&] { return hasSeenLinkTo(sinkId); });
       }
 
-      bool hasObservedOnlyLinkTo(std::string_view sinkId) const
+      std::vector<std::string> observedSinkIds() const
       {
         auto const lock = std::scoped_lock{_mutex};
-        return _linkedSinkIds.size() == 1 && hasSeenLinkTo(sinkId);
+        return _linkedSinkIds;
       }
 
       std::optional<std::string> tryWaitForBackendError()
@@ -485,7 +485,7 @@ namespace ao::audio::backend::test
     {
       CAPTURE(expectedSink.globalId, expectedSink.nodeName, expectedSink.objectSerial);
       REQUIRE(observer.tryWaitForLinkTo(expectedSink.graphNodeId()));
-      CHECK(observer.hasObservedOnlyLinkTo(expectedSink.graphNodeId()));
+      CHECK(observer.observedSinkIds() == std::vector{expectedSink.graphNodeId()});
     }
 
     utility::ScopedRegistration openAndObserve(PipeWireProvider& provider,
@@ -501,7 +501,7 @@ namespace ao::audio::backend::test
 
     void requireRetainedLink(PlaybackObserver const& incumbentObserver, NativeSinkIdentity const& expectedSink)
     {
-      // A new monitor sees the graph after the competing open, not the incumbent's link history.
+      // A new monitor sees the current graph, not the incumbent's link history.
       auto provider = PipeWireProvider{};
       auto observer = PlaybackObserver{incumbentObserver.routeAnchor()};
       auto const graphRegistration = subscribePlaybackGraph(provider, observer);
@@ -817,18 +817,21 @@ namespace ao::audio::backend::test
   {
     requirePrivatePipeWire();
 
-    auto fallbackSink = NullAudioSinkGuard{kAlternateSinkName};
+    auto optFallbackSink = std::optional<NullAudioSinkGuard>{};
     auto optSelectedSink = std::optional<NullAudioSinkGuard>{std::in_place, kSelectedSinkName, "Audio/Sink", "2000"};
-    auto const alternate = requireSinkIdentity(fallbackSink, kAlternateSinkName);
     auto const selected = requireSinkIdentity(*optSelectedSink, kSelectedSinkName);
     auto fixture = PrivatePipeWireFixture{};
-    fixture.requireDevice(kAlternateSinkId);
     auto selectedDevice = fixture.requireDevice(kSelectedSinkId);
-    // The higher session priority makes this the actual default as well.
     // A concrete default-marked device is still a named selection.
     selectedDevice.isDefault = true;
     auto observer = PlaybackObserver{};
     auto backendPtr = std::unique_ptr<Backend>{};
+    auto graphRegistration = utility::ScopedRegistration{};
+    auto const openOnSelected = [&]
+    {
+      REQUIRE(backendPtr);
+      return openAndObserve(fixture.provider(), *backendPtr, observer, selected);
+    };
     bool expectReroute = true;
 
     SECTION("Fixed named selection reports a terminal output error")
@@ -846,25 +849,35 @@ namespace ao::audio::backend::test
     {
       backendPtr =
         fixture.provider().createBackend(Device{.isDefault = true, .backendId = kBackendPipeWire}, kProfileShared);
+      // Registry visibility does not mean WirePlumber has elected its default. Establish
+      // the initial route with one sink before offering the lower-priority fallback.
+      graphRegistration = openOnSelected();
     }
 
-    REQUIRE(backendPtr);
-    auto const graphRegistration = openAndObserve(fixture.provider(), *backendPtr, observer, selected);
+    auto const alternate = requireSinkIdentity(optFallbackSink.emplace(kAlternateSinkName), kAlternateSinkName);
+    fixture.requireDevice(kAlternateSinkId);
 
+    if (!graphRegistration)
+    {
+      // Named requests must select the requested sink with the alternative already present.
+      graphRegistration = openOnSelected();
+    }
+
+    CHECK(observer.observedSinkIds() == std::vector{selected.graphNodeId()});
     optSelectedSink.reset();
     fixture.requireDeviceRemoved(selectedDevice.id);
 
     if (expectReroute)
     {
-      CHECK(observer.tryWaitForLinkTo(alternate.graphNodeId()));
-      CHECK_FALSE(observer.backendError());
+      REQUIRE(observer.tryWaitForLinkTo(alternate.graphNodeId()));
+      requireRetainedLink(observer, alternate);
     }
     else
     {
       auto const optError = observer.tryWaitForBackendError();
       REQUIRE(optError);
       CHECK_FALSE(optError->empty());
-      CHECK(observer.hasObservedOnlyLinkTo(selected.graphNodeId()));
+      CHECK(observer.observedSinkIds() == std::vector{selected.graphNodeId()});
     }
   }
 } // namespace ao::audio::backend::test
