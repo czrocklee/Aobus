@@ -1931,18 +1931,17 @@ Both comparisons use the paths Git reports and ignore Git replacement refs.
 Neither verifies the entire worktree byte for byte; edits Git treats as unchanged
 can be absent from the lint scope.
 
-A bounded comparison selects reports for applicable changed inputs, or skips
-production lint if there are none. Scoped header reports do not check every
-dependent. Semantic BUILD changes,
-generation or lint-policy changes, deleted native sources, and other
-unbounded inputs select the full native lint graph. A modified BUILD file
-adds no lint inputs if its supported token stream is unchanged after
-ignoring comments and insignificant whitespace. The current graph alone
-cannot recover consumers removed by a semantic edit. The portal also selects
-the full graph if it cannot verify the comparison (including when history
-is unavailable) or an explicitly based comparison has no changed paths. A malformed [Git binding](build.md#shared-source-git-discovery),
-or one that cannot open this checkout, is a configuration error: the portal
-stops before starting Bazel.
+A verified comparison selects only added or modified native sources, headers,
+and include fragments eligible for production lint. Renames select the surviving
+path; deletions add no reports. A change only to BUILD files, scripts, or
+configuration therefore skips production lint, not the build or its other checks.
+Scoped lint does not check unchanged dependents for findings introduced by new
+build flags, generated code, or lint rules. Use `--extend` for that coverage;
+[CI on `main`](ci.md#reproduce-the-native-jobs) checks the whole platform graph.
+
+If the comparison cannot be verified, completion uses full lint. A malformed
+[Git binding](build.md#shared-source-git-discovery), or one that cannot open
+this checkout, is a configuration error: the portal stops before starting Bazel.
 
 Scope selection changes only production lint, not formatting, audits, lint
 fixtures, product builds, or other tests. For a bounded, nonempty lint scope,

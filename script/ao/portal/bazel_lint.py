@@ -28,7 +28,16 @@ from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
-from ao.policy.tidy_policy import common_prefix, component_parts, consumer_rank, find_stale_nolint_suppressions
+from ao.policy.tidy_policy import (
+    FRAGMENT_SUFFIXES,
+    HEADER_SUFFIXES,
+    LINT_SUFFIXES,
+    TRANSLATION_UNIT_SUFFIXES,
+    common_prefix,
+    component_parts,
+    consumer_rank,
+    find_stale_nolint_suppressions,
+)
 from ao.portal import bazel_workflows, bazel_workspace, build_dir, tidy_engine
 
 if TYPE_CHECKING:
@@ -48,10 +57,6 @@ _QUERY_ATTRIBUTES = frozenset(
 )
 _CQUERY_EXPRESSION = 'str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))'
 
-_SOURCE_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
-_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
-_INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
-LINT_SUFFIXES = tuple(sorted(_SOURCE_SUFFIXES | _HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES))
 _COMPILE_OWNER_KINDS = frozenset({"cc_library", "cc_binary", "cc_test", "objc_library"})
 _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
 _FEATURE_PATH_PREFIXES = {
@@ -305,11 +310,11 @@ def _canonical_owner(query_label: str) -> str:
 
 
 def _is_source(path: str) -> bool:
-    return PurePosixPath(path).suffix.lower() in _SOURCE_SUFFIXES
+    return PurePosixPath(path).suffix.lower() in TRANSLATION_UNIT_SUFFIXES
 
 
 def _is_header(path: str) -> bool:
-    return PurePosixPath(path).suffix.lower() in _HEADER_SUFFIXES
+    return PurePosixPath(path).suffix.lower() in HEADER_SUFFIXES
 
 
 def _component(path: str) -> tuple[str, ...] | None:
@@ -1181,7 +1186,7 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
 
         # Fragments never have a direct companion. For ordinary headers let the
         # configured index decide; the loading query alone cannot prove pairing.
-        needs_donor = any(PurePosixPath(path).suffix.lower() in _INCLUDE_FRAGMENT_SUFFIXES for path in selected)
+        needs_donor = any(PurePosixPath(path).suffix.lower() in FRAGMENT_SUFFIXES for path in selected)
         initial_groups = discovery_groups if needs_donor else direct_groups
         bep, inventories = report_pass("build", compatible, {}, initial_groups)
         consumers: dict[str, tuple[str, str]] = {}

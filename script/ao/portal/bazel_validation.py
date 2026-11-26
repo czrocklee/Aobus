@@ -45,7 +45,14 @@ from ao.core.bazel_native import BazelWorkspaceError
 from ao.core.paths import absolute_path
 from ao.graph.bazel_live_checkout import project_root
 from ao.policy import bazel_contract
-from ao.policy.tidy_policy import classify_relative, find_stale_nolint_suppressions, mode_buckets, platform_incompatible
+from ao.policy.tidy_policy import (
+    LINT_SUFFIXES,
+    TRANSLATION_UNIT_SUFFIXES,
+    classify_relative,
+    find_stale_nolint_suppressions,
+    mode_buckets,
+    platform_incompatible,
+)
 from ao.portal import bazel_test_ownership, bazel_verify
 from ao.portal.git_files import git_command
 
@@ -84,11 +91,6 @@ _EXECUTABLE_KEYS = frozenset({"label", "kind", "is_tool", "sources"})
 _PLATFORMS = frozenset({"linux", "macos", "windows"})
 _MODES = frozenset({"dbg", "opt", "fastbuild"})
 _PROFILES = frozenset({None, "release", "sampling"})
-
-# The lint policy's authored C++ vocabulary: translation units, headers and
-# include fragments. The audits share it instead of restating a file taxonomy.
-_CPP_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".mm", ".h", ".hh", ".hpp", ".hxx", ".def")
-_C_CPP_SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".mm")
 
 # The separate Linux wrapper diagnostic: one representative checkout source per
 # fact file, expanded through the declared SDK compiler from the runfiles.
@@ -248,7 +250,7 @@ def _c_only_compile(argv: Sequence[str]) -> bool:
     explicit C++ language or standard switch. A ``.c`` file compiled with
     ``-std=c++...`` keeps its C++ policy, including a missing-standard failure.
     """
-    source = next((argument for argument in argv if argument.endswith(_C_CPP_SOURCE_SUFFIXES)), None)
+    source = next((argument for argument in argv if argument.endswith(TRANSLATION_UNIT_SUFFIXES)), None)
     if source is None or not source.endswith(".c"):
         return False
     if any(re.fullmatch(r"--?std=c\+\+.*", argument) for argument in argv):
@@ -488,7 +490,7 @@ def _authored_cpp_inventory(manifest: bytes, root: Path) -> list[str]:
     return sorted(
         name
         for name in os.fsdecode(manifest).split("\0")
-        if name.endswith(_CPP_SUFFIXES)
+        if name.endswith(LINT_SUFFIXES)
         and classify_relative(name, explicit=False) != "IGNORE"
         and (root / name).is_file()
     )

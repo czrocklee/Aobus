@@ -51,9 +51,11 @@ omits runner-specific build paths, job counts, and cache options.
 | Push to `main` or manual **CI** dispatch | `./ao check --native-only --extend`        | `ao.bat check --native-only --desktop-tests --extend`        |
 
 Each native job logs the production lint scope and the reason for its
-selection. The PR comparison changes only production lint; in particular,
-Buildifier formatting and semantic lint still run. See the [completion gate](bazel.md#completion-gate)
-for fallback rules and suite selections. Windows desktop tests require an
+selection. PRs gate production clang-tidy on changed native files, not on
+unchanged consumers of a BUILD, toolchain, or lint-rule change. Buildifier
+formatting and semantic lint, native builds and tests remain required. Native
+pushes to `main` use `--extend` to catch findings in unchanged files. See the
+[completion gate](bazel.md#completion-gate) for fallback rules and suite selections. Windows desktop tests require an
 [interactive console and runtime](windows.md#ui-automation-naming-gate);
 macOS Core Audio tests require a [logged-in console user](macos.md#validation).
 
