@@ -16,7 +16,9 @@ namespace ao::tui::test
   TEST_CASE("TrackPresentationNavigation - includes builtin and custom views")
   {
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
-      {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense-albums"}},
+      {.label = "Dense Albums",
+       .optBasePresetId = rt::BuiltinPreset::Albums,
+       .spec = {.presetId = rt::CustomPresetId{1}}},
     };
 
     auto const items = makeTrackPresentationNavigation(
@@ -26,79 +28,69 @@ namespace ao::tui::test
     CHECK(items[0].id == "library");
     CHECK(items[0].label == "Library");
     CHECK(items[0].detail == "All tracks in album-artist and album order.");
-    CHECK(items.back().id == "dense-albums");
+    CHECK(items.back().id == "0000000000000001");
     CHECK(items.back().label == "Dense Albums");
     CHECK(items.back().detail == "custom from albums");
   }
 
-  TEST_CASE("TrackPresentationNavigation - falls back for sparse preset labels")
+  TEST_CASE("TrackPresentationNavigation - an unlabeled custom preset displays its canonical key")
   {
-    auto const builtin = std::vector<rt::TrackPresentationPreset>{
-      {.spec = rt::TrackPresentationSpec{.id = "raw"}},
-    };
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
-      {.spec = rt::TrackPresentationSpec{.id = "custom-raw"}},
+      {.spec = {.presetId = rt::CustomPresetId{0xabc}}},
     };
 
     auto const items =
-      makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::kAllTracksListId, builtin, custom);
+      makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::kAllTracksListId, {}, custom);
 
-    REQUIRE(items.size() == 2);
-    CHECK(items[0].label == "raw");
-    CHECK(items[1].label == "custom-raw");
-    CHECK(items[1].detail == "custom");
+    REQUIRE(items.size() == 1);
+    CHECK(items.front().label == "0000000000000abc");
+    CHECK(items.front().detail == "custom");
   }
 
   TEST_CASE("TrackPresentationNavigation - preserves complete builtin then custom order")
   {
-    auto const builtin = std::vector<rt::TrackPresentationPreset>{
-      {.spec = rt::TrackPresentationSpec{.id = "raw-first"}},
-      {.spec = rt::TrackPresentationSpec{.id = "raw-second"}},
+    auto const builtin = std::vector{
+      rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs),
+      rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums),
     };
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
-      {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense"}},
-      {.label = "Simple", .spec = rt::TrackPresentationSpec{.id = "simple"}},
+      {.label = "Dense Albums",
+       .optBasePresetId = rt::BuiltinPreset::Albums,
+       .spec = {.presetId = rt::CustomPresetId{2}}},
+      {.label = "Simple", .spec = {.presetId = rt::CustomPresetId{1}}},
     };
 
     auto const items =
       makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), rt::kAllTracksListId, builtin, custom);
 
     REQUIRE(items.size() == 4);
-    CHECK(items[0].id == "raw-first");
-    CHECK(items[0].label == "raw-first");
-    CHECK(items[1].id == "raw-second");
-    CHECK(items[1].label == "raw-second");
-    CHECK(items[2].id == "dense");
+    CHECK(items[0].id == "songs");
+    CHECK(items[0].label == "Songs");
+    CHECK(items[1].id == "albums");
+    CHECK(items[1].label == "Albums");
+    CHECK(items[2].id == "0000000000000002");
     CHECK(items[2].label == "Dense Albums");
     CHECK(items[2].detail == "custom from albums");
-    CHECK(items[3].id == "simple");
+    CHECK(items[3].id == "0000000000000001");
     CHECK(items[3].label == "Simple");
     CHECK(items[3].detail == "custom");
-  }
-
-  TEST_CASE("TrackPresentationNavigation - display labels fall back to default")
-  {
-    auto const& textCatalog = ao::test::englishMessageCatalog();
-    CHECK(trackPresentationDisplayId(textCatalog, "") == "default");
-    CHECK(trackPresentationDisplayId(textCatalog, "albums") == "albums");
-    CHECK(trackPresentationBadgeLabel(textCatalog, "") == "view:default");
-    CHECK(trackPresentationBadgeLabel(textCatalog, "albums") == "view:albums");
   }
 
   TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy")
   {
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
-      {.label = "Dicht", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense"}},
+      {.label = "Dicht", .optBasePresetId = rt::BuiltinPreset::Albums, .spec = {.presetId = rt::CustomPresetId{1}}},
     };
 
     auto const items = makeTrackPresentationNavigation(textCatalog, rt::kAllTracksListId, {}, custom);
 
     REQUIRE(items.size() == 1);
-    CHECK(items.front().id == "dense");
+    CHECK(items.front().id == "0000000000000001");
     CHECK(items.front().label == "Dicht");
     CHECK(items.front().detail == "benutzerdefiniert aus albums");
-    CHECK(trackPresentationDisplayId(textCatalog, "") == "Standard");
-    CHECK(trackPresentationBadgeLabel(textCatalog, "") == "Ansicht:Standard");
+    CHECK(trackPresentationDisplayLabel(textCatalog, rt::CustomPresetId{1}, items) == "Dicht");
+    CHECK(trackPresentationDisplayLabel(textCatalog, rt::CustomPresetId{2}, items) == "0000000000000002");
+    CHECK(trackPresentationDisplayLabel(textCatalog, rt::BuiltinPreset::Albums, items) == "Alben");
   }
 } // namespace ao::tui::test

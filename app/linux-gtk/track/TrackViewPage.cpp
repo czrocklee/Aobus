@@ -62,6 +62,7 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 #include <sigc++/adaptors/track_obj.h>
+#include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
 #include <array>
@@ -265,6 +266,7 @@ namespace ao::gtk
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
+    , _renderedPresentation{presentation}
     , _modelPtr{std::move(modelPtr)}
 
     , _columnLayouts{columnLayouts}
@@ -298,6 +300,7 @@ namespace ao::gtk
     installOrderDragController();
     _viewHostPtr->columnController().applyColumnLayout(visibleFields);
     _viewHostPtr->columnController().updateTitlePositionVariable();
+    configureColumnSorting();
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
@@ -313,6 +316,8 @@ namespace ao::gtk
 
     append(_statusLabel);
     append(_scrolledWindow);
+    _beforeResetConnection =
+      _modelPtr->signalBeforeReset().connect(sigc::mem_fun(*this, &TrackViewPage::rememberSortScrollPosition));
   }
 
   TrackViewPage::~TrackViewPage()
@@ -323,6 +328,8 @@ namespace ao::gtk
     // emitted while the main context runs cannot enter a page whose teardown
     // steps below have already started.
     _themeRefreshConnection.disconnect();
+    _beforeResetConnection.disconnect();
+    _viewHostPtr->columnController().disconnectSorting();
     _tasks.cancelAll();
     _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
@@ -463,14 +470,59 @@ namespace ao::gtk
     _optOrderCapabilityStatus.reset();
   }
 
+  void TrackViewPage::bindProjection(std::shared_ptr<rt::TrackListProjection const> const& projectionPtr,
+                                     rt::TrackPresentationSpec const& presentation)
+  {
+    _modelPtr->bindProjection(projectionPtr);
+    _keepSortAtTop = false;
+    _renderedPresentation = presentation;
+    rebuildColumnView();
+  }
+
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
-    rebuildColumnView(presentation);
+    // The model already delivered any row changes. Keep the mounted table, its
+    // measured columns and selection when only the displayed sort has changed.
+    auto const keepAtTop = std::exchange(_keepSortAtTop, false);
+    auto const unchanged = _renderedPresentation == presentation;
+    auto const canKeepColumns = unchanged || _renderedPresentation.hasOnlyColumnSortChange(presentation);
+    _renderedPresentation = presentation;
+
+    if (auto& columns = _viewHostPtr->columnController(); canKeepColumns && columns.hasCurrentLayout())
+    {
+      if (auto const capabilities = orderCapabilities(); capabilities.canGapMove == hasOrderDragHandle())
+      {
+        updateOrderCapabilityStatus(capabilities);
+        // Binding a replacement projection may already have installed this spec.
+        // Its posted notification must not discard a newer click on that table.
+        if (!unchanged || !columns.hasPendingSort())
+        {
+          configureColumnSorting();
+        }
+
+        if (keepAtTop && _modelPtr->get_n_items() != 0 &&
+            selectionController().primarySelectedTrackId() == kInvalidTrackId)
+        {
+          _viewHostPtr->columnView().scroll_to(0);
+        }
+
+        return;
+      }
+    }
+
+    rebuildColumnView();
   }
 
   void TrackViewPage::refreshOrderCapabilities()
   {
-    installOrderDragController();
+    if (auto const capabilities = orderCapabilities(); hasOrderDragHandle() != capabilities.canGapMove)
+    {
+      rebuildColumnView();
+    }
+    else
+    {
+      updateOrderCapabilityStatus(capabilities);
+    }
   }
 
   void TrackViewPage::setPlayingTrackId(TrackId trackId)
@@ -516,13 +568,14 @@ namespace ao::gtk
     };
   }
 
-  void TrackViewPage::rebuildColumnView(rt::TrackPresentationSpec const& presentation)
+  void TrackViewPage::rebuildColumnView()
   {
     auto const visibleFields =
-      uimodel::visibleTrackFieldsInStoredLayout(presentation, _columnLayouts.layoutForList(_listId));
+      uimodel::visibleTrackFieldsInStoredLayout(_renderedPresentation, _columnLayouts.layoutForList(_listId));
     auto const factoryProvider = columnFactoryProvider(visibleFields);
 
     // 1. Detach UI from Model and Tree immediately.
+    _viewHostPtr->columnController().disconnectSorting();
     _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
     _scrolledWindow.unset_child();
@@ -536,6 +589,7 @@ namespace ao::gtk
     installOrderDragController();
     _viewHostPtr->columnController().applyColumnLayout(visibleFields);
     _viewHostPtr->columnController().updateTitlePositionVariable();
+    configureColumnSorting();
 
     // 4. Apply decorations (Section Headers)
     updateSectionHeaders();
@@ -567,40 +621,87 @@ namespace ao::gtk
     _viewHostPtr->configureSelectionActivation();
   }
 
-  void TrackViewPage::installOrderDragController()
+  void TrackViewPage::rememberSortScrollPosition()
   {
-    _orderDragControllerPtr.reset();
+    // GTK follows the old first item across a reset. At the top with no selection,
+    // a header reorder should show the new first row instead. A marker-only
+    // change sends no reset and leaves the user's scroll position alone.
+    if (auto const* live = _views.findTrackListPresentation(_viewId);
+        live == nullptr || !get_mapped() || !_renderedPresentation.hasOnlyColumnSortChange(*live))
+    {
+      return;
+    }
 
+    if (auto const adjustmentPtr = _scrolledWindow.get_vadjustment();
+        adjustmentPtr && adjustmentPtr->get_value() <= adjustmentPtr->get_lower() &&
+        selectionController().primarySelectedTrackId() == kInvalidTrackId)
+    {
+      _keepSortAtTop = true;
+    }
+  }
+
+  void TrackViewPage::configureColumnSorting()
+  {
     if (_viewId == rt::kInvalidViewId)
+    {
+      return;
+    }
+
+    auto onSort = [this, presentation = _renderedPresentation](rt::TrackColumnSort const sort)
+    {
+      // The preset can change after GTK queues the click but before this generation is rebuilt.
+      if (auto const* live = _views.findTrackListPresentation(_viewId); live == nullptr || *live != presentation)
+      {
+        return;
+      }
+
+      if (auto const res = _views.setColumnSort(_viewId, sort); !res)
+      {
+        APP_LOG_ERROR("Failed to sort track view: {}", res.error().message);
+        setStatusMessage(
+          i18n::requiredFormat(_textCatalog, i18n::MessageId::TrackSortFailed, {{"detail", res.error().message}}));
+      }
+    };
+    _viewHostPtr->columnController().configureSorting(_renderedPresentation.optColumnSort, std::move(onSort));
+  }
+
+  void TrackViewPage::updateOrderCapabilityStatus(uimodel::ListOrderCapabilityState const& capabilities)
+  {
+    if (_viewId == rt::kInvalidViewId || capabilities.canGapMove)
     {
       clearOrderCapabilityStatus();
       return;
     }
 
-    if (auto const capabilities = orderCapabilities(); !capabilities.canGapMove)
+    auto const stateRes = _views.findTrackListState(_viewId);
+    auto const sourceStateRes = _views.listSourceState(_viewId);
+    auto const savedList = stateRes && !rt::isVirtualListId(stateRes->listId);
+    auto const authoring = _library.authoringAvailability();
+    auto const shouldExplain =
+      savedList && (capabilities.canAuthorOrder || stateRes->presentation.isPreset(rt::BuiltinPreset::ListOrder) ||
+                    authoring.state == rt::LibraryAuthoringState::Maintenance || stateRes->optFilterError ||
+                    !sourceStateRes || *sourceStateRes != rt::TrackSourceState::Live);
+
+    if (shouldExplain)
     {
-      auto const stateRes = _views.findTrackListState(_viewId);
-      auto const sourceStateRes = _views.listSourceState(_viewId);
-      auto const savedList = stateRes && !rt::isVirtualListId(stateRes->listId);
-      auto const authoring = _library.authoringAvailability();
-      auto const shouldExplain =
-        savedList && (capabilities.canAuthorOrder || stateRes->presentation.id == rt::kListOrderTrackPresentationId ||
-                      authoring.state == rt::LibraryAuthoringState::Maintenance || stateRes->optFilterError ||
-                      !sourceStateRes || *sourceStateRes != rt::TrackSourceState::Live);
+      setOrderCapabilityStatus(capabilities.disabledReason);
+    }
+    else
+    {
+      clearOrderCapabilityStatus();
+    }
+  }
 
-      if (shouldExplain)
-      {
-        setOrderCapabilityStatus(capabilities.disabledReason);
-      }
-      else
-      {
-        clearOrderCapabilityStatus();
-      }
+  void TrackViewPage::installOrderDragController()
+  {
+    auto const capabilities = orderCapabilities();
+    updateOrderCapabilityStatus(capabilities);
 
+    if (!capabilities.canGapMove)
+    {
       return;
     }
 
-    clearOrderCapabilityStatus();
     _orderDragControllerPtr = std::make_unique<TrackOrderDragController>(
       _asyncRuntime,
       _library,

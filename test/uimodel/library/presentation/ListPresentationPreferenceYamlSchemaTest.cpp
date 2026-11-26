@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/utility/Uuid.h>
@@ -19,10 +20,9 @@ namespace ao::uimodel::test
     auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
   } // namespace
 
-  TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves opaque presentation ids")
+  TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves custom preset keys")
   {
-    auto state = ListPresentations::Snapshot{};
-    state[ListId{10}] = "plugin-preset";
+    auto const state = ListPresentations::Snapshot{{ListId{10}, rt::CustomPresetId{0x1a}}};
 
     auto const documentRes = toListPresentationPreferenceDocument(state, kLibraryId);
 
@@ -31,13 +31,12 @@ namespace ao::uimodel::test
     CHECK(documentRes->libraryId == kLibraryId);
     REQUIRE(documentRes->preferences.size() == 1);
     CHECK(documentRes->preferences[0].listId == 10);
-    CHECK(documentRes->preferences[0].presentationId == "plugin-preset");
+    CHECK(documentRes->preferences[0].presentationId == "000000000000001a");
 
     auto const decodedRes = listPresentationPreferenceStateFromDocument(*documentRes);
 
     REQUIRE(decodedRes);
-    REQUIRE((*decodedRes).size() == 1);
-    CHECK((*decodedRes).at(ListId{10}) == "plugin-preset");
+    CHECK(*decodedRes == state);
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects an invalid document as one object")
@@ -76,6 +75,15 @@ namespace ao::uimodel::test
       CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
+    SECTION("Invented custom name is not a preset key")
+    {
+      document.preferences.push_back({.listId = 11, .presentationId = "plugin-preset"});
+      auto const res = listPresentationPreferenceStateFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
     SECTION("Duplicate list id")
     {
       document.preferences.push_back(document.preferences[0]);
@@ -88,8 +96,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - owns the exact YAML mapping")
   {
-    auto state = ListPresentations::Snapshot{};
-    state[ListId{10}] = "plugin-preset";
+    auto const state = ListPresentations::Snapshot{{ListId{10}, rt::CustomPresetId{0x1a}}};
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(ListPresentationPreferenceYamlSchema{kLibraryId}.serialize(tree.rootref(), state));
@@ -98,7 +105,7 @@ namespace ao::uimodel::test
     CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(tree.rootref()["preferences"].is_seq());
     REQUIRE(tree.rootref()["preferences"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "plugin-preset");
+    CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "000000000000001a");
 
     auto const decodedRes =
       ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
@@ -109,7 +116,8 @@ namespace ao::uimodel::test
   TEST_CASE(
     "ListPresentationPreferenceYamlSchema - a document saved for another library keeps only virtual-list preferences")
   {
-    auto state = ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}};
+    auto const state = ListPresentations::Snapshot{
+      {ListId{10}, rt::BuiltinPreset::Albums}, {rt::kAllTracksListId, rt::BuiltinPreset::Songs}};
     auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
     auto tree = ryml::Tree{yaml::callbacks()};
     REQUIRE(ListPresentationPreferenceYamlSchema{otherLibraryId}.serialize(tree.rootref(), state));
@@ -118,7 +126,7 @@ namespace ao::uimodel::test
 
     REQUIRE(decodedRes);
     // List 10 names an unrelated list here; All Tracks is the same view in every library.
-    CHECK((*decodedRes) == ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
+    CHECK(*decodedRes == ListPresentations::Snapshot{{rt::kAllTracksListId, rt::BuiltinPreset::Songs}});
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates")

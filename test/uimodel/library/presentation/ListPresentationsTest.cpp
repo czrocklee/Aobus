@@ -18,10 +18,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <initializer_list>
-#include <map>
 #include <memory>
-#include <string>
 #include <tuple>
 #include <vector>
 
@@ -34,16 +31,16 @@ namespace ao::uimodel::test
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
 
-    store.setPresentationIdForList(kInvalidListId, "albums");
+    store.setPresentationIdForList(kInvalidListId, rt::BuiltinPreset::Albums);
     CHECK_FALSE(store.presentationIdForList(kInvalidListId));
+    store.clearPresentationForList(rt::kAllTracksListId);
+    CHECK(store.snapshot().empty());
     CHECK(events.empty());
 
-    store.setPresentationIdForList(rt::kAllTracksListId, "albums");
-    store.setPresentationIdForList(rt::kAllTracksListId, "albums");
+    store.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
+    store.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
 
-    auto const optId = store.presentationIdForList(rt::kAllTracksListId);
-    REQUIRE(optId);
-    CHECK(*optId == "albums");
+    CHECK(store.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::Albums});
     REQUIRE(events.size() == 1);
     CHECK(events[0] == rt::kAllTracksListId);
 
@@ -54,45 +51,6 @@ namespace ao::uimodel::test
     CHECK(events[1] == rt::kAllTracksListId);
   }
 
-  TEST_CASE("ListPresentations - copied presentation id survives preference removal")
-  {
-    auto fixture = TrackPresentationFixture{};
-    auto& store = fixture.listPresentations;
-    store.setPresentationIdForList(rt::kAllTracksListId, "albums");
-    auto copiedId = std::string{};
-
-    {
-      auto const optId = store.presentationIdForList(rt::kAllTracksListId);
-      REQUIRE(optId);
-      copiedId.assign(*optId);
-    }
-
-    store.clearPresentationForList(rt::kAllTracksListId);
-
-    CHECK(copiedId == "albums");
-    CHECK_FALSE(store.presentationIdForList(rt::kAllTracksListId));
-  }
-
-  TEST_CASE("ListPresentations - empty presentation id clears without inserting empty state")
-  {
-    auto fixture = TrackPresentationFixture{};
-    auto& store = fixture.listPresentations;
-    auto events = std::vector<ListId>{};
-    auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
-
-    store.setPresentationIdForList(rt::kAllTracksListId, "");
-    CHECK(store.snapshot().empty());
-    CHECK(events.empty());
-
-    store.setPresentationIdForList(rt::kAllTracksListId, "albums");
-    store.setPresentationIdForList(rt::kAllTracksListId, "");
-
-    CHECK(store.snapshot().empty());
-    REQUIRE(events.size() == 2);
-    CHECK(events[0] == rt::kAllTracksListId);
-    CHECK(events[1] == rt::kAllTracksListId);
-  }
-
   TEST_CASE("ListPresentations - All Tracks rejects a persisted List Order pin but accepts a flat unsorted custom pin")
   {
     auto fixture = TrackPresentationFixture{};
@@ -100,18 +58,22 @@ namespace ao::uimodel::test
     auto const& library = commandsFixture.library();
     auto& store = fixture.listPresentations;
 
-    store.restore({{rt::kAllTracksListId, std::string{rt::kListOrderTrackPresentationId}}}, {});
-    CHECK(store.presentationForList(rt::kAllTracksListId, library).id == "albums");
-    CHECK(store.presentationIdForList(rt::kAllTracksListId) == rt::kListOrderTrackPresentationId);
+    store.restore({{rt::kAllTracksListId, rt::BuiltinPreset::ListOrder}}, {});
+    CHECK(store.presentationForList(rt::kAllTracksListId, library).isPreset(rt::BuiltinPreset::Albums));
+    CHECK(store.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::ListOrder});
 
+    auto const presetId = rt::CustomPresetId{0x1a};
     auto const flatSpec = rt::TrackPresentationSpec{
-      .id = "tag-audit",
+      .presetId = presetId,
       .groupBy = rt::TrackGroupKey::None,
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Tags},
     };
     fixture.catalog.addCustomPresentation(rt::CustomTrackPresentationPreset{
-      .label = "Tag Audit", .basePresetId = std::string{rt::kDefaultTrackPresentationId}, .spec = flatSpec});
-    store.setPresentationIdForList(rt::kAllTracksListId, flatSpec.id);
+      .label = "Tag Audit",
+      .optBasePresetId = rt::TrackPresetId{rt::BuiltinPreset::Library},
+      .spec = flatSpec,
+    });
+    store.setPresentationIdForList(rt::kAllTracksListId, presetId);
 
     CHECK(store.presentationForList(rt::kAllTracksListId, library) == flatSpec);
   }
@@ -132,14 +94,15 @@ namespace ao::uimodel::test
       rt::ListDraft{.parentId = parentId, .name = "Bach", .expression = "$composer = \"Bach\""})));
 
     // The inherited work would outrank the child expression if included.
-    CHECK(store.presentationForList(childId, library).id == "classical-composers");
+    CHECK(store.presentationForList(childId, library).isPreset(rt::BuiltinPreset::ClassicalComposers));
 
-    store.setPresentationIdForList(childId, rt::kListOrderTrackPresentationId);
-    CHECK(store.presentationForList(childId, library).id == rt::kListOrderTrackPresentationId);
+    store.setPresentationIdForList(childId, rt::BuiltinPreset::ListOrder);
+    CHECK(store.presentationForList(childId, library).isPreset(rt::BuiltinPreset::ListOrder));
 
-    store.setPresentationIdForList(childId, "missing-preset");
-    CHECK(store.presentationForList(childId, library).id == "classical-composers");
-    CHECK(store.presentationIdForList(childId) == "missing-preset");
+    auto const missingPresetId = rt::CustomPresetId{0x1a};
+    store.setPresentationIdForList(childId, missingPresetId);
+    CHECK(store.presentationForList(childId, library).isPreset(rt::BuiltinPreset::ClassicalComposers));
+    CHECK(store.presentationIdForList(childId) == rt::TrackPresetId{missingPresetId});
   }
 
   TEST_CASE("ListPresentations - missing list uses the All Tracks recommendation but keeps its own pin identity")
@@ -149,12 +112,12 @@ namespace ao::uimodel::test
     auto const& library = commandsFixture.library();
     auto& store = fixture.listPresentations;
     auto const missingListId = ListId{42};
-    store.setPresentationIdForList(rt::kAllTracksListId, "artists");
+    store.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
 
-    CHECK(store.presentationForList(missingListId, library).id == "albums");
+    CHECK(store.presentationForList(missingListId, library).isPreset(rt::BuiltinPreset::Albums));
 
-    store.setPresentationIdForList(missingListId, rt::kListOrderTrackPresentationId);
-    CHECK(store.presentationForList(missingListId, library).id == rt::kListOrderTrackPresentationId);
+    store.setPresentationIdForList(missingListId, rt::BuiltinPreset::ListOrder);
+    CHECK(store.presentationForList(missingListId, library).isPreset(rt::BuiltinPreset::ListOrder));
   }
 
   TEST_CASE("ListPresentations - bulk state emits only when changed")
@@ -163,14 +126,14 @@ namespace ao::uimodel::test
     auto& store = fixture.listPresentations;
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
-    auto const presentations = std::map<ListId, std::string>{{rt::kAllTracksListId, "albums"}};
+    auto const presentations = ListPresentations::Snapshot{{rt::kAllTracksListId, rt::BuiltinPreset::Albums}};
 
     store.restore(presentations, {});
     store.restore(presentations, {});
 
     REQUIRE(events.size() == 1);
     CHECK(events[0] == kInvalidListId);
-    CHECK(store.snapshot().at(rt::kAllTracksListId) == "albums");
+    CHECK(store.snapshot().at(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::Albums});
   }
 
   TEST_CASE("ListPresentations - restore drops preferences whose list the library no longer has")
@@ -183,7 +146,12 @@ namespace ao::uimodel::test
     // A list deleted while the frontend was down produces no LibraryChanges
     // event, so only the restore path can retire its entry.
     listPresentations.restore(
-      {{liveId, "songs"}, {staleId, "albums"}, {rt::kAllTracksListId, "songs"}}, std::vector{liveId});
+      {
+        {liveId, rt::BuiltinPreset::Songs},
+        {staleId, rt::BuiltinPreset::Albums},
+        {rt::kAllTracksListId, rt::BuiltinPreset::Songs},
+      },
+      std::vector{liveId});
 
     REQUIRE(listPresentations.snapshot().size() == 2);
     CHECK(listPresentations.snapshot().contains(liveId));
@@ -211,10 +179,10 @@ namespace ao::uimodel::test
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
     listPresentations.restore(
       {
-        {parentId, "songs"},
-        {childId, "albums"},
-        {grandchildId, std::string{rt::kListOrderTrackPresentationId}},
-        {unrelatedId, "songs"},
+        {parentId, rt::BuiltinPreset::Songs},
+        {childId, rt::BuiltinPreset::Albums},
+        {grandchildId, rt::BuiltinPreset::ListOrder},
+        {unrelatedId, rt::BuiltinPreset::Songs},
       },
       std::vector{parentId, childId, grandchildId, unrelatedId});
     auto removed = std::vector<ListId>{};
@@ -241,7 +209,8 @@ namespace ao::uimodel::test
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
-    listPresentations.restore({{ListId{42}, "songs"}, {ListId{43}, "albums"}}, std::vector{ListId{42}, ListId{43}});
+    listPresentations.restore({{ListId{42}, rt::BuiltinPreset::Songs}, {ListId{43}, rt::BuiltinPreset::Albums}},
+                              std::vector{ListId{42}, ListId{43}});
     auto removed = std::vector<ListId>{};
     // A persisting observer snapshots from inside this callback, so the entry
     // must already be gone by the time the change is announced.
@@ -272,7 +241,8 @@ namespace ao::uimodel::test
     auto const childId = ao::test::requireValue(
       commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto presentationsPtr = std::make_unique<ListPresentations>(presentationFixture.catalog, changes);
-    presentationsPtr->restore({{parentId, "songs"}, {childId, "albums"}}, std::vector{parentId, childId});
+    presentationsPtr->restore(
+      {{parentId, rt::BuiltinPreset::Songs}, {childId, rt::BuiltinPreset::Albums}}, std::vector{parentId, childId});
     auto removed = std::vector<ListId>{};
     auto sub = presentationsPtr->signalChanged().connect(
       [&removed, &presentationsPtr](ListId const listId)

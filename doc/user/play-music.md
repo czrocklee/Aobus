@@ -7,7 +7,7 @@ id: user.play-music
 ## Outcome
 
 Playback starts from the selected track in the Linux GTK application.
-The view you start from supplies the eligible tracks: sequential playback follows the source order, while shuffle chooses from the same source without following that order.
+The view you start from supplies the eligible tracks and the flat sort used for sequential playback. Shuffle chooses from the same tracks without following that order. Group headings are not part of the sequence. In a grouped view, the table can keep its groups while playback follows a flat order that crosses them differently.
 
 For other frontends, see [Use the Windows desktop](use-windows-desktop.md) or [Use the terminal frontend](use-tui.md).
 

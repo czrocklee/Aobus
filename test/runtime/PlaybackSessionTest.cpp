@@ -303,8 +303,7 @@ namespace ao::rt::test
       executor.drain();
       auto request = NavigationRequest{
         .target = FilteredListTarget{.listId = listId, .filterExpression = {}},
-        .optPresentation =
-          NavigationPresentation{.spec = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}}},
+        .optPresentation = NavigationPresentation{.spec = TrackPresentationSpec{.presetId = BuiltinPreset::ListOrder}},
       };
 
       if (!sortBy.empty())
@@ -2164,28 +2163,28 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
   }
 
-  TEST_CASE("PlaybackSession - List views and playback share Manual Order and sorted projections")
+  TEST_CASE("PlaybackSession - List Order breaks column sort ties in browse and playback")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
     auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    auto const alpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
-    auto const bravo = addPlayableTrack(*runtimePtr, *executor, "Bravo");
+    auto const firstAlpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
+    auto const secondAlpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
     auto const charlie = addPlayableTrack(*runtimePtr, *executor, "Charlie");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {alpha, bravo, charlie});
-    auto const movedIds = std::vector{charlie};
-    auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, alpha);
+    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {firstAlpha, secondAlpha, charlie});
+    auto const movedIds = std::vector{firstAlpha};
+    auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, {});
     REQUIRE(moved.status == AuthoringStatus::Applied);
     executor->drain();
 
     auto viewProjectionPtr = ao::test::requireValue(runtimePtr->views().findTrackListProjection(orderedList.viewId));
-    auto const manualOrder = std::vector{charlie, alpha, bravo};
+    auto const manualOrder = std::vector{secondAlpha, charlie, firstAlpha};
     CHECK(projectionTrackIds(*viewProjectionPtr) == manualOrder);
     CHECK(playbackProjectionTrackIds(*runtimePtr, orderedList.viewId) == manualOrder);
 
-    auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
-    REQUIRE(runtimePtr->views().setPresentation(orderedList.viewId, TrackPresentationSpec{.sortBy = titleSort}));
-    auto const titleOrder = std::vector{alpha, bravo, charlie};
+    REQUIRE(runtimePtr->views().setColumnSort(orderedList.viewId, TrackColumnSort{.column = TrackField::Title}));
+    CHECK(runtimePtr->views().trackListState(orderedList.viewId).presentation.isPreset(BuiltinPreset::ListOrder));
+    auto const titleOrder = std::vector{secondAlpha, firstAlpha, charlie};
     CHECK(projectionTrackIds(*viewProjectionPtr) == titleOrder);
     CHECK(playbackProjectionTrackIds(*runtimePtr, orderedList.viewId) == titleOrder);
   }

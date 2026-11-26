@@ -106,11 +106,18 @@ namespace ao::gtk
           return;
         }
 
-        entry->pagePtr->applyPresentation(ev.presentation);
-
-        if (_playingTrackId != kInvalidTrackId)
+        // Events are posted. Do not repaint a retired preset or apply a new
+        // presentation to the old projection while a filter rebind is pending.
+        if (auto const* const live = _views.findTrackListPresentation(ev.viewId);
+            live == nullptr || *live != ev.presentation)
         {
-          entry->pagePtr->setPlayingTrackId(_playingTrackId);
+          return;
+        }
+
+        if (auto const projectionRes = _views.findTrackListProjection(ev.viewId);
+            projectionRes && projectionRes->get() == entry->pagePtr->projection())
+        {
+          entry->pagePtr->applyPresentation(ev.presentation);
         }
       });
 
@@ -146,13 +153,7 @@ namespace ao::gtk
 
       // Visibility follows the authored view spec, not inferred projection metadata.
       auto const authoredPresentation = *presentation;
-      entry.modelPtr->bindProjection(projectionPtr);
-      entry.pagePtr->applyPresentation(authoredPresentation);
-
-      if (_playingTrackId != kInvalidTrackId)
-      {
-        entry.pagePtr->setPlayingTrackId(_playingTrackId);
-      }
+      entry.pagePtr->bindProjection(projectionPtr, authoredPresentation);
     }
 
     return true;

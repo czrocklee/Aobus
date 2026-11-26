@@ -387,7 +387,6 @@ namespace ao::winui::layout
 
         auto const headers = _trackList.headers();
         auto const showRecovery = _trackList.rowCount() != 0 && headers.Size() == 0;
-        _headers.ItemsSource(headers);
         _headers.Visibility(showRecovery ? Visibility::Collapsed : Visibility::Visible);
         _columnsRecovery.Visibility(showRecovery ? Visibility::Visible : Visibility::Collapsed);
         _surface.Width(_trackList.contentWidth());

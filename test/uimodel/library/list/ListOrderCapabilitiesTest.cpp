@@ -4,6 +4,7 @@
 #include "test/MessageCatalogTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -43,7 +44,7 @@ namespace ao::uimodel::test
         .listId = ListId{42},
         .presentation =
           rt::TrackPresentationSpec{
-            .id = "custom-flat-order",
+            .presetId = rt::CustomPresetId{1},
             .groupBy = rt::TrackGroupKey::None,
             .sortBy = {},
           },
@@ -73,10 +74,104 @@ namespace ao::uimodel::test
     CHECK(state.canForgetHiddenPositions);
     CHECK(state.disabledReason.empty());
 
-    input.presentation.id = std::string{rt::kListOrderTrackPresentationId};
-    input.presentation.sortBy = {rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = true}};
+    input.presentation.presetId = rt::BuiltinPreset::ListOrder;
+
+    SECTION("preset sort prevents order authoring")
+    {
+      input.presentation.sortBy = {{.field = rt::TrackSortField::Title, .ascending = true}};
+    }
+
     auto const sorted = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
     checkDisabled(sorted);
+    CHECK(sorted.disabledReason.contains("flat unsorted"));
+  }
+
+  TEST_CASE("ListOrder - a header override asks to choose the current view again")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto input = eligibleInput();
+    input.presentation.optColumnSort = rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = true};
+    auto const expected = ao::i18n::requiredText(catalog, ao::i18n::MessageId::ListOrderChooseCurrentView);
+
+    SECTION("custom flat preset")
+    {
+      auto const state = describeListOrderCapabilities(catalog, input);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == expected);
+    }
+
+    SECTION("built-in Manual Order uses the same recovery")
+    {
+      input.presentation.presetId = rt::BuiltinPreset::ListOrder;
+      auto const state = describeListOrderCapabilities(catalog, input);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == expected);
+    }
+
+    SECTION("loaded view projects the same reason")
+    {
+      auto const view = rt::TrackListViewState{.listId = input.listId, .presentation = input.presentation};
+      auto const state = describeViewListOrderCapabilities(catalog, view, rt::TrackSourceState::Live, input.authoring);
+
+      checkDisabled(state);
+      CHECK(state.disabledReason == expected);
+    }
+  }
+
+  TEST_CASE("ListOrder - earlier blocks take precedence over a header override")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto input = eligibleInput();
+    input.presentation.optColumnSort = rt::TrackColumnSort{.column = rt::TrackField::Artist, .ascending = false};
+    auto expected = ao::i18n::MessageId::ListOrderChooseCurrentView;
+
+    SECTION("virtual source")
+    {
+      input.listId = rt::kAllTracksListId;
+      expected = ao::i18n::MessageId::ListOrderSavedListsOnly;
+    }
+
+    SECTION("maintenance")
+    {
+      input.authoring.state = rt::LibraryAuthoringState::Maintenance;
+      expected = ao::i18n::MessageId::ListOrderLibraryBusy;
+    }
+
+    SECTION("source unavailable")
+    {
+      input.sourceLive = false;
+      expected = ao::i18n::MessageId::ListOrderListUnavailable;
+    }
+
+    SECTION("filter error")
+    {
+      input.sourceHasError = true;
+      expected = ao::i18n::MessageId::ListOrderFixFilter;
+    }
+
+    SECTION("grouped presentation")
+    {
+      input.presentation.groupBy = rt::TrackGroupKey::Album;
+      expected = ao::i18n::MessageId::ListOrderChooseFlatPresentation;
+    }
+
+    SECTION("base sort")
+    {
+      input.presentation.sortBy = {{.field = rt::TrackSortField::Title, .ascending = true}};
+      expected = ao::i18n::MessageId::ListOrderChooseFlatPresentation;
+    }
+
+    SECTION("quick filter does not replace the header-override recovery")
+    {
+      input.quickFilterExpression = "$year >= 2020";
+      expected = ao::i18n::MessageId::ListOrderChooseCurrentView;
+    }
+
+    auto const state = describeListOrderCapabilities(catalog, input);
+    checkDisabled(state);
+    CHECK(state.disabledReason == ao::i18n::requiredText(catalog, expected));
   }
 
   TEST_CASE("ListOrder - quick filter keeps only absolute moves")

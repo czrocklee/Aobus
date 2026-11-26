@@ -167,6 +167,7 @@ namespace ao::rt
   /// Exact TrackField ids plus the structured Credits list name.
   /// Matching is case-sensitive and does not accept query aliases.
   bool isReservedCustomMetadataKey(std::string_view key) noexcept;
+  std::optional<TrackSortField> trackSortFieldForColumn(TrackField column);
   std::optional<TrackSortField> trackSortFieldFromId(std::string_view id);
   std::optional<TrackGroupKey> trackGroupKeyFromId(std::string_view id);
   std::optional<TrackField> trackFieldFromQueryField(query::Field field);

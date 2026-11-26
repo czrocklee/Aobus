@@ -8,6 +8,8 @@
 #include "NativeCallback.h"
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -198,7 +200,7 @@ namespace
 - (BOOL)canAcceptTrackDrop:(id<NSDraggingInfo>)info outlineView:(NSOutlineView*)outline item:(id)item;
 - (NSString*)text:(MessageId)message;
 - (void)selectTracks:(std::vector<ao::TrackId> const&)selection;
-- (void)refreshSortDescriptors:(std::vector<ao::rt::TrackSortTerm> const&)sortBy;
+- (void)refreshSortDescriptors:(std::optional<ao::rt::TrackColumnSort> const&)optColumnSort;
 - (void)playTrack:(id)sender;
 - (void)playSelection:(id)sender;
 - (void)togglePlayback:(id)sender;
@@ -216,6 +218,7 @@ namespace
   ao::uimodel::ListTreeProjection _listTree;
   std::unordered_set<ao::ListId> _writableListIds;
   std::vector<ao::TrackId> _displayedSelection;
+  ao::rt::ViewId _renderedViewId;
   std::uint64_t _tableRevision;
   std::uint64_t _listRevision;
   BOOL _outlineInitialized;
@@ -227,7 +230,6 @@ namespace
   CGFloat _columnLayoutWidth;
   BOOL _columnLayoutModern;
   NSString* _activeListTitle;
-  NSString* _presentationIdentifier;
 }
 
 - (instancetype)initWithSession:(ao::appkit::LibrarySession&)session delegate:(id<AobusLibraryBrowserDelegate>)delegate
@@ -238,10 +240,10 @@ namespace
   {
     _session = &session;
     _delegate = delegate;
+    _renderedViewId = ao::rt::kInvalidViewId;
     _tableRevision = UINT64_MAX;
     _listRevision = UINT64_MAX;
     _activeListTitle = ao::appkit::catalogText(session.catalog(), MessageId::LibraryAllTracks);
-    _presentationIdentifier = @"";
     _listItems = [NSMutableDictionary dictionary];
     _listItems[@(ao::rt::kAllTracksListId.raw())] = @(ao::rt::kAllTracksListId.raw());
     _lists = [[NSOutlineView alloc] initWithFrame:NSZeroRect];
@@ -464,6 +466,7 @@ namespace
       {
         auto const origin = _trackScroll.contentView.bounds.origin;
         _refreshing = YES;
+        _renderedViewId = _session->tableViewId();
         _tableRevision = state.tableRevision;
         [_tracks reloadData];
         [self selectTracks:selection];
@@ -515,15 +518,15 @@ namespace
         _displayedSelection = selection;
       }
 
+      auto const* tablePresentation = _session->runtime().views().findTrackListPresentation(_renderedViewId);
+      [self refreshSortDescriptors:tablePresentation != nullptr ? tablePresentation->optColumnSort : std::nullopt];
+      _activeListTitle = [self text:MessageId::LibraryAllTracks];
+
       if (!viewRes)
       {
-        _activeListTitle = [self text:MessageId::LibraryAllTracks];
-        _presentationIdentifier = @"";
         return;
       }
 
-      _presentationIdentifier = nativeText(viewRes->presentation.id);
-      _activeListTitle = [self text:MessageId::LibraryAllTracks];
       NSNumber* selectedItem = _listItems[@(ao::rt::kAllTracksListId.raw())];
 
       if (auto const row = _listTree.rowsById.find(viewRes->listId); row != _listTree.rowsById.end())
@@ -570,7 +573,6 @@ namespace
       }
 
       _refreshing = NO;
-      [self refreshSortDescriptors:viewRes->presentation.sortBy];
     });
 }
 
@@ -589,37 +591,29 @@ namespace
   [_tracks selectRowIndexes:indexes byExtendingSelection:NO];
 }
 
-- (void)refreshSortDescriptors:(std::vector<ao::rt::TrackSortTerm> const&)sortBy
+- (void)refreshSortDescriptors:(std::optional<ao::rt::TrackColumnSort> const&)optColumnSort
 {
   auto* sortDescriptors = [NSMutableArray<NSSortDescriptor*> array];
 
-  if (!sortBy.empty())
+  if (optColumnSort)
   {
-    auto const term = sortBy.front();
     NSString* key = nil;
 
-    if (sortBy.size() >= 2 && term.field == ao::rt::TrackSortField::DiscNumber &&
-        sortBy[1].field == ao::rt::TrackSortField::TrackNumber && sortBy[1].ascending == term.ascending)
+    switch (optColumnSort->column)
     {
-      key = @"#";
-    }
-    else
-    {
-      switch (term.field)
-      {
-        case ao::rt::TrackSortField::TrackNumber: key = @"#"; break;
-        case ao::rt::TrackSortField::Title: key = @"Title"; break;
-        case ao::rt::TrackSortField::Artist: key = @"Artist"; break;
-        case ao::rt::TrackSortField::Album: key = @"Album"; break;
-        case ao::rt::TrackSortField::Duration: key = @"Duration"; break;
-        default: break;
-      }
+      case ao::rt::TrackField::DisplayTrackNumber: key = @"#"; break;
+      case ao::rt::TrackField::Title: key = @"Title"; break;
+      case ao::rt::TrackField::Artist: key = @"Artist"; break;
+      case ao::rt::TrackField::Album: key = @"Album"; break;
+      case ao::rt::TrackField::Duration: key = @"Duration"; break;
+      default: break;
     }
 
     if (key != nil)
     {
-      [sortDescriptors addObject:[[NSSortDescriptor alloc] initWithKey:key
-                                                             ascending:static_cast<BOOL>(term.ascending)]];
+      auto* const descriptor = [[NSSortDescriptor alloc] initWithKey:key
+                                                           ascending:static_cast<BOOL>(optColumnSort->ascending)];
+      [sortDescriptors addObject:descriptor];
     }
   }
 
@@ -659,11 +653,6 @@ namespace
 - (NSString*)activeListTitle
 {
   return _activeListTitle;
-}
-
-- (NSString*)presentationIdentifier
-{
-  return _presentationIdentifier;
 }
 
 - (std::vector<ao::TrackId>)selectedTrackIds
@@ -1208,7 +1197,8 @@ namespace
 - (void)tableView:(NSTableView*)table
   sortDescriptorsDidChange:(NSArray<NSSortDescriptor*>*) [[maybe_unused]] oldDescriptors
 {
-  if (table != _tracks || _refreshing != NO || [self isClosing] != NO || table.sortDescriptors.count == 0)
+  if (table != _tracks || _refreshing != NO || [self isClosing] != NO ||
+      _tableRevision != _session->state().tableRevision || table.sortDescriptors.count == 0)
   {
     return;
   }
@@ -1216,34 +1206,33 @@ namespace
   nativeCallback(
     [&]
     {
-      auto* const descriptor = table.sortDescriptors.firstObject;
-      auto const key = descriptor.key;
-      auto optField = std::optional<ao::rt::TrackSortField>{};
+      auto const key = table.sortDescriptors.firstObject.key;
+      auto optColumn = std::optional<ao::rt::TrackField>{};
 
       if ([key isEqual:@"#"] != 0)
       {
-        optField = ao::rt::TrackSortField::TrackNumber;
+        optColumn = ao::rt::TrackField::DisplayTrackNumber;
       }
       else if ([key isEqual:@"Title"] != 0)
       {
-        optField = ao::rt::TrackSortField::Title;
+        optColumn = ao::rt::TrackField::Title;
       }
       else if ([key isEqual:@"Artist"] != 0)
       {
-        optField = ao::rt::TrackSortField::Artist;
+        optColumn = ao::rt::TrackField::Artist;
       }
       else if ([key isEqual:@"Album"] != 0)
       {
-        optField = ao::rt::TrackSortField::Album;
+        optColumn = ao::rt::TrackField::Album;
       }
       else if ([key isEqual:@"Duration"] != 0)
       {
-        optField = ao::rt::TrackSortField::Duration;
+        optColumn = ao::rt::TrackField::Duration;
       }
 
-      if (optField)
+      if (optColumn)
       {
-        if (auto res = _session->sort(*optField, descriptor.ascending != 0); !res)
+        if (auto const res = _session->toggleSort(_renderedViewId, *optColumn); !res)
         {
           showError(_tracks.window, [self text:MessageId::AppKitOperationFailed], nativeText(res.error().message));
         }

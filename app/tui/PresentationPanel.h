@@ -5,13 +5,13 @@
 
 #include "TrackPresentationNavigation.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackPresentation.h>
 
 #include <ftxui/screen/box.hpp>
 
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ftxui
@@ -39,12 +39,12 @@ namespace ao::tui
 
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
-                                        std::string_view activePresentationId,
+                                        rt::TrackPresetId const& activePreset,
                                         KeymapPlan const& keymapPlan,
                                         std::int32_t terminalColumns);
   ftxui::Element presentationPanel(i18n::MessageCatalog const& textCatalog,
                                    std::vector<TrackPresentationNavEntry> const& items,
-                                   std::string_view activePresentationId,
+                                   rt::TrackPresetId const& activePreset,
                                    std::int32_t selectedIndex,
                                    KeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* rowHitRegions = nullptr,

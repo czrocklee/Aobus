@@ -145,6 +145,106 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == std::vector{second, third, fourth});
   }
 
+  TEST_CASE("TrackListProjection - equal effective ordering still resets for changes beyond a column marker")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack(library::test::TrackSpec{.title = "First", .album = "Album"});
+    auto const second = libraryFixture.addTrack(library::test::TrackSpec{.title = "Second", .album = "Album"});
+    auto sourcePtr = makeMutableTrackSource({second, first});
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto const initial = TrackPresentationSpec{
+      .presetId = CustomPresetId{1},
+      .groupBy = TrackGroupKey::Album,
+      .sortBy = {{.field = TrackSortField::Title}},
+      .visibleFields = {TrackField::Title, TrackField::Artist},
+      .redundantFields = {TrackField::Album},
+    };
+    projection.setPresentation(initial);
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const subscription =
+      projection.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    batches.clear();
+    auto updated = initial;
+    updated.optColumnSort = TrackColumnSort{TrackField::Title, true};
+
+    SECTION("the same spec is reapplied")
+    {
+      updated = initial;
+    }
+
+    SECTION("the base sort changes under the marker")
+    {
+      updated.sortBy.front().ascending = false;
+    }
+
+    SECTION("visible fields change alongside the marker")
+    {
+      updated.visibleFields.push_back(TrackField::Duration);
+    }
+
+    SECTION("redundant fields change alongside the marker")
+    {
+      updated.redundantFields.push_back(TrackField::AlbumArtist);
+    }
+
+    SECTION("the preset changes alongside the marker")
+    {
+      updated.presetId = CustomPresetId{2};
+    }
+
+    REQUIRE(updated.effectiveSortBy() == initial.effectiveSortBy());
+    projection.setPresentation(updated);
+
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const* reset = std::get_if<ProjectionReset>(&batches.front().deltas.front());
+    REQUIRE(reset != nullptr);
+    CHECK_FALSE(reset->optAffectedTrackIds);
+    CHECK(projection.presentation() == updated);
+    CHECK(projectionTrackIds(projection) == std::vector{first, second});
+  }
+
+  TEST_CASE("TrackListProjection - an alias change still resets when explicit redundant fields match the fallback")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const id = libraryFixture.addTrack(library::test::TrackSpec{.title = "Track", .album = "Album"});
+    auto sourcePtr = makeMutableTrackSource({id});
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
+    auto initial = albums;
+    initial.optColumnSort = TrackColumnSort{TrackField::TrackNumber, true};
+    auto updated = albums;
+    updated.optColumnSort = TrackColumnSort{TrackField::DisplayTrackNumber, true};
+
+    SECTION("specifying the inferred fields")
+    {
+      initial.redundantFields.clear();
+    }
+
+    SECTION("omitting the previously specified fields")
+    {
+      updated.redundantFields.clear();
+    }
+
+    REQUIRE(initial.effectiveSortBy() == updated.effectiveSortBy());
+    projection.setPresentation(initial);
+    auto expectedSnapshot = albums;
+    expectedSnapshot.optColumnSort = initial.optColumnSort;
+    REQUIRE(projection.presentation() == expectedSnapshot);
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const subscription =
+      projection.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    batches.clear();
+
+    projection.setPresentation(updated);
+
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+    expectedSnapshot.optColumnSort = updated.optColumnSort;
+    CHECK(projection.presentation() == expectedSnapshot);
+  }
+
   TEST_CASE("TrackListProjection - subscription observes a source mutation triggered by its initial reset")
   {
     auto libraryFixture = MusicLibraryFixture{};

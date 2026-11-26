@@ -41,6 +41,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -131,13 +132,23 @@ namespace ao::gtk
                                  ListNavigationController::Callbacks{
                                    .onListSelected = [&runtime, this](ListId listId)
                                    { return navigateToList(listId, runtime).has_value(); },
-                                   .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
-                                   { listPresentations.setPresentationIdForList(listId, presentationId); },
+                                   .onListPresentationSaved =
+                                     [this](ListId listId, std::string const& presentationKey)
+                                   {
+                                     if (presentationKey.empty())
+                                     {
+                                       listPresentations.clearPresentationForList(listId);
+                                     }
+                                     else if (auto const optId = rt::parseTrackPresetId(presentationKey); optId)
+                                     {
+                                       listPresentations.setPresentationIdForList(listId, *optId);
+                                     }
+                                   },
                                    .listPresentationCallback = [this](ListId listId) -> std::optional<std::string>
                                    {
-                                     if (auto const optPres = listPresentations.presentationIdForList(listId); optPres)
+                                     if (auto const optId = listPresentations.presentationIdForList(listId); optId)
                                      {
-                                       return std::string{*optPres};
+                                       return rt::trackPresetKey(*optId);
                                      }
 
                                      return std::nullopt;

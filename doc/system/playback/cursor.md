@@ -75,7 +75,7 @@ An empty Live projection is Gap at zero.
 ### Launch
 
 `playFromView(viewId, startTrackId)` captures one coherent launch description from `ViewService`.
-The captured spec contains the exact source list id, quick-filter expression, and `sortBy` order; grouping, visible fields, redundant fields, and other display state do not become succession context.
+The captured spec contains the exact source list id, quick-filter expression, and effective `sortBy` order. That order is a flat sequence of `TrackSortTerm`s derived from a header override, including disc-number expansion when the clicked column's sort key is track number. The display-column identity is not stored. Grouping, visible fields, redundant fields, preset id, base `sortBy`, and other display state do not become succession context. The detached projection therefore does not follow grouped section order: a grouping-column override that leaves the table's sections in place can still reverse those keys in playback.
 An empty sort preserves source order, including the effective saved rank exposed by `ListOrderSource`.
 
 Changing or destroying the originating view after launch does not alter the session.

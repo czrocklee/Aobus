@@ -22,6 +22,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -417,7 +418,7 @@ namespace ao::gtk::layout::test
       auto const albumViewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(albumViewId != rt::kInvalidViewId);
       CHECK(optRequest->preferredViewId == albumViewId);
-      CHECK(runtime.views().trackListState(albumViewId).presentation.id == "albums");
+      CHECK(runtime.views().trackListState(albumViewId).presentation.isPreset(rt::BuiltinPreset::Albums));
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
       CHECK(playback.snapshot().transport.hasDeferredResume);
       CHECK(playback.snapshot().transport.nowPlaying.trackId == coverTrackId);

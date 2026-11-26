@@ -30,6 +30,8 @@ namespace ao::rt
     explicit NavigationHistory(std::size_t maxSize = kDefaultMaxSize);
 
     bool tryCommit(NavigationPoint point);
+    /// Checkpoint a manual sort on a matching list, filter, and base presentation without adding a stop.
+    bool tryCheckpointColumnSort(NavigationPoint const& live);
     std::optional<NavigationPoint> back();
     std::optional<NavigationPoint> forward();
     std::optional<NavigationPoint> current() const;

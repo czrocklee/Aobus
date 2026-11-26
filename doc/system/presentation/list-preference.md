@@ -20,7 +20,7 @@ Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map
 ## Terminology
 
 - **List membership** is the local predicate composed with parent membership by the library.
-- **Presentation preference** is an optional `ListId -> presentation id` choice.
+- **Presentation preference** is an optional choice of a built-in or custom preset for a `ListId`.
 - **Active presentation** is the exact `TrackPresentationSpec` installed in one runtime view.
 - **Recommendation** is the source-aware fallback used when no resolvable preference exists.
 - **Replay** restores a recorded view snapshot without treating that restoration as a new user preference.
@@ -31,22 +31,20 @@ Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map
 - A presentation preference never changes list membership.
 - A transient filter narrows the current list while retaining its current presentation.
 - Preferences key by base `ListId`, not by `(ListId, filterExpression)`.
-- Unknown saved presentation ids fall back instead of blocking list opening.
+- A valid saved custom key whose preset is unavailable does not block List opening.
 - Runtime navigation snapshots retain exact presentation state independently of the saved default preference.
-- Replaying history does not write a new preference.
+- Neither replaying history nor sorting by column writes a preference.
 - Presentation preferences are per library and do not become global application state.
 - Deleting a saved List removes its preference in the shared UIModel lifecycle; one cascade change removes every deleted descendant preference.
 
 ## State model
 
-`ListPresentations` retains a map from valid `ListId` to non-empty presentation id.
-It also borrows the presentation catalog used to resolve built-in and custom ids.
+`ListPresentations::Snapshot` maps each valid `ListId` to a `TrackPresetId`. The model borrows the catalog that resolves the typed built-in or custom id. Canonical text keys cross the persistence boundary through the YAML codec, not through the model's map.
 
-`presentationIdForList()` returns a borrowed view into that map. The view remains valid only while the owner and that entry remain unchanged; replacement, clearing, effective restore, library reset, or deletion of the same List invalidates it. Callers copy the id before a reentrant callback, coroutine suspension, or any such mutation.
+`presentationIdForList()` returns an optional id by value. That copy survives map mutation and owner destruction but may no longer describe the current preference. Callers must still serialize access to the mutable model.
 
-Setting an empty id clears that list's preference.
-An empty id is Auto: absence of a saved preference, not today's concrete recommendation. The recommendation is resolved when a view opens, so no migration reinterprets an already stored concrete builtin id.
-Setting a preference for the invalid list id has no effect.
+`setPresentationIdForList()` takes a typed id. `clearPresentationForList()` removes the entry. Auto is the absence of a saved preference, not today's concrete recommendation. The recommendation is resolved when a view opens, so an already saved built-in id retains its meaning.
+Setting a preference for an invalid `ListId` has no effect.
 Bulk state replacement emits one general change only when the map actually differs.
 
 The active runtime view separately retains:
@@ -84,25 +82,22 @@ A filtered view over the same list is not a reusable plain target, so `Workspace
 
 A restored workspace view retains its exact presentation; Back and Forward also restore the recorded spec, even if the picker would not offer it today. Neither operation consults or edits the preference for that view. For fallback navigation when a view or List cannot be restored, see [workspace navigation](../workspace/navigation.md).
 GTK playback-session restoration uses `NewViewDefault` for its plain target. [Revealing the currently playing track](../workspace/navigation.md#navigate-to-the-playback-source) likewise resolves a default only for a newly created plain destination.
-A normal named choice installs the runtime spec before the frontend updates the base List's preference. In WinUI, a rejected [presentation-menu choice](../frontend/windows.md#commands-and-transitions) reports the error and leaves the view, history, and preference unchanged.
+A named picker choice installs the runtime spec and records the accepted choice in workspace history before updating the base List's preference. A rejected choice does not update the preference. A [column-header sort](../workspace/navigation.md#sort-a-view-by-column) keeps the current preset id and changes neither the preference nor the history cursor.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 A full library reset carries no incremental List ids, so it clears the complete preference map and emits every removed key.
 That lifecycle covers only deletions the owner observed while it was alive, so `restore()` takes the library's live list ids and drops every preference naming a list that no longer exists; a virtual list id is retained without appearing among them.
 Because a library never reuses a list id, that pruning also retires preferences for lists a restore replaced; a document saved for another library keeps only its virtual-list preferences when loaded, since that library's ids may name unrelated lists here.
 
-[WinUI startup without a restored view](../frontend/windows.md#commands-and-transitions) uses `NewViewDefault` for All Tracks. Its presentation menu records the accepted spec in workspace history before pinning it; a temporary column sort does neither.
+[WinUI startup without a restored view](../frontend/windows.md#commands-and-transitions) uses `NewViewDefault` for All Tracks.
 A [WinUI List editor save](../frontend/windows-library-workflows.md#create-and-edit-lists) has a different commit order: it updates the preference after the List mutation succeeds, then navigates with an `Override` carrying the resolved spec. Auto clears the pin and supplies the recommendation; even a reused view receives that spec. A navigation failure does not undo the List save or the preference change.
 
 Applying a quick filter changes the active source and filter text, not the active presentation or the preference. It does not rerun recommendation.
 
 ## Failure and cancellation
 
-An unknown or removed presentation id is recoverable and selects the recommendation path.
-An empty built-in catalog may produce an empty fallback spec; ordinary application composition supplies the built-in catalog.
-
 UIModel preference operations, recommendation, deletion cleanup, and persistence conversion are synchronous and have no cancellation point.
-An unsupported version, missing or malformed library id, duplicate or invalid list id, empty id, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
-An unknown nonempty presentation id remains a valid extensible reference and follows recommendation fallback.
+An unsupported version, missing or malformed library id, duplicate or invalid List id, malformed preset key, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
+A canonical key for an unavailable or removed custom preset is not malformed. It remains stored while List opening uses the recommendation.
 Frontend load/save failures do not mutate library list records.
 Bulk installation during GTK restore suppresses persistence callbacks, so loading one valid sibling group cannot rewrite another rejected group.
 TUI likewise installs both startup candidates before connecting save observers; rejection of one group leaves its seeded value while a valid sibling still loads.
@@ -117,16 +112,15 @@ Its catalog is built after workspace restoration; the map is restored against li
 When the group fails to load, AppKit keeps that session's preference changes in memory and never saves over the rejected group.
 The native catalog menu pins only accepted normal choices, Auto clears the key and applies the resulting recommendation, and a temporary header sort changes neither the map nor its save boundary.
 The menu keeps the shared separator between built-in and custom presets, checks only the stored choice, and defers rebuilding while it is open.
-Unavailable ids stay opaque and visible in the menu while new views use recommendation fallback; picker-less List edits do not write them.
+When the stored custom key is absent from the menu, AppKit adds a disabled checked row labeled with the localized `Unavailable: {id} (Auto)` message. That row is not the bare id used as an active caption. New views use the recommendation; picker-less List edits do not write the key.
 Workspace/history replay retains exact specs, and live List deletion retires the corresponding persisted entries through shared `ListPresentations`.
 
-WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
+WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps canonical keys across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
 It loads that store when the runtime graph binds rather than at startup, because the list ids the group is keyed by only mean anything against an open library.
 The `trackView.presentations` group carries required `version: 1` and the `libraryId` it was saved for, and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
-The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.
-Unknown custom ids remain tolerated because custom presentations may be removed independently; fallback resolution never rewrites that opaque value.
+Changing or removing a built-in slug requires a compatibility decision. A valid custom key may outlive its preset; recommendation never rewrites that key.
 Unversioned legacy preference maps and unsupported future versions are rejected without migration or automatic rewrite.
 The explicit schema returns `NotSupported` for a future version before interpreting its preferences.
 
@@ -134,14 +128,14 @@ TUI constructs one catalog and preference model after workspace restoration, so 
 
 ## Frontend observations
 
-Presentation pickers resolve labels and specs through the shared catalog.
+Presentation pickers resolve built-in and custom choices through the shared catalog and keep that preset's label while a header override is active. Choosing the active preset again clears the override. An unavailable custom preset's active caption is its bare canonical key. A missing pin is a different row: AppKit's menu and the GTK Saved-List editor show the localized `Unavailable: {id} (Auto)` text.
 The active view observes the selected `TrackPresentationSpec`; frontends do not read or write list storage to remember the choice.
 
 Quick-filter controls and List editors may display the current presentation, but filter editing remains independent from preference mutation.
 
-The GTK Saved-List editor shows an unavailable stored id as an explicit selected option, labeled with the retained opaque id, while list opening uses recommendation fallback. A rename or filter-only edit preserves that preference; only choosing another presentation replaces it, and choosing Auto clears it. The editor's option catalog is a construction-time snapshot, so display and save use the same identities even if the workspace presets change while the dialog is open. Opening the List resolves the retained id through the live catalog, which may now contain a changed preset or require fallback.
+The GTK Saved-List editor shows an unavailable custom preset as an explicit selected option labeled `Unavailable: {id} (Auto)`, and saving that row keeps the stored key. List opening uses the recommendation. A rename or filter-only edit preserves that preference; choosing another preset replaces it and choosing Auto clears it. The editor's option catalog is a construction-time snapshot, so display and save use the same identities even if the workspace presets change while the dialog is open. Opening the List resolves the retained key through the live catalog, which may now contain a changed preset or require a recommendation.
 
-The TUI and AppKit editors have no presentation picker, so their saves never write the preference map: a new List stays Auto and an edit keeps whatever the List already stores, including a dangling opaque id.
+The TUI and AppKit editors have no presentation picker, so their saves never write the preference map: a new List stays Auto and an edit keeps whatever the List already stores, including a key for an unavailable custom preset.
 
 ## Implementation map
 
@@ -156,12 +150,12 @@ The TUI and AppKit editors have no presentation picker, so their saves never wri
 ## Test map
 
 - [`ListPresentationsTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationsTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
-- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, canonical keys, and whole-group rejection.
 - [`ListPresentationRecommendationTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationRecommendationTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) prove independent per-library persistence.
 - [`LibraryControllerTest.cpp`](../../../test/tui/LibraryControllerTest.cpp) proves TUI preference/recommendation navigation and exact restored-view precedence.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
-- [`AppKitPresentationScenario.mm`](../../../test/macos-appkit/AppKitPresentationScenario.mm) checks native-session preference writes, reuse/new-view defaults, Auto, opaque and custom ids, deletion, history, reopen sibling preservation, and no overwrite of a rejected group; [`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm) checks native catalog identity, eligibility, label and checkmark display, open-menu deferral, and transient sort labeling.
+- [`AppKitPresentationScenario.mm`](../../../test/macos-appkit/AppKitPresentationScenario.mm) checks native-session preference writes, reuse/new-view defaults, Auto, custom ids including unavailable presets, deletion, history, reopen sibling preservation, and no overwrite of a rejected group; [`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm) checks native catalog identity, eligibility, label and checkmark display, open-menu deferral, header-sort indication, and retention of the preset label.
 - Workspace history tests under [`test/runtime/`](../../../test/runtime) prove snapshot replay semantics.
 
 ## Related documents

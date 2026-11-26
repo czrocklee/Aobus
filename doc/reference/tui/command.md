@@ -59,11 +59,20 @@ The parser accepts the Command Palette draft with or without its leading `:`; `/
 | `filter <text>`     | quick filter           |
 | `presentation <id>` | set track presentation |
 | `preset <id>`       | set track presentation |
+| `sort <column-id>`  | sort the active view   |
 | `view <id>`         | set track presentation |
 
 The parser accepts only known prefixes and exact aliases. The palette also searches localized action names and aliases, showing one row per action; Return activates a highlighted search result. An unmatched draft reports an unknown command without changing the filter.
 
+Presentation arguments use exact [preset keys](../presentation/track-preset.md): a built-in slug or 16 lowercase hexadecimal digits for a custom preset. An invalid key or a valid custom key not present in the workspace does not change the view, history, or preference.
+
 `:view list-order` selects Manual Order on a saved List. On All Tracks, Views and command completion include `list-order`, but `view`, `preset` and `presentation` reject it without changing the view, workspace history or saved preference. If the reason is clipped, close Views if it is open, then open Notifications (`n` by default or `:notifications`) while the message is active. On narrow terminals the text may still be clipped.
+
+`:sort <column-id>` applies the same header override as a column click. The argument is a stable [track-field id](../library/model/track-field.md) for a visible sortable column, such as `title` or `display-track-number`. It is not a localized header, a sort-field id, or another column that shares the order key. `display-track-number` and `track-number` both order disc before track, but each id records its own column and arrow.
+
+The parser ASCII-lowercases the whole command before reading a `sort` argument, so `TITLE` matches `title`. It does not Unicode-case-fold that argument. Completion shows the localized header and inserts the stable id. A row matches an ASCII-insensitive id prefix or a Unicode-caseless label prefix.
+
+Return on bare `:sort`, before any column id, applies the highlighted command completion and opens the column choices. It does not sort. When choosing a column, Return uses a typed eligible id even when another row is highlighted, unless Up, Down, Page Up, Page Down, or a completion click has moved the highlight. That explicit choice wins. Otherwise Return inserts the highlighted id and sorts. Tab inserts the highlighted completion and leaves the palette open. An id that is not a visible sortable column, and that has no candidate, warns and does not sort. Repeating the same id reverses direction, as a second click on that header does.
 
 ### Command aliases
 
@@ -309,28 +318,29 @@ The [playback-mode interaction specification](../../system/frontend/tui.md#playb
 
 All track-table gestures below remain available while the detail inspector is open and are blocked by modal overlays. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail sidebar uses its divider arrow or `d`; editor dialogs use their close controls.
 
-| Target/gesture                                | Action                                                                                                              |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| track-table wheel                             | move selection by the configured wheel step (default: three tracks)                                                 |
-| table scrollbar press/drag                    | map visual row to selected track                                                                                    |
-| header column edge drag/release               | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
-| group header click                            | select first track in section                                                                                       |
-| seek rail press/drag/release                  | preview/final seek                                                                                                  |
-| playback mode button hover                    | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode |
-| playback mode button click                    | advance to the next preset in the [playback-mode cycle](../../system/frontend/tui.md#playback-modes)                |
-| Soul button click                             | toggle playback                                                                                                     |
-| Soul button hover                             | show quality hover panel                                                                                            |
-| playback title click                          | reveal the current track                                                                                            |
-| playback artist click                         | open an All Tracks view filtered by the complete artist metadata value                                              |
-| playback album click                          | open All Tracks with the `albums` presentation and reveal the current track                                         |
-| library/view/status/quality/output indicators | open corresponding panel                                                                                            |
-| list/view/output row click                    | select/activate according to panel                                                                                  |
+| Target/gesture                                                     | Action                                                                                                                                     |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| track-table wheel                                                  | move selection by the configured wheel step (default: three tracks)                                                                        |
+| table scrollbar press/drag                                         | map visual row to selected track                                                                                                           |
+| header cell click, including a stationary click in the resize slop | sort that sortable column; the resize slop overlaps the painted cell, including a short localized label                                    |
+| header column edge drag/release                                    | preview a terminal-cell width once the pointer moves, then persist the current list's canonical layout on release; interruption rolls back |
+| group header click                                                 | select first track in section                                                                                                              |
+| seek rail press/drag/release                                       | preview/final seek                                                                                                                         |
+| playback mode button hover                                         | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode                        |
+| playback mode button click                                         | advance to the next preset in the [playback-mode cycle](../../system/frontend/tui.md#playback-modes)                                       |
+| Soul button click                                                  | toggle playback                                                                                                                            |
+| Soul button hover                                                  | show quality hover panel                                                                                                                   |
+| playback title click                                               | reveal the current track                                                                                                                   |
+| playback artist click                                              | open an All Tracks view filtered by the complete artist metadata value                                                                     |
+| playback album click                                               | open All Tracks with the `albums` presentation and reveal the current track                                                                |
+| library/view/status/quality/output indicators                      | open corresponding panel                                                                                                                   |
+| list/view/output row click                                         | select/activate according to panel                                                                                                         |
 
 ## Validation rules
 
 - Command prefixes match before aliases; unknown command input remains open and reports a warning.
 - Exact aliases include multi-word commands such as `scan cancel`. A `scan` completion prefix may list `scan` and `scan cancel`; a trailing space after `scan` converges to `scan cancel`. Bare `select` is not a command.
-- Prefix-command arguments, including internal whitespace, are preserved byte-for-byte. Arbitrary extra spacing inside an exact alias is not rewritten into that alias.
+- Prefix-command arguments other than `sort`, including internal whitespace, are preserved byte-for-byte. A `sort` argument is read from the ASCII-lowercased command. Arbitrary extra spacing inside an exact alias is not rewritten into that alias.
 - Live Quick Filter drafts and explicit `:filter` arguments use the shared UIModel track-filter completer.
 - An explicit leading query variable produces structured query suggestions; otherwise a non-empty active term produces frequency-ranked live Quick-filter value suggestions.
 - Presentation completion includes built-in and custom preset ids.
@@ -342,7 +352,7 @@ All track-table gestures below remain available while the detail inspector is op
 - A duration-zero seek rail is inert.
 - A supported override affects root dispatch and every configurable hint for that action; an empty sequence removes both.
 - Unsupported terminal chords and later projected collisions omit only those entries, while fixed protocol and unrelated supported actions remain available.
-- Manual-order commands and keys use the shared `ListOrderAuthoringSession` contract: they need the active view to be a saved List in a flat unsorted presentation, they move the marked ids in current view order or the focused track when none are marked, and one command while a previous one is still in flight is dropped rather than queued. Disabled reasons and outcomes, including a busy library or a changed revision, are transient notifications; only a failed write is kept as a warning.
+- Manual-order commands and keys use the shared `ListOrderAuthoringSession` contract: they need the active view to be a saved List in a flat unsorted presentation, they move the marked ids in current view order or the focused track when none are marked, and one command while a previous one is still in flight is dropped rather than queued. Disabled reasons and outcomes, including a busy library or a changed revision, are transient notifications; only a failed write is kept as a warning. If a header sort is the only blocker, the notification asks the user to choose the current view again. This clears the temporary sort.
 - Fixed protocol takes precedence in its active scope, so rebinding Return, Escape, navigation, or a text-editing key cannot strand an input or modal overlay.
 
 ## Compatibility and versioning
@@ -356,6 +366,7 @@ Changing a default key, alias, option, or default path requires updating this re
 ```text
 :filter $composer = "Bach"
 :view classical-works
+:sort display-track-number
 :scan
 :scan cancel
 :edit
@@ -377,7 +388,7 @@ Changing a default key, alias, option, or default path requires updating this re
 ## Test authority
 
 - [`CommandTest.cpp`](../../../test/tui/CommandTest.cpp) protects commands and aliases.
-- [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp) protects keyboard and mouse mappings.
+- [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp) protects keyboard and mouse mappings, including sort completion, exact column ids, and a stationary header click versus a drag.
 - [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
 - [`CommandCompletionTest.cpp`](../../../test/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
 - [`LibraryScanControllerTest.cpp`](../../../test/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.

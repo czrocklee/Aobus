@@ -127,22 +127,18 @@ namespace ao::rt::test
       firstListId = createList(*runtimePtr, "First saved");
       secondListId = createList(*runtimePtr, "Second saved");
 
-      auto const firstViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = firstListId}));
-      auto const* artistsPreset = builtinTrackPresentationPreset("artists");
-      REQUIRE(artistsPreset != nullptr);
-      firstPresentation = artistsPreset->spec;
-      REQUIRE(runtimePtr->views().setPresentation(firstViewId, firstPresentation));
+      REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
+      firstPresentation = builtinTrackPresentationPreset(BuiltinPreset::Artists).spec;
+      REQUIRE(runtimePtr->workspace().setActivePresentation(firstPresentation, {.recordHistory = false}));
 
-      auto const secondViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = secondListId}));
-      auto const* technicalPreset = builtinTrackPresentationPreset("technical");
-      REQUIRE(technicalPreset != nullptr);
-      secondPresentation = technicalPreset->spec;
-      REQUIRE(runtimePtr->views().setPresentation(secondViewId, secondPresentation));
+      REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
+      secondPresentation = builtinTrackPresentationPreset(BuiltinPreset::Technical).spec;
+      REQUIRE(runtimePtr->workspace().setActivePresentation(secondPresentation, {.recordHistory = false}));
 
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
 
       auto const encoded = ao::test::readFile(workspaceConfigPath);
-      CHECK(encoded.contains("presentationVersion: 1"));
+      CHECK(encoded.contains("presentationVersion: 3"));
       CHECK(encoded.contains("activeViewIndex: 1"));
       CHECK(encoded.contains("group: \"none\""));
       CHECK(encoded.contains("display-track-number"));
@@ -172,15 +168,14 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
-    auto const* artistPreset = builtinTrackPresentationPreset("artists");
-    REQUIRE(artistPreset != nullptr);
+    auto const& artistSpec = builtinTrackPresentationPreset(BuiltinPreset::Artists).spec;
     auto listId = kInvalidListId;
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
       listId = createList(*runtimePtr, "Grouped saved");
-      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = listId}));
-      REQUIRE(runtimePtr->views().setPresentation(viewId, artistPreset->spec));
+      REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
+      REQUIRE(runtimePtr->workspace().setActivePresentation(artistSpec, {.recordHistory = false}));
 
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
 
@@ -201,7 +196,7 @@ namespace ao::rt::test
     CHECK(restoredState.listId == listId);
     CHECK(restoredState.filterExpression.empty());
     CHECK(restoredState.groupBy == TrackGroupKey::AlbumArtist);
-    CHECK(restoredState.presentation == artistPreset->spec);
+    CHECK(restoredState.presentation == artistSpec);
   }
 
   TEST_CASE("HeadlessShell - session persistence restores a flat default presentation")

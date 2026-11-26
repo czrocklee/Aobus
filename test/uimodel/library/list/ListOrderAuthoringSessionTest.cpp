@@ -59,12 +59,11 @@ namespace ao::uimodel::test
 
       rt::ViewId open(std::string filterExpression = {})
       {
-        auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-        REQUIRE(manual != nullptr);
+        auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
         return runtime.requireView(rt::TrackListViewConfig{
           .listId = listId,
           .filterExpression = std::move(filterExpression),
-          .optPresentation = manual->spec,
+          .optPresentation = manual.spec,
         });
       }
 
@@ -94,11 +93,10 @@ namespace ao::uimodel::test
 
       rt::ViewId open()
       {
-        auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-        REQUIRE(manual != nullptr);
+        auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
         auto const viewId = ao::test::requireValue(workspace.navigate(rt::NavigationRequest{
           .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
-          .optPresentation = rt::NavigationPresentation{.spec = manual->spec},
+          .optPresentation = rt::NavigationPresentation{.spec = manual.spec},
         }));
         executor.runUntilIdle();
         return viewId;
@@ -170,7 +168,8 @@ namespace ao::uimodel::test
       auto const viewId = fixture.open();
       auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
         fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
-      REQUIRE(fixture.runtime.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+      REQUIRE(
+        fixture.runtime.workspace.setActivePresentation(rt::defaultTrackPresentationSpec(), {.recordHistory = false}));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(session.isCurrent());
     }
@@ -263,7 +262,7 @@ namespace ao::uimodel::test
       fixture.commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(completedPtr, session.resetOrderAsync()));
     REQUIRE(fixture.executor.tryWaitUntilQueued());
 
-    REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    REQUIRE(fixture.workspace.setActivePresentation(rt::defaultTrackPresentationSpec(), {.recordHistory = false}));
     CHECK(session.isCurrent());
     REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
 
@@ -301,7 +300,7 @@ namespace ao::uimodel::test
       return pending;
     }();
 
-    REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    REQUIRE(fixture.workspace.setActivePresentation(rt::defaultTrackPresentationSpec(), {.recordHistory = false}));
     REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
     auto const res = future.get();
     REQUIRE(res);

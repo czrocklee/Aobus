@@ -185,6 +185,7 @@ namespace ao::gtk
   {
     auto const newSize = static_cast<::guint>(_projectionPtr->size());
     auto const oldSize = static_cast<::guint>(_modelSize);
+    _beforeReset.emit();
     _modelSize = newSize;
     notifyReset(oldSize, newSize);
   }

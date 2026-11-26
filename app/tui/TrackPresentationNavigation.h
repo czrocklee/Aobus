@@ -9,7 +9,6 @@
 
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::tui
@@ -22,8 +21,9 @@ namespace ao::tui
     bool enabled = true;
   };
 
-  std::string trackPresentationDisplayId(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
-  std::string trackPresentationBadgeLabel(i18n::MessageCatalog const& textCatalog, std::string_view presentationId);
+  std::string trackPresentationDisplayLabel(i18n::MessageCatalog const& textCatalog,
+                                            rt::TrackPresetId const& presetId,
+                                            std::span<TrackPresentationNavEntry const> entries);
   std::vector<TrackPresentationNavEntry> makeTrackPresentationNavigation(
     i18n::MessageCatalog const& textCatalog,
     ListId listId,

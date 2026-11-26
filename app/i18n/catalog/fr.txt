@@ -4,6 +4,7 @@
 fr:table {
   messages:table {
     track_field_recording_date { "Date d’enregistrement" }
+    track_sort_recording_year { "Année d’enregistrement" }
     track_credits_heading { "Crédits" }
     track_credit_performer { "Interprète" }
     track_credit_lyricist { "Parolier" }
@@ -202,6 +203,8 @@ fr:table {
     create_custom_track_presentation { "Créer une vue personnalisée…" }
     track_presentation_picker_label { "Vue" }
     track_presentation_all_tracks_manual_order_unavailable { "« Tous les morceaux » n''a pas d''ordre enregistré. Créez une liste enregistrée pour organiser la bibliothèque manuellement." }
+    track_sort_column_unavailable { "Impossible de trier par cette colonne : {column}" }
+    track_sort_failed { "Impossible de trier les morceaux : {detail}" }
     audio_backend_pipewire_description { "Serveur audio Linux moderne à faible latence" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (accès direct au matériel)" }
     audio_backend_wasapi_description { "API Windows Audio Session" }
@@ -298,6 +301,7 @@ fr:table {
     list_order_list_unavailable { "Cette liste n''est plus disponible." }
     list_order_fix_filter { "Corrigez la liste ou l''expression de filtre rapide avant de changer l''ordre." }
     list_order_choose_flat_presentation { "Choisissez Ordre manuel ou une autre vue non triée pour réorganiser les morceaux." }
+    list_order_choose_current_view { "Sélectionnez à nouveau la vue actuelle pour supprimer le tri par colonne." }
     list_order_clear_quick_filter { "Effacez le filtre rapide pour glisser ou déplacer relativement ; déplacer en haut ou en bas reste disponible." }
     list_order_changed { "La liste a changé. Recommencez l''action d''ordonnancement." }
     list_order_unchanged { "Ordre inchangé." }
@@ -592,6 +596,7 @@ fr:table {
     tui_shell_detail_track_detail { "détail du morceau" }
     tui_shell_detail_audio_pipeline { "chaîne audio" }
     tui_shell_detail_output_device { "périphérique de sortie" }
+    tui_shell_detail_sort_column { "trier les morceaux par colonne" }
     tui_shell_detail_choose_view { "choisir la vue" }
     tui_shell_detail_notification_center { "centre de notifications" }
     tui_shell_detail_close_overlay { "fermer le volet" }
@@ -670,8 +675,6 @@ fr:table {
     tui_library_expression_filter_matched { "Le filtre d''expression correspond à {count, plural, one {# morceau} other {# morceaux}}" }
     tui_presentation_custom { "personnalisée" }
     tui_presentation_custom_from { "personnalisée à partir de {id}" }
-    tui_presentation_default { "par défaut" }
-    tui_presentation_badge { "vue:{id}" }
     tui_editor_title { "Propriétés du morceau" }
     tui_editor_title_multiple { "Modifier {count, plural, one {# morceau} other {# morceaux}}" }
     tui_editor_applies_to_all { "Les modifications s’appliquent à {count, plural, one {# morceau} other {tous les # morceaux}}" }
@@ -771,12 +774,9 @@ fr:table {
     winui_column_resize_failed { "Échec du redimensionnement de la colonne : {detail}" }
     winui_column_move_failed { "Échec du déplacement de colonne : {detail}" }
     winui_column_visibility_failed { "Échec de la visibilité de la colonne : {detail}" }
-    winui_column_not_sortable { "La colonne ''{column}'' n''est pas triable" }
-    winui_sort_failed { "Échec du tri : {detail}" }
     winui_unavailable_track { "Morceau indisponible" }
     winui_theme_file_not_found { "Fichier de thème introuvable : {path}" }
     winui_startup_failure { "Aobus n''a pas pu démarrer :\n\n{detail}" }
-    track_presentation_column_sort { "Tri par colonne" }
     track_multiple_values { "<Valeurs multiples>" }
     track_metadata_heading { "Métadonnées" }
     track_audio_properties_heading { "Propriétés audio" }

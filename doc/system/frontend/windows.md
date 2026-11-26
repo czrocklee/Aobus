@@ -33,7 +33,7 @@ The [system architecture](../overview.md) defines the runtime-to-UIModel-to-fron
 - Replacing track-table items suppresses native selection publication, restores the Runtime-owned selection, and keeps the top visible track anchored by stable id whenever it survives the replacement.
 - The window detaches its observers and controllers before its session destroys the unique runtime.
 - Modern is the first-run shell. Both shells follow the effective Windows light or dark theme unless semantic theme tokens override their surfaces.
-- Authored Windows shell copy, dynamic status templates, presentation labels, and column labels resolve through the WinUI resource system. Library metadata, device names, paths, and diagnostics supplied by lower layers remain data rather than resource identifiers.
+- Windows shell copy, dynamic status templates, and column labels resolve through the WinUI resource system. The presentation picker consumes shared UIModel captions. Library metadata, device names, paths, and diagnostics supplied by lower layers remain data rather than resource identifiers.
 - The track table remains usable at every supported width. The inspector collapses before navigation; narrow layouts also collapse navigation.
 - Soul radius, anchor geometry, brand colors, aura interpretation, gradient stops, and animation periods come from shared UIModel constants. Theme YAML cannot replace them.
 - A shell mode may apply a positive stroke width and inner-glyph scale to fit its allocated control size without changing those shared brand and motion constants.
@@ -110,14 +110,13 @@ no visible columns. The table then shows **No track columns are visible in this
 presentation.** and a **Columns...** button that opens the same menu. Showing
 the prompt or opening its menu does not change stored visibility or clear the
 rows. Checking a field explicitly shows it and dismisses the prompt.
-The active primary sort is marked in its generated header. Clicking that header
-reverses the persisted workspace direction; clicking another sortable header
-starts that field in ascending order.
+The header arrow marks only the clicked [column override](../workspace/navigation.md#sort-a-view-by-column), not the preset's leading sort and not another column that shares its order key. Clicking the marked header reverses that override; clicking another sortable header, including such an alias, replaces it and starts ascending.
 The shared width solver uses the current viewport, and a single horizontal
 surface keeps headers and rows aligned when minimum widths overflow.
+When the fields and widths stay the same, sorting updates the arrow without replacing the header controls or moving focus off the clicked header.
 Replacing the row source restores the still-projected selected track ids as display-index ranges, without reading each selected row or changing which track has playback priority. If the viewport is at the top and nothing is selected, the refresh shows the new first row. Otherwise it anchors to the already realized top row's track when that track remains, rather than reading an unrealized index from the source being replaced. An explicit reveal still takes precedence.
 A retired row source retains only the rows still in its cache. An uncached read of that retired source does not query the replacement projection. Row gestures affect selection, playback, or track menus only after the table finishes binding the current source and restoring selection; a row still visible from a retired source cannot act on the track now at that position.
-Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
+Presentation grouping inserts non-playable group headers through a display-index adapter. Playback captures a flat effective sort, not the grouped section order or the display index.
 Group headers are not selectable tracks. A header-only native selection keeps the
 Runtime-selected tracks; mixed selection and Select All retain only valid tracks,
 while a genuine clear still empties the selection.
@@ -125,12 +124,9 @@ An explicit UI Automation Selection query on the list returns providers for sele
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
 An explicit named choice submits the complete spec to Workspace with history recording.
 Only after Runtime accepts it does the picker pin that choice for the base List. Rejection reports an error and changes neither view, history, nor pin. Back and Forward restore the recorded spec, not the current pin.
-A column-header sort creates a temporary presentation labeled with localized
-“Column sort” text; it neither adds a history entry nor replaces the saved preference.
+A [column-header sort](../workspace/navigation.md#sort-a-view-by-column) updates the live view without adding a history entry or replacing the saved preference. The presentation button keeps the original preset name. Choosing that preset again clears the override.
 A successful header sort requests the [coalesced workspace save](../workspace/session.md#frontend-lifecycle-integration). A refused sort does not.
-Only that synthetic presentation is relabeled; opaque unknown identifiers remain
-data. The button's tooltip and accessible name retain the complete label when
-its allocated layout space constrains the painted text.
+An unavailable custom preset uses its canonical hexadecimal key as the active caption. That bare id is not the localized missing-pin row. The button's tooltip and accessible name retain the complete label when its allocated layout space constrains the painted text.
 The Reveal Current Track command (default `Ctrl+L`) uses [source-first workspace navigation](../workspace/navigation.md#navigate-to-the-playback-source). WinUI adopts the destination view before selecting the track and resolving its scroll position. If the track has been removed, it cannot be revealed. An explicit view-targeted reveal instead uses the supplied destination; it does not bypass that view's filter to scroll a hidden row.
 
 Quick Filter adapts the shared completion and filtering policy. Its [Create List action](windows-library-workflows.md#create-and-edit-lists) enters the ordinary List workflow with the resolved expression.
@@ -233,8 +229,8 @@ installing live settings, without resizing the current window.
 Per-list presentation choice and column state use the shared `trackView.presentations` and `trackView.columnLayouts` groups.
 Track-property drafts and dialog state are not persisted; accepted metadata, custom metadata, and tags use ordinary library mutation. [Library workflows](windows-library-workflows.md#persistence) owns List and transfer state and their persistence boundaries.
 The global `desktop` group and the two per-library presentation groups have separate writers and save boundaries. Each presentation store saves only its own group in `winui_layout.yaml`, preserving siblings; a desktop-settings checkpoint does not atomically commit all three groups. `windows-theme.yaml` remains independent.
-Workspace owns the active view's current presentation and sorting.
-`LibrarySession` restores that per-library workspace before controllers bind and checkpoints it with Windows settings changes and at shutdown.
+`LibrarySession` restores the per-library workspace before controllers bind and checkpoints it with Windows settings changes and at shutdown.
+The [workspace checkpoint](../workspace/session.md) captures each view's exact presentation, including its sort.
 The process-global `windows-playback.yaml` store is injected into `AppRuntime`, independently from desktop settings. Its ordinary restore, successor durability gate, and parent retirement follow [desktop library lifecycle](../desktop-library-lifecycle.md). After a failed selected-root commit, later ordinary Windows settings checkpoints retain the prior root rather than retrying the failed target.
 Exact paths, fields, defaults, validation, and versioning are defined by the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 

@@ -4,6 +4,7 @@
 zh_Hant:table {
   messages:table {
     track_field_recording_date { "錄音日期" }
+    track_sort_recording_year { "錄音年份" }
     track_credits_heading { "製作人員" }
     track_credit_performer { "演出者" }
     track_credit_lyricist { "作詞" }
@@ -202,6 +203,8 @@ zh_Hant:table {
     create_custom_track_presentation { "建立自訂檢視…" }
     track_presentation_picker_label { "檢視" }
     track_presentation_all_tracks_manual_order_unavailable { "「所有曲目」沒有已儲存的順序。請建立並儲存列表，以手動排列整個音樂庫。" }
+    track_sort_column_unavailable { "無法依此欄排序：{column}" }
+    track_sort_failed { "曲目排序失敗：{detail}" }
     audio_backend_pipewire_description { "低延遲的現代 Linux 音訊伺服器" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接存取硬體）" }
     audio_backend_wasapi_description { "Windows 音訊會話 API" }
@@ -298,6 +301,7 @@ zh_Hant:table {
     list_order_list_unavailable { "此列表已不再可用。" }
     list_order_fix_filter { "更改排序前，請先修正列表表示式或快速篩選條件。" }
     list_order_choose_flat_presentation { "請選取「手動排序」或其他未設定排序規則的平鋪檢視，以重新排列曲目。" }
+    list_order_choose_current_view { "請重新選取目前檢視以清除欄排序。" }
     list_order_clear_quick_filter { "清除快速篩選條件後才能拖曳或相對移動；移至頂端或底端仍然可用。" }
     list_order_changed { "列表已更改。請重新啟動排序操作。" }
     list_order_unchanged { "排序未更改。" }
@@ -592,6 +596,7 @@ zh_Hant:table {
     tui_shell_detail_track_detail { "曲目詳情" }
     tui_shell_detail_audio_pipeline { "音訊鏈路" }
     tui_shell_detail_output_device { "輸出裝置" }
+    tui_shell_detail_sort_column { "依欄排序曲目" }
     tui_shell_detail_choose_view { "選取檢視" }
     tui_shell_detail_notification_center { "通知中心" }
     tui_shell_detail_close_overlay { "關閉浮層" }
@@ -670,8 +675,6 @@ zh_Hant:table {
     tui_library_expression_filter_matched { "表示式篩選條件符合 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     tui_presentation_custom { "自訂" }
     tui_presentation_custom_from { "以 {id} 為基礎的自訂檢視" }
-    tui_presentation_default { "預設" }
-    tui_presentation_badge { "檢視:{id}" }
     tui_editor_title { "曲目屬性" }
     tui_editor_title_multiple { "編輯 {count, plural, other {# 首曲目}}" }
     tui_editor_applies_to_all { "變更將套用至全部 {count, plural, other {# 首曲目}}" }
@@ -772,12 +775,9 @@ zh_Hant:table {
     winui_column_resize_failed { "調整欄寬失敗：{detail}" }
     winui_column_move_failed { "移動欄失敗：{detail}" }
     winui_column_visibility_failed { "更改欄可見性失敗：{detail}" }
-    winui_column_not_sortable { "欄 ''{column}'' 不支援排序" }
-    winui_sort_failed { "排序失敗：{detail}" }
     winui_unavailable_track { "無法使用的曲目" }
     winui_theme_file_not_found { "未找到主題檔案：{path}" }
     winui_startup_failure { "Aobus 無法啟動：\n\n{detail}" }
-    track_presentation_column_sort { "欄排序" }
     track_multiple_values { "<多個值>" }
     track_metadata_heading { "後設資料" }
     track_audio_properties_heading { "音訊屬性" }

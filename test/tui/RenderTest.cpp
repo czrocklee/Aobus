@@ -29,6 +29,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -211,14 +212,14 @@ namespace ao::tui::test
     }
 
     ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
-                                     std::string_view const activePresentationId,
+                                     rt::TrackPresetId const& activePresentation,
                                      std::int32_t const selectedIndex,
                                      std::vector<PresentationRowHitRegion>* const rowHitRegions = nullptr,
                                      std::int32_t const columns = 0)
     {
       return ao::tui::presentationPanel(ao::test::englishMessageCatalog(),
                                         items,
-                                        activePresentationId,
+                                        activePresentation,
                                         selectedIndex,
                                         defaultKeymapPlan(),
                                         rowHitRegions,
@@ -226,11 +227,11 @@ namespace ao::tui::test
     }
 
     std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
-                                          std::string_view const activePresentationId,
+                                          rt::TrackPresetId const& activePresentation,
                                           std::int32_t const terminalColumns)
     {
       return ao::tui::presentationPanelColumns(
-        ao::test::englishMessageCatalog(), items, activePresentationId, defaultKeymapPlan(), terminalColumns);
+        ao::test::englishMessageCatalog(), items, activePresentation, defaultKeymapPlan(), terminalColumns);
     }
   } // namespace
 
@@ -265,6 +266,8 @@ namespace ao::tui::test
 
     CHECK(text.contains("reveal current track"));
     CHECK(text.contains(":view <id>"));
+    REQUIRE(text.contains(":sort <column-id>"));
+    CHECK(lineIndexContaining(text, ":sort <column-id>") == lineIndexContaining(text, "sort tracks by column"));
     CHECK(text.contains("choose output"));
     CHECK(text.contains("choose presentation"));
     CHECK(text.contains("show notification center"));
@@ -1323,7 +1326,7 @@ namespace ao::tui::test
     auto const quality = renderText(qualityPanel(textCatalog, rt::PlaybackTransportSnapshot{}, keymapPlan, 100), 100);
     auto const output =
       renderText(outputDevicePanel(textCatalog, uimodel::OutputDeviceViewState{}, -1, keymapPlan, nullptr, 100), 100);
-    auto const presentation = renderText(presentationPanel(textCatalog, {}, "", 0, keymapPlan, nullptr, 100), 100);
+    auto const presentation = renderText(presentationPanel(textCatalog, {}, {}, 0, keymapPlan, nullptr, 100), 100);
     auto const notification =
       renderText(notificationCenterPanel(uimodel::ActivityStatusViewState{}, nullptr, 100), 100);
 
@@ -1751,10 +1754,11 @@ namespace ao::tui::test
     };
     auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
 
-    auto const rendered = renderElement(presentationPanel(items, "albums", 1, &rowHitRegions), 48, 16);
+    auto const rendered = renderElement(presentationPanel(items, rt::BuiltinPreset::Albums, 1, &rowHitRegions), 48, 16);
 
     CHECK(rendered.text.contains("Views"));
-    CHECK(rendered.text.contains("albums"));
+    CHECK(lineIndexContaining(rendered.text, "Albums") == 0);
+    CHECK_FALSE(rendered.text.contains("albums"));
     CHECK(rendered.text.contains("* Albums"));
     CHECK(rendered.text.contains("Grouped by album."));
     CHECK_FALSE(rendered.text.contains("songs"));
@@ -1767,23 +1771,39 @@ namespace ao::tui::test
           ftxui::Color::Yellow);
   }
 
+  TEST_CASE("Render - presentation panel displays the active custom label but keeps its key for selection")
+  {
+    auto const items = std::vector<TrackPresentationNavEntry>{
+      {.id = "0000000000000abc", .label = "Listening Queue"},
+    };
+    auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
+    auto const rendered = renderElement(presentationPanel(items, rt::CustomPresetId{0xabc}, 0, &rowHitRegions), 48, 16);
+
+    CHECK(lineIndexContaining(rendered.text, "Listening Queue") == 0);
+    CHECK(rendered.text.contains("* Listening Queue"));
+    CHECK_FALSE(rendered.text.contains("0000000000000abc"));
+    REQUIRE(rowHitRegions.size() == 1);
+    CHECK(rowHitRegions.front().presentationId == "0000000000000abc");
+  }
+
   TEST_CASE("Render - presentation panel width follows content and terminal bounds")
   {
     auto const items = std::vector<TrackPresentationNavEntry>{
-      {.id = "wide",
+      {.id = "albums",
        .label = "Wide View",
        .detail = "Detailed description long enough to widen the picker beyond the default."},
     };
 
-    auto const wideColumns = presentationPanelColumns(items, "wide", 120);
+    auto const wideColumns = presentationPanelColumns(items, rt::BuiltinPreset::Albums, 120);
 
     CHECK(wideColumns > kPresentationPanelColumns);
     CHECK(wideColumns <= 120);
-    CHECK(presentationPanelColumns(items, "wide", 60) == 60);
-    CHECK(presentationPanelColumns(std::vector{TrackPresentationNavEntry{.id = "x", .label = "X"}}, "x", 120) <
-          kPresentationPanelColumns);
+    CHECK(presentationPanelColumns(items, rt::BuiltinPreset::Albums, 60) == 60);
+    auto const shortItems = std::vector{TrackPresentationNavEntry{.id = "songs", .label = "X"}};
+    CHECK(presentationPanelColumns(shortItems, rt::BuiltinPreset::Songs, 120) < kPresentationPanelColumns);
 
-    auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
+    auto const rendered =
+      renderElement(presentationPanel(items, rt::BuiltinPreset::Albums, 0, nullptr, wideColumns), wideColumns, 16);
 
     CHECK(rendered.text.contains("Wide View · Detailed description"));
 
@@ -1791,20 +1811,21 @@ namespace ao::tui::test
     {
       CAPTURE(columns);
       auto rows = std::vector<PresentationRowHitRegion>{};
-      auto const narrow = renderElement(presentationPanel(items, "wide", 0, &rows, columns), columns, 16);
+      auto const narrow =
+        renderElement(presentationPanel(items, rt::BuiltinPreset::Albums, 0, &rows, columns), columns, 16);
       REQUIRE(rows.size() == 1);
       CHECK(rows.front().box.x_min == 2);
       CHECK(rows.front().box.x_max == columns - 3);
       CHECK(narrow.screen.PixelAt(columns - 2, rows.front().box.y_min).background_color == ftxui::Color::Default);
 
       // A long description must not squeeze a name that fits the row in full.
-      auto const optName = findTextCells(narrow.screen, "Wide View");
+      auto const optName = findTextCells(narrow.screen, "* Wide View");
       auto const optDetail = findTextCells(narrow.screen, " · Detailed");
       REQUIRE(optName);
       REQUIRE(optDetail);
       CHECK(optName->y_min == rows.front().box.y_min);
       CHECK(optDetail->x_min == optName->x_max + 1);
-      CHECK_FALSE(narrow.screen.PixelAt(optName->x_min, optName->y_min).dim);
+      CHECK_FALSE(narrow.screen.PixelAt(optName->x_max, optName->y_min).dim);
       CHECK(narrow.screen.PixelAt(optDetail->x_min, optDetail->y_min).dim);
     }
   }
@@ -1814,9 +1835,9 @@ namespace ao::tui::test
     auto rowHitRegions = std::vector{
       PresentationRowHitRegion{.rowIndex = 7, .box = ftxui::Box{.x_min = 2, .x_max = 8, .y_min = 3, .y_max = 3}}};
     auto const emptyRendered =
-      renderElement(presentationPanel(std::vector<TrackPresentationNavEntry>{}, "", 99, &rowHitRegions), 48, 16);
+      renderElement(presentationPanel({}, rt::BuiltinPreset::Library, 99, &rowHitRegions), 48, 16);
 
-    CHECK(emptyRendered.text.contains("default"));
+    CHECK(emptyRendered.text.contains("Library"));
     CHECK(emptyRendered.text.contains("No views available"));
     CHECK(rowHitRegions.empty());
   }
@@ -1827,7 +1848,7 @@ namespace ao::tui::test
     auto const items = std::vector<TrackPresentationNavEntry>{
       {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
     };
-    auto const rendered = renderElement(presentationPanel(items, "songs", 99, &rowHitRegions), 48, 16);
+    auto const rendered = renderElement(presentationPanel(items, rt::BuiltinPreset::Songs, 99, &rowHitRegions), 48, 16);
 
     REQUIRE(rowHitRegions.size() == 1);
     CHECK_FALSE(rendered.screen.PixelAt(rowHitRegions[0].box.x_min, rowHitRegions[0].box.y_min).inverted);

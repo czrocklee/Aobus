@@ -137,8 +137,6 @@ namespace ao::rt
       ResourceId imageId{kInvalidResourceId};
     };
 
-    using Comparator = compat::MoveOnlyFunction<bool(OrderEntry const&, OrderEntry const&)>;
-
     constexpr std::size_t kArticleAnLength = 3;
 
     bool startsWithCaseInsensitive(std::string_view str, std::string_view prefix)
@@ -360,67 +358,6 @@ namespace ao::rt
       return term.ascending ? normalized : -normalized;
     }
 
-    std::span<TrackSortField const> groupSortFields(TrackGroupKey const groupBy)
-    {
-      static constexpr auto kArtist = std::to_array({TrackSortField::Artist});
-      static constexpr auto kAlbum = std::to_array({TrackSortField::AlbumArtist, TrackSortField::Album});
-      static constexpr auto kAlbumArtist = std::to_array({TrackSortField::AlbumArtist});
-      static constexpr auto kGenre = std::to_array({TrackSortField::Genre});
-      static constexpr auto kComposer = std::to_array({TrackSortField::Composer});
-      static constexpr auto kConductor = std::to_array({TrackSortField::Conductor});
-      static constexpr auto kEnsemble = std::to_array({TrackSortField::Ensemble});
-      static constexpr auto kWork = std::to_array({TrackSortField::Composer, TrackSortField::Work});
-      static constexpr auto kYear = std::to_array({TrackSortField::Year});
-
-      switch (groupBy)
-      {
-        case TrackGroupKey::Artist: return kArtist;
-        case TrackGroupKey::Album: return kAlbum;
-        case TrackGroupKey::AlbumArtist: return kAlbumArtist;
-        case TrackGroupKey::Genre: return kGenre;
-        case TrackGroupKey::Composer: return kComposer;
-        case TrackGroupKey::Conductor: return kConductor;
-        case TrackGroupKey::Ensemble: return kEnsemble;
-        case TrackGroupKey::Work: return kWork;
-        case TrackGroupKey::Year: return kYear;
-        case TrackGroupKey::None: return {};
-      }
-
-      return {};
-    }
-
-    std::vector<TrackSortTerm> buildGroupOrder(TrackGroupKey const groupBy, std::vector<TrackSortTerm> const& sortBy)
-    {
-      auto groupOrder = std::vector<TrackSortTerm>{};
-      groupOrder.reserve(2);
-      auto const groupFields = groupSortFields(groupBy);
-
-      for (auto const& term : sortBy)
-      {
-        if (std::ranges::contains(groupFields, term.field) &&
-            !std::ranges::contains(groupOrder, term.field, &TrackSortTerm::field))
-        {
-          groupOrder.push_back(term);
-        }
-      }
-
-      auto const fallbackAscending = groupOrder.empty() || groupOrder.front().ascending;
-      auto const appendMissing = [&](TrackSortField const field)
-      {
-        if (!std::ranges::contains(groupOrder, field, &TrackSortTerm::field))
-        {
-          groupOrder.push_back(TrackSortTerm{.field = field, .ascending = fallbackAscending});
-        }
-      };
-
-      for (auto const field : groupFields)
-      {
-        appendMissing(field);
-      }
-
-      return groupOrder;
-    }
-
     std::string_view groupIdentityComponent(TrackGroupKey const groupBy,
                                             TrackSortField const field,
                                             GroupIdentityKey const& identity)
@@ -458,20 +395,17 @@ namespace ao::rt
       return 0;
     }
 
-    Comparator buildComparator(std::vector<TrackSortTerm> sortBy, TrackGroupKey const groupBy)
+    struct Comparator final
     {
-      auto groupOrder = buildGroupOrder(groupBy, sortBy);
-      std::erase_if(sortBy,
-                    [&groupOrder](TrackSortTerm const& term)
-                    { return std::ranges::contains(groupOrder, term.field, &TrackSortTerm::field); });
+      TrackGroupKey groupBy;
+      std::vector<TrackSortTerm> groupOrder;
+      std::vector<TrackSortTerm> rowOrder;
 
-      if (sortBy.empty() && groupOrder.empty())
-      {
-        return {};
-      }
+      bool operator==(Comparator const&) const = default;
 
-      return [sortBy = std::move(sortBy), groupOrder = std::move(groupOrder), groupBy](
-               OrderEntry const& lhs, OrderEntry const& rhs) -> bool
+      explicit operator bool() const noexcept { return !groupOrder.empty() || !rowOrder.empty(); }
+
+      bool operator()(OrderEntry const& lhs, OrderEntry const& rhs) const
       {
         for (auto const& term : groupOrder)
         {
@@ -486,7 +420,7 @@ namespace ao::rt
           return cmp < 0;
         }
 
-        for (auto const& term : sortBy)
+        for (auto const& term : rowOrder)
         {
           if (auto const cmp = compareDirectedField(term, lhs.keys, rhs.keys); cmp != 0)
           {
@@ -495,7 +429,17 @@ namespace ao::rt
         }
 
         return lhs.sourceRank < rhs.sourceRank;
-      };
+      }
+    };
+
+    Comparator buildComparator(std::vector<TrackSortTerm> sortBy, TrackPresentationSpec const& presentation)
+    {
+      auto const groupBy = presentation.groupBy;
+      auto groupOrder = trackGroupSortBy(groupBy, presentation.sortBy);
+      std::erase_if(sortBy,
+                    [&groupOrder](TrackSortTerm const& term)
+                    { return std::ranges::contains(groupOrder, term.field, &TrackSortTerm::field); });
+      return {.groupBy = groupBy, .groupOrder = std::move(groupOrder), .rowOrder = std::move(sortBy)};
     }
 
     struct CachedDictionaryText final
@@ -608,7 +552,7 @@ namespace ao::rt
         fillSortKey(keys, view, dictionary, term.field, textCache, arena, scratch, textOrderingPolicy);
       }
 
-      for (auto const field : groupSortFields(groupBy))
+      for (auto const field : trackGroupSortFields(groupBy))
       {
         if (!std::ranges::contains(sortBy, field, &TrackSortTerm::field))
         {
@@ -749,20 +693,13 @@ namespace ao::rt
 
     bool hasSameSortFields(std::vector<TrackSortTerm> const& old, std::vector<TrackSortTerm> const& updated)
     {
-      if (old.size() != updated.size())
+      auto const containsFields = [](auto const& available, auto const& required)
       {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < old.size(); ++index)
-      {
-        if (old[index].field != updated[index].field)
-        {
-          return false;
-        }
-      }
-
-      return true;
+        return std::ranges::all_of(required,
+                                   [&](TrackSortTerm const& term)
+                                   { return std::ranges::contains(available, term.field, &TrackSortTerm::field); });
+      };
+      return containsFields(old, updated) && containsFields(updated, old);
     }
 
     ProjectionReset makeSectionReset(delta::RegularTrackEditScript const& script)
@@ -792,11 +729,8 @@ namespace ao::rt
     library::MusicLibrary const& library;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
     std::shared_ptr<TextOrderingPolicy const> updatedTextOrderingPolicyPtr;
-    TrackGroupKey groupBy = TrackGroupKey::None;
+    TrackPresentationSpec presentation;
     std::vector<TrackSortTerm> sortBy;
-    std::string presentationId = std::string{kDefaultTrackPresentationId};
-    std::vector<TrackField> visibleFields;
-    std::vector<TrackField> redundantFields;
     Comparator comparator;
     library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
     // Derived sort/group key views in orderIndex/sections/dictionaryTextCache point into
@@ -829,16 +763,22 @@ namespace ao::rt
                    view,
                    dictionary,
                    sortBy,
-                   groupBy,
+                   presentation.groupBy,
                    dictionaryTextCache,
                    stringArena,
                    normScratch,
                    textOrderingPolicy);
 
-      if (groupBy != TrackGroupKey::None)
+      if (presentation.groupBy != TrackGroupKey::None)
       {
-        fillGroupMetadata(
-          entry, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch, textOrderingPolicy);
+        fillGroupMetadata(entry,
+                          view,
+                          dictionary,
+                          presentation.groupBy,
+                          dictionaryTextCache,
+                          stringArena,
+                          normScratch,
+                          textOrderingPolicy);
       }
 
       return entry;
@@ -853,9 +793,10 @@ namespace ao::rt
       , sourceLease{std::move(trackSourceLease)}
       , library{lib}
       , textOrderingPolicy{orderingPolicy}
-      , sortBy{std::move(initialSort)}
-      , comparator{buildComparator(sortBy, groupBy)}
-      , loadMode{computeLoadMode(sortBy, groupBy)}
+      , presentation{.sortBy = std::move(initialSort)}
+      , sortBy{presentation.sortBy}
+      , comparator{buildComparator(sortBy, presentation)}
+      , loadMode{computeLoadMode(sortBy, presentation.groupBy)}
     {
       if (sourceLease->state() == TrackSourceState::Live)
       {
@@ -875,7 +816,7 @@ namespace ao::rt
     {
       sections.clear();
 
-      if (orderIndex.empty() || groupBy == TrackGroupKey::None)
+      if (orderIndex.empty() || presentation.groupBy == TrackGroupKey::None)
       {
         return;
       }
@@ -1004,7 +945,7 @@ namespace ao::rt
         sourceOrder.push_back(source.trackIdAt(index));
       }
 
-      auto const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
+      auto const entriesDependOnTrackData = comparator || presentation.groupBy != TrackGroupKey::None;
       reader.visitTracks(sourceOrder,
                          loadMode,
                          [&](TrackId trackId, library::TrackView const& view)
@@ -1371,7 +1312,7 @@ namespace ao::rt
       auto replacementIds = TrackIdSet{};
       auto excludedIds = TrackIdSet{};
       auto changedIds = TrackIdSet{};
-      bool const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
+      bool const entriesDependOnTrackData = comparator || presentation.groupBy != TrackGroupKey::None;
       collectChangedTrackIds(script, entriesDependOnTrackData, replacementIds, excludedIds, changedIds);
       auto retainedEntries = retainOrderEntries(excludedIds);
       auto optReplacementEntries = buildReplacementEntries(replacementIds, finalSourceOrder, entriesDependOnTrackData);
@@ -1697,46 +1638,39 @@ namespace ao::rt
 
     auto const previousSize = _implPtr->orderIndex.size();
     auto spec = normalizeTrackPresentationSpec(presentation);
+    auto sortBy = spec.effectiveSortBy();
+    auto comparator = buildComparator(sortBy, spec);
+    auto const loadMode = computeLoadMode(sortBy, spec.groupBy);
+    auto const sameLoadMode = _implPtr->loadMode == loadMode;
+    auto const sameOrder = sameLoadMode && _implPtr->comparator == comparator;
+    auto const headerOnly = sameOrder && _implPtr->presentation.hasOnlyColumnSortChange(spec);
 
-    _implPtr->presentationId = spec.id;
-    _implPtr->visibleFields = spec.visibleFields;
-    _implPtr->redundantFields = spec.redundantFields;
+    // An unchanged grouping supplies the same implicit group keys. The remaining
+    // keys can be reused regardless of their precedence or direction.
+    auto const reuseKeys = !sameOrder && sameLoadMode && _implPtr->presentation.groupBy == spec.groupBy &&
+                           _implPtr->comparator && comparator &&
+                           hasSameSortFields(_implPtr->comparator.rowOrder, comparator.rowOrder);
+    _implPtr->presentation = std::move(spec);
+    _implPtr->sortBy = std::move(sortBy);
+    _implPtr->comparator = std::move(comparator);
+    _implPtr->loadMode = loadMode;
 
-    // Fall back to the built-in preset when redundant fields are unspecified.
-    if (_implPtr->redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
+    if (reuseKeys)
     {
-      for (auto const& preset : builtinTrackPresentationPresets())
-      {
-        if (preset.spec.groupBy == spec.groupBy)
-        {
-          _implPtr->redundantFields = preset.spec.redundantFields;
-          break;
-        }
-      }
-    }
-
-    // Reuse already-materialized keys when only directions changed (or the same
-    // presentation is applied again); sorting them performs no library reads.
-    if (_implPtr->groupBy == spec.groupBy && hasSameSortFields(_implPtr->sortBy, spec.sortBy) && _implPtr->comparator)
-    {
-      _implPtr->sortBy = std::move(spec.sortBy);
-      _implPtr->comparator = buildComparator(_implPtr->sortBy, _implPtr->groupBy);
       std::ranges::sort(_implPtr->orderIndex, std::ref(_implPtr->comparator));
       _implPtr->rebuildRowIndex();
       _implPtr->buildGroupSections();
-
-      _implPtr->publishReset(previousSize);
-      return;
+    }
+    else if (!sameOrder)
+    {
+      _implPtr->rebuildOrderIndex();
     }
 
-    _implPtr->groupBy = spec.groupBy;
-    _implPtr->sortBy = std::move(spec.sortBy);
-    _implPtr->comparator = buildComparator(_implPtr->sortBy, _implPtr->groupBy);
-    _implPtr->loadMode = computeLoadMode(_implPtr->sortBy, _implPtr->groupBy);
-
-    _implPtr->rebuildOrderIndex();
-
-    _implPtr->publishReset(previousSize);
+    // ViewService publishes the new column marker independently of row deltas.
+    if (!headerOnly)
+    {
+      _implPtr->publishReset(previousSize);
+    }
   }
 
   std::size_t TrackListProjection::size() const noexcept
@@ -1766,13 +1700,23 @@ namespace ao::rt
 
   TrackPresentationSpec TrackListProjection::presentation() const
   {
-    return TrackPresentationSpec{
-      .id = _implPtr->presentationId,
-      .groupBy = _implPtr->groupBy,
-      .sortBy = _implPtr->sortBy,
-      .visibleFields = _implPtr->visibleFields,
-      .redundantFields = _implPtr->redundantFields,
-    };
+    auto spec = _implPtr->presentation;
+
+    // Keep the fallback in the snapshot so change detection can distinguish
+    // inferred redundant fields from the same fields supplied explicitly.
+    if (spec.redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
+    {
+      for (auto const& preset : builtinTrackPresentationPresets())
+      {
+        if (preset.spec.groupBy == spec.groupBy)
+        {
+          spec.redundantFields = preset.spec.redundantFields;
+          break;
+        }
+      }
+    }
+
+    return spec;
   }
 
   std::size_t TrackListProjection::groupCount() const noexcept

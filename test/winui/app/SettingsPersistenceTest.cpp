@@ -51,13 +51,6 @@ namespace ao::winui::test
       return *navigateRes;
     }
 
-    rt::TrackPresentationSpec titleSortPresentation(bool ascending)
-    {
-      return {.id = "windows-column-sort",
-              .sortBy = {{.field = rt::TrackSortField::Title, .ascending = ascending}},
-              .visibleFields = {rt::TrackField::Title}};
-    }
-
     void requirePersisted(rt::WorkspaceService& workspace,
                           rt::ConfigStore& workspaceStore,
                           rt::ConfigStore& settingsStore,
@@ -90,8 +83,8 @@ namespace ao::winui::test
     }
 
     auto const firstCheckpointPath = tempDir.path() / "first-checkpoint.yaml";
-    auto const firstPresentation = titleSortPresentation(false);
-    auto const secondPresentation = titleSortPresentation(true);
+    auto const firstSort = rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = false};
+    auto const secondSort = rt::TrackColumnSort{.column = rt::TrackField::Title};
     {
       auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
       auto& executor = *executorPtr;
@@ -99,9 +92,9 @@ namespace ao::winui::test
       auto checkpoint = WorkspaceSortCheckpoint{executor, runtimePtr->workspace(), runtimePtr->workspaceConfigStore()};
       auto const viewId = navigateToAllTracks(*runtimePtr);
 
-      REQUIRE(runtimePtr->views().setPresentation(viewId, secondPresentation));
+      REQUIRE(runtimePtr->views().setColumnSort(viewId, secondSort));
       checkpoint.request();
-      REQUIRE(runtimePtr->views().setPresentation(viewId, firstPresentation));
+      REQUIRE(runtimePtr->views().setColumnSort(viewId, firstSort));
       auto const queuedBefore = executor.queuedCount();
       checkpoint.request();
 
@@ -112,7 +105,7 @@ namespace ao::winui::test
       auto const firstSaved = ao::test::readFile(firstCheckpointPath);
       REQUIRE_FALSE(firstSaved.empty());
 
-      REQUIRE(runtimePtr->views().setPresentation(viewId, secondPresentation));
+      REQUIRE(runtimePtr->views().setColumnSort(viewId, secondSort));
       checkpoint.request();
       CHECK(ao::test::readFile(workspacePath) == firstSaved);
       executor.runUntilIdle();
@@ -120,8 +113,7 @@ namespace ao::winui::test
     }
 
     // Restore each snapshot after releasing the writer; only one runtime owns the library at a time.
-    auto const checkSavedPresentation = [&](
-                                          std::filesystem::path const& path, rt::TrackPresentationSpec const& expected)
+    auto const checkSavedSort = [&](std::filesystem::path const& path, rt::TrackColumnSort const sort)
     {
       INFO(path.filename().string());
       auto restoredRuntimePtr = rt::test::makeStateOnlyRuntime(tempDir);
@@ -130,11 +122,15 @@ namespace ao::winui::test
       auto const viewId = restoredRuntimePtr->workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
       auto const restored = restoredRuntimePtr->views().trackListState(viewId);
+      auto expected = rt::defaultTrackPresentationSpec();
+      expected.optColumnSort = sort;
       CHECK(restored.presentation == expected);
-      CHECK(restored.sortBy == expected.sortBy);
+      REQUIRE_FALSE(restored.sortBy.empty());
+      CHECK(restored.sortBy.front() ==
+            rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = sort.ascending});
     };
-    checkSavedPresentation(firstCheckpointPath, firstPresentation);
-    checkSavedPresentation(workspacePath, secondPresentation);
+    checkSavedSort(firstCheckpointPath, firstSort);
+    checkSavedSort(workspacePath, secondSort);
 
     if (desktopBlocked)
     {
@@ -156,7 +152,7 @@ namespace ao::winui::test
     auto& store = runtimePtr->workspaceConfigStore();
     auto checkpoint = WorkspaceSortCheckpoint{executor, workspace, store};
     auto const viewId = navigateToAllTracks(*runtimePtr);
-    REQUIRE(runtimePtr->views().setPresentation(viewId, titleSortPresentation(true)));
+    REQUIRE(runtimePtr->views().setColumnSort(viewId, {.column = rt::TrackField::Title}));
     checkpoint.request();
 
     // Mirror session retirement: disarm the queued task, then save while the old workspace is live.
@@ -166,7 +162,7 @@ namespace ao::winui::test
     auto const saved = ao::test::readFile(workspacePath);
     REQUIRE_FALSE(saved.empty());
 
-    REQUIRE(runtimePtr->views().setPresentation(viewId, titleSortPresentation(false)));
+    REQUIRE(runtimePtr->views().setColumnSort(viewId, {.column = rt::TrackField::Title, .ascending = false}));
     executor.runUntilIdle();
     CHECK(ao::test::readFile(workspacePath) == saved);
   }

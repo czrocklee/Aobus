@@ -7,8 +7,6 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/TrackField.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
@@ -17,7 +15,6 @@
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
-#include <utility>
 
 namespace ao::rt::test
 {
@@ -58,29 +55,6 @@ namespace ao::rt::test
     if (config.optPresentation)
     {
       request.optPresentation = NavigationPresentation{.spec = *config.optPresentation};
-    }
-    else if (config.groupBy != TrackGroupKey::None || !config.sortBy.empty())
-    {
-      auto presentation = defaultTrackPresentationSpec();
-
-      if (config.groupBy != TrackGroupKey::None)
-      {
-        for (auto const& preset : builtinTrackPresentationPresets())
-        {
-          if (preset.spec.groupBy == config.groupBy)
-          {
-            presentation = preset.spec;
-            break;
-          }
-        }
-      }
-
-      if (!config.sortBy.empty())
-      {
-        presentation.sortBy = config.sortBy;
-      }
-
-      request.optPresentation = NavigationPresentation{.spec = std::move(presentation)};
     }
 
     auto const viewId = ao::test::requireValue(workspace.navigate(request));

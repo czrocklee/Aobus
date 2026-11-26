@@ -9,10 +9,11 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
+#include <algorithm>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::tui
@@ -30,23 +31,27 @@ namespace ao::tui
 
     for (auto const& preset : builtinPresets)
     {
-      auto const optText = uimodel::builtinTrackPresentation(textCatalog, preset.spec.id);
+      auto const id = preset.presetId();
+      auto const key = std::string{rt::builtinPresetKey(id)};
+      auto const text = uimodel::builtinTrackPresentation(textCatalog, id);
       items.push_back(TrackPresentationNavEntry{
-        .id = preset.spec.id,
-        .label = optText ? std::string{optText->label} : preset.spec.id,
-        .detail = optText ? std::string{optText->description} : std::string{},
+        .id = key,
+        .label = std::string{text.label},
+        .detail = std::string{text.description},
       });
     }
 
     for (auto const& preset : customPresets)
     {
+      auto const key = rt::trackPresetKey(preset.presetId());
       items.push_back(TrackPresentationNavEntry{
-        .id = preset.spec.id,
-        .label = preset.label.empty() ? preset.spec.id : preset.label,
-        .detail =
-          preset.basePresetId.empty()
-            ? std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationCustom)}
-            : i18n::requiredFormat(textCatalog, MessageId::TuiPresentationCustomFrom, {{"id", preset.basePresetId}}),
+        .id = key,
+        .label = preset.label.empty() ? key : preset.label,
+        .detail = preset.optBasePresetId
+                    ? i18n::requiredFormat(textCatalog,
+                                           MessageId::TuiPresentationCustomFrom,
+                                           {{"id", rt::trackPresetKey(*preset.optBasePresetId)}})
+                    : std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationCustom)},
       });
     }
 
@@ -64,16 +69,22 @@ namespace ao::tui
     return items;
   }
 
-  std::string trackPresentationDisplayId(i18n::MessageCatalog const& textCatalog, std::string_view const presentationId)
+  std::string trackPresentationDisplayLabel(i18n::MessageCatalog const& textCatalog,
+                                            rt::TrackPresetId const& presetId,
+                                            std::span<TrackPresentationNavEntry const> const entries)
   {
-    return presentationId.empty() ? std::string{i18n::requiredText(textCatalog, MessageId::TuiPresentationDefault)}
-                                  : std::string{presentationId};
-  }
+    auto key = rt::trackPresetKey(presetId);
 
-  std::string trackPresentationBadgeLabel(i18n::MessageCatalog const& textCatalog,
-                                          std::string_view const presentationId)
-  {
-    auto const id = trackPresentationDisplayId(textCatalog, presentationId);
-    return i18n::requiredFormat(textCatalog, MessageId::TuiPresentationBadge, {{"id", id}});
+    if (auto const it = std::ranges::find(entries, key, &TrackPresentationNavEntry::id); it != entries.end())
+    {
+      return it->label;
+    }
+
+    if (auto const* builtin = std::get_if<rt::BuiltinPreset>(&presetId); builtin != nullptr)
+    {
+      return std::string{uimodel::builtinTrackPresentation(textCatalog, *builtin).label};
+    }
+
+    return key;
   }
 } // namespace ao::tui

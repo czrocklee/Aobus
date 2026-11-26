@@ -17,7 +17,7 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 ## Terminology
 
 - **Source snapshot** is the projection's ordered `TrackId` mirror of its source.
-- **Projection order** is source order when no sort terms exist, otherwise stable presentation sort order.
+- **Projection order** is source order when the effective presentation sort is empty, otherwise that stable sort.
 - **Regular batch** contains sequential insert, remove, and update row ranges.
 - **Reset** announces a complete replacement snapshot.
 - **Source invalidation** is the terminal outcome of the leased source identity.
@@ -30,7 +30,7 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 - Regular ranges are interpreted after preceding ranges in the same batch: removes have descending starts, followed by inserts and then updates, each in ascending non-overlapping ranges.
   Insert and update coordinates also refer to the final state, since no later edit shifts a completed insertion; remove coordinates do not.
 - Reset and source invalidation are valid only as singleton batches.
-- Empty presentation sort preserves source order exactly.
+- An empty effective presentation sort preserves source order exactly. A header override is part of that sort even when the preset `sortBy` is empty.
 - Equal sort keys retain their relative order in the current source, including after source moves and incremental merges.
 - Incremental and complete rebuilds use the same group-identity and ordering-key
   derivation and therefore publish the same final row and section order.
@@ -76,7 +76,7 @@ A projection never parses a filter expression; its source already owns the resul
 A section identity, order, or section-metadata change publishes `ProjectionReset`; membership-count-only changes may remain regular row deltas.
 When a regular source edit causes a section reset, the reset carries the inserted and updated track IDs. Consumers still replace all row coordinates, but need not reload fields for the other tracks. A removal-only edit can therefore produce a reset with an empty ID list. A reset without an ID list makes no such guarantee.
 
-Changing presentation or receiving source reset performs a complete rebuild.
+A source reset rebuilds the projection. A presentation change can reuse materialized keys when only their priority or direction changes; the projection still publishes a reset when row or section order changes. If only `optColumnSort` changes and both the table comparator and the required metadata stay the same, the projection stores the new spec without publishing a row delta. A frontend that displays the sort arrow must observe view presentation changes, not wait for a row reset.
 Source invalidation clears rows, lookup indexes, group sections, and arena-backed views before publishing one terminal invalidation batch and no later reset.
 
 ## Arena rebasing

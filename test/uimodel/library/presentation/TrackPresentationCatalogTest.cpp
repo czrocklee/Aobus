@@ -20,19 +20,19 @@ namespace ao::uimodel::test
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
-    auto const optPreviousSpec = catalog.specForId("library");
+    auto const optPreviousSpec = catalog.specForId(rt::BuiltinPreset::Library);
     std::int32_t notifications = 0;
     auto observedLabel = std::string{};
     auto sub = catalog.signalChanged().connect(
       [&]
       {
         ++notifications;
-        observedLabel = catalog.labelForId("library");
+        observedLabel = catalog.labelFor(rt::BuiltinPreset::Library);
       });
     catalog.setTextCatalog(ao::test::messageCatalog("de"));
     CHECK(notifications == 1);
     CHECK(observedLabel == "Bibliothek");
-    CHECK(catalog.specForId("library") == optPreviousSpec);
+    CHECK(catalog.specForId(rt::BuiltinPreset::Library) == optPreviousSpec);
   }
 
   TEST_CASE("TrackPresentationCatalog - projects builtin and custom presentation choices")
@@ -42,30 +42,32 @@ namespace ao::uimodel::test
     std::int32_t signalCount = 0;
     auto sub = catalog.signalChanged().connect([&signalCount] noexcept { ++signalCount; });
 
+    auto const customId = rt::CustomPresetId{0x1a};
     catalog.addCustomPresentation(rt::CustomTrackPresentationPreset{
       .label = "Library QA",
-      .basePresetId = std::string{rt::kDefaultTrackPresentationId},
-      .spec = rt::TrackPresentationSpec{.id = "library-qa"},
+      .optBasePresetId = rt::TrackPresetId{rt::BuiltinPreset::Library},
+      .spec = rt::TrackPresentationSpec{.presetId = customId},
     });
 
     auto const items = catalog.menuItems();
     auto const builtinCount = catalog.builtinPresets().size();
 
-    CHECK(catalog.labelForId(rt::kDefaultTrackPresentationId) == "Library");
-    CHECK(catalog.labelForId(rt::kListOrderTrackPresentationId) == "Manual Order");
-    CHECK(catalog.labelForId("library-qa") == "Library QA");
-    CHECK(catalog.labelForId("missing-preset") == "missing-preset");
-    REQUIRE(catalog.specForId("library-qa").has_value());
-    CHECK(catalog.specForId("library-qa")->id == "library-qa");
-    REQUIRE(catalog.specForId(rt::kListOrderTrackPresentationId).has_value());
-    CHECK(catalog.specForId(rt::kListOrderTrackPresentationId)->sortBy.empty());
-    CHECK_FALSE(catalog.specForId("missing-preset").has_value());
+    CHECK(catalog.labelFor(rt::BuiltinPreset::Library) == "Library");
+    CHECK(catalog.labelFor(rt::BuiltinPreset::ListOrder) == "Manual Order");
+    CHECK(catalog.labelFor(customId) == "Library QA");
+    auto const optSpec = catalog.specForId(customId);
+    REQUIRE(optSpec);
+    CHECK(optSpec->isPreset(customId));
+    auto const optListOrder = catalog.specForId(rt::BuiltinPreset::ListOrder);
+    REQUIRE(optListOrder);
+    CHECK(optListOrder->sortBy.empty());
+    CHECK_FALSE(catalog.specForId(rt::CustomPresetId{0x2b}));
 
     REQUIRE(items.size() == builtinCount + 4);
     CHECK(items.front().type == TrackPresentationMenuItemType::Preset);
     CHECK(items[builtinCount].type == TrackPresentationMenuItemType::Separator);
     CHECK(items[builtinCount + 1].type == TrackPresentationMenuItemType::Preset);
-    CHECK(items[builtinCount + 1].id == "library-qa");
+    CHECK(items[builtinCount + 1].id == "000000000000001a");
     CHECK(items[builtinCount + 1].label == "Library QA");
     CHECK(items.back().type == TrackPresentationMenuItemType::CreateCustomView);
     CHECK(signalCount == 1);

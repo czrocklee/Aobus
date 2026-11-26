@@ -14,8 +14,8 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::uimodel
@@ -43,22 +43,22 @@ namespace ao::uimodel
     return _workspace.customPresets();
   }
 
-  rt::CustomTrackPresentationPreset const* TrackPresentationCatalog::findCustomPresetById(std::string_view id) const
+  rt::CustomTrackPresentationPreset const* TrackPresentationCatalog::findCustomPresetById(rt::CustomPresetId id) const
   {
     auto const presets = _workspace.customPresets();
-    auto const it = std::ranges::find(presets, id, [](auto const& preset) { return preset.spec.id; });
+    auto const it = std::ranges::find(presets, id, &rt::CustomTrackPresentationPreset::presetId);
 
     return it == presets.end() ? nullptr : &*it;
   }
 
-  std::optional<rt::TrackPresentationSpec> TrackPresentationCatalog::specForId(std::string_view id) const
+  std::optional<rt::TrackPresentationSpec> TrackPresentationCatalog::specForId(rt::TrackPresetId const& id) const
   {
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
+    if (auto const* builtin = std::get_if<rt::BuiltinPreset>(&id); builtin != nullptr)
     {
-      return builtin->spec;
+      return rt::builtinTrackPresentationPreset(*builtin).spec;
     }
 
-    if (auto const* custom = findCustomPresetById(id); custom != nullptr)
+    if (auto const* custom = findCustomPresetById(std::get<rt::CustomPresetId>(id)); custom != nullptr)
     {
       return custom->spec;
     }
@@ -66,22 +66,15 @@ namespace ao::uimodel
     return std::nullopt;
   }
 
-  std::string TrackPresentationCatalog::labelForId(std::string_view id) const
+  std::string TrackPresentationCatalog::labelFor(rt::TrackPresetId const& id) const
   {
-    if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
+    if (auto const* builtin = std::get_if<rt::BuiltinPreset>(&id); builtin != nullptr)
     {
-      if (auto const optText = builtinTrackPresentation(_textCatalog, builtin->spec.id); optText)
-      {
-        return std::string{optText->label};
-      }
+      return std::string{builtinTrackPresentation(_textCatalog, *builtin).label};
     }
 
-    if (auto const* custom = findCustomPresetById(id); custom != nullptr)
-    {
-      return custom->label;
-    }
-
-    return std::string{id};
+    auto const* custom = findCustomPresetById(std::get<rt::CustomPresetId>(id));
+    return custom != nullptr ? custom->label : rt::trackPresetKey(id);
   }
 
   std::vector<TrackPresentationMenuItem> TrackPresentationCatalog::menuItems() const
@@ -90,12 +83,11 @@ namespace ao::uimodel
 
     for (auto const& preset : builtinPresets())
     {
-      auto const optText = builtinTrackPresentation(_textCatalog, preset.spec.id);
-
+      auto const id = preset.presetId();
       items.push_back(TrackPresentationMenuItem{
         .type = TrackPresentationMenuItemType::Preset,
-        .id = std::string{preset.spec.id},
-        .label = optText ? std::string{optText->label} : preset.spec.id,
+        .id = std::string{rt::builtinPresetKey(id)},
+        .label = labelFor(id),
       });
     }
 
@@ -109,7 +101,7 @@ namespace ao::uimodel
       {
         items.push_back(TrackPresentationMenuItem{
           .type = TrackPresentationMenuItemType::Preset,
-          .id = preset.spec.id,
+          .id = rt::trackPresetKey(preset.presetId()),
           .label = preset.label,
         });
       }

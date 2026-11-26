@@ -16,6 +16,7 @@
 #include "tui/StatusBar.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -76,7 +77,7 @@ namespace ao::tui::test
     SECTION("Album suffix opens album groups")
     {
       press(events, 'b');
-      CHECK(library.activePresentationId() == "albums");
+      CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     }
 
     SECTION("Menu selection activates with Enter")

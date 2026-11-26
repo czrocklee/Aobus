@@ -34,8 +34,10 @@
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
 
+#include <winrt/Aobus.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/base.h>
 
 #include <algorithm>
 #include <cmath>
@@ -178,6 +180,17 @@ namespace ao::winui
       auto const fields = uimodel::visibleTrackFieldsInStoredLayout(presentation, stored);
       return uimodel::pixelTrackColumnSpecs(fields, stored);
     }
+
+    std::string trackHeaderLabel(i18n::MessageCatalog const& textCatalog, rt::TrackField const field)
+    {
+      return stableResourceString(
+        "track_field_", rt::trackFieldId(field), uimodel::trackFieldLabel(textCatalog, field));
+    }
+
+    std::string trackHeaderSortSuffix(bool const ascending)
+    {
+      return resourceString(ascending ? "SortAscendingSuffix" : "SortDescendingSuffix");
+    }
   } // namespace
 
   detail::TrackTableRowReader::TrackTableRowReader(std::span<TrackColumnCellSpec const> const columns) noexcept
@@ -218,6 +231,8 @@ namespace ao::winui
           adoptWorkspaceView(_viewId);
         }
       });
+    _presentationSub = _views.onPresentationChanged([this](rt::ViewService::PresentationChanged const& changed)
+                                                    { handlePresentationChanged(changed.viewId); });
     _workspaceSub = _workspace.onChanged(
       [this](rt::WorkspaceChanged const&)
       {
@@ -235,6 +250,7 @@ namespace ao::winui
     _bindingLifetimePtr.reset();
     _projectionSub.reset();
     _viewProjectionSub.reset();
+    _presentationSub.reset();
     _workspaceSub.reset();
     _projectionPtr.reset();
     _displayIndex.clear();
@@ -296,12 +312,13 @@ namespace ao::winui
     _projectionPtr = std::move(projectionPtr);
     _displayIndex.clear();
     _projectionInvalidated = false;
+    _optHeaderSort.reset();
+    _columns.clear();
+    _headers.Clear();
     _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
 
     if (_projectionPtr == nullptr)
     {
-      _columns.clear();
-      _headers.Clear();
       _changed.emit();
       return;
     }
@@ -370,19 +387,14 @@ namespace ao::winui
 
   void TrackListController::refreshColumns()
   {
-    _columns.clear();
-    _headers.Clear();
-    _contentWidth = static_cast<double>(_surfaceViewportWidth);
-
-    if (_viewId == rt::kInvalidViewId)
-    {
-      return;
-    }
-
     auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
+      _columns.clear();
+      _headers.Clear();
+      _optHeaderSort.reset();
+      _contentWidth = static_cast<double>(_surfaceViewportWidth);
       return;
     }
 
@@ -391,27 +403,45 @@ namespace ao::winui
     auto const& storedLayout = _columnLayouts.layoutForList(listId);
     auto const specs = visibleColumnSpecs(state.presentation, storedLayout);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
-    _columns.reserve(specs.size());
+    auto columns = std::vector<TrackColumnCellSpec>{};
+    columns.reserve(specs.size());
+    auto totalWidth = static_cast<double>(_trailingChromeWidth);
 
     for (std::size_t index = 0; index < specs.size(); ++index)
     {
       auto const field = specs[index].field;
       auto const width = index < widths.size() ? static_cast<double>(widths[index])
                                                : static_cast<double>(uimodel::trackColumnDefaults(field).width);
-      _columns.push_back({.field = field, .width = width});
+      columns.push_back({.field = field, .width = width});
+      totalWidth += width;
+    }
 
+    _contentWidth = std::max(totalWidth, static_cast<double>(_surfaceViewportWidth));
+
+    if (columns == _columns)
+    {
+      // A row reorder does not retire the clicked header or its native focus.
+      refreshSortIndicators(state.presentation.optColumnSort);
+      return;
+    }
+
+    _columns = std::move(columns);
+    _headers.Clear();
+    _optHeaderSort.reset();
+
+    for (auto const& [field, width] : _columns)
+    {
       auto const* definition = rt::trackFieldDefinition(field);
       auto const fieldId = rt::trackFieldId(field);
-      auto label = stableResourceString("track_field_", fieldId, uimodel::trackFieldLabel(_textCatalog, field));
+      auto label = trackHeaderLabel(_textCatalog, field);
       // The gripper names the column it widens, without the header's sort mark.
       auto const resizeName =
         i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiTrackResizeColumn, {{"column", label}});
 
-      if (definition != nullptr && definition->optSortField && !state.presentation.sortBy.empty() &&
-          state.presentation.sortBy.front().field == *definition->optSortField)
+      if (auto const& optSort = state.presentation.optColumnSort; optSort && optSort->column == field)
       {
-        label +=
-          resourceString(state.presentation.sortBy.front().ascending ? "SortAscendingSuffix" : "SortDescendingSuffix");
+        _optHeaderSort = optSort;
+        label += trackHeaderSortSuffix(optSort->ascending);
       }
 
       _headers.Append(
@@ -421,16 +451,64 @@ namespace ao::winui
                                                                  definition != nullptr && definition->optSortField,
                                                                  winrt::to_hstring(resizeName)));
     }
+  }
 
-    _contentWidth = 0.0;
-
-    for (auto const& column : _columns)
+  void TrackListController::handlePresentationChanged(rt::ViewId const viewId)
+  {
+    // Workspace focus can change before the posted notification that adopts it.
+    if (viewId != _viewId || _projectionPtr == nullptr || _projectionInvalidated)
     {
-      _contentWidth += column.width;
+      return;
     }
 
-    _contentWidth =
-      std::max(_contentWidth + static_cast<double>(_trailingChromeWidth), static_cast<double>(_surfaceViewportWidth));
+    auto const projectionRes = _views.findTrackListProjection(viewId);
+
+    if (!projectionRes || *projectionRes != _projectionPtr)
+    {
+      return;
+    }
+
+    // Delivery is posted. Read the live override instead of replaying an obsolete arrow.
+    if (auto const* presentation = _views.findTrackListPresentation(viewId); presentation != nullptr)
+    {
+      refreshSortIndicators(presentation->optColumnSort);
+    }
+  }
+
+  void TrackListController::refreshSortIndicators(std::optional<rt::TrackColumnSort> optSort)
+  {
+    if (optSort && !std::ranges::contains(_columns, optSort->column, &TrackColumnCellSpec::field))
+    {
+      optSort.reset();
+    }
+
+    if (_optHeaderSort == optSort)
+    {
+      return;
+    }
+
+    auto const optPreviousSort = std::exchange(_optHeaderSort, optSort);
+
+    for (std::uint32_t index = 0; index < _headers.Size(); ++index)
+    {
+      auto const field = _columns[index].field;
+      auto const sorted = optSort && optSort->column == field;
+
+      if (!sorted && (!optPreviousSort || optPreviousSort->column != field))
+      {
+        continue;
+      }
+
+      auto label = trackHeaderLabel(_textCatalog, field);
+
+      if (sorted)
+      {
+        label += trackHeaderSortSuffix(optSort->ascending);
+      }
+
+      auto const header = _headers.GetAt(index).as<winrt::Aobus::TrackCellItem>();
+      winrt::get_self<winrt::Aobus::implementation::TrackCellItem>(header)->setText(winrt::to_hstring(label));
+    }
   }
 
   void TrackListController::storeColumnSpecs(ListId const listId, std::span<uimodel::TrackColumnSolveSpec const> specs)
@@ -646,7 +724,7 @@ namespace ao::winui
     return playTrack(_viewId, trackId);
   }
 
-  Result<> TrackListController::toggleSort(rt::TrackSortField const field)
+  Result<> TrackListController::toggleSort(rt::TrackField const column)
   {
     if (_viewId == rt::kInvalidViewId)
     {
@@ -660,12 +738,7 @@ namespace ao::winui
       return std::unexpected{stateRes.error()};
     }
 
-    auto spec = stateRes->presentation;
-    auto const ascending =
-      spec.sortBy.empty() || spec.sortBy.front().field != field ? true : !spec.sortBy.front().ascending;
-    spec.id = kColumnSortPresentationId;
-    spec.sortBy = {{.field = field, .ascending = ascending}};
-    return _views.setPresentation(_viewId, spec);
+    return _views.setColumnSort(_viewId, stateRes->presentation.nextColumnSort(column));
   }
 
   Result<> TrackListController::navigateTo(ListId const listId)
@@ -818,17 +891,6 @@ namespace ao::winui
 
     auto const stateRes = _views.findTrackListState(_viewId);
     return stateRes ? stateRes->listId : kInvalidListId;
-  }
-
-  std::string TrackListController::activePresentationId() const
-  {
-    if (_viewId == rt::kInvalidViewId)
-    {
-      return {};
-    }
-
-    auto const stateRes = _views.findTrackListState(_viewId);
-    return stateRes ? stateRes->presentation.id : std::string{};
   }
 
   std::size_t TrackListController::rowCount() const noexcept

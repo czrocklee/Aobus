@@ -12,6 +12,7 @@
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -191,11 +192,28 @@ namespace ao::gtk::test
 
     auto const activeViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);
-    CHECK(runtime.views().trackListState(activeViewId).presentation.id == "albums");
+    CHECK(runtime.views().trackListState(activeViewId).presentation.isPreset(rt::BuiltinPreset::Albums));
 
     auto const optStored = listPresentations.presentationIdForList(rt::kAllTracksListId);
     REQUIRE(optStored);
-    CHECK(*optStored == "albums");
+    CHECK(*optStored == rt::TrackPresetId{rt::BuiltinPreset::Albums});
+
+    auto const sort = rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = false};
+    REQUIRE(runtime.views().setColumnSort(activeViewId, sort));
+    drainGtkEvents();
+    CHECK(menuButton->get_label() == "Albums");
+    CHECK(listPresentations.presentationIdForList(rt::kAllTracksListId) == optStored);
+
+    menuButton->popup();
+    drainGtkEvents();
+    auto* const resetButton = findButtonByLabel(*popover, "Albums");
+    REQUIRE(resetButton != nullptr);
+    REQUIRE(resetButton->get_sensitive());
+    emitClicked(*resetButton);
+    drainGtkEvents();
+    CHECK(runtime.views().trackListState(activeViewId).presentation ==
+          rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec);
+    CHECK(listPresentations.presentationIdForList(rt::kAllTracksListId) == optStored);
     window.close();
     drainGtkEvents();
   }
@@ -214,8 +232,8 @@ namespace ao::gtk::test
     sendOkIfEditorStillLive();
 
     CHECK(fixture.catalog.customPresentations().empty());
-    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id ==
-          rt::kDefaultTrackPresentationId);
+    CHECK(
+      fixture.runtime.views().trackListState(fixture.activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
     CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
     drainGtkEvents();
 
@@ -223,10 +241,9 @@ namespace ao::gtk::test
     auto const presets = fixture.catalog.customPresentations();
     REQUIRE(presets.size() == 1);
     CHECK(presets.front().label == "Release Review");
-    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id == presets.front().spec.id);
-    auto const optStored = fixture.listPresentations.presentationIdForList(rt::kAllTracksListId);
-    REQUIRE(optStored);
-    CHECK(*optStored == presets.front().spec.id);
+    auto const presetId = presets.front().presetId();
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.isPreset(presetId));
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{presetId});
   }
 
   TEST_CASE("TrackPresentationButton - preserves a custom draft when only the picker is hidden")
@@ -264,8 +281,9 @@ namespace ao::gtk::test
     auto const presets = fixture.catalog.customPresentations();
     REQUIRE(presets.size() == 1);
     CHECK(presets.front().label == "Visibility Draft");
-    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id == presets.front().spec.id);
-    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == presets.front().spec.id);
+    auto const presetId = presets.front().presetId();
+    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.isPreset(presetId));
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{presetId});
   }
 
   TEST_CASE("TrackPresentationButton - seeds a custom draft from the live presentation before the label refreshes")
@@ -275,17 +293,26 @@ namespace ao::gtk::test
     auto* const menuButton = findWidget<Gtk::MenuButton>(*fixture.pickerPtr);
     REQUIRE(menuButton != nullptr);
     auto const renderedSpec = fixture.runtime.views().trackListState(fixture.activeViewId).presentation;
-    auto const* const albums = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(albums != nullptr);
-    auto liveSpec = albums->spec;
-    REQUIRE_FALSE(liveSpec.sortBy.empty());
-    // The catalog supplies the label, but even its Albums spec is not the live one.
-    liveSpec.sortBy.front().ascending = !liveSpec.sortBy.front().ascending;
-    REQUIRE(liveSpec.sortBy != renderedSpec.sortBy);
+    auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
 
-    REQUIRE(fixture.runtime.workspace().setActivePresentation(liveSpec));
+    SECTION("named preset with live values that differ from the catalog")
+    {
+      auto albumsSpec = albums;
+      REQUIRE_FALSE(albumsSpec.sortBy.empty());
+      albumsSpec.sortBy.front().ascending = !albumsSpec.sortBy.front().ascending;
+      REQUIRE(fixture.runtime.workspace().setActivePresentation(albumsSpec));
+    }
+
+    SECTION("a column override contributes to the copied order without renaming the source preset")
+    {
+      REQUIRE(fixture.runtime.workspace().setActivePresentation(albums));
+      auto const sort = rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = false};
+      REQUIRE(fixture.runtime.views().setColumnSort(fixture.activeViewId, sort));
+    }
+
+    auto const liveSpec = fixture.runtime.views().trackListState(fixture.activeViewId).presentation;
+    REQUIRE(liveSpec.effectiveSortBy() != renderedSpec.effectiveSortBy());
     REQUIRE(fixture.runtime.workspace().snapshot().activeViewId == fixture.activeViewId);
-    REQUIRE(fixture.runtime.views().trackListState(fixture.activeViewId).presentation == liveSpec);
     REQUIRE(menuButton->get_label() == "Library");
 
     // Click the already-open menu before dispatching the presentation notification.
@@ -296,8 +323,10 @@ namespace ao::gtk::test
     auto const presets = fixture.catalog.customPresentations();
     REQUIRE(presets.size() == 1);
     CHECK(presets.front().label == "Albums Copy");
+    CHECK(presets.front().optBasePresetId == liveSpec.presetId);
     CHECK(presets.front().spec.groupBy == liveSpec.groupBy);
-    CHECK(presets.front().spec.sortBy == liveSpec.sortBy);
+    CHECK(presets.front().spec.sortBy == liveSpec.effectiveSortBy());
+    CHECK_FALSE(presets.front().spec.optColumnSort);
     CHECK(presets.front().spec.visibleFields == liveSpec.visibleFields);
   }
 
@@ -381,8 +410,8 @@ namespace ao::gtk::test
     drainGtkEvents();
     CHECK(findCustomViewEditor() == nullptr);
     CHECK(fixture.catalog.customPresentations().empty());
-    CHECK(fixture.runtime.views().trackListState(fixture.activeViewId).presentation.id ==
-          rt::kDefaultTrackPresentationId);
+    CHECK(
+      fixture.runtime.views().trackListState(fixture.activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
   }
 
   TEST_CASE("TrackPresentationButton - rebinding services revokes the custom editor and queued Save")
@@ -437,13 +466,13 @@ namespace ao::gtk::test
     // Move focus after Save queues the draft but before the idle can commit it.
     auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
     REQUIRE(secondViewId != fixture.activeViewId);
-    auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
+    auto const secondPresentation = runtime.views().trackListState(secondViewId).presentation;
     drainGtkEvents();
 
     CHECK(findCustomViewEditor() == nullptr);
     CHECK(fixture.catalog.customPresentations().empty());
-    CHECK(runtime.views().trackListState(fixture.activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
-    CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+    CHECK(runtime.views().trackListState(fixture.activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
+    CHECK(runtime.views().trackListState(secondViewId).presentation == secondPresentation);
     CHECK_FALSE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
     CHECK_FALSE(fixture.listPresentations.presentationIdForList(secondListId).has_value());
   }
@@ -480,7 +509,7 @@ namespace ao::gtk::test
     button.setPresentationServices(&catalog, &replacementPreferences, &themeCoordinator);
     drainGtkEvents();
 
-    CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    CHECK(runtime.views().trackListState(activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
     CHECK_FALSE(listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
     CHECK_FALSE(replacementPreferences.presentationIdForList(rt::kAllTracksListId).has_value());
   }
@@ -499,7 +528,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     auto const activeViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);
-    REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    REQUIRE(runtime.views().trackListState(activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
 
     auto buttonPtr = std::make_unique<TrackPresentationButton>(
       runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog());
@@ -519,7 +548,7 @@ namespace ao::gtk::test
     buttonPtr.reset();
     drainGtkEvents();
 
-    CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    CHECK(runtime.views().trackListState(activeViewId).presentation.isPreset(rt::BuiltinPreset::Library));
   }
 
   TEST_CASE("TrackPresentationButton - refused deferred applies do not persist a preference")
@@ -554,11 +583,11 @@ namespace ao::gtk::test
     emitClicked(*albumsButton);
 
     auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
-    auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
+    auto const secondPresentation = runtime.views().trackListState(secondViewId).presentation;
     drainGtkEvents();
 
-    CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
-    CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+    CHECK(runtime.views().trackListState(firstViewId).presentation.isPreset(rt::BuiltinPreset::Library));
+    CHECK(runtime.views().trackListState(secondViewId).presentation == secondPresentation);
     CHECK_FALSE(listPresentations.presentationIdForList(secondListId).has_value());
 
     CHECK_FALSE(listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());

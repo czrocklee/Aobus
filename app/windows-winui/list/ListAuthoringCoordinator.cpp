@@ -13,6 +13,7 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -88,6 +89,14 @@ namespace ao::winui
     std::string labeled(std::string_view const label, std::string_view const value)
     {
       return std::format("{}: {}", label, value);
+    }
+
+    bool shouldRefreshListPreview(rt::LibraryChangeSet const& change, ListId const parentListId)
+    {
+      // Ancestor changes can affect the count or diagnostic even if the direct parent's definition is unchanged.
+      return change.libraryReset || !change.tracksInserted.empty() || !change.tracksDeleted.empty() ||
+             !change.tracksMutated.empty() ||
+             (!rt::isVirtualListId(parentListId) && (!change.listsUpserted.empty() || !change.listsDeleted.empty()));
     }
   } // namespace
 
@@ -165,7 +174,7 @@ namespace ao::winui
 
     if (auto const optId = _listPresentations.presentationIdForList(editListId); optId)
     {
-      auto const selected = std::ranges::find(_presentationIds, *optId);
+      auto const selected = std::ranges::find(_presentationIds, optId);
 
       if (selected != _presentationIds.end())
       {
@@ -232,7 +241,7 @@ namespace ao::winui
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPresentationPickerLabel))));
     _presentationInput.HorizontalAlignment(HorizontalAlignment::Stretch);
     _presentationIds.clear();
-    _presentationIds.emplace_back();
+    _presentationIds.emplace_back(std::nullopt);
     _presentationInput.Items().Append(
       winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::TrackPresentationAuto))));
 
@@ -243,8 +252,11 @@ namespace ao::winui
         continue;
       }
 
-      _presentationIds.push_back(item.id);
-      _presentationInput.Items().Append(winrt::box_value(winrt::to_hstring(item.label)));
+      if (auto const optId = rt::parseTrackPresetId(item.id); optId)
+      {
+        _presentationIds.push_back(optId);
+        _presentationInput.Items().Append(winrt::box_value(winrt::to_hstring(item.label)));
+      }
     }
 
     content.Children().Append(_presentationInput);
@@ -285,11 +297,8 @@ namespace ao::winui
           return;
         }
 
-        // The replica has applied the commit. Ancestor changes can affect the
-        // count or diagnostic even if the direct parent's definition is unchanged.
-        if (change.libraryReset || !change.tracksInserted.empty() || !change.tracksDeleted.empty() ||
-            !change.tracksMutated.empty() ||
-            (!rt::isVirtualListId(_parentListId) && (!change.listsUpserted.empty() || !change.listsDeleted.empty())))
+        // The replica has applied the commit.
+        if (shouldRefreshListPreview(change, _parentListId))
         {
           _previewTimer.Start();
         }
@@ -474,9 +483,13 @@ namespace ao::winui
 
     auto const token = _dialogGenerationGate.token();
 
-    if (selected > 0 && static_cast<std::size_t>(selected) < _presentationIds.size())
+    auto const optPresetId = selected >= 0 && static_cast<std::size_t>(selected) < _presentationIds.size()
+                               ? _presentationIds[static_cast<std::size_t>(selected)]
+                               : std::nullopt;
+
+    if (optPresetId)
     {
-      _listPresentations.setPresentationIdForList(*res, _presentationIds[static_cast<std::size_t>(selected)]);
+      _listPresentations.setPresentationIdForList(*res, *optPresetId);
     }
     else
     {

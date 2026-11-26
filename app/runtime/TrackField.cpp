@@ -338,7 +338,9 @@ namespace ao::rt
         .category = Cat::Synthetic,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .sortable = true,
         .synthetic = true,
+        .optSortField = TrackSortField::TrackNumber,
       },
       {
         .field = F::TechnicalSummary,
@@ -482,6 +484,12 @@ namespace ao::rt
     // Structured credits have no scalar TrackField. Match exact field ids,
     // without case folding or query aliases.
     return key == kCreditsMetadataKey || trackFieldFromId(key).has_value();
+  }
+
+  std::optional<TrackSortField> trackSortFieldForColumn(TrackField const column)
+  {
+    auto const* definition = trackFieldDefinition(column);
+    return definition == nullptr ? std::nullopt : definition->optSortField;
   }
 
   std::optional<TrackSortField> trackSortFieldFromId(std::string_view id)

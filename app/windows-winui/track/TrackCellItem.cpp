@@ -10,6 +10,8 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 
+#include <winrt/Microsoft.UI.Xaml.Data.h>
+
 #include <utility>
 
 namespace winrt::Aobus::implementation
@@ -29,6 +31,25 @@ namespace winrt::Aobus::implementation
         optField && ao::uimodel::trackColumnDefaults(*optField).alignment == ao::uimodel::TrackColumnAlignment::End)
     {
       _alignment = Microsoft::UI::Xaml::TextAlignment::Right;
+    }
+  }
+
+  event_token TrackCellItem::PropertyChanged(Microsoft::UI::Xaml::Data::PropertyChangedEventHandler const& handler)
+  {
+    return _propertyChanged.add(handler);
+  }
+
+  void TrackCellItem::PropertyChanged(event_token const& token) noexcept
+  {
+    _propertyChanged.remove(token);
+  }
+
+  void TrackCellItem::setText(hstring text)
+  {
+    if (_text != text)
+    {
+      _text = std::move(text);
+      _propertyChanged(*this, Microsoft::UI::Xaml::Data::PropertyChangedEventArgs{L"Text"});
     }
   }
 } // namespace winrt::Aobus::implementation

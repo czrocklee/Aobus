@@ -120,7 +120,20 @@ namespace ao::tui
       return columns;
     }
 
+    ftxui::Element trackHeaderCell(TrackColumn const& column, rt::TrackPresentationSpec const& presentation)
+    {
+      if (auto const& optSort = presentation.optColumnSort; optSort && optSort->column == column.field)
+      {
+        auto const marker = std::string_view{optSort->ascending ? "↑ " : "↓ "};
+        return fieldCell(
+          std::string{marker} + ellipsizeToCellWidth(column.label, column.width - cellWidth(marker)), column);
+      }
+
+      return fieldCell(column.label, column);
+    }
+
     ftxui::Element trackHeaderRow(std::vector<TrackColumn> const& columns,
+                                  rt::TrackPresentationSpec const& presentation,
                                   std::int32_t const availableColumns,
                                   std::vector<TrackColumnResizeHandle>* const resizeHandles)
     {
@@ -141,12 +154,13 @@ namespace ao::tui
         auto const& column = columns[index];
         cells.push_back(columnSeparator(index));
 
-        auto cellPtr = fieldCell(column.label, column) | style::accent() | bold;
+        auto cellPtr = trackHeaderCell(column, presentation) | style::accent() | bold;
 
         if (resizeHandles != nullptr)
         {
           resizeHandles->push_back(TrackColumnResizeHandle{
             .field = column.field,
+            .nextSortAscending = presentation.nextColumnSort(column.field).ascending,
             .columns = column.width,
             .availableColumns = availableColumns,
           });
@@ -582,7 +596,7 @@ namespace ao::tui
     }
 
     auto tablePtr = vbox({
-                      trackHeaderRow(columns, columnLayout.availableColumns, options.resizeHandles),
+                      trackHeaderRow(columns, presentation, columnLayout.availableColumns, options.resizeHandles),
                       std::move(listElementPtr),
                     }) |
                     flex;

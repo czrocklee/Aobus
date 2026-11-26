@@ -8,6 +8,7 @@
 #include "tui/LibraryController.h"
 #include <ao/async/LoopExecutor.h>
 #include <ao/library/Credits.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryJobs.h>
@@ -44,7 +45,7 @@ namespace ao::tui::test
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         columnLayouts};
-    std::ignore = controller.setPresentation("songs");
+    std::ignore = controller.setPresentation(rt::BuiltinPreset::Songs);
     controller.setSelectedTrackIndex(0);
     REQUIRE(controller.selectedTrackView().track->id == credited);
     auto const& first = controller.focusedCredits()[3];

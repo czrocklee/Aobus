@@ -59,9 +59,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackColumnLayouts - Albums offers Album without showing it until explicitly requested")
   {
     using Field = rt::TrackField;
-    auto const* preset = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(preset != nullptr);
-    auto const& presentation = preset->spec;
+    auto const& presentation = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
     auto stored = std::vector{TrackColumnState{.field = Field::Album, .weight = 1.75}};
 
     auto const choices = trackColumnChoices(presentation, stored);
@@ -83,25 +81,23 @@ namespace ao::uimodel::test
   TEST_CASE("TrackColumnLayouts - visibility-only toggles do not give a column a stored position")
   {
     using Field = rt::TrackField;
-    auto const* const albums = rt::builtinTrackPresentationPreset("albums");
-    auto const* const songs = rt::builtinTrackPresentationPreset("songs");
-    REQUIRE(albums);
-    REQUIRE(songs);
+    auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
+    auto const& songs = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs);
     auto stored = std::vector{
       TrackColumnState{.field = Field::Album, .visibility = TrackColumnVisibility::Show},
     };
 
-    CHECK(visibleTrackFieldsInStoredLayout(albums->spec, stored) ==
+    CHECK(visibleTrackFieldsInStoredLayout(albums.spec, stored) ==
           std::vector{Field::DisplayTrackNumber, Field::Title, Field::Artist, Field::Duration, Field::Album});
-    CHECK(visibleTrackFieldsInStoredLayout(songs->spec, stored) == songs->spec.visibleFields);
+    CHECK(visibleTrackFieldsInStoredLayout(songs.spec, stored) == songs.spec.visibleFields);
 
     stored[0].visibility = TrackColumnVisibility::Hide;
-    CHECK(visibleTrackFieldsInStoredLayout(albums->spec, stored) == albums->spec.visibleFields);
-    CHECK(visibleTrackFieldsInStoredLayout(songs->spec, stored) ==
+    CHECK(visibleTrackFieldsInStoredLayout(albums.spec, stored) == albums.spec.visibleFields);
+    CHECK(visibleTrackFieldsInStoredLayout(songs.spec, stored) ==
           std::vector{Field::Title, Field::Artist, Field::Duration, Field::Year});
 
     stored[0].visibility = TrackColumnVisibility::Show;
-    CHECK(visibleTrackFieldsInStoredLayout(songs->spec, stored) == songs->spec.visibleFields);
+    CHECK(visibleTrackFieldsInStoredLayout(songs.spec, stored) == songs.spec.visibleFields);
   }
 
   TEST_CASE("TrackColumnLayouts - offers equivalent secondary grouping fields but not other row facts")
@@ -141,7 +137,7 @@ namespace ao::uimodel::test
   {
     using Field = rt::TrackField;
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "custom",
+      .presetId = rt::CustomPresetId{1},
       .groupBy = rt::TrackGroupKey::Album,
       .visibleFields = {Field::Title, Field::Album},
       .redundantFields = {Field::Album, Field::Tags},

@@ -9,7 +9,6 @@
 
 #include <array>
 #include <cstddef>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -17,19 +16,13 @@ namespace ao::rt::test
 {
   namespace
   {
-    TrackPresentationSpec const& requirePresetSpec(std::string_view const id)
-    {
-      auto const* preset = builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      return preset->spec;
-    }
-
     // Field-wise checks name the part of the spec that differs; the spec itself has no Catch2 printer.
     void checkSpec(TrackPresentationSpec const& actual, TrackPresentationSpec const& expected)
     {
-      CHECK(actual.id == expected.id);
+      CHECK(actual.presetId == expected.presetId);
       CHECK(actual.groupBy == expected.groupBy);
       CHECK(actual.sortBy == expected.sortBy);
+      CHECK(actual.optColumnSort == expected.optColumnSort);
       CHECK(actual.visibleFields == expected.visibleFields);
       CHECK(actual.redundantFields == expected.redundantFields);
     }
@@ -58,7 +51,10 @@ namespace ao::rt::test
 
     for (std::size_t index = 0; index < presets.size(); ++index)
     {
-      CHECK(presets[index].spec.id == kExpectedIds[index]);
+      auto const id = presets[index].presetId();
+      CHECK(builtinPresetKey(id) == kExpectedIds[index]);
+      CHECK(parseTrackPresetId(kExpectedIds[index]) == TrackPresetId{id});
+      CHECK(&builtinTrackPresentationPreset(id) == &presets[index]);
 
       for (auto const& term : presets[index].spec.sortBy)
       {
@@ -67,28 +63,34 @@ namespace ao::rt::test
     }
 
     // "album-artists" was renamed to "artists"; the former "artists" is now "performers".
-    CHECK(builtinTrackPresentationPreset("album-artists") == nullptr);
+    CHECK_FALSE(parseTrackPresetId("album-artists"));
   }
 
-  TEST_CASE("builtinTrackPresentationPreset lookup by id")
+  TEST_CASE("Custom preset keys - preserve all 64 bits and reject noncanonical text")
   {
-    CHECK(builtinTrackPresentationPreset("songs") != nullptr);
-    CHECK(builtinTrackPresentationPreset("albums") != nullptr);
-    CHECK(builtinTrackPresentationPreset(kListOrderTrackPresentationId) != nullptr);
-    CHECK(builtinTrackPresentationPreset("nonexistent") == nullptr);
+    auto const custom = CustomPresetId{0xfedcba9876543210ULL};
+    CHECK(trackPresetKey(custom) == "fedcba9876543210");
+    CHECK(parseTrackPresetId("fedcba9876543210") == TrackPresetId{custom});
+    CHECK(trackPresetKey(CustomPresetId{0}) == "0000000000000000");
+    CHECK(parseTrackPresetId("0000000000000000") == TrackPresetId{CustomPresetId{0}});
+    CHECK_FALSE(parseTrackPresetId("FEDCBA9876543210"));
+    CHECK_FALSE(parseTrackPresetId("0"));
+    CHECK_FALSE(parseTrackPresetId("0000000000000000a"));
+    CHECK_FALSE(parseTrackPresetId("000000000000000z"));
+    CHECK_FALSE(parseTrackPresetId("ablums"));
   }
 
   TEST_CASE("defaultTrackPresentationSpec is the library preset")
   {
-    checkSpec(defaultTrackPresentationSpec(), requirePresetSpec("library"));
+    checkSpec(defaultTrackPresentationSpec(), builtinTrackPresentationPreset(BuiltinPreset::Library).spec);
   }
 
   TEST_CASE("library preset - orders by album artist and stays album-intact")
   {
     // First key is AlbumArtist so various-artist compilations are not split apart.
-    checkSpec(requirePresetSpec("library"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Library).spec,
               TrackPresentationSpec{
-                .id = "library",
+                .presetId = BuiltinPreset::Library,
                 .groupBy = TrackGroupKey::None,
                 .sortBy = {{TrackSortField::AlbumArtist, true},
                            {TrackSortField::Album, true},
@@ -107,9 +109,9 @@ namespace ao::rt::test
 
   TEST_CASE("list-order preset - preserves source order with track columns")
   {
-    checkSpec(requirePresetSpec(kListOrderTrackPresentationId),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::ListOrder).spec,
               TrackPresentationSpec{
-                .id = std::string{kListOrderTrackPresentationId},
+                .presetId = BuiltinPreset::ListOrder,
                 .groupBy = TrackGroupKey::None,
                 .sortBy = {},
                 .visibleFields = {TrackField::DisplayTrackNumber,
@@ -125,9 +127,9 @@ namespace ao::rt::test
   TEST_CASE("songs preset - is a flat title-ordered list")
   {
     checkSpec(
-      requirePresetSpec("songs"),
+      builtinTrackPresentationPreset(BuiltinPreset::Songs).spec,
       TrackPresentationSpec{
-        .id = "songs",
+        .presetId = BuiltinPreset::Songs,
         .groupBy = TrackGroupKey::None,
         .sortBy = {{TrackSortField::Title, true}, {TrackSortField::Artist, true}, {TrackSortField::Album, true}},
         .visibleFields =
@@ -139,9 +141,9 @@ namespace ao::rt::test
   TEST_CASE("albums preset - groups tracks by album")
   {
     checkSpec(
-      requirePresetSpec("albums"),
+      builtinTrackPresentationPreset(BuiltinPreset::Albums).spec,
       TrackPresentationSpec{
-        .id = "albums",
+        .presetId = BuiltinPreset::Albums,
         .groupBy = TrackGroupKey::Album,
         .sortBy = {{TrackSortField::AlbumArtist, true},
                    {TrackSortField::Album, true},
@@ -156,9 +158,9 @@ namespace ao::rt::test
   TEST_CASE("artists preset - groups by album artist")
   {
     // Year leads the columns so it reads as a discography.
-    checkSpec(requirePresetSpec("artists"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Artists).spec,
               TrackPresentationSpec{
-                .id = "artists",
+                .presetId = BuiltinPreset::Artists,
                 .groupBy = TrackGroupKey::AlbumArtist,
                 .sortBy = {{TrackSortField::AlbumArtist, true},
                            {TrackSortField::Year, true},
@@ -178,9 +180,9 @@ namespace ao::rt::test
 
   TEST_CASE("performers preset - groups by track artist")
   {
-    checkSpec(requirePresetSpec("performers"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Performers).spec,
               TrackPresentationSpec{
-                .id = "performers",
+                .presetId = BuiltinPreset::Performers,
                 .groupBy = TrackGroupKey::Artist,
                 .sortBy = {{TrackSortField::Artist, true},
                            {TrackSortField::Year, true},
@@ -199,9 +201,9 @@ namespace ao::rt::test
 
   TEST_CASE("genres preset - groups albums within each genre")
   {
-    checkSpec(requirePresetSpec("genres"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Genres).spec,
               TrackPresentationSpec{
-                .id = "genres",
+                .presetId = BuiltinPreset::Genres,
                 .groupBy = TrackGroupKey::Genre,
                 .sortBy = {{TrackSortField::Genre, true},
                            {TrackSortField::AlbumArtist, true},
@@ -222,9 +224,9 @@ namespace ao::rt::test
 
   TEST_CASE("years preset - groups albums by release year")
   {
-    checkSpec(requirePresetSpec("years"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Years).spec,
               TrackPresentationSpec{
-                .id = "years",
+                .presetId = BuiltinPreset::Years,
                 .groupBy = TrackGroupKey::Year,
                 .sortBy = {{TrackSortField::Year, true},
                            {TrackSortField::AlbumArtist, true},
@@ -246,9 +248,9 @@ namespace ao::rt::test
   {
     // Work leads the columns; DisplayTrackNumber is demoted to the end because
     // in a classical context the movement is more meaningful than the track number.
-    checkSpec(requirePresetSpec("classical-composers"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::ClassicalComposers).spec,
               TrackPresentationSpec{
-                .id = "classical-composers",
+                .presetId = BuiltinPreset::ClassicalComposers,
                 .groupBy = TrackGroupKey::Composer,
                 .sortBy = {{TrackSortField::Composer, true},
                            {TrackSortField::Work, true},
@@ -273,9 +275,9 @@ namespace ao::rt::test
 
   TEST_CASE("classical-conductors preset - groups works by conductor")
   {
-    checkSpec(requirePresetSpec("classical-conductors"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::ClassicalConductors).spec,
               TrackPresentationSpec{
-                .id = "classical-conductors",
+                .presetId = BuiltinPreset::ClassicalConductors,
                 .groupBy = TrackGroupKey::Conductor,
                 .sortBy = {{TrackSortField::Conductor, true},
                            {TrackSortField::Composer, true},
@@ -302,9 +304,9 @@ namespace ao::rt::test
 
   TEST_CASE("classical-works preset - groups movements by work")
   {
-    checkSpec(requirePresetSpec("classical-works"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::ClassicalWorks).spec,
               TrackPresentationSpec{
-                .id = "classical-works",
+                .presetId = BuiltinPreset::ClassicalWorks,
                 .groupBy = TrackGroupKey::Work,
                 .sortBy = {{TrackSortField::Composer, true},
                            {TrackSortField::Work, true},
@@ -330,9 +332,9 @@ namespace ao::rt::test
   {
     // Curation view exposes raw disc/track numbers rather than the formatted
     // DisplayTrackNumber, so tagging mistakes (missing disc, wrong totals) are visible.
-    checkSpec(requirePresetSpec("tagging"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Tagging).spec,
               TrackPresentationSpec{
-                .id = "tagging",
+                .presetId = BuiltinPreset::Tagging,
                 .groupBy = TrackGroupKey::None,
                 .sortBy = {{TrackSortField::Artist, true},
                            {TrackSortField::Album, true},
@@ -356,9 +358,9 @@ namespace ao::rt::test
   {
     // FileSize/ModifiedTime are manifest-sourced and not yet sortable, so the
     // preset falls back to a metadata-only sort order.
-    checkSpec(requirePresetSpec("technical"),
+    checkSpec(builtinTrackPresentationPreset(BuiltinPreset::Technical).spec,
               TrackPresentationSpec{
-                .id = "technical",
+                .presetId = BuiltinPreset::Technical,
                 .groupBy = TrackGroupKey::None,
                 .sortBy = {{TrackSortField::AlbumArtist, true},
                            {TrackSortField::Album, true},
@@ -378,7 +380,9 @@ namespace ao::rt::test
   TEST_CASE("normalizeTrackPresentationSpec removes duplicate visible fields")
   {
     auto spec = TrackPresentationSpec{
-      .id = "test",
+      .presetId = BuiltinPreset::Songs,
+      .sortBy = {{TrackSortField::Title, true}},
+      .optColumnSort = TrackColumnSort{TrackField::Title, false},
       .visibleFields =
         {
           TrackField::Title,
@@ -391,6 +395,8 @@ namespace ao::rt::test
 
     auto normalized = normalizeTrackPresentationSpec(spec);
 
+    CHECK(normalized.isPreset(BuiltinPreset::Songs));
+    CHECK(normalized.optColumnSort == spec.optColumnSort);
     REQUIRE(normalized.visibleFields.size() == 3);
     CHECK(normalized.visibleFields[0] == TrackField::Title);
     CHECK(normalized.visibleFields[1] == TrackField::Artist);
@@ -399,11 +405,11 @@ namespace ao::rt::test
 
   TEST_CASE("normalizeTrackPresentationSpec keeps at least one visible field")
   {
-    auto spec = TrackPresentationSpec{.id = "custom-empty"};
+    auto spec = TrackPresentationSpec{.presetId = CustomPresetId{1}};
 
     auto normalized = normalizeTrackPresentationSpec(spec);
 
-    CHECK(normalized.id == "custom-empty");
+    CHECK(normalized.isPreset(CustomPresetId{1}));
     REQUIRE(normalized.visibleFields.size() == 1);
     CHECK(normalized.visibleFields[0] == TrackField::Title);
   }
@@ -411,7 +417,7 @@ namespace ao::rt::test
   TEST_CASE("normalizeTrackPresentationSpec removes duplicate redundant fields")
   {
     auto spec = TrackPresentationSpec{
-      .id = "test",
+      .presetId = CustomPresetId{2},
       .redundantFields =
         {
           TrackField::Album,
@@ -439,12 +445,32 @@ namespace ao::rt::test
     CHECK(normalized.redundantFields == std::vector<TrackField>{TrackField::Album});
   }
 
-  TEST_CASE("normalizeTrackPresentationSpec defaults empty id to library")
+  TEST_CASE("TrackPresentationSpec - both track number columns move disc and track ahead of preset ties")
   {
-    auto spec = TrackPresentationSpec{.id = ""};
+    auto spec = builtinTrackPresentationPreset(BuiltinPreset::Library).spec;
 
-    auto normalized = normalizeTrackPresentationSpec(spec);
+    SECTION("track number")
+    {
+      spec.optColumnSort = TrackColumnSort{TrackField::TrackNumber, false};
+    }
 
-    CHECK(normalized.id == "library");
+    SECTION("display track number")
+    {
+      spec.optColumnSort = TrackColumnSort{TrackField::DisplayTrackNumber, false};
+    }
+
+    auto const expected = std::vector<TrackSortTerm>{
+      {TrackSortField::DiscNumber, false},
+      {TrackSortField::TrackNumber, false},
+      {TrackSortField::AlbumArtist, true},
+      {TrackSortField::Album, true},
+      {TrackSortField::Title, true},
+    };
+    CHECK(spec.effectiveSortBy() == expected);
+  }
+
+  TEST_CASE("TrackPresentationSpec - starts with the library identity")
+  {
+    CHECK(TrackPresentationSpec{}.isPreset(BuiltinPreset::Library));
   }
 } // namespace ao::rt::test

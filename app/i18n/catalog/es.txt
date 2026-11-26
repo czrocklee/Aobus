@@ -4,6 +4,7 @@
 es:table {
   messages:table {
     track_field_recording_date { "Fecha de grabación" }
+    track_sort_recording_year { "Año de grabación" }
     track_credits_heading { "Créditos" }
     track_credit_performer { "Intérprete" }
     track_credit_lyricist { "Letrista" }
@@ -202,6 +203,8 @@ es:table {
     create_custom_track_presentation { "Crear vista personalizada…" }
     track_presentation_picker_label { "Vista" }
     track_presentation_all_tracks_manual_order_unavailable { "«Todas las pistas» no tiene un orden guardado. Crea una lista guardada para ordenar la biblioteca manualmente." }
+    track_sort_column_unavailable { "No se puede ordenar por esta columna: {column}" }
+    track_sort_failed { "No se pudieron ordenar las pistas: {detail}" }
     audio_backend_pipewire_description { "Servidor de audio moderno para Linux con baja latencia" }
     audio_backend_alsa_description { "Arquitectura de sonido avanzada para Linux (acceso directo a hardware)" }
     audio_backend_wasapi_description { "API de sesión de audio de Windows" }
@@ -298,6 +301,7 @@ es:table {
     list_order_list_unavailable { "Esta lista ya no está disponible." }
     list_order_fix_filter { "Corrige la lista o la expresión de filtro rápido antes de cambiar su orden." }
     list_order_choose_flat_presentation { "Elige Orden manual u otra vista plana sin ordenar para reorganizar las pistas." }
+    list_order_choose_current_view { "Vuelve a elegir la vista actual para quitar la ordenación por columna." }
     list_order_clear_quick_filter { "Borra el filtro rápido para arrastrar o mover relativamente; mover arriba o abajo sigue disponible." }
     list_order_changed { "La lista ha cambiado. Inicia la acción de orden de nuevo." }
     list_order_unchanged { "Orden sin cambios." }
@@ -592,6 +596,7 @@ es:table {
     tui_shell_detail_track_detail { "detalle de pista" }
     tui_shell_detail_audio_pipeline { "cadena de audio" }
     tui_shell_detail_output_device { "dispositivo de salida" }
+    tui_shell_detail_sort_column { "ordenar pistas por columna" }
     tui_shell_detail_choose_view { "elegir vista" }
     tui_shell_detail_notification_center { "centro de notificaciones" }
     tui_shell_detail_close_overlay { "cerrar superposición" }
@@ -670,8 +675,6 @@ es:table {
     tui_library_expression_filter_matched { "El filtro por expresión coincidió con {count, plural, one {# pista} other {# pistas}}" }
     tui_presentation_custom { "personalizada" }
     tui_presentation_custom_from { "personalizada a partir de {id}" }
-    tui_presentation_default { "predeterminada" }
-    tui_presentation_badge { "vista:{id}" }
     tui_editor_title { "Propiedades de la pista" }
     tui_editor_title_multiple { "Editar {count, plural, one {# pista} other {# pistas}}" }
     tui_editor_applies_to_all { "Los cambios se aplican a {count, plural, one {# pista} other {las # pistas}}" }
@@ -771,12 +774,9 @@ es:table {
     winui_column_resize_failed { "Error al cambiar el tamaño de columna: {detail}" }
     winui_column_move_failed { "Error al mover la columna: {detail}" }
     winui_column_visibility_failed { "Error de visibilidad de columna: {detail}" }
-    winui_column_not_sortable { "La columna ''{column}'' no se puede ordenar" }
-    winui_sort_failed { "Error al ordenar: {detail}" }
     winui_unavailable_track { "Pista no disponible" }
     winui_theme_file_not_found { "Archivo de tema no encontrado: {path}" }
     winui_startup_failure { "Aobus no pudo iniciarse:\n\n{detail}" }
-    track_presentation_column_sort { "Orden por columna" }
     track_multiple_values { "<Varios valores>" }
     track_metadata_heading { "Metadatos" }
     track_audio_properties_heading { "Propiedades de audio" }

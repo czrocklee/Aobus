@@ -8,6 +8,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -34,8 +35,29 @@ namespace ao::uimodel
   void CustomPresentationEditorModel::populate(rt::TrackPresentationSpec const& spec, std::string_view label)
   {
     _label = std::string{label};
+    _optBasePresetId = spec.presetId;
     _groupKey = spec.groupBy;
-    _sortTerms = spec.sortBy;
+    auto sortTerms = spec.effectiveSortBy();
+
+    if (spec.optColumnSort &&
+        rt::trackGroupSortBy(_groupKey, sortTerms) != rt::trackGroupSortBy(_groupKey, spec.sortBy))
+    {
+      // Only a group-key override can change section order. That key is not
+      // compared within a section, so keep the base sort in this case.
+      sortTerms = spec.sortBy;
+    }
+
+    _sortTerms.clear();
+    _sortTerms.reserve(sortTerms.size());
+
+    for (auto const& term : sortTerms)
+    {
+      if (!std::ranges::contains(_sortTerms, term.field, &rt::TrackSortTerm::field))
+      {
+        _sortTerms.push_back(term);
+      }
+    }
+
     _visibleFields = spec.visibleFields;
   }
 
@@ -60,9 +82,26 @@ namespace ao::uimodel
     return optionIndexOf(_groupOptions, _groupKey);
   }
 
-  void CustomPresentationEditorModel::addSortTerm()
+  bool CustomPresentationEditorModel::tryAddSortTerm()
   {
-    _sortTerms.push_back({.field = rt::TrackSortField::Title, .ascending = true});
+    auto const isUnused = [this](rt::TrackSortField field)
+    { return !std::ranges::contains(_sortTerms, field, &rt::TrackSortTerm::field); };
+    auto field = rt::TrackSortField::Title;
+
+    if (!isUnused(field))
+    {
+      auto const option = std::ranges::find_if(_sortFieldOptions, isUnused, &TrackSortFieldOption::value);
+
+      if (option == _sortFieldOptions.end())
+      {
+        return false;
+      }
+
+      field = option->value;
+    }
+
+    _sortTerms.push_back({.field = field, .ascending = true});
+    return true;
   }
 
   bool CustomPresentationEditorModel::tryRemoveSortTerm(std::size_t index)
@@ -87,7 +126,14 @@ namespace ao::uimodel
       return false;
     }
 
-    _sortTerms[termIndex].field = _sortFieldOptions[optionIndex].value;
+    auto const field = _sortFieldOptions[optionIndex].value;
+
+    if (field != _sortTerms[termIndex].field && std::ranges::contains(_sortTerms, field, &rt::TrackSortTerm::field))
+    {
+      return false;
+    }
+
+    _sortTerms[termIndex].field = field;
     return true;
   }
 
@@ -145,11 +191,12 @@ namespace ao::uimodel
     return optionIndexOf(_visibleFieldOptions, field);
   }
 
-  rt::CustomTrackPresentationPreset CustomPresentationEditorModel::collectState(std::string_view generatedId) const
+  rt::CustomTrackPresentationPreset CustomPresentationEditorModel::collectState(rt::CustomPresetId const id) const
   {
     auto state = rt::CustomTrackPresentationPreset{};
-    state.spec.id = std::string{generatedId};
     state.label = _label;
+    state.optBasePresetId = _optBasePresetId;
+    state.spec.presetId = id;
     state.spec.groupBy = _groupKey;
     state.spec.sortBy = _sortTerms;
     state.spec.visibleFields = _visibleFields;
@@ -188,19 +235,15 @@ namespace ao::uimodel
     i18n::MessageCatalog const& textCatalog)
   {
     auto options = std::vector<TrackSortFieldOption>{};
-    auto const defs = rt::trackFieldDefinitions();
+    options.reserve(rt::kTrackSortFieldCount);
 
     for (std::size_t index = 0; index < rt::kTrackSortFieldCount; ++index)
     {
       auto const sortField = static_cast<rt::TrackSortField>(index);
 
-      for (auto const& def : defs)
+      if (auto const label = trackSortFieldLabel(textCatalog, sortField); !label.empty())
       {
-        if (def.optSortField == sortField)
-        {
-          options.push_back({.value = sortField, .label = std::string{trackFieldLabel(textCatalog, def.field)}});
-          break;
-        }
+        options.push_back({.value = sortField, .label = std::string{label}});
       }
     }
 

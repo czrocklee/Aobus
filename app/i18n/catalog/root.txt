@@ -4,6 +4,7 @@
 root:table {
   messages:table {
     track_field_recording_date { "Recording Date" }
+    track_sort_recording_year { "Recording Year" }
     track_credits_heading { "Credits" }
     track_credit_performer { "Performer" }
     track_credit_lyricist { "Lyricist" }
@@ -204,6 +205,8 @@ root:table {
     create_custom_track_presentation { "Create Custom View…" }
     track_presentation_picker_label { "Presentation" }
     track_presentation_all_tracks_manual_order_unavailable { "All Tracks has no saved order. Create a saved List to arrange the full library manually." }
+    track_sort_column_unavailable { "Cannot sort by this column: {column}" }
+    track_sort_failed { "Could not sort tracks: {detail}" }
     audio_backend_pipewire_description { "Modern Linux audio server with low latency" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (Direct Hardware Access)" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
@@ -300,6 +303,7 @@ root:table {
     list_order_list_unavailable { "This List is no longer available." }
     list_order_fix_filter { "Fix the List or quick-filter expression before changing its order." }
     list_order_choose_flat_presentation { "Choose Manual Order or another flat unsorted presentation to rearrange tracks." }
+    list_order_choose_current_view { "Reselect the current view to clear the column sort." }
     list_order_clear_quick_filter { "Clear the quick filter to drag or move relatively; moving to the top or bottom is still available." }
     list_order_changed { "The List changed. Start the order action again." }
     list_order_unchanged { "Order unchanged." }
@@ -594,6 +598,7 @@ root:table {
     tui_shell_detail_track_detail { "track detail" }
     tui_shell_detail_audio_pipeline { "audio pipeline" }
     tui_shell_detail_output_device { "output device" }
+    tui_shell_detail_sort_column { "sort tracks by column" }
     tui_shell_detail_choose_view { "choose view" }
     tui_shell_detail_notification_center { "notification center" }
     tui_shell_detail_close_overlay { "close overlay" }
@@ -672,8 +677,6 @@ root:table {
     tui_library_expression_filter_matched { "Expression filter matched {count, plural, one {# track} other {# tracks}}" }
     tui_presentation_custom { "custom" }
     tui_presentation_custom_from { "custom from {id}" }
-    tui_presentation_default { "default" }
-    tui_presentation_badge { "view:{id}" }
     tui_editor_title { "Track Properties" }
     tui_editor_title_multiple { "Edit {count, plural, one {# track} other {# tracks}}" }
     tui_editor_applies_to_all { "Changes apply to all {count, plural, one {# track} other {# tracks}}" }
@@ -774,12 +777,9 @@ root:table {
     winui_column_resize_failed { "Column resize failed: {detail}" }
     winui_column_move_failed { "Column move failed: {detail}" }
     winui_column_visibility_failed { "Column visibility failed: {detail}" }
-    winui_column_not_sortable { "Column ''{column}'' is not sortable" }
-    winui_sort_failed { "Sort failed: {detail}" }
     winui_unavailable_track { "Unavailable track" }
     winui_theme_file_not_found { "Theme file not found: {path}" }
     winui_startup_failure { "Aobus could not start:\n\n{detail}" }
-    track_presentation_column_sort { "Column sort" }
     track_multiple_values { "<Multiple Values>" }
     track_metadata_heading { "Metadata" }
     track_audio_properties_heading { "Audio Properties" }

@@ -5,6 +5,7 @@
 
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
@@ -103,7 +104,7 @@ namespace ao::tui::test
     fixture.runtimePtr->setTextOrderingPolicy(
       std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))});
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("songs"));
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Songs));
     controller.setSelectedTrackIndex(0);
     REQUIRE(controller.selectedTrackView().track->id == umlaut);
     controller.toggleFocusedMark();
@@ -141,6 +142,152 @@ namespace ao::tui::test
     CHECK(controller.tracks()[0].id == trackId);
   }
 
+  TEST_CASE("LibraryController - sorting displayed track numbers keeps discs, grouping, filter and marked tracks")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const secondDisc = fixture.addTrack({.title = "Keep A", .discNumber = 2, .trackNumber = 1});
+    auto const thirdTrack = fixture.addTrack({.title = "Keep B", .discNumber = 1, .trackNumber = 3});
+    auto const secondTrack = fixture.addTrack({.title = "Keep C", .discNumber = 1, .trackNumber = 2});
+    fixture.addTrack("Omit");
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
+    auto controller = fixture.makeController();
+    auto const viewId = controller.activeViewId();
+    auto& views = fixture.runtimePtr->views();
+    controller.setFilterDraft("Keep");
+    requireAppliedFilter(controller);
+    auto const before = views.trackListState(viewId);
+    REQUIRE(controller.tracks().size() == 3);
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.selectedTrackView().track->id == thirdTrack);
+
+    REQUIRE(controller.sortByColumn("display-track-number"));
+    CHECK(controller.tracks()[0].id == secondTrack);
+    CHECK(controller.tracks()[1].id == thirdTrack);
+    CHECK(controller.tracks()[2].id == secondDisc);
+    REQUIRE(controller.sortByColumn("display-track-number"));
+    auto const after = views.trackListState(viewId);
+    CHECK(after.presentation.isPreset(rt::BuiltinPreset::Albums));
+    CHECK(after.presentation.optColumnSort ==
+          rt::TrackColumnSort{.column = rt::TrackField::DisplayTrackNumber, .ascending = false});
+    CHECK(controller.tracks()[0].id == secondDisc);
+    CHECK(controller.tracks()[1].id == thirdTrack);
+    CHECK(controller.tracks()[2].id == secondTrack);
+    CHECK(after.presentation.groupBy == before.presentation.groupBy);
+    CHECK(after.presentation.visibleFields == before.presentation.visibleFields);
+    CHECK(after.filterExpression == before.filterExpression);
+    CHECK(controller.filterDraft() == "Keep");
+    CHECK(controller.selectedTrackView().track->id == thirdTrack);
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondTrack, thirdTrack});
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) ==
+          rt::TrackPresetId{rt::BuiltinPreset::Albums});
+  }
+
+  TEST_CASE("LibraryController - changing sort columns replaces the override and reselecting Songs clears it")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const alpha = fixture.addTrack({.title = "Alpha", .artist = "Middle"});
+    auto const bravo = fixture.addTrack({.title = "Bravo",
+                                         .artist = "Middle",
+                                         .uri = audio::test::requireAudioFixture("vbr_no_seek_table.mp3").string()});
+    auto const charlie = fixture.addTrack({.title = "Charlie", .artist = "Early"});
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Songs);
+    auto controller = fixture.makeController();
+    auto const viewId = controller.activeViewId();
+    auto const preset = controller.activePresentation();
+    auto const selectedPreset = controller.selectedPresentation();
+    REQUIRE(preset.isPreset(rt::BuiltinPreset::Songs));
+    REQUIRE_FALSE(preset.optColumnSort);
+    auto const trackIds = [&controller]
+    {
+      auto ids = std::vector<TrackId>{};
+
+      for (auto const& entry : controller.tracks())
+      {
+        ids.push_back(entry.id);
+      }
+
+      return ids;
+    };
+    REQUIRE(trackIds() == std::vector{alpha, bravo, charlie});
+
+    REQUIRE(controller.sortByColumn("duration"));
+    CHECK(trackIds() == std::vector{alpha, charlie, bravo});
+    REQUIRE(controller.sortByColumn("duration"));
+    CHECK(trackIds() == std::vector{bravo, alpha, charlie});
+    REQUIRE(controller.sortByColumn("artist"));
+    // The tied artists follow preset title order, not the previous duration order.
+    CHECK(trackIds() == std::vector{charlie, alpha, bravo});
+    CHECK(controller.activePresentation().optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Artist});
+    CHECK(controller.activePresentation().sortBy == preset.sortBy);
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Songs));
+    CHECK(controller.selectedPresentation() == selectedPreset);
+
+    REQUIRE(controller.selectSelectedPresentation());
+    CHECK(controller.activeViewId() == viewId);
+    CHECK(controller.activePresentation() == preset);
+    CHECK(trackIds() == std::vector{alpha, bravo, charlie});
+  }
+
+  TEST_CASE("LibraryController - equivalent column sort preserves an active visual range")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const first = fixture.addTrack("Alpha");
+    auto const second = fixture.addTrack("Bravo");
+    auto const third = fixture.addTrack("Charlie");
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Songs);
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 3);
+    REQUIRE_FALSE(controller.activePresentation().optColumnSort);
+    REQUIRE(controller.tracks()[0].id == first);
+    REQUIRE(controller.tracks()[1].id == second);
+    REQUIRE(controller.tracks()[2].id == third);
+    controller.toggleFocusedMark();
+    controller.setSelectedTrackIndex(1);
+    controller.toggleVisualSelection();
+    controller.moveTrackSelection(1);
+    REQUIRE(controller.markedIds() == std::unordered_set<TrackId>{first, second, third});
+    auto const revision = controller.trackRowsRevision();
+
+    REQUIRE(controller.sortByColumn("title"));
+
+    CHECK(controller.activePresentation().optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Title});
+    CHECK(controller.isVisualSelectionActive());
+    CHECK(controller.selectedTrackView().track->id == third);
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{first, second, third});
+    CHECK(controller.trackRowsRevision() == revision);
+    controller.cancelVisualSelection();
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{first});
+  }
+
+  TEST_CASE("LibraryController - Back and Forward preserve a column sort without a separate history stop")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const listId = fixture.addList("Saved");
+    auto controller = fixture.makeController();
+    auto const allTracksViewId = controller.activeViewId();
+    REQUIRE(controller.openList(listId));
+    auto const savedViewId = controller.activeViewId();
+    auto const savedPresentation = controller.activePresentation();
+    REQUIRE(controller.navigateHistory(false));
+    REQUIRE(controller.activeViewId() == allTracksViewId);
+
+    REQUIRE(controller.sortByColumn("title"));
+    auto const sorted = controller.activePresentation();
+    REQUIRE(sorted.optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Title});
+    CHECK_FALSE(controller.canNavigateBack());
+    REQUIRE(controller.canNavigateForward());
+    REQUIRE(controller.navigateHistory(true));
+    CHECK(controller.activeViewId() == savedViewId);
+    CHECK(controller.activePresentation() == savedPresentation);
+    REQUIRE(controller.navigateHistory(false));
+    CHECK(controller.activeViewId() == allTracksViewId);
+    CHECK(controller.activePresentation() == sorted);
+    CHECK_FALSE(controller.canNavigateBack());
+  }
+
   TEST_CASE("LibraryController - fallback navigation uses the shared presentation recommendation")
   {
     auto fixture = LibraryControllerFixture{};
@@ -155,7 +302,7 @@ namespace ao::tui::test
                                         presentations,
                                         fixture.columnLayouts};
 
-    CHECK(controller.activePresentationId() == "albums");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     CHECK(presentations.snapshot().empty());
   }
 
@@ -166,8 +313,8 @@ namespace ao::tui::test
     auto catalog =
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
-    presentations.setPresentationIdForList(listId, "albums");
+    presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
+    presentations.setPresentationIdForList(listId, rt::BuiltinPreset::Albums);
 
     auto controller = LibraryController{fixture.runtimePtr->library(),
                                         fixture.runtimePtr->views(),
@@ -176,11 +323,11 @@ namespace ao::tui::test
                                         presentations,
                                         fixture.columnLayouts};
 
-    CHECK(controller.activePresentationId() == "artists");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Artists));
     controller.navigation().reveal(listId);
     REQUIRE(controller.openList(controller.navigation().cursor()));
     CHECK(controller.currentListId() == listId);
-    CHECK(controller.activePresentationId() == "albums");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("LibraryController - successful presentation selection records the list preference")
@@ -196,10 +343,10 @@ namespace ao::tui::test
                                         presentations,
                                         fixture.columnLayouts};
 
-    CHECK(controller.setPresentation("albums") == "View: albums");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
 
     REQUIRE(presentations.snapshot().contains(rt::kAllTracksListId));
-    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == "albums");
+    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::Albums});
   }
 
   TEST_CASE("LibraryController - failed presentation selection does not change the list preference")
@@ -208,29 +355,29 @@ namespace ao::tui::test
     auto catalog =
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    presentations.setPresentationIdForList(rt::kAllTracksListId, "albums");
+    presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
     auto controller = LibraryController{fixture.runtimePtr->library(),
                                         fixture.runtimePtr->views(),
                                         fixture.runtimePtr->workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
-    auto const activeBefore = controller.activePresentationId();
+    auto const activeBefore = controller.activePresentation().presetId;
 
-    auto const missingRes = controller.setPresentation("missing-presentation");
+    auto const missingRes = controller.setPresentation(rt::CustomPresetId{77});
     REQUIRE_FALSE(missingRes);
-    CHECK(missingRes.error().message == "Unknown view missing-presentation");
+    CHECK(missingRes.error().message == "Unknown view 000000000000004d");
 
-    CHECK(controller.activePresentationId() == activeBefore);
-    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == "albums");
+    CHECK(controller.activePresentation().presetId == activeBefore);
+    CHECK(presentations.snapshot().at(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::Albums});
   }
 
   TEST_CASE("LibraryController - a stale presentation choice cannot change either view or pin")
   {
     auto fixture = LibraryControllerFixture{};
     auto const listId = fixture.addList("Saved");
-    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
-    fixture.listPresentations.setPresentationIdForList(listId, "songs");
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
+    fixture.listPresentations.setPresentationIdForList(listId, rt::BuiltinPreset::Songs);
     auto controller = fixture.makeController();
     auto const textCatalog = ao::test::messageCatalog("zh-Hans");
     controller.setTextCatalog(textCatalog);
@@ -251,7 +398,7 @@ namespace ao::tui::test
     auto const savedBefore = views.trackListState(savedViewId).presentation;
     auto const pinsBefore = fixture.listPresentations.snapshot();
 
-    auto const staleRes = controller.setPresentation(rt::kListOrderTrackPresentationId);
+    auto const staleRes = controller.setPresentation(rt::BuiltinPreset::ListOrder);
     REQUIRE_FALSE(staleRes);
     CHECK(staleRes.error().severity == rt::NotificationSeverity::Warning);
     CHECK(staleRes.error().message ==
@@ -272,31 +419,31 @@ namespace ao::tui::test
     REQUIRE(reopenedRes);
     REQUIRE(*reopenedRes);
     CHECK(workspace.snapshot().activeViewId == savedViewId);
-    REQUIRE(controller.setPresentation(rt::kListOrderTrackPresentationId));
-    CHECK(views.trackListState(savedViewId).presentation.id == rt::kListOrderTrackPresentationId);
-    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::kListOrderTrackPresentationId);
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::ListOrder));
+    CHECK(views.trackListState(savedViewId).presentation.isPreset(rt::BuiltinPreset::ListOrder));
+    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::TrackPresetId{rt::BuiltinPreset::ListOrder});
     CHECK(views.trackListState(allTracksViewId).presentation == allTracksBefore);
-    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == "artists");
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) ==
+          rt::TrackPresetId{rt::BuiltinPreset::Artists});
   }
 
   TEST_CASE("LibraryController - persisted preference does not replace an exact restored active view")
   {
     auto fixture = LibraryControllerFixture{};
-    auto const* albumsPreset = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(albumsPreset != nullptr);
+    auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
     auto const activeViewId = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({
       .target = rt::GlobalViewKind::AllTracks,
       .optPresentation =
         rt::NavigationPresentation{
           .mode = rt::NavigationPresentationMode::Override,
-          .spec = albumsPreset->spec,
+          .spec = albums.spec,
         },
     }));
     auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
     auto catalog =
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
+    presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
 
     auto controller = LibraryController{fixture.runtimePtr->library(),
                                         fixture.runtimePtr->views(),
@@ -306,7 +453,7 @@ namespace ao::tui::test
                                         fixture.columnLayouts};
 
     CHECK(controller.activeViewId() == activeViewId);
-    CHECK(controller.activePresentationId() == "albums");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
   }
 
@@ -320,10 +467,8 @@ namespace ao::tui::test
       auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
       firstTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "First"});
       secondTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Second"});
-      auto const* songsPreset = rt::builtinTrackPresentationPreset("songs");
-      auto const* albumsPreset = rt::builtinTrackPresentationPreset("albums");
-      REQUIRE(songsPreset != nullptr);
-      REQUIRE(albumsPreset != nullptr);
+      auto const& songs = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs);
+      auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
       REQUIRE(runtimePtr->workspace().navigate({
         .target =
           rt::FilteredListTarget{
@@ -333,7 +478,7 @@ namespace ao::tui::test
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = songsPreset->spec,
+            .spec = songs.spec,
           },
       }));
       REQUIRE(runtimePtr->workspace().navigate({
@@ -345,7 +490,7 @@ namespace ao::tui::test
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = albumsPreset->spec,
+            .spec = albums.spec,
           },
       }));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
@@ -376,7 +521,7 @@ namespace ao::tui::test
     CHECK(controller.currentListId() == rt::kAllTracksListId);
     CHECK(controller.navigation().cursor() == rt::kAllTracksListId);
     CHECK(controller.filterDraft() == expectedState.filterExpression);
-    CHECK(controller.activePresentationId() == "albums");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == secondTrackId);
     CHECK(controller.tracks()[0].id != firstTrackId);
@@ -412,24 +557,26 @@ namespace ao::tui::test
       CHECK(untitled->row.optUriPath == optExpectedUntitled->optUriPath);
       CHECK(trackDisplayTitle(ao::test::englishMessageCatalog(), untitled->row) == fileName);
     };
-    REQUIRE(controller.activePresentationId() == "albums");
+    REQUIRE(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     verifyPaths(false);
 
+    auto const pathId = rt::CustomPresetId{1};
     auto pathSpec = rt::defaultTrackPresentationSpec();
-    pathSpec.id = "with-file-path";
+    pathSpec.presetId = pathId;
     pathSpec.visibleFields = {rt::TrackField::Title, rt::TrackField::FilePath};
     REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(
-      {.label = "With File Path", .basePresetId = "songs", .spec = pathSpec}));
-    REQUIRE(controller.setPresentation(pathSpec.id));
+      {.label = "With File Path", .optBasePresetId = rt::BuiltinPreset::Songs, .spec = pathSpec}));
+    REQUIRE(controller.setPresentation(pathId));
     CHECK(controller.activeViewId() == viewId);
     verifyPaths(true);
 
+    auto const artistId = rt::CustomPresetId{2};
     auto customSpec = rt::defaultTrackPresentationSpec();
-    customSpec.id = "artist-only";
+    customSpec.presetId = artistId;
     customSpec.visibleFields = {rt::TrackField::Artist};
     REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(
-      {.label = "Artist Only", .basePresetId = "songs", .spec = customSpec}));
-    REQUIRE(controller.setPresentation(customSpec.id));
+      {.label = "Artist Only", .optBasePresetId = rt::BuiltinPreset::Songs, .spec = customSpec}));
+    REQUIRE(controller.setPresentation(artistId));
     CHECK(controller.activePresentation().visibleFields == std::vector{rt::TrackField::Artist});
     verifyPaths(false);
     CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
@@ -449,8 +596,8 @@ namespace ao::tui::test
     };
     auto const hiddenListId = addList("Hidden path");
     auto const visibleListId = addList("Visible path");
-    fixture.listPresentations.setPresentationIdForList(hiddenListId, "technical");
-    fixture.listPresentations.setPresentationIdForList(visibleListId, "technical");
+    fixture.listPresentations.setPresentationIdForList(hiddenListId, rt::BuiltinPreset::Technical);
+    fixture.listPresentations.setPresentationIdForList(visibleListId, rt::BuiltinPreset::Technical);
     fixture.columnLayouts.updateLayout(
       hiddenListId, {{.field = rt::TrackField::FilePath, .visibility = uimodel::TrackColumnVisibility::Hide}});
     fixture.columnLayouts.updateLayout(visibleListId, {{.field = rt::TrackField::FilePath, .weight = 1.0}});
@@ -465,7 +612,7 @@ namespace ao::tui::test
     auto const verifyDestination = [&](ListId const listId, bool const filePathVisible)
     {
       CHECK(controller.currentListId() == listId);
-      CHECK(controller.activePresentationId() == "technical");
+      CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Technical));
       auto const titled = std::ranges::find(controller.tracks(), titledId, &TrackListEntry::id);
       auto const untitled = std::ranges::find(controller.tracks(), untitledId, &TrackListEntry::id);
       REQUIRE(titled != controller.tracks().end());
@@ -537,7 +684,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
     controller.setFilterDraft("Needle");
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
-    CHECK(controller.setPresentation("albums") == "View: albums");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.tracks().size() == 1);
     auto const activeViewId = controller.activeViewId();
     auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
@@ -550,7 +697,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->views().trackListState(activeViewId).filterExpression == viewBefore.filterExpression);
     CHECK(fixture.runtimePtr->views().trackListState(activeViewId).presentation == viewBefore.presentation);
     CHECK(controller.filterDraft() == "Needle");
-    CHECK(controller.activePresentationId() == "albums");
+    CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == matchingTrackId);
   }
@@ -563,7 +710,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
     controller.navigation().reveal(otherListId);
     REQUIRE(controller.presentationEntries().size() > 1);
-    auto const activePresentationId = controller.activePresentationId();
+    auto const activePreset = controller.activePresentation().presetId;
     auto const selectedPresentation = controller.selectedPresentation() == 0 ? 1 : 0;
     REQUIRE(controller.trySetSelectedPresentation(selectedPresentation));
 
@@ -573,7 +720,7 @@ namespace ao::tui::test
     CHECK(controller.navigation().cursor() == otherListId);
     CHECK(controller.selectedPresentation() == selectedPresentation);
     CHECK(controller.currentListId() == rt::kAllTracksListId);
-    CHECK(controller.activePresentationId() == activePresentationId);
+    CHECK(controller.activePresentation().presetId == activePreset);
     CHECK(controller.tracks().size() == 2);
   }
 
@@ -665,7 +812,7 @@ namespace ao::tui::test
     auto catalog =
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    presentations.setPresentationIdForList(temporaryListId, "albums");
+    presentations.setPresentationIdForList(temporaryListId, rt::BuiltinPreset::Albums);
     fixture.columnLayouts.updateLayout(
       temporaryListId, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17, .weight = -1.0}});
     auto controller = LibraryController{fixture.runtimePtr->library(),
@@ -840,6 +987,83 @@ namespace ao::tui::test
     CHECK(controller.tracks().size() == 2);
   }
 
+  TEST_CASE("LibraryController - revealing a track leaves no extra Back stop after a column sort")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const trackA = fixture.addTrack({.title = "Only in A", .artist = "Artist A"});
+    auto const otherB = fixture.addTrack({.title = "Earlier in B", .artist = "Artist B"});
+    auto const targetB = fixture.addTrack({.title = "Target in B", .artist = "Artist B"});
+    auto const outside = fixture.addTrack({.title = "Outside both views", .artist = "Artist C"});
+    auto controller = fixture.makeController();
+    auto& workspace = fixture.runtimePtr->workspace();
+    auto const home = controller.activeViewId();
+    auto expectedHome = home;
+
+    REQUIRE(controller.navigateToArtist("Artist A"));
+    auto const viewA = controller.activeViewId();
+    auto const filterA = std::string{controller.filterDraft()};
+    REQUIRE(controller.navigateToArtist("Artist B"));
+    auto const viewB = controller.activeViewId();
+    auto const filterB = std::string{controller.filterDraft()};
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks().front().id == otherB);
+    REQUIRE(controller.navigateHistory(false));
+    REQUIRE(controller.activeViewId() == viewA);
+    REQUIRE(controller.sortByColumn("title"));
+    REQUIRE(controller.canNavigateForward());
+
+    auto expectedTrack = outside;
+
+    SECTION("The exact preferred filtered view wins over a plain view of the same List")
+    {
+      expectedTrack = targetB;
+      REQUIRE(controller.revealTrack(targetB, viewB, rt::kAllTracksListId));
+      CHECK(controller.activeViewId() == viewB);
+      CHECK(controller.filterDraft() == filterB);
+      CHECK(controller.tracks().size() == 2);
+    }
+
+    SECTION("A preferred view that excludes the track falls back to the open plain view")
+    {
+      REQUIRE(controller.revealTrack(outside, viewB));
+      CHECK(controller.activeViewId() == home);
+      CHECK(controller.filterDraft().empty());
+    }
+
+    SECTION("Fallback opens a plain view when no plain view is open")
+    {
+      REQUIRE(workspace.closeView(home));
+      REQUIRE(controller.revealTrack(outside, viewB));
+      expectedHome = controller.activeViewId();
+      CHECK(expectedHome != home);
+      CHECK(controller.filterDraft().empty());
+      CHECK(controller.tracks().size() == 4);
+    }
+
+    auto const destination = controller.activeViewId();
+    CHECK(workspace.snapshot().activeViewId == destination);
+    auto const& views = fixture.runtimePtr->views();
+    CHECK(views.trackListState(viewB).filterExpression == filterB);
+    CHECK(views.trackListState(destination).selection == std::vector{expectedTrack});
+    auto const* selected = controller.selectedTrackView().track;
+    REQUIRE(selected != nullptr);
+    CHECK(selected->id == expectedTrack);
+    CHECK_FALSE(controller.canNavigateForward());
+
+    REQUIRE(controller.navigateHistory(false));
+    CHECK(controller.activeViewId() == viewA);
+    CHECK(controller.filterDraft() == filterA);
+    CHECK(controller.activePresentation().optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Title});
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().id == trackA);
+
+    REQUIRE(controller.navigateHistory(false));
+    CHECK(controller.activeViewId() == expectedHome);
+    CHECK(controller.filterDraft().empty());
+    CHECK_FALSE(controller.activePresentation().optColumnSort);
+    CHECK_FALSE(controller.canNavigateBack());
+  }
+
   TEST_CASE(
     "LibraryController - in-place playback reveal follows live rows without discarding the filter draft or marks")
   {
@@ -847,7 +1071,7 @@ namespace ao::tui::test
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Alpha", .album = "Z"});
     auto const other = fixture.addTrack(library::test::TrackSpec{.title = "Beta", .album = "A"});
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("songs"));
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Songs));
     REQUIRE(controller.tracks().size() == 2);
     REQUIRE(controller.tracks().front().id == target);
     auto const viewId = controller.activeViewId();
@@ -868,9 +1092,8 @@ namespace ao::tui::test
     {
       controller.setSelectedTrackIndex(1);
       controller.toggleFocusedMark();
-      auto const* albums = rt::builtinTrackPresentationPreset("albums");
-      REQUIRE(albums != nullptr);
-      REQUIRE(views.setPresentation(viewId, albums->spec));
+      REQUIRE(
+        fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
       expectedRow = 1;
     }
 
@@ -907,7 +1130,7 @@ namespace ao::tui::test
                                                                     .year = 2020});
 
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.tracks().size() == 3);
     CHECK(controller.tracks()[0].id == targetId);
     CHECK(controller.tracks()[1].id == secondId);
@@ -926,25 +1149,29 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
 
-    CHECK(controller.setPresentation("albums") == "View: albums");
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
-    auto const missingRes = controller.setPresentation("missing-preset");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
+    CHECK(fixture.runtimePtr->views()
+            .trackListState(controller.activeViewId())
+            .presentation.isPreset(rt::BuiltinPreset::Albums));
+    auto const missingRes = controller.setPresentationKey("missing-preset");
     REQUIRE_FALSE(missingRes);
     CHECK(missingRes.error().message == "Unknown view missing-preset");
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "albums");
+    CHECK(fixture.runtimePtr->views()
+            .trackListState(controller.activeViewId())
+            .presentation.isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("LibraryController - construction reads custom presets already restored in workspace")
   {
     auto tempDir = ao::test::TempDir{};
     auto customSpec = rt::defaultTrackPresentationSpec();
-    customSpec.id = "custom-restored";
+    customSpec.presetId = rt::CustomPresetId{0xb};
 
     {
       auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
       REQUIRE(runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
         .label = "Restored Custom",
-        .basePresetId = "songs",
+        .optBasePresetId = rt::BuiltinPreset::Songs,
         .spec = customSpec,
       }));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
@@ -965,8 +1192,8 @@ namespace ao::tui::test
                                         listPresentations,
                                         columnLayouts};
 
-    auto const entryIt =
-      std::ranges::find(controller.presentationEntries(), customSpec.id, &TrackPresentationNavEntry::id);
+    auto const entryIt = std::ranges::find(
+      controller.presentationEntries(), std::string_view{"000000000000000b"}, &TrackPresentationNavEntry::id);
     REQUIRE(entryIt != controller.presentationEntries().end());
     CHECK(entryIt->label == "Restored Custom");
   }
@@ -977,22 +1204,23 @@ namespace ao::tui::test
     fixture.addTrack("First");
 
     auto controller = fixture.makeController();
+    auto const customId = rt::CustomPresetId{0xc};
     auto customSpec = rt::defaultTrackPresentationSpec();
-    customSpec.id = "custom-songs";
-
+    customSpec.presetId = customId;
+    auto const beforePreset = controller.activePresentation().presetId;
     auto const initialCount = controller.presentationEntries().size();
     REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
       .label = "Custom Songs",
-      .basePresetId = "songs",
+      .optBasePresetId = rt::BuiltinPreset::Songs,
       .spec = customSpec,
     }));
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
 
     REQUIRE(controller.presentationEntries().size() == initialCount + 1);
-    CHECK(controller.presentationEntries().back().id == "custom-songs");
+    CHECK(controller.presentationEntries().back().id == "000000000000000c");
     REQUIRE(controller.selectedPresentation() >= 0);
     CHECK(controller.presentationEntries()[static_cast<std::size_t>(controller.selectedPresentation())].id ==
-          controller.activePresentationId());
+          rt::trackPresetKey(beforePreset));
 
     CHECK_FALSE(controller.trySetSelectedPresentation(-1));
     CHECK_FALSE(
@@ -1000,8 +1228,9 @@ namespace ao::tui::test
     REQUIRE(
       controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
 
-    CHECK(controller.selectSelectedPresentation() == "View: custom-songs");
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "custom-songs");
+    CHECK(controller.selectSelectedPresentation() == "View: 000000000000000c");
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.isPreset(customId));
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{customId});
     CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationEntries().size()) - 1);
   }
 
@@ -1021,7 +1250,7 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrackView().track != nullptr);
     REQUIRE(controller.selectedTrackView().track->id == olderId);
 
-    CHECK(controller.setPresentation("artists") == "View: artists");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Artists) == "View: artists");
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == olderId);
     CHECK(controller.selectedTrack() == 0);
@@ -1039,7 +1268,7 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
 
-    CHECK(controller.setPresentation("albums") == "View: albums");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.sections().size() == 2);
     CHECK(controller.sections()[0].primaryText == "Album A");
     CHECK(controller.sections()[0].secondaryText == "Artist");
@@ -1062,7 +1291,7 @@ namespace ao::tui::test
       library::test::TrackSpec{.title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist"});
 
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.sections().size() == 2);
 
     controller.setSelectedTrackIndex(1);
@@ -1086,7 +1315,7 @@ namespace ao::tui::test
     auto const lastBoundaryId =
       fixture.addTrack(library::test::TrackSpec{.title = "B 3", .album = "Album B", .albumArtist = "Artist"});
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.sections().size() == 2);
     REQUIRE(controller.sections()[0].rowBegin == 0);
     REQUIRE(controller.sections()[0].rowCount == 2);
@@ -1150,7 +1379,7 @@ namespace ao::tui::test
     auto const secondId =
       fixture.addTrack(library::test::TrackSpec{.title = "Two", .album = "Only Album", .albumArtist = "Artist"});
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.sections().size() == 1);
     REQUIRE(controller.sections()[0].rowCount == 2);
     controller.setSelectedTrackIndex(1);
@@ -1169,7 +1398,7 @@ namespace ao::tui::test
     fixture.addTrack("First");
 
     auto controller = fixture.makeController();
-    REQUIRE(controller.setPresentation("songs") == "View: songs");
+    REQUIRE(controller.setPresentation(rt::BuiltinPreset::Songs) == "View: songs");
     REQUIRE(controller.sections().empty());
 
     CHECK(controller.jumpToAdjacentSection(1) == "No sections in this view");
@@ -1351,7 +1580,7 @@ namespace ao::tui::test
     controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
-    CHECK(controller.setPresentation("artists") == "View: artists");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Artists) == "View: artists");
     REQUIRE(controller.tracks()[0].id == alphaId);
     REQUIRE(controller.tracks()[1].id == charlieId);
     REQUIRE(controller.tracks()[2].id == bravoId);
@@ -1383,7 +1612,7 @@ namespace ao::tui::test
 
     // Another shell can reorder the rows under the same filter expression, so
     // the kept focus has to follow its track rather than its row index.
-    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation("artists"));
+    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Artists));
     REQUIRE(controller.applyFilter());
 
     REQUIRE(controller.tracks()[2].id == bravoId);
@@ -1458,7 +1687,7 @@ namespace ao::tui::test
       controller.toggleVisualSelection();
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
-      CHECK(controller.setPresentation("artists") == "View: artists");
+      CHECK(controller.setPresentation(rt::BuiltinPreset::Artists) == "View: artists");
       REQUIRE(controller.tracks()[1].id == charlieId);
 
       // The starting set is carried through the new row order untouched, and the
@@ -1579,7 +1808,7 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrack() == 1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{newerId, olderId});
 
-    CHECK(controller.setPresentation("artists") == "View: artists");
+    CHECK(controller.setPresentation(rt::BuiltinPreset::Artists) == "View: artists");
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == olderId);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{olderId, newerId});

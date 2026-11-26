@@ -47,6 +47,26 @@ namespace ao::rt
     return std::ranges::contains(_newerGroups, group);
   }
 
+  void ConfigStore::preserveGroup(std::string_view const group)
+  {
+    if (!std::ranges::contains(_preservedGroups, group))
+    {
+      _preservedGroups.emplace_back(group);
+    }
+  }
+
+  Result<> ConfigStore::checkGroupReplacement(std::string_view const group) const
+  {
+    if (std::ranges::contains(_preservedGroups, group))
+    {
+      return makeError(
+        Error::Code::InvalidState,
+        std::format("Config group '{}' could not be restored; it is kept unchanged", yaml::boundedErrorContext(group)));
+    }
+
+    return {};
+  }
+
   Result<bool> ConfigStore::contains(std::string_view const group)
   {
     if (auto const loadedRes = ensureLoaded(); !loadedRes)
@@ -75,15 +95,19 @@ namespace ao::rt
 
     auto candidate = std::move(*candidateRes);
     auto const groupName = yaml::toCsubstr(group);
-    auto root = candidate.rootref();
 
-    if (!root[groupName].readable())
+    if (auto root = candidate.rootref(); root[groupName].readable())
     {
-      return {};
+      root.remove_child(groupName);
+
+      if (auto res = commitCandidate(std::move(candidate)); !res)
+      {
+        return res;
+      }
     }
 
-    root.remove_child(groupName);
-    return commitCandidate(std::move(candidate));
+    std::erase(_preservedGroups, group);
+    return {};
   }
 
   Result<> ConfigStore::refuseNewerGroup(std::string_view const group, std::uint32_t const currentVersion)

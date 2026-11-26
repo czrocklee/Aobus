@@ -7,6 +7,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/utility/Uuid.h>
@@ -93,11 +94,10 @@ namespace ao::uimodel
     for (auto const& [listId, presentationId] : state)
     {
       AO_EXPECTS(listId != kInvalidListId, "Cannot persist a presentation preference for the invalid list id");
-      AO_EXPECTS(!presentationId.empty(), "Cannot persist an empty presentation id");
 
       document.preferences.push_back(StoredListPresentationPreference{
         .listId = listId.raw(),
-        .presentationId = presentationId,
+        .presentationId = rt::trackPresetKey(presentationId),
       });
     }
 
@@ -124,12 +124,14 @@ namespace ao::uimodel
         return makeError(Error::Code::FormatRejected, "List presentation preference uses the invalid list id");
       }
 
-      if (preference.presentationId.empty())
+      auto const optId = rt::parseTrackPresetId(preference.presentationId);
+
+      if (!optId)
       {
-        return makeError(Error::Code::FormatRejected, "List presentation preference uses an empty presentation id");
+        return makeError(Error::Code::FormatRejected, "List presentation preference uses an invalid presentationId");
       }
 
-      if (!state.emplace(listId, preference.presentationId).second)
+      if (!state.emplace(listId, *optId).second)
       {
         return makeError(Error::Code::FormatRejected,
                          std::format("List presentation preferences repeat list id {}", preference.listId));

@@ -65,12 +65,13 @@ Open ids preserve forward compatibility:
 - unknown audio backend and profile ids use the stable id as the label and have
   no authored description;
 - an unknown audio backend uses the conservative output-device icon kind;
-- an unknown built-in track-presentation id yields no built-in presentation;
 - unknown extension values in surfaces such as the GTK Layout Editor remain
   unchanged rather than being mistaken for catalog keys; and
 - an unrecognized structured notification template uses the generic
   notification fallback, while an unknown scan verdict formats as failure
   without inventing an error reason.
+
+The shared presentation picker uses the localized label for a `BuiltinPreset` and the user-authored label for an available `CustomPresetId`. If the active custom preset is unavailable, the active caption is its bare canonical hexadecimal key. A missing stored pin is not that caption: AppKit's menu and the GTK Saved-List editor use the localized message `Unavailable: {id} (Auto)`. WinUI's List editor does not add that row; opening a missing pin there shows Auto, and saving in that state clears the key. A header override keeps the preset label and has no text key.
 
 External display values win over authored fallbacks. For example, a provider's
 nonempty device description is retained; the catalog supplies a known backend's

@@ -36,7 +36,7 @@ The TUI owns chord and command-alias dispatch, the one-pending submission gate, 
 ## Invariants
 
 - The virtual All Tracks source never has order-authoring capability.
-- Capability depends on presentation structure, not presentation id: `groupBy` must be `None` and `sortBy` must be empty.
+- Capability depends on presentation structure, not presentation id: `groupBy` must be `None`, base `sortBy` must be empty, and `optColumnSort` must be absent. If a header override is the only blocker, the refusal asks the user to choose the current view again. Reselecting it clears the override and restores source order. A grouped presentation or one with base sort keys instead requires switching to a flat, unsorted presentation.
 - Visible fields and whether raw rank is currently empty do not affect capability.
 - Source state must be live and error-free, and library authoring must be `Available`.
 - An invalid filter on the saved List or any saved ancestor is a source error and disables every order-authoring capability until repaired.
@@ -68,7 +68,7 @@ Evaluation order makes the most actionable blocking state visible:
 1. saved List rather than a virtual source;
 2. maintenance or other authoring availability;
 3. live, error-free source;
-4. flat presentation with empty sort;
+4. flat presentation with empty base sort and no header override;
 5. quick-filter restriction for gap/relative movement.
 
 Maintenance produces **Library is busy. Manual ordering will be available when maintenance finishes.**

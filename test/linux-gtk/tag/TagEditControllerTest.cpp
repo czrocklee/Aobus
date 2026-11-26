@@ -432,14 +432,13 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
       runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
-    auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-    REQUIRE(manual != nullptr);
+    auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = "$year >= 2020"},
       .optPresentation =
         rt::NavigationPresentation{
           .mode = rt::NavigationPresentationMode::Override,
-          .spec = manual->spec,
+          .spec = manual,
         },
     }));
     auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
@@ -457,7 +456,7 @@ namespace ao::gtk::test
                               runtime.library(),
                               runtime.views(),
                               thumbnailLoader,
-                              manual->spec,
+                              manual,
                               viewId};
     auto const capabilities = page.orderCapabilities();
 

@@ -22,13 +22,13 @@ namespace ao::winui::test
     auto fixture = uimodel::test::TrackPresentationFixture{};
     auto const listId = ListId{71};
 
-    fixture.listPresentations.setPresentationIdForList(listId, rt::kListOrderTrackPresentationId);
-    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'").id ==
-          rt::kListOrderTrackPresentationId);
+    fixture.listPresentations.setPresentationIdForList(listId, rt::BuiltinPreset::ListOrder);
+    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'")
+            .isPreset(rt::BuiltinPreset::ListOrder));
 
     fixture.listPresentations.clearPresentationForList(listId);
-    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'").id ==
-          "classical-composers");
+    CHECK(resolveListAuthoringPresentation(fixture.listPresentations, listId, "$composer = 'Bach'")
+            .isPreset(rt::BuiltinPreset::ClassicalComposers));
   }
 
   TEST_CASE("List tree invalidation - ignores track-only publications")

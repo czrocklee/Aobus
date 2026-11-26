@@ -17,6 +17,7 @@
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/Contract.h>
+#include <ao/rt/TrackPresentation.h>
 
 #import <AppKit/AppKit.h>
 
@@ -39,14 +40,14 @@ namespace ao::appkit
     enum class Kind : std::uint8_t
     {
       Current,
+      Automatic,
       Choice,
       Separator,
     };
 
     Kind kind = Kind::Choice;
     std::string title{};
-    // Auto selects the empty id; the current-label row selects nothing.
-    std::optional<std::string> optId{};
+    std::optional<rt::TrackPresetId> optPresetId{};
     std::string toolTip{};
     bool enabled = true;
     bool checked = false;

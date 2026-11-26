@@ -16,6 +16,12 @@ namespace ao::i18n::detail
   };
 
   inline constexpr auto kWinUiPositionalResources = std::to_array<WinUiPositionalResource>({
+    {.messageId = "navigation_failed", .argumentName = "detail"},
+    {.messageId = "playback_failed", .argumentName = "detail"},
+    {.messageId = "track_fallback", .argumentName = "id"},
+    {.messageId = "track_sort_column_unavailable", .argumentName = "column"},
+    {.messageId = "track_sort_failed", .argumentName = "detail"},
+
     {.messageId = "winui_error", .argumentName = "detail"},
     {.messageId = "winui_save_settings_failed", .argumentName = "detail"},
     {.messageId = "winui_folder_picker_failed", .argumentName = "detail"},
@@ -25,16 +31,11 @@ namespace ao::i18n::detail
     {.messageId = "winui_smtc_unavailable", .argumentName = "detail"},
     {.messageId = "winui_shell_layout_failed", .argumentName = "detail"},
     {.messageId = "winui_library_ready_at", .argumentName = "root"},
-    {.messageId = "navigation_failed", .argumentName = "detail"},
-    {.messageId = "playback_failed", .argumentName = "detail"},
     {.messageId = "winui_list_status", .argumentName = "list"},
     {.messageId = "winui_presentation_failed", .argumentName = "detail"},
     {.messageId = "winui_column_resize_failed", .argumentName = "detail"},
     {.messageId = "winui_column_move_failed", .argumentName = "detail"},
     {.messageId = "winui_column_visibility_failed", .argumentName = "detail"},
-    {.messageId = "winui_column_not_sortable", .argumentName = "column"},
-    {.messageId = "winui_sort_failed", .argumentName = "detail"},
-    {.messageId = "track_fallback", .argumentName = "id"},
     {.messageId = "winui_theme_file_not_found", .argumentName = "path"},
     {.messageId = "winui_startup_failure", .argumentName = "detail"},
   });

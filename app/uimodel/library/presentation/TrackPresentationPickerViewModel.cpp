@@ -25,7 +25,8 @@ namespace ao::uimodel
                                                             ListId const listId,
                                                             std::string_view const presentationId)
   {
-    if (!isTrackPresentationEligibleForList(listId, presentationId))
+    if (auto const optId = rt::parseTrackPresetId(presentationId);
+        optId && !isTrackPresentationEligibleForList(listId, *optId))
     {
       return {
         .enabled = false,
@@ -104,7 +105,7 @@ namespace ao::uimodel
 
     result.enabled = true;
     result.activeViewId = activeViewId;
-    result.label = _catalog.labelForId(foundStateRes->presentation.id);
+    result.label = _catalog.labelFor(foundStateRes->presentation.presetId);
 
     for (auto& item : result.menuItems)
     {
@@ -146,12 +147,15 @@ namespace ao::uimodel
       return {};
     }
 
-    if (!isTrackPresentationEligibleForList(foundStateRes->listId, presentationId))
+    auto const optId = rt::parseTrackPresetId(presentationId);
+
+    if (!optId || !isTrackPresentationEligibleForList(foundStateRes->listId, *optId))
     {
       return {};
     }
 
-    auto optSpec = _catalog.specForId(presentationId);
+    // Even reselecting the current preset reapplies its base sort.
+    auto optSpec = _catalog.specForId(*optId);
 
     if (!optSpec)
     {
@@ -164,11 +168,9 @@ namespace ao::uimodel
 
   void TrackPresentationPickerViewModel::completeSelection(TrackPresentationSelection const& selection)
   {
-    if (selection.targetListId == kInvalidListId)
+    if (selection.targetListId != kInvalidListId)
     {
-      return;
+      _listPresentations.setPresentationIdForList(selection.targetListId, selection.spec.presetId);
     }
-
-    _listPresentations.setPresentationIdForList(selection.targetListId, selection.spec.id);
   }
 } // namespace ao::uimodel

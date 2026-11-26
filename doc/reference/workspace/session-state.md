@@ -9,7 +9,7 @@ id: workspace.session-state
 This reference owns the exact current payload of the `workspace` configuration group.
 It enumerates the private persistence document, nested view presentations and custom presets, stable values, strict validation, and compatibility behavior.
 
-The required `presentationVersion` is currently `1`.
+The required `presentationVersion` is currently `3`.
 It versions the nested presentation vocabulary, not the complete workspace document.
 The payload has no root workspace schema version or resource budget.
 
@@ -37,7 +37,7 @@ Its value is one mapping with these required fields in canonical emitted order:
 
 | Field                 | YAML shape                          | Meaning                                                                             |
 | --------------------- | ----------------------------------- | ----------------------------------------------------------------------------------- |
-| `presentationVersion` | Unsigned 32-bit scalar.             | Required and exactly `1`.                                                           |
+| `presentationVersion` | Unsigned 32-bit scalar.             | Required and exactly `3`.                                                           |
 | `libraryId`           | Canonical UUID string.              | Library the session was saved for; its `openViews` list ids belong to that library. |
 | `openViews`           | Sequence of view mappings.          | Ordered semantic view reconstruction records.                                       |
 | `activeViewIndex`     | Unsigned 32-bit scalar.             | Zero-based position of the exact active entry in `openViews`.                       |
@@ -56,99 +56,109 @@ Every `openViews` entry contains:
 | `filterExpression` | String.                 | Required; empty means no transient filter.                         |
 | `presentation`     | Presentation mapping.   | Required exact presentation used to reconstruct the view.          |
 
-Legacy top-level `groupBy`, `sortBy`, and optional presentation fields are not part of version 1.
 Grouping and sorting occur only inside the required exact presentation.
 
 ### Presentation mapping
 
 Each view `presentation` and custom-preset `spec` contains:
 
-| Field             | YAML shape                              | Requirement                                          |
-| ----------------- | --------------------------------------- | ---------------------------------------------------- |
-| `id`              | String.                                 | Required and nonempty; opaque presentation identity. |
-| `group`           | Stable group-key string.                | Required and known.                                  |
-| `sort`            | Sequence of sort-term mappings.         | Required; sort fields must be unique.                |
-| `visibleFields`   | Sequence of stable track-field strings. | Required, nonempty, known, and unique.               |
-| `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique.                         |
+| Field             | YAML shape                              | Requirement                                                                                              |
+| ----------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `kind`            | `builtin` or `custom`.                  | Required. A `customPresets` entry's `spec` must use `custom`.                                            |
+| `presetId`        | String.                                 | Required. Built-in slug for `builtin`; canonical custom key for `custom`.                                |
+| `group`           | Stable group-key string.                | Required and known.                                                                                      |
+| `sort`            | Sequence of sort-term mappings.         | Required base order. May be empty. Sort fields must be known and unique within this sequence.            |
+| `columnSort`      | One column-sort mapping.                | Optional on a view. Omitted when absent. `column` is a track-field id. Forbidden in a custom definition. |
+| `visibleFields`   | Sequence of stable track-field strings. | Required, nonempty, known, and unique.                                                                   |
+| `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique.                                                                             |
 
-The stable token catalogs are owned by the [runtime track-field catalog](../library/model/track-field.md) and routed through the [persisted presentation-state reference](../presentation/persisted-state.md).
-Presentation ids are not resolved against the current catalog during deserialization.
+The [preset reference](../presentation/track-preset.md) defines the closed built-in slugs and the custom key format: exactly 16 lowercase hexadecimal digits. Deserialization checks that a key matches its `kind`. It does not require a custom id to appear in `customPresets`, because the view stores its complete presentation.
+The field and group token catalogs are owned by the [runtime track-field catalog](../library/model/track-field.md) and routed through the [persisted presentation-state reference](../presentation/persisted-state.md).
 
 ### Sort term
 
 Every `sort` entry contains:
 
-| Field       | YAML shape                | Requirement                                          |
-| ----------- | ------------------------- | ---------------------------------------------------- |
-| `field`     | Stable sort-field string. | Required, known, and unique within the presentation. |
-| `direction` | String.                   | Required; exactly `ascending` or `descending`.       |
+| Field       | YAML shape                | Requirement                                    |
+| ----------- | ------------------------- | ---------------------------------------------- |
+| `field`     | Stable sort-field string. | Required, known, and unique within `sort`.     |
+| `direction` | String.                   | Required; exactly `ascending` or `descending`. |
+
+`columnSort`, when present, is one mapping and not a sequence:
+
+| Field       | YAML shape             | Requirement                                         |
+| ----------- | ---------------------- | --------------------------------------------------- |
+| `column`    | Stable track-field id. | Required, known, and sortable. Not a sort-field id. |
+| `direction` | String.                | Required; exactly `ascending` or `descending`.      |
+
+`field` is not accepted in `columnSort`, and `column` is not accepted in a `sort` term.
 
 ### Custom presentation preset
 
 Every `customPresets` entry contains:
 
-| Field          | YAML shape            | Meaning                                           |
-| -------------- | --------------------- | ------------------------------------------------- |
-| `label`        | String.               | User-visible label.                               |
-| `basePresetId` | String.               | Opaque source/base preset identity; may be empty. |
-| `spec`         | Presentation mapping. | Complete version-1 presentation spec.             |
+| Field          | YAML shape            | Meaning                                                    |
+| -------------- | --------------------- | ---------------------------------------------------------- |
+| `label`        | String.               | User-visible label.                                        |
+| `basePresetId` | String.               | Built-in slug, canonical custom key, or empty for no base. |
+| `spec`         | Presentation mapping. | Complete spec with `kind: custom` and no `columnSort`.     |
 
 ## Validation rules
 
-- The explicit schema validates each mapping and sequence recursively; every listed member is required.
+- The explicit schema validates each mapping and sequence recursively. `presetId` must match `kind`. `columnSort` does not select a kind.
 - Unknown members, missing members, wrong node kinds, malformed scalar values, and malformed vector elements reject the whole workspace document.
-- `presentationVersion` must be `1`.
+- `presentationVersion` must be `3`.
 - `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID; whether it matches the open library is decided at restore, not deserialization.
 - When `openViews` is empty, `activeViewIndex` must be `0`.
 - When `openViews` is nonempty, `activeViewIndex` must be smaller than `openViews.size()`.
 - Deserialization violations of either active-index rule return `FormatRejected` before candidate-view creation.
 - View list ids must be nonzero; existence in the active library is checked while candidate views are created.
-- Closed field, sort, group, and direction tokens must resolve exactly and case-sensitively.
-- Duplicate sort fields and duplicate values within either field collection reject the document.
-- Presentation ids must be nonempty and deserialized presentations must have at least one visible field.
-- Serialization has caller preconditions: the semantic active-view index must fit the unsigned 32-bit DTO and satisfy the empty/nonempty bounds; every view must have a nonzero list id and an exact presentation with valid enum values and identity. These are live workspace invariants, and violating them is a contract failure rather than a recoverable `InvalidState` result.
-- Before emission, serialization normalizes permitted presentation defaults, deduplicates `visibleFields` and `redundantFields`, and supplies `title` for an empty visible set. It does not deduplicate `sortBy`: duplicate sort fields violate a serialization precondition enforced by `AO_EXPECTS`. Canonical output therefore has unique sort and field entries and a nonempty `visibleFields` sequence.
+- Closed kind, column, field, sort, group, and direction tokens must resolve exactly and case-sensitively.
+- Duplicate fields inside `sort`, and duplicate values within either field collection, reject the document. `columnSort` stores the clicked track-field id, not its projected sort key, and is not expanded into disc and track terms.
+- A present `columnSort` must be one mapping with exactly `column` and `direction`. A sequence, a missing member, an unknown or unsortable column, an unknown direction, an extra member, or a `field` member rejects the document. `kind: columnSort` is not a kind.
+- A `customPresets` spec that contains `columnSort` rejects the document. A view presentation of either kind may contain it.
+- Invalid preset keys and mismatches between `kind` and `presetId` reject the document. Deserialized presentations must have at least one visible field.
+- Serialization has caller preconditions: the semantic active-view index must fit the unsigned 32-bit DTO and satisfy the empty/nonempty bounds; every view must have a nonzero list id and an exact presentation with valid enum values and a preset id. A custom-preset definition must not carry `optColumnSort`. These are live workspace invariants, and violating them is a contract failure rather than a recoverable `InvalidState` result.
+- Before emission, serialization normalizes permitted presentation defaults, deduplicates `visibleFields` and `redundantFields`, and supplies `title` for an empty visible set. It does not deduplicate `sortBy`: duplicate sort fields violate a serialization precondition enforced by `AO_EXPECTS`. It emits `columnSort` only when an override is present, after `sort` and before `visibleFields`, as one `column`/`direction` mapping. `column` is the track-field id, such as `display-track-number`, not a sort-field id and not an expanded disc-plus-track sequence. `sort` continues to use `field`. Canonical output therefore has unique base sort and field entries and a nonempty `visibleFields` sequence.
 - Structural and semantic deserialize completes before `WorkspaceService` creates or installs candidate views.
 
 There is no schema-level limit for view count, preset count, string length, sort-term count, or field count.
-Custom-preset ids also have no complete uniqueness or built-in-collision check at this schema boundary.
+The schema does not check custom ids for uniqueness. Built-in and custom ids are distinct types and cannot collide.
 
 ## Compatibility and versioning
 
-Version 1 is the first supported stable presentation serialization.
-Unversioned legacy workspace state, numeric enums, unknown closed tokens, and unsupported presentation versions are rejected without migration or automatic rewrite.
-An unsupported presentation version returns `NotSupported` before version-specific sibling fields are interpreted.
+The reader accepts only version 3. That vocabulary has not been published. It rejects version 2, version 1, unversioned state, numeric enums, `kind: columnSort`, and unknown closed tokens without migration or automatic rewrite. `field` is not an alias for `columnSort.column`.
+An unsupported version returns `NotSupported` before version-specific sibling fields are interpreted. The old `id` field is not accepted as an alias for `kind` or `presetId`.
 
-Strict deserialization fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
-However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no complete root version or collection budgets.
-Those remaining compatibility limits are why this payload is not described as a complete version-1 workspace envelope.
-
-The root field set is exact.
-Alternate root field names are not parsed, migrated, retained as aliases, or emitted.
-`libraryId` joined that set without a presentation-version change, so a document written before it lacks the field and is rejected as malformed.
+Strict deserialization requires the exact root field set; it does not parse, migrate, or emit alternate root names.
+`presentationVersion` promises only the nested presentation vocabulary, not a complete root version or collection budgets.
 
 Changing a stable presentation token requires an explicit compatibility decision.
-Built-in and custom presentation ids remain opaque references, while the exact field/sort/group/direction vocabulary is closed for a given presentation version.
+The kind, built-in slug, field, sort, group, and direction vocabularies are closed for a given presentation version. The custom key format encodes a `uint64_t`, not an extensible name.
 
 ## Example
 
-This example contains one filtered All Tracks view and one custom presentation:
+This example contains one filtered All Tracks view with a descending `display-track-number` header override and one named custom preset:
 
 ```yaml
 workspace:
-  presentationVersion: 1
+  presentationVersion: 3
   libraryId: 123e4567-e89b-12d3-a456-426614174000
   openViews:
     - listId: 4294967295
       filterExpression: '$genre = "Classical"'
       presentation:
-        id: albums
+        kind: builtin
+        presetId: albums
         group: album
         sort:
           - field: album
             direction: ascending
           - field: title
-            direction: descending
+            direction: ascending
+        columnSort:
+          column: display-track-number
+          direction: descending
         visibleFields:
           - title
           - artist
@@ -160,7 +170,8 @@ workspace:
     - label: Works
       basePresetId: library
       spec:
-        id: custom.works
+        kind: custom
+        presetId: 00000000000000ab
         group: work
         sort:
           - field: work

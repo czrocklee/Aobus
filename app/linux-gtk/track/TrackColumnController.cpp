@@ -8,6 +8,7 @@
 #include <ao/compat/Enumerate.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
@@ -20,7 +21,11 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/columnviewsorter.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/sorter.h>
+#include <gtkmm/stringsorter.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
@@ -28,6 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -121,7 +127,8 @@ namespace ao::gtk
 
       _columnView.append_column(columnPtr);
 
-      _columns.push_back({.field = rtDef.field, .columnPtr = columnPtr});
+      _columns.push_back(
+        {.field = rtDef.field, .columnPtr = columnPtr, .sortable = rtDef.sortable && rtDef.optSortField});
     }
 
     _syncingColumnLayout = wasSyncingColumnLayout;
@@ -142,8 +149,107 @@ namespace ao::gtk
     queueTitlePositionVariableUpdate();
   }
 
+  void TrackColumnController::configureSorting(std::optional<rt::TrackColumnSort> const optColumnSort,
+                                               std::function<void(rt::TrackColumnSort)> onSort)
+  {
+    // Install the native header affordance once per generation. The runtime
+    // projection, not a GTK sort model, owns the row order.
+    if (!_sortChangedConnection.connected())
+    {
+      auto const headerSorterPtr = Gtk::StringSorter::create({});
+
+      for (auto const& binding : _columns)
+      {
+        if (binding.sortable)
+        {
+          binding.columnPtr->set_sorter(headerSorterPtr);
+        }
+      }
+    }
+
+    disconnectSorting();
+
+    if (auto const sorterPtr = std::dynamic_pointer_cast<Gtk::ColumnViewSorter>(_columnView.get_sorter()); sorterPtr)
+    {
+      syncSortIndicator(*sorterPtr, optColumnSort);
+
+      // The column view owns this non-replaceable sorter for the generation.
+      _sortChangedConnection = sorterPtr->signal_changed().connect(
+        [this, sorter = sorterPtr.get(), onSort = std::move(onSort)](Gtk::Sorter::Change)
+        {
+          // Moving or hiding a column can also change GTK's sorter.
+          if (_syncingColumnLayout)
+          {
+            return;
+          }
+
+          auto const columnPtr = sorter->get_primary_sort_column();
+          auto const it = std::ranges::find(_columns, columnPtr, &ColumnBinding::columnPtr);
+
+          if (it == _columns.end() || !it->sortable || !columnPtr->get_visible())
+          {
+            return;
+          }
+
+          auto const ascending = sorter->get_primary_sort_order() == Gtk::SortType::ASCENDING;
+          auto const sort = rt::TrackColumnSort{.column = it->field, .ascending = ascending};
+          // A sort updates the projection and can retire this generation. Do not
+          // run the command on GTK's header gesture or sorter dispatch stack.
+          _queuedSortConnection.disconnect();
+          _queuedSortConnection = Glib::signal_idle().connect(
+            [onSort, sort]
+            {
+              onSort(sort);
+              return false;
+            });
+        });
+    }
+  }
+
+  void TrackColumnController::syncSortIndicator(Gtk::ColumnViewSorter const& sorter,
+                                                std::optional<rt::TrackColumnSort> const optColumnSort)
+  {
+    auto const* const binding = optColumnSort ? findColumnBinding(optColumnSort->column) : nullptr;
+    auto const targetColumnPtr = binding != nullptr && binding->sortable && binding->columnPtr->get_visible()
+                                   ? binding->columnPtr
+                                   : Glib::RefPtr<Gtk::ColumnViewColumn>{};
+    auto const direction =
+      optColumnSort && !optColumnSort->ascending ? Gtk::SortType::DESCENDING : Gtk::SortType::ASCENDING;
+    auto const sortCount = sorter.get_n_sort_columns();
+
+    if (sortCount <= 1 && sorter.get_primary_sort_column() == targetColumnPtr &&
+        (!targetColumnPtr || sorter.get_primary_sort_order() == direction))
+    {
+      return;
+    }
+
+    // GTK retains prior columns as secondary sorters. Clear them before marking
+    // the exact live override, or leave the header unmarked if its column is hidden.
+    if (sortCount != 0)
+    {
+      _columnView.sort_by_column({}, Gtk::SortType::ASCENDING);
+    }
+
+    if (targetColumnPtr)
+    {
+      _columnView.sort_by_column(targetColumnPtr, direction);
+    }
+  }
+
+  void TrackColumnController::disconnectSorting()
+  {
+    _sortChangedConnection.disconnect();
+    _queuedSortConnection.disconnect();
+  }
+
+  bool TrackColumnController::hasCurrentLayout() const noexcept
+  {
+    return _appliedLayout == _columnLayouts.layoutForList(_listId);
+  }
+
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
+    _appliedLayout = _columnLayouts.layoutForList(_listId);
     auto const wasSyncingColumnLayout = _syncingColumnLayout;
     _syncingColumnLayout = true;
 
@@ -166,7 +272,7 @@ namespace ao::gtk
 
     updateColumnVisibility(visibleFields);
 
-    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _columnLayouts.layoutForList(_listId));
+    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _appliedLayout);
     applySolvedColumnWidths(specs);
 
     _syncingColumnLayout = wasSyncingColumnLayout;
@@ -321,7 +427,14 @@ namespace ao::gtk
     }
 
     auto const& stored = _columnLayouts.layoutForList(_listId);
-    _columnLayouts.updateLayout(_listId, uimodel::mergeVisibleTrackColumnSpecs(stored, specs));
+    auto const layout = uimodel::mergeVisibleTrackColumnSpecs(stored, specs);
+    // A resize applies geometry, not another page's pending visibility changes.
+    if (hasCurrentLayout())
+    {
+      _appliedLayout = layout;
+    }
+
+    _columnLayouts.updateLayout(_listId, layout);
 
     if (viewportWidth > 0)
     {

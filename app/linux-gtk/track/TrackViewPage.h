@@ -120,6 +120,8 @@ namespace ao::gtk
       return _groupCoverPlaceholderStyle;
     }
 
+    void bindProjection(std::shared_ptr<rt::TrackListProjection const> const& projectionPtr,
+                        rt::TrackPresentationSpec const& presentation);
     void applyPresentation(rt::TrackPresentationSpec const& presentation);
     void refreshOrderCapabilities();
 
@@ -132,11 +134,14 @@ namespace ao::gtk
     void buildStatusBar();
     void applyColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
+    void configureColumnSorting();
+    void rememberSortScrollPosition();
     void installOrderDragController();
+    void updateOrderCapabilityStatus(uimodel::ListOrderCapabilityState const& capabilities);
     void setOrderCapabilityStatus(std::string_view message);
     void clearOrderCapabilityStatus();
 
-    void rebuildColumnView(rt::TrackPresentationSpec const& presentation);
+    void rebuildColumnView();
 
     void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr,
                               rt::TrackField field,
@@ -151,6 +156,7 @@ namespace ao::gtk
     // Models
     ListId _listId;
     rt::ViewId _viewId;
+    rt::TrackPresentationSpec _renderedPresentation;
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayouts& _columnLayouts;
     i18n::MessageCatalog _textCatalog;
@@ -173,6 +179,8 @@ namespace ao::gtk
     // subscription first. That is the only protection on the constructor's
     // failure path, where the destructor body never runs.
     sigc::scoped_connection _themeRefreshConnection;
+    sigc::scoped_connection _beforeResetConnection;
+    bool _keepSortAtTop = false;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

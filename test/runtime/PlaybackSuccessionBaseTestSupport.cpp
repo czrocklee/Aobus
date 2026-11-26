@@ -14,7 +14,6 @@
 #include <ao/Error.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -71,12 +70,6 @@ namespace ao::rt::test::playback_succession
     if (config.optPresentation)
     {
       request.optPresentation = NavigationPresentation{.spec = std::move(*config.optPresentation)};
-    }
-    else if (config.groupBy != TrackGroupKey::None || !config.sortBy.empty())
-    {
-      request.optPresentation = NavigationPresentation{
-        .spec = TrackPresentationSpec{.groupBy = config.groupBy, .sortBy = std::move(config.sortBy)},
-      };
     }
 
     return request;
@@ -136,7 +129,7 @@ namespace ao::rt::test::playback_succession
 
     if (!config.optPresentation)
     {
-      config.optPresentation = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}};
+      config.optPresentation = TrackPresentationSpec{.presetId = BuiltinPreset::ListOrder};
     }
 
     config.listId = listId;

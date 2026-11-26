@@ -49,41 +49,34 @@ namespace ao::uimodel::test
 
     auto const german = ao::test::messageCatalog("de-DE");
     CHECK(i18n::requiredFormat(german, MessageId::GtkPresentationCopyLabel, {{"label", "Alben"}}) == "Kopie von Alben");
-    CHECK(i18n::requiredFormat(german, MessageId::TuiPresentationBadge, {{"id", "Standard"}}) == "Ansicht:Standard");
     CHECK(playbackActionLabel(german, PlaybackCommand::PlayPause) == "Wiedergabe/Pause");
 
     auto const chinese = ao::test::messageCatalog("zh-CN");
     CHECK(i18n::requiredFormat(chinese, MessageId::GtkPresentationCopyLabel, {{"label", "专辑"}}) == "专辑 副本");
-    CHECK(i18n::requiredFormat(chinese, MessageId::TuiPresentationBadge, {{"id", "默认"}}) == "视图:默认");
     CHECK(playbackActionLabel(chinese, PlaybackCommand::PlayPause) == "播放/暂停");
     CHECK(trackFieldLabel(chinese, rt::TrackField::SampleRate) == "采样率");
 
     auto const traditionalChinese = ao::test::messageCatalog("zh-TW");
     CHECK(i18n::requiredFormat(traditionalChinese, MessageId::GtkPresentationCopyLabel, {{"label", "專輯"}}) ==
           "專輯 複本");
-    CHECK(i18n::requiredFormat(traditionalChinese, MessageId::TuiPresentationBadge, {{"id", "預設"}}) == "檢視:預設");
     CHECK(playbackActionLabel(traditionalChinese, PlaybackCommand::PlayPause) == "播放/暫停");
     CHECK(trackFieldLabel(traditionalChinese, rt::TrackField::SampleRate) == "取樣率");
 
     auto const japanese = ao::test::messageCatalog("ja-JP");
     CHECK(i18n::requiredFormat(japanese, MessageId::GtkPresentationCopyLabel, {{"label", "アルバム"}}) ==
           "アルバム のコピー");
-    CHECK(i18n::requiredFormat(japanese, MessageId::TuiPresentationBadge, {{"id", "デフォルト"}}) == "表示:デフォルト");
     CHECK(playbackActionLabel(japanese, PlaybackCommand::PlayPause) == "再生/一時停止");
     CHECK(trackFieldLabel(japanese, rt::TrackField::SampleRate) == "サンプリングレート");
 
     auto const spanish = ao::test::messageCatalog("es-ES");
     CHECK(i18n::requiredFormat(spanish, MessageId::GtkPresentationCopyLabel, {{"label", "Álbumes"}}) ==
           "Copia de Álbumes");
-    CHECK(i18n::requiredFormat(spanish, MessageId::TuiPresentationBadge, {{"id", "predeterminado"}}) ==
-          "vista:predeterminado");
     CHECK(playbackActionLabel(spanish, PlaybackCommand::PlayPause) == "Reproducir/Pausar");
     CHECK(trackFieldLabel(spanish, rt::TrackField::SampleRate) == "Frecuencia de muestreo");
 
     auto const french = ao::test::messageCatalog("fr-FR");
     CHECK(i18n::requiredFormat(french, MessageId::GtkPresentationCopyLabel, {{"label", "Albums"}}) ==
           "Copie de « Albums »");
-    CHECK(i18n::requiredFormat(french, MessageId::TuiPresentationBadge, {{"id", "par défaut"}}) == "vue:par défaut");
     CHECK(playbackActionLabel(french, PlaybackCommand::PlayPause) == "Lecture/Pause");
     CHECK(trackFieldLabel(french, rt::TrackField::SampleRate) == "Fréquence d'échantillonnage");
   }
@@ -97,6 +90,13 @@ namespace ao::uimodel::test
       auto const field = static_cast<rt::TrackField>(index);
       INFO("Track field index " << index);
       CHECK_FALSE(trackFieldLabel(catalog, field).empty());
+    }
+
+    for (std::size_t index = 0; index < rt::kTrackSortFieldCount; ++index)
+    {
+      auto const field = static_cast<rt::TrackSortField>(index);
+      INFO("Track sort field index " << index);
+      CHECK_FALSE(trackSortFieldLabel(catalog, field).empty());
     }
 
     for (std::size_t index = 0; index < rt::kTrackGroupKeyCount; ++index)
@@ -120,16 +120,20 @@ namespace ao::uimodel::test
 
     for (auto const& preset : rt::builtinTrackPresentationPresets())
     {
-      INFO("Built-in presentation " << preset.spec.id);
-      auto const optText = builtinTrackPresentation(catalog, preset.spec.id);
-      REQUIRE(optText);
-      CHECK_FALSE(optText->label.empty());
-      CHECK_FALSE(optText->description.empty());
+      auto const id = preset.presetId();
+      INFO("Built-in presentation " << rt::builtinPresetKey(id));
+      auto const text = builtinTrackPresentation(catalog, id);
+      CHECK_FALSE(text.label.empty());
+      CHECK_FALSE(text.description.empty());
     }
 
-    CHECK_FALSE(builtinTrackPresentation(catalog, "extension-view"));
     CHECK(trackFieldLabel(catalog, rt::TrackField::SampleRate) == "Sample Rate");
     CHECK(trackFieldLabel(catalog, rt::TrackField::AlbumArtist) == "Album Artist");
+    CHECK(trackSortFieldLabel(catalog, rt::TrackSortField::RecordingYear) == "Recording Year");
+    CHECK(trackSortFieldLabel(catalog, rt::TrackSortField::TrackNumber) ==
+          trackFieldLabel(catalog, rt::TrackField::TrackNumber));
+    CHECK(trackSortFieldLabel(catalog, rt::TrackSortField::Movement) ==
+          trackFieldLabel(catalog, rt::TrackField::Movement));
     CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) == "Create Custom View…");
   }
 
@@ -395,10 +399,10 @@ namespace ao::uimodel::test
     auto const catalog = ao::test::messageCatalog("de-DE");
 
     CHECK(trackFieldLabel(catalog, rt::TrackField::Title) == "Titel");
+    CHECK(trackSortFieldLabel(catalog, rt::TrackSortField::RecordingYear) == "Aufnahmejahr");
     CHECK(trackGroupKeyLabel(catalog, rt::TrackGroupKey::None) == "Keine");
     CHECK(missingTrackValueLabel(catalog, rt::MissingTrackValueKind::Artist) == "Unbekannter Interpret");
-    REQUIRE(builtinTrackPresentation(catalog, "library"));
-    CHECK(builtinTrackPresentation(catalog, "library")->label == "Bibliothek");
+    CHECK(builtinTrackPresentation(catalog, rt::BuiltinPreset::Library).label == "Bibliothek");
     CHECK(i18n::requiredText(catalog, MessageId::CreateCustomTrackPresentation) ==
           "Benutzerdefinierte Ansicht erstellen…");
     CHECK(audioProfilePresentation(catalog, audio::kProfileShared).label == "Gemeinsam genutzter Modus");
@@ -751,15 +755,9 @@ namespace ao::uimodel::test
 
     for (auto const& preset : rt::builtinTrackPresentationPresets())
     {
-      INFO("Built-in presentation " << preset.spec.id);
-      auto const optText = builtinTrackPresentation(catalog, preset.spec.id);
-      auto const optEnglishText = builtinTrackPresentation(english, preset.spec.id);
-      REQUIRE(optText);
-      REQUIRE(optEnglishText);
-      CHECK_FALSE(optText->label.empty());
-      CHECK_FALSE(optText->description.empty());
-      CHECK(optText->label == optEnglishText->label);
-      CHECK(optText->description == optEnglishText->description);
+      auto const id = preset.presetId();
+      INFO("Built-in presentation " << rt::builtinPresetKey(id));
+      CHECK(builtinTrackPresentation(catalog, id) == builtinTrackPresentation(english, id));
     }
 
     CHECK(trackFieldLabel(catalog, rt::TrackField::Title) == "Title");

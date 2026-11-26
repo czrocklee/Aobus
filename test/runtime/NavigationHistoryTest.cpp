@@ -13,25 +13,16 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::rt::test
 {
   namespace
   {
-    auto makeSpec(std::string_view id, TrackGroupKey groupBy = TrackGroupKey::None)
+    auto makePoint(ListId listId,
+                   std::string filterExpression = {},
+                   TrackPresentationSpec presentation = {.presetId = BuiltinPreset::Songs})
     {
-      return TrackPresentationSpec{.id = std::string{id}, .groupBy = groupBy};
-    }
-
-    auto makePoint(ListId listId, std::string filterExpression = {}, TrackPresentationSpec presentation = {})
-    {
-      if (presentation.id.empty())
-      {
-        presentation = makeSpec("songs");
-      }
-
       return NavigationPoint{
         .listId = listId, .filterExpression = std::move(filterExpression), .presentation = std::move(presentation)};
     }
@@ -147,7 +138,7 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - presentation changes create distinct points")
   {
     auto h = NavigationHistory{};
-    auto firstPresentation = makeSpec("custom");
+    auto firstPresentation = TrackPresentationSpec{.presetId = CustomPresetId{1}};
     firstPresentation.visibleFields = {TrackField::Title};
     auto secondPresentation = firstPresentation;
     secondPresentation.visibleFields = {TrackField::Title, TrackField::Artist};

@@ -19,7 +19,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <variant>
 
 namespace ao::async
@@ -88,6 +87,8 @@ namespace ao::rt
 
     Result<> focusView(ViewId viewId);
     Result<ViewId> navigate(NavigationRequest const& request);
+    /// Navigate to this exact open view, recording the live departure and destination together.
+    Result<ViewId> navigateToOpenView(ViewId viewId);
     /// Focus the track's source list (or All Tracks if it is no longer a member), without editing a view's filter.
     /// Only a new view asks for a presentation. The caller owns row selection and scrolling.
     Result<ViewId> navigateToTrackSource(TrackId trackId,
@@ -96,7 +97,7 @@ namespace ao::rt
     Result<> closeView(ViewId viewId);
 
     Result<> setActivePresentation(TrackPresentationSpec const& presentation, PresentationChangeOptions options = {});
-    Result<TrackPresentationSpec> setActivePresentation(std::string_view presentationId,
+    Result<TrackPresentationSpec> setActivePresentation(TrackPresetId const& presetId,
                                                         PresentationChangeOptions options = {});
 
     Result<> goBack();
@@ -110,7 +111,7 @@ namespace ao::rt
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
     Result<> addCustomPreset(CustomTrackPresentationPreset const& preset);
-    Result<> removeCustomPreset(std::string_view presetId);
+    Result<> removeCustomPreset(CustomPresetId presetId);
 
     void saveSession(ConfigStore& store) const;
     Result<> restoreSession(ConfigStore& store);

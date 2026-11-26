@@ -194,7 +194,7 @@ namespace ao::rt::test
         })));
         viewId = ao::test::requireValue(workspace.navigate(playback_succession::navigationRequest(TrackListViewConfig{
           .listId = listId,
-          .optPresentation = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}},
+          .optPresentation = TrackPresentationSpec{.presetId = BuiltinPreset::ListOrder},
         })));
       }
 

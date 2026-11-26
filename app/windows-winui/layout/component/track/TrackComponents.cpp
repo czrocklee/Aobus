@@ -15,6 +15,7 @@
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -159,9 +160,8 @@ namespace ao::winui::layout
      *
      * The presentation set is a runtime fact rather than an authored one, so the
      * component builds its menu on each click from the built-in presets and the
-     * eligibility of each for the active list. The active presentation can also be
-     * the track list's unsaved column sort, an id the presentation catalog echoes
-     * verbatim, so this leaf labels that state with localized copy itself.
+     * eligibility of each for the active list. The button displays the shared
+     * picker's localized label.
      */
     class PresentationButtonComponent final : public LayoutComponent
     {
@@ -175,7 +175,6 @@ namespace ao::winui::layout
                                   std::function<void(std::string)> reportStatus,
                                   bool const compact)
         : _workspace{workspace}
-        , _views{views}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{std::move(reportStatus)}
         , _viewModelPtr{std::make_unique<uimodel::TrackPresentationPickerViewModel>(
@@ -211,22 +210,14 @@ namespace ao::winui::layout
     private:
       void refreshLabel()
       {
-        // A column-header sort stamps the synthetic presentation id the shared
-        // catalog echoes verbatim, so the leaf names the unsaved field sort with
-        // localized copy instead of the raw identifier. Resolve against the
-        // picker's view: presentation delivery can precede controller adoption
-        // of the committed workspace focus.
-        auto const stateRes = _views.findTrackListState(_state.activeViewId);
-        auto const label = stateRes && stateRes->presentation.id == kColumnSortPresentationId
-                             ? resourceString("track_presentation_column_sort")
-                             : _state.label;
-        _button.Content(winrt::box_value(winrt::to_hstring(label)));
+        auto const label = winrt::to_hstring(_state.label);
+        _button.Content(winrt::box_value(label));
         _button.IsEnabled(_state.enabled);
 
         // Constrained layouts can clip longer labels, so the full text stays
         // reachable through the tooltip and the automation name.
-        ToolTipService::SetToolTip(_button, winrt::box_value(winrt::to_hstring(label)));
-        AutomationProperties::SetName(_button, winrt::to_hstring(label));
+        ToolTipService::SetToolTip(_button, winrt::box_value(label));
+        AutomationProperties::SetName(_button, label);
       }
 
       void onClicked(IInspectable const& /*sender*/, RoutedEventArgs const& /*args*/)
@@ -263,6 +254,13 @@ namespace ao::winui::layout
             continue;
           }
 
+          auto const optPresetId = rt::parseTrackPresetId(entry.id);
+
+          if (!optPresetId)
+          {
+            continue;
+          }
+
           auto item = MenuFlyoutItem{};
           item.Text(winrt::to_hstring(entry.label));
           item.IsEnabled(entry.enabled);
@@ -274,7 +272,7 @@ namespace ao::winui::layout
 
           _itemClickRevokers.push_back(
             item.Click(winrt::auto_revoke,
-                       [this, presentationId = entry.id](IInspectable const&, RoutedEventArgs const&)
+                       [this, presentationId = *optPresetId](IInspectable const&, RoutedEventArgs const&)
                        { select(presentationId); }));
           _flyout.Items().Append(item);
         }
@@ -297,14 +295,14 @@ namespace ao::winui::layout
       }
 
       /// Switch to @p presentationId and remember it as this list's preference.
-      void select(std::string const& presentationId)
+      void select(rt::TrackPresetId const& presentationId)
       {
         if (!uimodel::isGenerationActive(_gatePtr))
         {
           return;
         }
 
-        auto const optSelection = _viewModelPtr->selectPresentation(presentationId);
+        auto const optSelection = _viewModelPtr->selectPresentation(rt::trackPresetKey(presentationId));
 
         if (!optSelection)
         {
@@ -327,7 +325,6 @@ namespace ao::winui::layout
       Button _button{};
       MenuFlyout _flyout{nullptr};
       rt::WorkspaceService& _workspace;
-      rt::ViewService& _views;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
       uimodel::TrackPresentationPickerState _state;

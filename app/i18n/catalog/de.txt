@@ -4,6 +4,7 @@
 de:table {
   messages:table {
     track_field_recording_date { "Aufnahmedatum" }
+    track_sort_recording_year { "Aufnahmejahr" }
     track_credits_heading { "Mitwirkende" }
     track_credit_performer { "Interpret" }
     track_credit_lyricist { "Texter" }
@@ -202,6 +203,8 @@ de:table {
     create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen…" }
     track_presentation_picker_label { "Ansicht" }
     track_presentation_all_tracks_manual_order_unavailable { "Für „Alle Titel“ ist keine Reihenfolge gespeichert. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
+    track_sort_column_unavailable { "Nach dieser Spalte kann nicht sortiert werden: {column}" }
+    track_sort_failed { "Titel konnten nicht sortiert werden: {detail}" }
     audio_backend_pipewire_description { "Moderner Linux-Audioserver mit niedriger Latenz" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (direkter Hardwarezugriff)" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
@@ -298,6 +301,7 @@ de:table {
     list_order_list_unavailable { "Diese Liste ist nicht mehr verfügbar." }
     list_order_fix_filter { "Korrigieren Sie die Liste oder den Schnellfilterausdruck, bevor Sie die Reihenfolge ändern." }
     list_order_choose_flat_presentation { "Wählen Sie „Manuelle Reihenfolge“ oder eine andere flache, unsortierte Ansicht, um Titel neu anzuordnen." }
+    list_order_choose_current_view { "Wählen Sie die aktuelle Ansicht erneut aus, um die Spaltensortierung aufzuheben." }
     list_order_clear_quick_filter { "Löschen Sie den Schnellfilter, um Titel zu ziehen oder relativ zu verschieben; an den Anfang oder das Ende können sie weiterhin verschoben werden." }
     list_order_changed { "Die Liste wurde geändert. Beginnen Sie die Änderung der Reihenfolge erneut." }
     list_order_unchanged { "Reihenfolge unverändert." }
@@ -592,6 +596,7 @@ de:table {
     tui_shell_detail_track_detail { "Titeldetails" }
     tui_shell_detail_audio_pipeline { "Audiokette" }
     tui_shell_detail_output_device { "Ausgabegerät" }
+    tui_shell_detail_sort_column { "Titel nach Spalte sortieren" }
     tui_shell_detail_choose_view { "Ansicht wählen" }
     tui_shell_detail_notification_center { "Benachrichtigungszentrale" }
     tui_shell_detail_close_overlay { "Einblendung schließen" }
@@ -670,8 +675,6 @@ de:table {
     tui_library_expression_filter_matched { "Ausdrucksfilter fand {count, plural, one {# Titel} other {# Titel}}" }
     tui_presentation_custom { "benutzerdefiniert" }
     tui_presentation_custom_from { "benutzerdefiniert aus {id}" }
-    tui_presentation_default { "Standard" }
-    tui_presentation_badge { "Ansicht:{id}" }
     tui_editor_title { "Titeleigenschaften" }
     tui_editor_title_multiple { "{count, plural, one {# Titel} other {# Titel}} bearbeiten" }
     tui_editor_applies_to_all { "Änderungen gelten für alle {count, plural, one {# Titel} other {# Titel}}" }
@@ -771,12 +774,9 @@ de:table {
     winui_column_resize_failed { "Spaltengröße konnte nicht geändert werden: {detail}" }
     winui_column_move_failed { "Spalte konnte nicht verschoben werden: {detail}" }
     winui_column_visibility_failed { "Spaltensichtbarkeit konnte nicht geändert werden: {detail}" }
-    winui_column_not_sortable { "Spalte ''{column}'' kann nicht sortiert werden" }
-    winui_sort_failed { "Sortierung fehlgeschlagen: {detail}" }
     winui_unavailable_track { "Nicht verfügbarer Titel" }
     winui_theme_file_not_found { "Designdatei nicht gefunden: {path}" }
     winui_startup_failure { "Aobus konnte nicht gestartet werden:\n\n{detail}" }
-    track_presentation_column_sort { "Spaltensortierung" }
     track_multiple_values { "<Mehrere Werte>" }
     track_metadata_heading { "Metadaten" }
     track_audio_properties_heading { "Audioeigenschaften" }

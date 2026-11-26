@@ -69,6 +69,7 @@ If the tag is restored later, the track returns to that position.
 ### Arrange Manual Order
 
 1. Choose **Manual Order**, or another custom presentation that is flat, ungrouped, and has no sort fields.
+   If that presentation is already selected and a header sort is blocking moves, choose it again. That clears the temporary sort without changing the saved order.
 2. Clear the quick filter for gap dragging or relative movement.
 3. In GTK, drag the handle beside a row to a visible gap.
    When dragging part of a selection, selected tracks retain their current relative order.
@@ -90,7 +91,7 @@ Drag, Move Up, and Move Down are therefore unavailable, but Move to Top and Move
 
 The first effective move saves the complete current List order lazily.
 Switching to Albums, Artists, Years, or another sorted presentation does not erase it.
-Those presentations control visible and playback order while active; switching back to Manual Order restores the saved order.
+Those presentations control the visible table while active. Playback follows a flat order from the same sort and does not keep group headings, so Next can leave a group in an order the table does not show. Switching back to Manual Order restores the saved order.
 
 **All Tracks** has no saved-position record.
 Manual Order is disabled there; create a root List with an empty filter if you need a manually arranged whole-library view.
@@ -119,14 +120,14 @@ Deleting a List never deletes music files.
 
 - Reopen the List and confirm that its expression still produces the intended members.
 - Switch away from Manual Order and back; the saved sequence should return.
-- Start playback from the List; succession follows the same current presentation order shown in the view.
+- Start playback from a flat view; succession follows that order. In a grouped view, succession follows the flat sort, not the group headings.
 - After removing a track from a Playlist, confirm that it no longer appears there.
 
 ## Troubleshooting
 
 - **Library is busy**: scanning, import, or identity maintenance temporarily blocks order and membership commits. Wait for maintenance to finish and start the gesture again.
 - **The List changed**: membership, presentation, filter, or library revision changed during the gesture. Retry from the current rows.
-- **No drag handle in GTK**: use a saved List, choose a flat unsorted presentation, clear the quick filter, and resolve any expression error. Windows currently uses menu and keyboard movement only.
+- **No drag handle in GTK**: use a saved List, choose a flat unsorted presentation, clear the quick filter, and resolve any expression error. If the presentation is already Manual Order, choose it again to clear a temporary header sort. Windows currently uses menu and keyboard movement only.
 - **Playlist missing from Add to Playlist**: check that it isn't the current Playlist and that its local filter is one positive tag. If a nested Playlist appears but the add fails, check that its parent contains every selected track.
 
 ## Related reference

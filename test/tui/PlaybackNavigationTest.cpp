@@ -15,6 +15,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -108,7 +109,7 @@ namespace ao::tui::test
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Target", .artist = artist});
     fixture.addTrack(library::test::TrackSpec{.title = "Other", .artist = "Someone else"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("songs"));
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Songs));
     library.setFilterDraft("First");
     REQUIRE(library.applyFilter());
     library.toggleVisualSelection();
@@ -126,7 +127,7 @@ namespace ao::tui::test
     REQUIRE(library.navigateHistory(false));
     CHECK(library.activeViewId() == previousView);
     CHECK(library.filterDraft() == previousFilter);
-    CHECK(library.activePresentationId() == "songs");
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Songs));
     REQUIRE(library.tracks().size() == 1);
     CHECK(library.tracks().front().row.title == "First");
     REQUIRE(library.navigateHistory(true));
@@ -139,7 +140,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Target", .album = "Another album"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("songs"));
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Songs));
     library.setFilterDraft("First");
     REQUIRE(library.applyFilter());
     auto const previousView = library.activeViewId();
@@ -148,7 +149,7 @@ namespace ao::tui::test
     REQUIRE(library.revealAlbum(target));
 
     CHECK(library.currentListId() == rt::kAllTracksListId);
-    CHECK(library.activePresentationId() == "albums");
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     CHECK(library.filterDraft().empty());
     CHECK(library.tracks().size() == 3);
     REQUIRE(library.selectedTrackView().track != nullptr);
@@ -156,7 +157,7 @@ namespace ao::tui::test
     CHECK(library.sections().size() == 2);
     REQUIRE(library.navigateHistory(false));
     CHECK(library.activeViewId() == previousView);
-    CHECK(library.activePresentationId() == "songs");
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Songs));
     CHECK(library.filterDraft() == previousFilter);
   }
 
@@ -389,7 +390,7 @@ namespace ao::tui::test
     SECTION("Album click reveals the album group")
     {
       REQUIRE(events.tryHandleEvent(clickBox(fixture.hitRegions.playbackMetadata.album)));
-      CHECK(library.activePresentationId() == "albums");
+      CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
       REQUIRE(library.selectedTrackView().track != nullptr);
       CHECK(library.selectedTrackView().track->id == target);
     }
@@ -397,7 +398,7 @@ namespace ao::tui::test
     SECTION("Album command reveals the album group")
     {
       submitNavigation(events, "album");
-      CHECK(library.activePresentationId() == "albums");
+      CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
       REQUIRE(library.selectedTrackView().track != nullptr);
       CHECK(library.selectedTrackView().track->id == target);
     }
@@ -416,7 +417,7 @@ namespace ao::tui::test
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
     REQUIRE(library.openList(source));
-    REQUIRE(library.setPresentation("albums"));
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums));
     REQUIRE(library.tracks().size() == 2);
     auto const target = library.tracks().back().id;
     auto const sourceView = library.activeViewId();
@@ -451,7 +452,7 @@ namespace ao::tui::test
     }
 
     CHECK(library.currentListId() == source);
-    CHECK(library.activePresentationId() == "albums");
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     REQUIRE_FALSE(library.sections().empty());
     CHECK(library.tracks()[library.selectedTrack()].id == target);
 
@@ -520,6 +521,65 @@ namespace ao::tui::test
     CHECK(library.activeViewId() == browsingView);
     CHECK(library.filterDraft() == "unfinished");
     CHECK(library.selectedTrackIds() == std::vector{marked});
+  }
+
+  TEST_CASE("LibraryController - explicit reveal to a deleted preferred view preserves Forward before publication")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const preferredList = fixture.addList("Preferred");
+    auto const forwardList = fixture.addList("Forward destination");
+    auto library = fixture.makeLibrary();
+    auto& runtime = *fixture.runtimePtr;
+    REQUIRE(library.openList(preferredList));
+    auto const preferredView = library.activeViewId();
+    REQUIRE(library.tracks().size() == 2);
+    auto const target = library.tracks().back().id;
+
+    REQUIRE(library.openList(rt::kAllTracksListId));
+    library.setFilterDraft("First");
+    REQUIRE(library.applyFilter());
+    auto const browsingView = library.activeViewId();
+    REQUIRE(library.openList(forwardList));
+    auto const forwardView = library.activeViewId();
+    REQUIRE(library.navigateHistory(false));
+    REQUIRE(library.activeViewId() == browsingView);
+    REQUIRE(library.canNavigateForward());
+    REQUIRE(library.tracks().size() == 1);
+    auto const retained = library.tracks().front().id;
+    REQUIRE(retained != target);
+    auto const filter = library.filterDraft();
+    library.setFilterDraft("unfinished");
+    auto const before = runtime.workspace().snapshot();
+
+    inspectBeforeDeletionPublication(fixture,
+                                     runtime.library().commands().deleteListAsync(preferredList),
+                                     [&]
+                                     {
+                                       auto const snapshot = runtime.library().snapshot();
+                                       REQUIRE_FALSE(snapshot.listNode(preferredList));
+                                       REQUIRE(snapshot.containsTrack(target));
+                                       auto const projectionRes =
+                                         runtime.views().findTrackListProjection(preferredView);
+                                       REQUIRE(projectionRes);
+                                       REQUIRE((*projectionRes)->indexOf(target));
+
+                                       auto const res = library.revealTrack(target, preferredView, preferredList);
+                                       REQUIRE_FALSE(res);
+                                       CHECK(res.error().code == Error::Code::NotFound);
+                                       CHECK(runtime.workspace().snapshot() == before);
+                                       CHECK(library.activeViewId() == browsingView);
+                                       CHECK(library.filterDraft() == "unfinished");
+                                       CHECK(library.selectedTrackIds() == std::vector{retained});
+                                       auto const state = runtime.views().trackListState(browsingView);
+                                       CHECK(state.filterExpression == filter);
+                                       CHECK(state.selection == std::vector{retained});
+                                       CHECK(library.canNavigateForward());
+                                     });
+
+    REQUIRE(library.navigateHistory(true));
+    CHECK(library.activeViewId() == forwardView);
+    CHECK(library.currentListId() == forwardList);
+    CHECK_FALSE(library.canNavigateForward());
   }
 
   TEST_CASE("LibraryController - a vanished reveal row publishes the actual cursor and selection immediately")

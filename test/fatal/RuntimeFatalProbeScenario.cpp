@@ -1227,7 +1227,7 @@ namespace ao::rt::test
       auto runtimePtr = std::move(*runtimeRes);
       auto preset = CustomTrackPresentationPreset{};
       preset.label = "probe";
-      preset.spec.id = "probe";
+      preset.spec.presetId = CustomPresetId{1};
       executor->rejectNext();
       std::ignore = runtimePtr->workspace().addCustomPreset(preset);
       return 3;
@@ -1288,11 +1288,9 @@ namespace ao::rt::test
         return 3;
       }
 
-      auto presentation = defaultTrackPresentationSpec();
-      presentation.id.clear();
-      presentation.groupBy = TrackGroupKey::Artist;
+      auto const sort = TrackColumnSort{.column = TrackField::Title, .ascending = false};
       executor->rejectNext();
-      std::ignore = runtimePtr->views().setPresentation(*optViewId, presentation);
+      std::ignore = runtimePtr->views().setColumnSort(*optViewId, sort);
       return 3;
     }
 

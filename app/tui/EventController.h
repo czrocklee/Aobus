@@ -158,6 +158,8 @@ namespace ao::tui
     bool tryPlaySelectedTrack();
     void reportPlaybackControlUnavailable();
     void applyListOrderCommand(ListOrderCommand command);
+    void applyColumnSort(std::string_view columnId);
+    void applyPaintedColumnSort(rt::TrackField field, bool ascending);
     void executePlaybackCommand(uimodel::PlaybackCommand command);
     void executeKeyAction(KeyAction action);
     void runCommand(Command const& command);
@@ -180,6 +182,7 @@ namespace ao::tui
     bool tryHandleMouseMove(ftxui::Mouse const& mouse);
     std::optional<bool> handleSeekRailPress(ftxui::Mouse const& mouse, bool modalInputActive);
     std::optional<bool> handleColumnResizePress(ftxui::Mouse const& mouse);
+    bool tryHandleColumnSortPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
     bool tryHandlePlaybackMetadataPress(ftxui::Mouse const& mouse);
@@ -241,6 +244,8 @@ namespace ao::tui
     {
       rt::TrackField field = rt::TrackField::Title;
       std::int32_t startX = 0;
+      std::optional<std::int32_t> optSortClickY{};
+      bool nextSortAscending = true;
       std::int32_t startColumns = 0;
       ListId listId = kInvalidListId;
       std::uint64_t rowsRevision = 0;

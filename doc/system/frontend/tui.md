@@ -135,7 +135,7 @@ The composition root retains one shared presentation catalog, one per-list prese
 Each input mode's completion result carries a replacement range, ranked items, display text, insertion text, and detail.
 Quick Filter drafts delegate directly to the shared UIModel track-filter completer, which selects live values or structured expression candidates according to the same boundary as GTK.
 Command Palette drafts search actions through their localized labels and command aliases; only the explicit `filter` command delegates its argument to the filter completer.
-Presentation contexts add built-in and custom preset ids.
+Presentation contexts add built-in slugs and canonical custom preset keys, as defined by the [preset reference](../../reference/presentation/track-preset.md).
 
 ## Commands and transitions
 
@@ -203,7 +203,7 @@ Track navigation moves focus by row/page/endpoints; group navigation focuses the
 At the first or last section boundary, an unavailable group step leaves focus, marks, and an active visual range unchanged; it does not reselect the current section's first track.
 Mouse wheel over the track table moves focus by the configured wheel step (three tracks by default).
 Dragging the table scrollbar maps its visual position to a focused track.
-Clicking a section header focuses its first track; dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list.
+Clicking a section header focuses its first track. Dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list. The resize target overlaps the painted header cell, including a short localized label in those cells. A stationary click there sorts; movement resizes.
 
 After runtime workspace restore, `LibraryController` reads the active process-local `ViewId` and materializes that view directly.
 It does not navigate by `ListId`, so multiple filtered views over one list remain distinct and construction adds no history entry.
@@ -220,6 +220,8 @@ but still requests a path for tracks with an empty stored title so the table
 and Detail can use a filename when available. See [track-list presentation](../presentation/track-presentation.md#table-rows-and-display-coordinates) for how the fallback is displayed.
 
 Views and `:view` (including aliases) share the [List eligibility rule](../presentation/list-preference.md#resolution). On All Tracks, confirming the disabled Manual Order row keeps Views open; the command gives the same reason. Neither rejection changes the presentation, history, or saved preference. Custom flat unsorted presentations are not the built-in Manual Order preset and remain eligible.
+
+Clicking a sortable column header or using `:sort <column-id>` applies the same [header override](../workspace/navigation.md#sort-a-view-by-column). The argument is the stable track-field id, including `display-track-number`, after ASCII case folding. Completion shows the localized header and inserts that id. Return uses the highlighted completion unless the typed id is already an exact eligible column; Tab inserts the completion without sorting. The [command reference](../../reference/tui/command.md#command-prefixes) owns the remaining input rules, including bare `:sort` opening column choices before an argument is submitted. Views keeps the original preset name, and the header arrow marks the clicked column rather than another column that shares its order key. Choosing that preset again clears the override. Selection follows the focused track when it remains visible. Marked track identities survive a reorder, but an active visual range ends. If only the header arrow changes, the range stays active and can still be cancelled. A click on a header whose painted direction is out of date does not reverse the new sort.
 
 #### Fit Lists beside Tracks
 

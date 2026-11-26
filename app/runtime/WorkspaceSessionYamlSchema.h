@@ -4,11 +4,13 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/utility/Uuid.h>
 
 #include <ryml.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -19,7 +21,7 @@ namespace ao::rt
 
 namespace ao::rt::detail
 {
-  inline constexpr std::uint32_t kWorkspacePresentationVersion = 1;
+  inline constexpr std::uint32_t kWorkspacePresentationVersion = 3;
 
   // Persistence DTOs isolate the versioned wire shape from live workspace state.
   struct StoredTrackSortTerm final
@@ -28,11 +30,18 @@ namespace ao::rt::detail
     std::string direction{};
   };
 
+  struct StoredTrackColumnSort final
+  {
+    std::string column{};
+    std::string direction{};
+  };
+
   struct StoredTrackPresentationSpec final
   {
-    std::string id{};
+    TrackPresetId presetId = BuiltinPreset::Library;
     std::string group{};
     std::vector<StoredTrackSortTerm> sort{};
+    std::optional<StoredTrackColumnSort> optColumnSort{};
     std::vector<std::string> visibleFields{};
     std::vector<std::string> redundantFields{};
   };

@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <memory>
 #include <span>
-#include <string_view>
 #include <variant>
 
 namespace ao::uimodel
@@ -110,29 +109,15 @@ namespace ao::uimodel
   } // namespace
 
   rt::TrackPresentationSpec recommendListPresentation(ListPresentationContext const& context,
-                                                      std::span<rt::TrackPresentationPreset const> builtinPresets,
-                                                      std::span<rt::CustomTrackPresentationPreset const> customPresets)
+                                                      std::span<rt::TrackPresentationPreset const> builtinPresets)
   {
-    auto findPreset = [&](std::string_view id) -> rt::TrackPresentationSpec
+    auto findPreset = [builtinPresets](rt::BuiltinPreset id) -> rt::TrackPresentationSpec
     {
-      if (auto const iter = std::ranges::find(
-            builtinPresets, id, [](rt::TrackPresentationPreset const& preset) { return preset.spec.id; });
-          iter != builtinPresets.end())
-      {
-        return iter->spec;
-      }
-
-      if (auto const iter = std::ranges::find(
-            customPresets, id, [](rt::CustomTrackPresentationPreset const& preset) { return preset.spec.id; });
-          iter != customPresets.end())
-      {
-        return iter->spec;
-      }
-
-      return fallbackSpec(builtinPresets);
+      auto const iter = std::ranges::find(builtinPresets, id, &rt::TrackPresentationPreset::presetId);
+      return iter != builtinPresets.end() ? iter->spec : fallbackSpec(builtinPresets);
     };
 
-    auto fallbackSpec = findPreset("albums");
+    auto fallbackSpec = findPreset(rt::BuiltinPreset::Albums);
 
     if (context.sourceKind != ListPresentationSourceKind::SavedList || context.listExpression.empty())
     {
@@ -152,32 +137,32 @@ namespace ao::uimodel
 
     if (visitor.hasWork())
     {
-      return findPreset("classical-works");
+      return findPreset(rt::BuiltinPreset::ClassicalWorks);
     }
 
     if (visitor.hasComposer())
     {
-      return findPreset("classical-composers");
+      return findPreset(rt::BuiltinPreset::ClassicalComposers);
     }
 
     if (visitor.hasTechnical())
     {
-      return findPreset("technical");
+      return findPreset(rt::BuiltinPreset::Technical);
     }
 
     if (visitor.hasTag())
     {
-      return findPreset("tagging");
+      return findPreset(rt::BuiltinPreset::Tagging);
     }
 
     if (visitor.hasGenre() || visitor.hasYear())
     {
-      return findPreset("albums");
+      return fallbackSpec;
     }
 
     if (visitor.hasAlbumArtist())
     {
-      return findPreset("artists");
+      return findPreset(rt::BuiltinPreset::Artists);
     }
 
     // Artist and album queries fall through on purpose: "albums" is already the

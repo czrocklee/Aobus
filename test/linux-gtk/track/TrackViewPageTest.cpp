@@ -12,6 +12,7 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/linux-gtk/GtkNativeInputTestSupport.h"
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
@@ -63,9 +64,11 @@
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/sorter.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <array>
@@ -163,6 +166,77 @@ namespace ao::gtk::test
     CHECK(label->get_visible());
     page.clearStatusMessage();
     CHECK_FALSE(label->get_visible());
+  }
+
+  TEST_CASE("TrackViewPage - a queued header click cannot sort a replacement presentation")
+  {
+    requireOwnedGtkDisplay();
+    auto window = GtkWindowFixture{};
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const original = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs).spec;
+    auto const replacement = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = rt::kAllTracksListId,
+      .optPresentation = rt::NavigationPresentation{.spec = original},
+    }));
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), textCatalog};
+    auto modelPtr = TrackListModel::create(cache);
+    modelPtr->bindProjection(ao::test::requireValue(runtime.views().findTrackListProjection(viewId)));
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              textCatalog,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader,
+                              original,
+                              viewId};
+    window.window().set_default_size(850, 400);
+    window.mount(page);
+    window.present();
+
+    auto* const view = findWidget<Gtk::ColumnView>(page);
+    REQUIRE(view != nullptr);
+    auto const sorterPtr = view->get_sorter();
+    REQUIRE(sorterPtr != nullptr);
+    auto specAtClick = replacement;
+    bool committed = false;
+    auto const replaceOnClick = sigc::scoped_connection{sorterPtr->signal_changed().connect(
+      [&](Gtk::Sorter::Change)
+      {
+        specAtClick = runtime.views().trackListState(viewId).presentation;
+        committed = runtime.workspace().setActivePresentation(replacement).has_value();
+      })};
+
+    // The sorter handles the real click, then this observer commits Albums on
+    // the same dispatch stack. With no host attached, the Songs generation is
+    // still alive at idle; the test does not depend on publication timing.
+    double x = 0;
+    double y = 0;
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        auto* const header = findLabelByText(page, "Title");
+        return header && header->get_mapped() && header->get_width() > 0 && header->get_height() > 0 &&
+               header->translate_coordinates(page, header->get_width() / 2.0, header->get_height() / 2.0, x, y);
+      }));
+    auto pointer = GtkNativePointerFixture{page};
+    pointer.movePointerTo(x, y);
+    pointer.press();
+    pointer.release();
+    drainGtkEvents();
+
+    REQUIRE(committed);
+    CHECK(specAtClick == original);
+    CHECK(runtime.workspace().snapshot().activeViewId == viewId);
+    CHECK(runtime.views().trackListState(viewId).presentation == replacement);
+    window.unmount();
   }
 
   TEST_CASE("TrackViewPage - grouped headers render localized cover placeholders")
@@ -270,8 +344,7 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    auto const* const preset = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(preset);
+    auto const& presentation = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
     auto const showAlbum = uimodel::TrackColumnState{
       .field = rt::TrackField::Album, .weight = 1.75, .visibility = uimodel::TrackColumnVisibility::Show};
     columnLayouts.restore({{rt::kAllTracksListId, {showAlbum}}}, {});
@@ -284,7 +357,7 @@ namespace ao::gtk::test
                               runtime.library(),
                               runtime.views(),
                               thumbnailLoader,
-                              preset->spec};
+                              presentation};
     auto const isAlbumVisible = [&page]
     {
       auto* const columnView = findWidget<Gtk::ColumnView>(page);
@@ -308,11 +381,11 @@ namespace ao::gtk::test
 
     CHECK(isAlbumVisible());
     columnLayouts.updateLayout(rt::kAllTracksListId, {});
-    page.applyPresentation(preset->spec);
+    page.applyPresentation(presentation);
     CHECK_FALSE(isAlbumVisible());
 
     columnLayouts.updateLayout(rt::kAllTracksListId, {showAlbum});
-    page.applyPresentation(preset->spec);
+    page.applyPresentation(presentation);
     CHECK(isAlbumVisible());
   }
 
@@ -392,9 +465,7 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    auto const* const technicalPreset = rt::builtinTrackPresentationPreset("technical");
-    REQUIRE(technicalPreset);
-    auto const& technical = technicalPreset->spec;
+    auto const& technical = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Technical).spec;
     auto const hiddenPath =
       uimodel::TrackColumnState{.field = rt::TrackField::FilePath, .visibility = uimodel::TrackColumnVisibility::Hide};
     constexpr auto kShownList = rt::kAllTracksListId;
@@ -482,14 +553,13 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
       runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
-    auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-    REQUIRE(manual != nullptr);
+    auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
       .optPresentation =
         rt::NavigationPresentation{
           .mode = rt::NavigationPresentationMode::Override,
-          .spec = manual->spec,
+          .spec = manual,
         },
     }));
     auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
@@ -507,7 +577,7 @@ namespace ao::gtk::test
                               runtime.library(),
                               runtime.views(),
                               thumbnailLoader,
-                              manual->spec,
+                              manual,
                               viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);
@@ -515,13 +585,13 @@ namespace ao::gtk::test
 
     auto const presentableFieldCount = static_cast<std::size_t>(
       std::ranges::count_if(rt::trackFieldDefinitions(), &rt::TrackFieldDefinition::presentable));
-    auto currentColumnCount = [&page] -> std::size_t
+    auto const currentColumns = [&page]
     {
       auto* const columnView = findWidget<Gtk::ColumnView>(page);
       REQUIRE(columnView != nullptr);
       auto const columnsPtr = columnView->get_columns();
       REQUIRE(columnsPtr);
-      return columnsPtr->get_n_items();
+      return columnsPtr;
     };
     auto checkCellAlignment = [&page]
     {
@@ -541,7 +611,8 @@ namespace ao::gtk::test
       CHECK(durationLabel->get_halign() == Gtk::Align::END);
       CHECK(durationLabel->get_xalign() == 1.0F);
     };
-    CHECK(currentColumnCount() == presentableFieldCount + 1);
+    auto const manualColumnsPtr = currentColumns();
+    CHECK(manualColumnsPtr->get_n_items() == presentableFieldCount + 1);
     checkCellAlignment();
     CHECK(page.hasOrderDragHandle());
     auto* const dragHandle = findWidgetByClass<Gtk::Box>(page, "ao-order-drag-handle");
@@ -549,20 +620,33 @@ namespace ao::gtk::test
     CHECK(dragHandle->get_tooltip_text() == "Drag to rearrange tracks in Manual Order");
     CHECK(hasAccessibleLabel(*dragHandle, "Rearrange track"));
 
-    REQUIRE(runtime.views().setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    REQUIRE(runtime.views().setColumnSort(viewId, {.column = rt::TrackField::Title}));
+    auto const sorted = runtime.views().trackListState(viewId).presentation;
+    REQUIRE(sorted.isPreset(rt::BuiltinPreset::ListOrder));
+    page.applyPresentation(sorted);
+    CHECK_FALSE(page.hasOrderDragHandle());
+    CHECK_FALSE(page.orderCapabilities().canAuthorOrder);
+    auto const sortedColumnsPtr = currentColumns();
+    CHECK(sortedColumnsPtr != manualColumnsPtr);
+    CHECK(sortedColumnsPtr->get_n_items() == presentableFieldCount);
+
+    REQUIRE(runtime.workspace().setActivePresentation(rt::defaultTrackPresentationSpec(), {.recordHistory = false}));
     page.applyPresentation(rt::defaultTrackPresentationSpec());
     CHECK_FALSE(page.hasOrderDragHandle());
-    CHECK(currentColumnCount() == presentableFieldCount);
+    auto const defaultColumnsPtr = currentColumns();
+    CHECK(defaultColumnsPtr->get_n_items() == presentableFieldCount);
     checkCellAlignment();
 
-    REQUIRE(runtime.views().setPresentation(viewId, manual->spec));
-    page.applyPresentation(manual->spec);
+    REQUIRE(runtime.workspace().setActivePresentation(manual, {.recordHistory = false}));
+    page.applyPresentation(manual);
     CHECK(page.hasOrderDragHandle());
-    CHECK(currentColumnCount() == presentableFieldCount + 1);
+    auto const restoredColumnsPtr = currentColumns();
+    CHECK(restoredColumnsPtr != defaultColumnsPtr);
+    CHECK(restoredColumnsPtr->get_n_items() == presentableFieldCount + 1);
     checkCellAlignment();
 
     REQUIRE(runtime.views().setFilter(viewId, "true"));
-    page.applyPresentation(manual->spec);
+    page.applyPresentation(manual);
     CHECK_FALSE(page.hasOrderDragHandle());
 
     REQUIRE(runtime.views().setFilter(viewId, ""));
@@ -592,14 +676,13 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
       runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
-    auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-    REQUIRE(manual != nullptr);
+    auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
       .optPresentation =
         rt::NavigationPresentation{
           .mode = rt::NavigationPresentationMode::Override,
-          .spec = manual->spec,
+          .spec = manual,
         },
     }));
     auto const sourceIdsRes = runtime.views().listSourceTrackIds(viewId);
@@ -621,7 +704,7 @@ namespace ao::gtk::test
                               runtime.library(),
                               runtime.views(),
                               thumbnailLoader,
-                              manual->spec,
+                              manual,
                               viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);

@@ -114,7 +114,7 @@ Create or Save clears the previous attempt's error, cancels any pending filter d
 A rejected local expression hides the preview and produces a filter diagnostic. For a valid non-empty expression over a broken saved-List parent chain, the filter diagnostic identifies the parent error. If the parent is missing or deleted, the preview diagnostic reports an unavailable source, not an invalid local expression. These preview failures disable Save and leave the draft open.
 A rejected create or edit likewise retains the draft. A rejected deletion presents a parent-bound transient message without changing the tree or selection.
 
-Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
+Deferred named-preset selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message. The picker records a per-List preference only after acceptance.
 Active-pair terminal-retirement failure presents a parent-bound transient message and leaves the old pair visible.
 After retirement, process-launch or successor-startup failure presents a standalone native diagnostic without reconstructing the old pair, as specified by the active-library lifecycle.
 A Keyboard-page shortcut persistence failure retains the candidate, leaves live accelerators unchanged, and reports the error once on that page.
@@ -141,6 +141,7 @@ Layout document, component state, shortcut, and active-library path formats belo
 
 The Preferences surface contains General, Appearance, Playback/Output, Layout, and Keyboard pages.
 Messages and confirmations may use `AppDialog::presentMessage` or a native GTK dialog according to whether application-owned actions are required.
+The presentation picker keeps the original preset name after a [column-header sort](../../workspace/navigation.md#sort-a-view-by-column). The override is not a selectable preset; choosing that preset again clears it. Create Custom View copies the live table's group and within-group order into a definition with no header override, as [track-list presentation](../../presentation/track-presentation.md#grouping-and-sorting) specifies.
 
 ## Implementation map
 

@@ -13,6 +13,7 @@
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
 #include <glibmm/refptr.h>
+#include <gtk/gtktypes.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
@@ -27,7 +28,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <random>
 #include <span>
 #include <string>
@@ -47,12 +47,11 @@ namespace ao::gtk
     constexpr int kMaxScrollContentWidth = 700;
     constexpr std::int32_t kMaxScrollContentHeight = 520;
 
-    std::string generateId()
+    rt::CustomPresetId generateId()
     {
       static std::random_device rd;
       static std::mt19937_64 gen{rd()};
-      static std::uniform_int_distribution<std::uint64_t> dis;
-      return std::format("{:016x}", dis(gen));
+      return rt::CustomPresetId{gen()};
     }
 
     template<typename T>
@@ -161,8 +160,10 @@ namespace ao::gtk
     addSortBtn->signal_clicked().connect(
       [this]
       {
-        _model.addSortTerm();
-        rebuildSortList();
+        if (_model.tryAddSortTerm())
+        {
+          rebuildSortList();
+        }
       });
 
     mainBox->append(*makeSectionHeader(gtkText(_textCatalog, MessageId::GtkCustomViewSortOrder), *addSortBtn));
@@ -215,15 +216,18 @@ namespace ao::gtk
       auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
       auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createOptionLabelsModel(_model.sortFieldOptions()));
-      auto const index = _model.optionIndexForSortField(term.field).value_or(0);
+      auto const optIndex = _model.optionIndexForSortField(term.field);
 
-      dropdown->set_selected(static_cast<::guint>(index));
+      dropdown->set_selected(optIndex ? static_cast<::guint>(*optIndex) : GTK_INVALID_LIST_POSITION);
       dropdown->property_selected().signal_changed().connect(
         [this, i, dropdown]
         {
-          if (auto const selected = dropdown->get_selected(); selected < _model.sortFieldOptions().size())
+          if (auto const selected = dropdown->get_selected(); i < _model.sortTerms().size() &&
+                                                              selected < _model.sortFieldOptions().size() &&
+                                                              !_model.trySetSortFieldByOptionIndex(i, selected))
           {
-            _model.trySetSortFieldByOptionIndex(i, selected);
+            auto const optPrevious = _model.optionIndexForSortField(_model.sortTerms()[i].field);
+            dropdown->set_selected(optPrevious ? static_cast<::guint>(*optPrevious) : GTK_INVALID_LIST_POSITION);
           }
         });
       box->append(*dropdown);

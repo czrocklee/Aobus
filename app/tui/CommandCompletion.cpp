@@ -7,6 +7,8 @@
 #include "ShellText.h"
 #include <ao/Contract.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>
@@ -18,6 +20,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -192,12 +195,14 @@ namespace ao::tui
           return;
         }
 
-        if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
-        {
-          auto const optText = uimodel::builtinTrackPresentation(textCatalog, preset.spec.id);
+        auto const id = preset.presetId();
 
-          if (!tryAppendItem(
-                items, limit, preset.spec.id, preset.spec.id, optText ? std::string{optText->label} : preset.spec.id))
+        if (auto const key = std::string{rt::builtinPresetKey(id)};
+            rt::startsWithCompletionPrefixInsensitive(key, prefix))
+        {
+          auto const text = uimodel::builtinTrackPresentation(textCatalog, id);
+
+          if (!tryAppendItem(items, limit, key, key, std::string{text.label}))
           {
             return;
           }
@@ -211,11 +216,35 @@ namespace ao::tui
           return;
         }
 
-        if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
+        if (auto const key = rt::trackPresetKey(preset.presetId());
+            rt::startsWithCompletionPrefixInsensitive(key, prefix))
         {
-          if (!tryAppendItem(items, limit, preset.spec.id, preset.spec.id, preset.label))
+          if (!tryAppendItem(items, limit, key, key, preset.label))
           {
             return;
+          }
+        }
+      }
+    }
+
+    void appendSortColumnItems(std::vector<rt::CompletionItem>& items,
+                               i18n::MessageCatalog const& textCatalog,
+                               std::span<rt::TrackField const> const columns,
+                               std::string_view const prefix,
+                               std::size_t const limit)
+    {
+      auto const key = commandSearchKey(prefix);
+
+      for (auto const column : columns)
+      {
+        auto const id = rt::trackFieldId(column);
+        auto const label = uimodel::trackFieldLabel(textCatalog, column);
+
+        if (rt::startsWithCompletionPrefixInsensitive(id, prefix) || commandSearchKey(label).starts_with(key))
+        {
+          if (!tryAppendItem(items, limit, std::string{label}, std::string{id}, std::string{id}))
+          {
+            break;
           }
         }
       }
@@ -285,6 +314,13 @@ namespace ao::tui
         if (spec.action == CommandAction::SetPresentation)
         {
           appendPresentationItems(items, textCatalog, context, argumentPrefix.substr(0, cursor - replaceBegin), limit);
+          return buildResult(replaceBegin, draft.size(), std::move(items));
+        }
+
+        if (spec.action == CommandAction::SortColumn)
+        {
+          appendSortColumnItems(
+            items, textCatalog, context.sortableColumns, argumentPrefix.substr(0, cursor - replaceBegin), limit);
           return buildResult(replaceBegin, draft.size(), std::move(items));
         }
 
