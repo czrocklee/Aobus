@@ -13,6 +13,7 @@
 // dispatcher timeout bounds the run, and no expected failure aborts.
 
 #include "WinUiSilentAudio.h"
+#include "WinUiTrackSelectionProbe.h"
 #include "XamlMetaDataProvider.h"
 #include "app/DispatcherQueueExecutor.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -29,7 +30,9 @@
 #include "platform/ResourceLanguage.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
+#include "track/TrackItemView.h"
 #include "track/TrackListController.h"
+#include "track/TrackListSelection.h"
 #include "track/TrackRowItem.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -73,6 +76,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -81,11 +85,13 @@
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <unknwn.h>
+#include <winerror.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Data.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -97,6 +103,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -138,6 +145,10 @@ namespace
   using ao::TrackId;
 
   constexpr std::size_t kTrackCount = 44;
+  constexpr auto kIdentityTrackCount = ao::uimodel::IndexedTrackRowCache::kDefaultMaximumEntries + 3;
+  constexpr std::uint32_t kLargeListCount = 50000;
+  // Leave ample room for realization/prefetch without admitting a full enumeration.
+  constexpr std::size_t kLargeListCallBudget = 1000;
   constexpr std::size_t kTracksPerAlbum = 11;
   constexpr std::size_t kAlbumCount = kTrackCount / kTracksPerAlbum;
   constexpr auto kGlobalTimeout = std::chrono::seconds{90};
@@ -227,8 +238,8 @@ namespace
     : public ApplicationT<WinUiTrackTableProbeApplication, Markup::IXamlMetadataProvider>
   {
   public:
-    explicit WinUiTrackTableProbeApplication(std::int32_t& exitCode)
-      : _exitCode{exitCode}
+    WinUiTrackTableProbeApplication(std::int32_t& exitCode, bool const identityOnly, std::uint32_t const fragmentCount)
+      : _exitCode{exitCode}, _identityOnly{identityOnly}, _fragmentCount{fragmentCount}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& arguments)
@@ -376,53 +387,91 @@ namespace
 
     // --- Observation helpers ----------------------------------------------
 
+    std::vector<ProjectedTrackRow> selectedNativeRows() const
+    {
+      // These checks use the 44-track fixture, not the counted 50000-row list.
+      auto rows = std::vector<ProjectedTrackRow>{};
+      auto const items = _listView.ItemsSource().as<winrt::Windows::Foundation::Collections::IVectorView<Item>>();
+
+      for (auto const& range : _listView.SelectedRanges())
+      {
+        for (std::uint32_t offset = 0; offset < range.Length(); ++offset)
+        {
+          rows.push_back(items.GetAt(static_cast<std::uint32_t>(range.FirstIndex()) + offset).as<ProjectedTrackRow>());
+        }
+      }
+
+      return rows;
+    }
+
+    ProjectedTrackRow singleSelectedNativeRow() const
+    {
+      auto const rows = selectedNativeRows();
+      return rows.size() == 1 ? rows.front() : nullptr;
+    }
+
+    void verifyAutomationSelection(std::vector<TrackId> const& expected)
+    {
+      if (auto const optError = ao::winui::test::trackSelectionProviderFailure(_listView, expected); optError)
+      {
+        _report.record(*optError);
+      }
+    }
+
+    std::size_t nativeSelectionCount() const
+    {
+      std::size_t count = 0;
+
+      for (auto const& range : _listView.SelectedRanges())
+      {
+        count += range.Length();
+      }
+
+      return count;
+    }
+
+    void clearNativeSelection()
+    {
+      if (auto const count = _trackListPtr->items().Size(); count != 0)
+      {
+        _listView.DeselectRange(Data::ItemIndexRange{0, count});
+      }
+    }
+
     std::vector<TrackId> selectedNativeTrackIds() const
     {
       auto ids = std::vector<TrackId>{};
 
-      for (auto const& selected : _listView.SelectedItems())
+      for (auto const& row : selectedNativeRows())
       {
-        if (auto const row = selected.try_as<ProjectedTrackRow>(); row && !row.IsGroupHeader() && row.TrackId() != 0)
+        if (row && !row.IsGroupHeader() && row.TrackId() != 0)
         {
           ids.emplace_back(row.TrackId());
         }
       }
 
-      std::ranges::sort(ids, [](TrackId const& lhs, TrackId const& rhs) { return lhs.raw() < rhs.raw(); });
-      return ids;
+      return sortIds(std::move(ids));
     }
 
     bool hasNativeSelectionHeader() const
     {
-      return std::ranges::any_of(_listView.SelectedItems(),
-                                 [](Item const& selected)
-                                 {
-                                   auto const row = selected.try_as<ProjectedTrackRow>();
-                                   return row && row.IsGroupHeader();
-                                 });
+      return std::ranges::any_of(selectedNativeRows(), [](auto const& row) { return row && row.IsGroupHeader(); });
     }
 
     bool isEverySelectedNativeTrackSeeded() const
     {
-      for (auto const& selected : _listView.SelectedItems())
+      for (auto const& row : selectedNativeRows())
       {
-        if (auto const row = selected.try_as<ProjectedTrackRow>(); row && !row.IsGroupHeader())
+        if (!row || (!row.IsGroupHeader() && !std::ranges::contains(_sortedSeedIds, TrackId{row.TrackId()})))
         {
-          if (auto const found = std::ranges::binary_search(_sortedSeedIds,
-                                                            TrackId{row.TrackId()},
-                                                            [](TrackId const& lhs, TrackId const& rhs)
-                                                            { return lhs.raw() < rhs.raw(); });
-              !found)
-          {
-            return false;
-          }
+          return false;
         }
       }
 
       return true;
     }
 
-    Item firstHeaderItem()
+    std::optional<std::int32_t> firstHeaderIndex()
     {
       auto const& items = _trackListPtr->items();
 
@@ -432,11 +481,11 @@ namespace
 
         if (row && row.IsGroupHeader())
         {
-          return items.GetAt(index);
+          return static_cast<std::int32_t>(index);
         }
       }
 
-      return nullptr;
+      return std::nullopt;
     }
 
     std::optional<TrackId> topVisibleTrackId() const
@@ -463,6 +512,54 @@ namespace
       return std::nullopt;
     }
 
+    static Controls::ScrollViewer findScrollViewer(DependencyObject const& node)
+    {
+      if (auto const scroll = node.try_as<Controls::ScrollViewer>(); scroll)
+      {
+        return scroll;
+      }
+
+      auto const count = Media::VisualTreeHelper::GetChildrenCount(node);
+
+      for (std::int32_t index = 0; index < count; ++index)
+      {
+        if (auto const found = findScrollViewer(Media::VisualTreeHelper::GetChild(node, index)); found)
+        {
+          return found;
+        }
+      }
+
+      return nullptr;
+    }
+
+    std::string anchorObservation(std::optional<TrackId> const optTopTrack) const
+    {
+      auto const panel = _listView.ItemsPanelRoot().try_as<ItemsStackPanel>();
+      auto const first = panel ? panel.FirstVisibleIndex() : -1;
+      auto const last = panel ? panel.LastVisibleIndex() : -1;
+      auto const container =
+        first >= 0 ? _listView.ContainerFromIndex(first).try_as<Controls::ListViewItem>() : nullptr;
+      auto const realized = container ? container.Content().try_as<ProjectedTrackRow>() : nullptr;
+      auto const scroll = findScrollViewer(_listView);
+      auto const optTarget = _trackListPtr->displayIndexOfTrack(_anchorTrack);
+      return std::format(
+        "expected id={} at index={}, got id={}, visible=[{}, {}], realized id={} at index={} "
+        "(group header={}), same panel={}, native selected index={}, scroll offset/limit/viewport={}/{}/{}",
+        _anchorTrack.raw(),
+        optTarget ? static_cast<std::int64_t>(*optTarget) : -1,
+        optTopTrack ? optTopTrack->raw() : 0,
+        first,
+        last,
+        realized ? realized.TrackId() : 0,
+        realized ? static_cast<std::int64_t>(realized.DisplayIndex()) : -1,
+        realized && realized.IsGroupHeader(),
+        panel && isSameInstance(panel, _rowsPanel),
+        _listView.SelectedIndex(),
+        scroll ? scroll.VerticalOffset() : -1.0,
+        scroll ? scroll.ScrollableHeight() : -1.0,
+        scroll ? scroll.ViewportHeight() : -1.0);
+    }
+
     bool isDisplayIndexVisible(std::size_t displayIndex) const
     {
       auto const first = _rowsPanel.FirstVisibleIndex();
@@ -483,6 +580,7 @@ namespace
                     std::format("the native selection was restored to {} row(s) by stable id", expectedIds.size()));
       _report.check(!hasNativeSelectionHeader(), "no group header remains in the native selection");
       _report.check(isEverySelectedNativeTrackSeeded(), "the native selection contains no phantom track ids");
+      verifyAutomationSelection(expectedIds);
     }
 
     // --- Steps -------------------------------------------------------------
@@ -511,6 +609,25 @@ namespace
         auto applyRes = transaction.apply(
           [this](ao::library::LibraryWrite& write) -> ao::Result<>
           {
+            if (_identityOnly)
+            {
+              for (std::uint32_t index = 0; index < kIdentityTrackCount; ++index)
+              {
+                auto const uri = std::format("identity/{}.flac", index);
+                auto builder = ao::library::TrackBuilder::makeEmpty();
+                builder.metadata().title("Cache identity probe");
+                builder.property().uri(uri);
+
+                if (auto const rowRes = write.tracks().create(builder, ao::library::FileManifestBuilder::makeEmpty());
+                    !rowRes)
+                {
+                  return std::unexpected{rowRes.error()};
+                }
+              }
+
+              return {};
+            }
+
             for (std::size_t index = 0; index < kTrackCount; ++index)
             {
               // The strings must outlive the builder: it stores string views.
@@ -661,6 +778,20 @@ namespace
                                                                        *_columnLayoutsPtr,
                                                                        *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
+
+      if (_identityOnly)
+      {
+        if (auto const songsRes = _runtimePtr->workspace().setActivePresentation("songs", {.recordHistory = false});
+            !songsRes)
+        {
+          failSetup(songsRes.error().message);
+          return;
+        }
+
+        afterPostedNotifications(&WinUiTrackTableProbeApplication::verifyLiveRowIdentity);
+        return;
+      }
+
       _selectionSub =
         _runtimePtr->views().onSelectionChanged([this](ao::rt::ViewService::SelectionChanged const& change)
                                                 { _selectionPublications.push_back(change.selection); });
@@ -703,6 +834,324 @@ namespace
       _resources.Insert(winrt::box_value(L"TrackRowTemplate"),
                         Markup::XamlReader::Load(winrt::to_hstring(kRowTemplateMarkup)).as<DataTemplate>());
 
+      verifyRangeSourceSnapshots();
+      _report.beginScenario("a loaded native ListView binds all 50000 rows without enumerating them");
+      _largeList = ListView{};
+      _largeList.SelectionMode(Controls::ListViewSelectionMode::Extended);
+      _largeList.ItemTemplate(_resources.Lookup(winrt::box_value(L"TrackRowTemplate")).as<DataTemplate>());
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::bindLargeListStep);
+      _hostBorder.Child(_largeList);
+    }
+
+    void verifyLiveRowIdentity()
+    {
+      _report.beginScenario("held controller rows retain COM identity after strong-cache eviction");
+      auto const items = _trackListPtr->items();
+
+      if (_trackListPtr->rowCount() != kIdentityTrackCount || items.Size() != kIdentityTrackCount)
+      {
+        failSetup("the identity probe requires a flat Songs view of all seeded tracks");
+        return;
+      }
+
+      auto const held = items.GetAt(0).as<ProjectedTrackRow>();
+      auto const evictionWitness = winrt::make_weak(items.GetAt(1).as<ProjectedTrackRow>());
+
+      for (std::uint32_t index = 2; index < kIdentityTrackCount; ++index)
+      {
+        std::ignore = items.GetAt(index);
+      }
+
+      _report.check(!evictionWitness.get(), "a row with no external owner was evicted");
+      _report.check(
+        held.TrackId() != 0 && isSameInstance(_trackListPtr->items(), items) && isSameInstance(held, items.GetAt(0)),
+        "the same live source returns the held track's canonical COM object after eviction");
+      finish();
+    }
+
+    void verifyRangeSourceSnapshots()
+    {
+      _report.beginScenario("source selection snapshots survive edits and clip at the last row");
+      auto const view = ao::winui::makeTrackItemView(10, {}, 1);
+      auto const selection = view.try_as<Data::ISelectionInfo>();
+
+      if (!selection)
+      {
+        _report.record("the track source does not expose native range selection");
+        return;
+      }
+
+      using Range = Data::ItemIndexRange;
+      using Bounds = std::pair<std::int32_t, std::uint32_t>;
+      auto const bounds = [](auto const& ranges)
+      {
+        auto result = std::vector<Bounds>{};
+
+        for (auto const& range : ranges)
+        {
+          result.emplace_back(range.FirstIndex(), range.Length());
+        }
+
+        return result;
+      };
+      selection.SelectRange(Range{2, 3});
+      selection.SelectRange(Range{7, 2});
+      auto const snapshot = selection.GetSelectedRanges();
+      auto const expectedSnapshot = std::vector<Bounds>{{2, 3}, {7, 2}};
+      _report.check(bounds(snapshot) == expectedSnapshot, "the saved snapshot exposes the two disjoint ranges");
+      selection.SelectRange(Range{5, 2});
+      _report.check(bounds(selection.GetSelectedRanges()) == std::vector<Bounds>{{2, 7}},
+                    "selecting the gap merges adjacent spans");
+      selection.DeselectRange(Range{4, 3});
+      _report.check(bounds(selection.GetSelectedRanges()) == std::vector<Bounds>{{2, 2}, {7, 2}},
+                    "deselecting the middle splits the span");
+      selection.SelectRange(Range{8, 8});
+      _report.check(bounds(selection.GetSelectedRanges()) == std::vector<Bounds>{{2, 2}, {7, 3}},
+                    "an oversized selection ends at the last row");
+      selection.DeselectRange(Range{9, 8});
+      _report.check(bounds(selection.GetSelectedRanges()) == std::vector<Bounds>{{2, 2}, {7, 2}},
+                    "an oversized deselection affects only the valid tail");
+      _report.check(bounds(snapshot) == expectedSnapshot, "the retained snapshot is unchanged after all live edits");
+    }
+
+    void recordLargeListReads(std::string_view stage) const
+    {
+      std::cerr << std::format("  TrackItemProvider phase={} calls={}\n", stage, *_largeListCallsPtr);
+    }
+
+    void bindLargeListStep()
+    {
+      if (!_largeList.IsLoaded())
+      {
+        failSetup("the ListView must be loaded before assigning its source");
+        return;
+      }
+
+      auto const view = makeCountedLargeListSource();
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::verifyLargeListStep);
+      recordLargeListReads("initial.before_assign");
+      _largeList.ItemsSource(view);
+      recordLargeListReads("initial.after_assign");
+      // Detect the eager ItemsSource copy independently of any later layout work.
+      _report.check(*_largeListCallsPtr < kLargeListCallBudget,
+                    std::format("ItemsSource assignment called the provider {} times", *_largeListCallsPtr));
+      _root.InvalidateArrange();
+    }
+
+    void verifyLargeListStep()
+    {
+      auto const panel = _largeList.ItemsPanelRoot().try_as<ItemsStackPanel>();
+      _report.check(_largeList.Items().Size() == kLargeListCount && panel && panel.FirstVisibleIndex() == 0,
+                    "the full 50000-item source is mounted and its first row is visible");
+      recordLargeListReads("initial.after_layout");
+      _report.check(*_largeListCallsPtr > 0 && *_largeListCallsPtr < kLargeListCallBudget,
+                    std::format("first layout read {} rows, not the whole source", *_largeListCallsPtr));
+      replaceLargeListSelectionStep();
+    }
+
+    winrt::Windows::Foundation::Collections::IVectorView<Item> makeCountedLargeListSource()
+    {
+      _largeListCallsPtr = std::make_shared<std::size_t>(0);
+      return ao::winui::makeTrackItemView(
+        kLargeListCount,
+        [callsPtr = _largeListCallsPtr,
+         budget = singletonReadBudget(),
+         overBudget = winrt::box_value(L"Probe read budget exceeded")](std::size_t index) -> Item
+        {
+          // Allow viewport rows and a native selection anchor anywhere in the
+          // source. Once the count already fails, stop constructing real rows.
+          if (++*callsPtr >= budget)
+          {
+            return overBudget;
+          }
+
+          auto const displayIndex = static_cast<std::uint32_t>(index);
+          return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
+            displayIndex, displayIndex + 1, 0, L"Lazy probe row", L"", L"", L"");
+        },
+        2048);
+    }
+
+    static constexpr std::uint32_t kLargeRangeFirst = 12000;
+    static constexpr std::uint32_t kLargeRangeSecond = 44000;
+    static constexpr std::uint32_t kLargeRangeLength = 2048;
+
+    bool tryRestoreLargeSelection(std::vector<std::uint32_t> displayIndices)
+    {
+      try
+      {
+        ao::winui::restoreTrackSelection(_largeList, std::move(displayIndices));
+        return true;
+      }
+      catch (winrt::hresult_error const& error)
+      {
+        _report.record(std::format("restoration raised HRESULT {:#x} after {} provider call(s): {}",
+                                   static_cast<std::uint32_t>(error.code().value),
+                                   *_largeListCallsPtr,
+                                   winrt::to_string(error.message())));
+        return false;
+      }
+    }
+
+    void replaceLargeListSelectionStep()
+    {
+      _report.beginScenario("replacing a loaded source restores disjoint offscreen ranges without reading their rows");
+      auto displayIndices = std::vector<std::uint32_t>{};
+      displayIndices.reserve(2 * static_cast<std::size_t>(kLargeRangeLength));
+
+      for (std::uint32_t offset = 0; offset < kLargeRangeLength; ++offset)
+      {
+        // Out-of-order IDs must not turn contiguous positions into per-row mutations.
+        displayIndices.push_back(kLargeRangeSecond + offset);
+        displayIndices.push_back(kLargeRangeFirst + offset);
+      }
+
+      recordLargeListReads("sparse.original.before_restore");
+      auto const originalRestored = tryRestoreLargeSelection(displayIndices);
+      recordLargeListReads("sparse.original.after_restore");
+
+      if (!originalRestored || !tryCheckLargeSelectionReads())
+      {
+        retireLargeList();
+        return;
+      }
+
+      auto const replacement = makeCountedLargeListSource();
+      recordLargeListReads("sparse.replacement.before_assign");
+      _largeList.ItemsSource(replacement);
+      recordLargeListReads("sparse.replacement.after_assign");
+      auto const replacementRestored = tryRestoreLargeSelection(std::move(displayIndices));
+      recordLargeListReads("sparse.replacement.after_restore");
+
+      if (!replacementRestored)
+      {
+        retireLargeList();
+        return;
+      }
+
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::verifyLargeListSelectionStep);
+      _root.InvalidateArrange();
+    }
+
+    void verifyLargeListSelectionStep()
+    {
+      recordLargeListReads("sparse.replacement.after_layout");
+      auto const ranges = _largeList.SelectedRanges();
+      auto const contains = [&ranges](std::uint32_t first)
+      {
+        return std::ranges::any_of(
+          ranges,
+          [first](Data::ItemIndexRange const& range)
+          { return std::cmp_equal(range.FirstIndex(), first) && range.Length() == kLargeRangeLength; });
+      };
+      auto const restored = _largeList.Items().Size() == kLargeListCount && ranges.Size() == 2 &&
+                            contains(kLargeRangeFirst) && contains(kLargeRangeSecond);
+      auto const lazy = tryCheckLargeSelectionReads();
+      _report.check(
+        restored, "the replacement source exposes all 50000 rows and exactly the two restored native ranges");
+
+      if (!restored || !lazy)
+      {
+        retireLargeList();
+        return;
+      }
+
+      verifyLargeListSingletonRestore(_fragmentCount != 0 ? _fragmentCount : 64U);
+
+      if (_fragmentCount != 0)
+      {
+        finish();
+        return;
+      }
+
+      _report.beginScenario("the production bridge restores all 50000 rows as one native range");
+      auto all = std::vector<std::uint32_t>(kLargeListCount);
+
+      for (std::uint32_t index = 0; index < kLargeListCount; ++index)
+      {
+        all[index] = index;
+      }
+
+      auto const replacement = makeCountedLargeListSource();
+      recordLargeListReads("dense.replacement.before_assign");
+      _largeList.ItemsSource(replacement);
+      recordLargeListReads("dense.replacement.after_assign");
+      auto const restoredAll = tryRestoreLargeSelection(std::move(all));
+      recordLargeListReads("dense.replacement.after_restore");
+
+      if (!restoredAll)
+      {
+        retireLargeList();
+        return;
+      }
+
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::verifyLargeListSelectAllStep);
+      _root.InvalidateArrange();
+    }
+
+    std::size_t singletonReadBudget() const noexcept
+    {
+      // The scale study allows native anchor reads per singleton, but never a full 50,000-row scan.
+      return kLargeListCallBudget + (4 * static_cast<std::size_t>(_fragmentCount));
+    }
+
+    void verifyLargeListSingletonRestore(std::uint32_t const count)
+    {
+      _report.beginScenario("alternating singleton restoration replaces disjoint ranges on the same source");
+      auto const source = _largeList.ItemsSource();
+      auto positions = std::vector<std::uint32_t>(count);
+
+      for (std::uint32_t index = 0; index < count; ++index)
+      {
+        positions[index] = 24000 + (2 * index);
+      }
+
+      auto const before = *_largeListCallsPtr;
+      auto const start = std::chrono::steady_clock::now();
+      auto const restored = tryRestoreLargeSelection(positions);
+      auto const elapsed = std::chrono::steady_clock::now() - start;
+      auto const reads = *_largeListCallsPtr - before;
+      std::cerr << std::format("  {} singleton ranges: {} us, {} row reads\n",
+                               count,
+                               std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count(),
+                               reads);
+      _report.check(reads <= 4 * static_cast<std::size_t>(count) && *_largeListCallsPtr < singletonReadBudget(),
+                    "singleton restoration stays within the row-read budget");
+
+      if (restored)
+      {
+        auto const matches = [](std::uint32_t const index, Data::ItemIndexRange const& range)
+        { return std::cmp_equal(range.FirstIndex(), index) && range.Length() == 1; };
+        _report.check(isSameInstance(source, _largeList.ItemsSource()) &&
+                        std::ranges::equal(positions, _largeList.SelectedRanges(), matches),
+                      "the same mounted source exposes exactly all singleton ranges and no sentinel survivors");
+      }
+    }
+
+    void verifyLargeListSelectAllStep()
+    {
+      recordLargeListReads("dense.replacement.after_layout");
+      auto const ranges = _largeList.SelectedRanges();
+      _report.check(
+        ranges.Size() == 1 && ranges.GetAt(0).FirstIndex() == 0 && ranges.GetAt(0).Length() == kLargeListCount,
+        "native selection covers all 50000 rows in one range");
+      std::ignore = tryCheckLargeSelectionReads();
+      retireLargeList();
+    }
+
+    bool tryCheckLargeSelectionReads()
+    {
+      auto const lazy = *_largeListCallsPtr < kLargeListCallBudget;
+      _report.check(lazy, std::format("restoration requested {} rows", *_largeListCallsPtr));
+      return lazy;
+    }
+
+    void retireLargeList()
+    {
+      _largeList.ItemsSource(nullptr);
+      _hostBorder.Child(nullptr);
+      _largeList = nullptr;
+      _largeListCallsPtr.reset();
       enqueueStep(&WinUiTrackTableProbeApplication::buildAndPublishStep);
     }
 
@@ -812,6 +1261,63 @@ namespace
       _trackListPtr->setViewportWidth(1200.0, 0.0);
     }
 
+    bool tryVerifyRetiredRowSource()
+    {
+      _report.beginScenario("an in-place reorder retires uncached reads from the previous row source");
+      auto& views = _runtimePtr->views();
+      auto const viewId = _trackListPtr->viewId();
+      auto const projectionRes = views.findTrackListProjection(viewId);
+      auto const previousItems = _trackListPtr->items();
+      auto const trackId = _seededTrackIds[3];
+      auto const optPosition = _trackListPtr->displayIndexOfTrack(trackId);
+
+      if (!projectionRes || !optPosition || *optPosition + 1 >= previousItems.Size())
+      {
+        failSetup("the unmounted Albums view needs a fixture track and a following row");
+        return false;
+      }
+
+      // There is no ListView attached to the controller yet. Cache exactly one row.
+      auto const cachedIndex = static_cast<std::uint32_t>(*optPosition);
+      auto const uncachedIndex = cachedIndex + 1;
+      auto const cachedRow = previousItems.GetAt(cachedIndex).as<ProjectedTrackRow>();
+
+      if (auto const sortRes = _trackListPtr->toggleSort(ao::rt::TrackSortField::Title); !sortRes)
+      {
+        failSetup(sortRes.error().message);
+        return false;
+      }
+
+      auto const reorderedProjectionRes = views.findTrackListProjection(viewId);
+      auto const optReorderedPosition = _trackListPtr->displayIndexOfTrack(trackId);
+      _report.check(reorderedProjectionRes && *reorderedProjectionRes == *projectionRes && optReorderedPosition &&
+                      optReorderedPosition != optPosition,
+                    "Title reorders the same runtime projection");
+      _report.check(isSameInstance(previousItems.GetAt(cachedIndex), cachedRow) &&
+                      cachedRow.TrackId() == trackId.raw() && cachedRow.Title() == L"Probe Title 21",
+                    "the retired source can still return the original cached row");
+
+      try
+      {
+        std::ignore = previousItems.GetAt(uncachedIndex);
+        _report.record("the retired source materialized an uncached row from the reordered projection");
+      }
+      catch (winrt::hresult_error const& error)
+      {
+        _report.check(error.code() == winrt::hresult{E_BOUNDS}, "the retired uncached read fails with E_BOUNDS");
+      }
+
+      auto const restoredRes = _runtimePtr->workspace().setActivePresentation("albums", {.recordHistory = false});
+
+      if (!restoredRes)
+      {
+        failSetup(restoredRes.error().message);
+        return false;
+      }
+
+      return true;
+    }
+
     void buildAndPublishStep()
     {
       if (_trackListPtr->activeListId() != ao::rt::kAllTracksListId ||
@@ -822,6 +1328,12 @@ namespace
       }
 
       verifyColumnLayoutEdits();
+
+      if (!tryVerifyRetiredRowSource())
+      {
+        return;
+      }
+
       _hostPtr = std::make_unique<ao::winui::layout::LayoutHost>(_hostBorder);
       _gatePtr = _hostPtr->stage();
       _focusedDetailPtr = std::make_shared<ao::winui::layout::FocusedDetail>();
@@ -929,7 +1441,72 @@ namespace
       _report.check(trackRowSeen, "the grouped projection exposes track rows");
       _report.check(_rowsPanel.FirstVisibleIndex() >= 0, "the loaded viewport realizes rows");
       verifyHeaderResizeNames();
-      beginPositionlessAlbumToggle();
+      changeColumnTestPreset("songs", &WinUiTrackTableProbeApplication::scrollUnselectedToTopStep);
+    }
+
+    void scrollUnselectedToTopStep()
+    {
+      _report.beginScenario("an unselected reorder at the top realizes the new first track");
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::sortUnselectedAtTopStep);
+      _listView.ScrollIntoView(_trackListPtr->items().GetAt(0), ScrollIntoViewAlignment::Leading);
+      _root.InvalidateArrange();
+    }
+
+    void checkUnselectedTopTrack(TrackId const expectedId, winrt::hstring const& expectedTitle)
+    {
+      auto const panel = _listView.ItemsPanelRoot().try_as<ItemsStackPanel>();
+      auto const first = panel ? panel.FirstVisibleIndex() : -1;
+      auto const last = panel ? panel.LastVisibleIndex() : -1;
+      auto const container =
+        first >= 0 ? _listView.ContainerFromIndex(first).try_as<Controls::ListViewItem>() : nullptr;
+      auto const row = container ? container.Content().try_as<ProjectedTrackRow>() : nullptr;
+      auto const loaded = container && container.IsLoaded();
+      // Inspect the realized native container, not the probe template's dynamic text binding.
+      // The shipping compiled template and pixel checks cover glyphs separately.
+      auto const title = row ? winrt::to_string(row.Title()) : std::string{"<no row>"};
+      _report.check(first == 0 && last >= first && loaded && row && !row.IsGroupHeader() && row.DisplayIndex() == 0 &&
+                      row.TrackId() == expectedId.raw() && row.Title() == expectedTitle,
+                    std::format("expected first slot 0 with '{}' (id {}), got visible [{}, {}], loaded={}, "
+                                "row index={}, id={}, title='{}'",
+                                winrt::to_string(expectedTitle),
+                                expectedId.raw(),
+                                first,
+                                last,
+                                loaded,
+                                row ? static_cast<std::int64_t>(row.DisplayIndex()) : -1,
+                                row ? row.TrackId() : 0,
+                                title));
+      auto const nativeCount = nativeSelectionCount();
+      auto const runtimeCount = _trackListPtr->selection().size();
+      _report.check(nativeCount == 0 && runtimeCount == 0,
+                    std::format("expected empty selection, got native={}, runtime={}", nativeCount, runtimeCount));
+    }
+
+    void sortUnselectedAtTopStep()
+    {
+      checkUnselectedTopTrack(_seededTrackIds.front(), L"Probe Title 00");
+      clearSelectionPublications();
+      // Fixture durations increase with seed index; the old first row moves to the very end.
+      auto& views = _runtimePtr->views();
+      auto const viewId = _trackListPtr->viewId();
+      auto spec = views.trackListState(viewId).presentation;
+      spec.sortBy = {{.field = ao::rt::TrackSortField::Duration, .ascending = false}};
+
+      if (auto const sortRes = views.setPresentation(viewId, spec); !sortRes)
+      {
+        failSetup(sortRes.error().message);
+        return;
+      }
+
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::verifyUnselectedTopReorderStep);
+      _root.InvalidateArrange();
+    }
+
+    void verifyUnselectedTopReorderStep()
+    {
+      checkUnselectedTopTrack(_seededTrackIds.back(), L"Probe Title 37");
+      _report.check(_selectionPublications.empty(), "the reorder did not publish a selection change");
+      changeColumnTestPreset("albums", &WinUiTrackTableProbeApplication::beginPositionlessAlbumToggle);
     }
 
     void beginPositionlessAlbumToggle()
@@ -1211,8 +1788,8 @@ namespace
       }
 
       auto const firstItem = _trackListPtr->items().GetAt(static_cast<std::uint32_t>(*optDisplayIndex));
-      _listView.SelectedItems().Clear();
-      _listView.SelectedItem(firstItem);
+      clearNativeSelection();
+      _listView.SelectedIndex(static_cast<std::int32_t>(*optDisplayIndex));
 
       _report.check(
         _selectionPublications.size() == 1,
@@ -1223,7 +1800,27 @@ namespace
       _report.check(sortIds(_trackListPtr->selection()) == std::vector{_firstTrack},
                     "the real view service holds the published selection");
 
+      _secondTrack = _seededTrackIds[kTracksPerAlbum + 3];
+      auto const optSecondIndex = _trackListPtr->displayIndexOfTrack(_secondTrack);
+
+      if (!optSecondIndex || *optSecondIndex <= *optDisplayIndex + 1)
+      {
+        failSetup("the sort fixture must project the second selected track in a separate range");
+        return;
+      }
+
+      _listView.SelectRange(Data::ItemIndexRange{static_cast<std::int32_t>(*optSecondIndex), 1});
+      verifyAutomationSelection({_firstTrack, _secondTrack});
       clearSelectionPublications();
+      _rowsBeforeSort = _listView.ItemsSource();
+      _selectedBeforeSort = firstItem.as<ProjectedTrackRow>();
+      auto const oldItems = _rowsBeforeSort.as<winrt::Windows::Foundation::Collections::IVectorView<Item>>();
+      // Reattaching A can read any row during ItemsSource assignment or realization.
+      // Warm this small fixture while A is still live; retired cache misses are tested separately.
+      for (std::uint32_t index = 0; index < oldItems.Size(); ++index)
+      {
+        std::ignore = oldItems.GetAt(index);
+      }
 
       auto const sortedRes = _trackListPtr->toggleSort(ao::rt::TrackSortField::Title);
 
@@ -1233,15 +1830,58 @@ namespace
         return;
       }
 
-      afterNextLayoutStep(&WinUiTrackTableProbeApplication::sortRestoreStep);
+      afterPostedNotifications(&WinUiTrackTableProbeApplication::sortRestoreStep);
     }
 
     void sortRestoreStep()
     {
-      _report.beginScenario("stable track-id selection restoration without runtime publication (sort)");
-      verifyRestoration({_firstTrack});
-      verifyHeaderResizeNames();
+      _report.beginScenario("real title reorder restores stable track selection without remounting the table");
+      _root.UpdateLayout();
+      verifyRestoration({_firstTrack, _secondTrack});
+      auto const optSecondIndex = _trackListPtr->displayIndexOfTrack(_secondTrack);
 
+      if (!optSecondIndex)
+      {
+        failSetup("the second selected track disappeared on Title reorder");
+        return;
+      }
+
+      _listView.DeselectRange(Data::ItemIndexRange{static_cast<std::int32_t>(*optSecondIndex), 1});
+      verifyAutomationSelection({_firstTrack});
+      clearSelectionPublications();
+      verifyHeaderResizeNames();
+      auto const newSource = _listView.ItemsSource();
+      _report.check(newSource && !isSameInstance(_rowsBeforeSort, newSource) &&
+                      isSameInstance(newSource, _trackListPtr->items().as<Item>()) &&
+                      isSameInstance(_listView, findListView(_hostBorder)),
+                    "the native ListView consumes the new row source without remounting the table");
+      auto const newRow = singleSelectedNativeRow();
+      auto const optNewDisplayIndex = _trackListPtr->displayIndexOfTrack(_firstTrack);
+      _report.check(newRow && optNewDisplayIndex && newRow.DisplayIndex() == *optNewDisplayIndex &&
+                      newRow.DisplayIndex() != _selectedBeforeSort.DisplayIndex(),
+                    "the selected track moved to a new native row index");
+      auto const liveItems = _trackListPtr->items();
+      std::uint32_t foundAt = 0;
+      _report.check(!liveItems.IndexOf(_selectedBeforeSort, foundAt), "the new source rejects the old row object");
+
+      if (newRow && newRow.DisplayIndex() > 0 && newRow.DisplayIndex() + 1 < liveItems.Size())
+      {
+        auto const before = liveItems.GetAt(newRow.DisplayIndex() - 1).as<ProjectedTrackRow>();
+        auto const after = liveItems.GetAt(newRow.DisplayIndex() + 1).as<ProjectedTrackRow>();
+        _report.check(before.Title() == L"Probe Title 19" && after.Title() == L"Probe Title 26",
+                      "the reordered rows put Title 21 between its ascending neighbors in its album");
+      }
+      else
+      {
+        _report.record("the reordered fixture row has no surrounding tracks");
+      }
+
+      _report.check(
+        _selectedBeforeSort.TrackId() == _firstTrack.raw() && _selectedBeforeSort.Title() == L"Probe Title 21",
+        "holding a row from the replaced source still allows reading its original values");
+      exerciseStaleMountedSource();
+      _rowsBeforeSort = nullptr;
+      _selectedBeforeSort = nullptr;
       clearSelectionPublications();
 
       auto const resizedRes = _trackListPtr->resizeColumn("title", 48.0);
@@ -1255,50 +1895,154 @@ namespace
       afterNextLayoutStep(&WinUiTrackTableProbeApplication::widthRestoreStep);
     }
 
+    void exerciseStaleMountedSource()
+    {
+      _report.beginScenario("a stale mounted source cannot publish a choice or an empty clear");
+      auto const oldItems = _rowsBeforeSort.as<winrt::Windows::Foundation::Collections::IVectorView<Item>>();
+      auto const liveItems = _trackListPtr->items();
+      // The slot after Title 21 in Albums held Title 28; after the sort it holds Title 14.
+      auto const index = _selectedBeforeSort.DisplayIndex() + 1;
+      auto const oldRow = index < oldItems.Size() ? oldItems.GetAt(index).try_as<ProjectedTrackRow>() : nullptr;
+      auto const liveRow = index < liveItems.Size() ? liveItems.GetAt(index).try_as<ProjectedTrackRow>() : nullptr;
+
+      if (!_listView.IsLoaded() || !oldRow || !liveRow || oldRow.IsGroupHeader() || liveRow.IsGroupHeader() ||
+          oldRow.TrackId() == liveRow.TrackId() || liveRow.TrackId() == _firstTrack.raw())
+      {
+        _report.record("the mounted replacement must map the candidate slot to a different unselected track");
+        return;
+      }
+
+      _replacementAtStaleIndex = liveRow;
+      bool nativeChanged = false;
+      auto const observed = _listView.SelectionChanged(
+        winrt::auto_revoke, [&nativeChanged](auto const&, auto const&) { nativeChanged = true; });
+      auto const runtimeUnchanged = [this]
+      { return _trackListPtr->selection() == std::vector{_firstTrack} && _selectionPublications.empty(); };
+      _listView.ItemsSource(_rowsBeforeSort);
+      _report.check(
+        isSameInstance(_listView.ItemsSource(), _rowsBeforeSort) && isSameInstance(_trackListPtr->items(), liveItems),
+        "the mounted control consumes A while the controller still owns B");
+      _report.check(runtimeUnchanged(), "reattaching A neither changes nor publishes Runtime selection");
+
+      nativeChanged = false;
+      _listView.SelectRange(Data::ItemIndexRange{static_cast<std::int32_t>(index), 1});
+      auto const choseOldRow = std::ranges::contains(selectedNativeTrackIds(), TrackId{oldRow.TrackId()});
+      _report.check(nativeChanged && choseOldRow && runtimeUnchanged(),
+                    "a native choice on A selects its cached track without any Runtime change or publication");
+
+      nativeChanged = false;
+      _listView.DeselectRange(Data::ItemIndexRange{0, oldItems.Size()});
+      _report.check(nativeChanged && nativeSelectionCount() == 0 && runtimeUnchanged(),
+                    "emptying the ranges on A fires a native event without changing or publishing Runtime selection");
+    }
+
+    void verifySelectionAfterStaleSource()
+    {
+      auto const row = std::exchange(_replacementAtStaleIndex, nullptr);
+
+      if (!row)
+      {
+        return;
+      }
+
+      auto const index = row.DisplayIndex();
+      auto const id = TrackId{row.TrackId()};
+      _report.check(isSameInstance(_listView.ItemsSource(), _trackListPtr->items()) &&
+                      _trackListPtr->displayIndexOfTrack(id) == index,
+                    "the real refresh rebinds the live source with B's row at the same display index");
+      auto const range = Data::ItemIndexRange{static_cast<std::int32_t>(index), 1};
+      auto const expected = std::vector{_firstTrack, id};
+      _listView.SelectRange(range);
+      _report.check(_trackListPtr->selection() == expected && _selectionPublications.size() == 1 &&
+                      _selectionPublications.front() == expected,
+                    "the same gesture on the live source publishes B's track exactly once");
+      _listView.DeselectRange(range);
+      _report.check(_trackListPtr->selection() == std::vector{_firstTrack},
+                    "the calibration leaves the original track selected for the next scenario");
+      clearSelectionPublications();
+    }
+
     void widthRestoreStep()
     {
       _report.beginScenario("stable track-id selection restoration without runtime publication (width)");
       verifyRestoration({_firstTrack});
       verifyHeaderResizeNames();
+      verifySelectionAfterStaleSource();
 
-      _report.beginScenario("mixed native selection publishes only valid track ids");
+      auto const index = static_cast<std::uint32_t>(firstHeaderIndex().value_or(0));
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::mixedHeaderStep);
+      _listView.ScrollIntoView(_trackListPtr->items().GetAt(index), ScrollIntoViewAlignment::Leading);
+      _root.InvalidateArrange();
+    }
+
+    bool matchesStoredSelection(Controls::ListViewItem const& original,
+                                std::int32_t const index,
+                                bool const selected) const
+    {
+      if (!original || !original.IsLoaded() || !isDisplayIndexVisible(static_cast<std::size_t>(index)) ||
+          !isSameInstance(_listView.ContainerFromIndex(index), original) ||
+          !isSameInstance(original.Content(), _trackListPtr->items().GetAt(static_cast<std::uint32_t>(index))))
+      {
+        return false;
+      }
+
+      // IsSelected() can consult the source instead of reading the state stored on the container.
+      auto const value = original.ReadLocalValue(Controls::Primitives::SelectorItem::IsSelectedProperty());
+
+      if (value == DependencyProperty::UnsetValue())
+      {
+        return !selected; // No local value: IsSelected defaults to false.
+      }
+
+      auto const boolean = value.try_as<winrt::Windows::Foundation::IReference<bool>>();
+      return boolean && boolean.Value() == selected;
+    }
+
+    void checkGroupedContainerSelection(bool const trackSelected, std::string_view observation)
+    {
+      auto const optHeaderIndex = firstHeaderIndex();
+      auto const optTrackIndex = _trackListPtr->displayIndexOfTrack(_secondTrack);
+      _report.check(
+        optHeaderIndex && optTrackIndex && matchesStoredSelection(_groupHeaderContainer, *optHeaderIndex, false) &&
+          matchesStoredSelection(_groupTrackContainer, static_cast<std::int32_t>(*optTrackIndex), trackSelected),
+        observation);
+    }
+
+    void mixedHeaderStep()
+    {
+      _report.beginScenario("disjoint native selection appends track ids in selection order");
 
       _secondTrack = _seededTrackIds[7];
       auto const optSecondIndex = _trackListPtr->displayIndexOfTrack(_secondTrack);
+      auto const optHeaderIndex = firstHeaderIndex();
 
-      if (!optSecondIndex)
+      if (!optSecondIndex || !optHeaderIndex)
       {
-        failSetup("the second probe track has no display index");
+        failSetup("the grouped projection must contain the second track and a group header");
         return;
       }
 
-      auto const secondItem = _trackListPtr->items().GetAt(static_cast<std::uint32_t>(*optSecondIndex));
-      _listView.SelectedItems().Append(secondItem);
+      _groupHeaderContainer = _listView.ContainerFromIndex(*optHeaderIndex).try_as<Controls::ListViewItem>();
+      _groupTrackContainer =
+        _listView.ContainerFromIndex(static_cast<std::int32_t>(*optSecondIndex)).try_as<Controls::ListViewItem>();
+      checkGroupedContainerSelection(false, "the realized header and second track both start locally unselected");
+      auto const optFirstIndex = _trackListPtr->displayIndexOfTrack(_firstTrack);
+      _report.check(optFirstIndex && *optSecondIndex + 1 < *optFirstIndex,
+                    "the second gesture selects a disjoint range earlier in display order");
+      _listView.SelectRange(Data::ItemIndexRange{static_cast<std::int32_t>(*optSecondIndex), 1});
 
-      _report.check(_selectionPublications.size() == 1,
-                    std::format("the mixed range published {} runtime changes", _selectionPublications.size()));
-      _report.check(!_selectionPublications.empty() &&
-                      sortIds(_selectionPublications.front()) == sortIds({_firstTrack, _secondTrack}),
-                    "the mixed native range published exactly the valid track ids");
-      _report.check(sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}),
-                    "the real view service holds both selected track ids");
+      auto const expectedOrder = std::vector{_firstTrack, _secondTrack};
+      _report.check(_selectionPublications.size() == 1 && _selectionPublications.front() == expectedOrder,
+                    "the disjoint range publishes the newly selected id after the existing selection");
+      _report.check(_trackListPtr->selection() == expectedOrder,
+                    "runtime keeps selection order even when the new range precedes the old range");
 
+      checkGroupedContainerSelection(true, "a genuine range choice marks the same realized second track locally");
+      verifyAutomationSelection(expectedOrder);
       clearSelectionPublications();
 
-      _headerItem = firstHeaderItem();
-
-      if (!_headerItem)
-      {
-        failSetup("the grouped projection exposed no group header to select");
-        return;
-      }
-
-      auto const headerSelectedIndex = _listView.SelectedItems().Size();
-      _report.check(headerSelectedIndex == 2, "the sparse mixed selection has two tracks before appending a header");
-      _report.check(_headerItem.as<ProjectedTrackRow>().DisplayIndex() != headerSelectedIndex,
-                    "the header's display index differs from its SelectedItems append position");
-
-      _listView.SelectedItems().Append(_headerItem);
+      _report.check(nativeSelectionCount() == 2, "the sparse selection has two tracks before adding a header");
+      _listView.SelectRange(Data::ItemIndexRange{*optHeaderIndex, 1});
 
       _report.check(selectedNativeTrackIds() == sortIds({_firstTrack, _secondTrack}),
                     "pruning the sparse mixed selection retains exactly the two chosen track ids");
@@ -1306,34 +2050,56 @@ namespace
         _selectionPublications.empty(), "adding a group header to a valid selection publishes no runtime change");
       _report.check(
         !hasNativeSelectionHeader(), "the non-selectable group header was pruned from the native selection");
-      _report.check(_listView.SelectedItems().Size() == 2,
-                    std::format("the native selection holds {} item(s) after the header gesture",
-                                _listView.SelectedItems().Size()));
+      _report.check(nativeSelectionCount() == 2, "only the two native track positions remain selected");
 
       enqueueStep(&WinUiTrackTableProbeApplication::headerOnlyStep);
     }
 
     void headerOnlyStep()
     {
+      checkGroupedContainerSelection(true, "mixed cleanup leaves the same header locally clear and track selected");
       _report.beginScenario("a header-only native choice keeps the previous runtime selection");
 
+      auto const optHeaderIndex = firstHeaderIndex();
+
+      if (!optHeaderIndex)
+      {
+        failSetup("the grouped projection exposed no group header for a header-only choice");
+        return;
+      }
+
       clearSelectionPublications();
-      _listView.SelectedItem(_headerItem);
+      _listView.SelectedIndex(*optHeaderIndex);
 
       _report.check(_selectionPublications.empty(), "a header-only choice published no runtime selection change");
-      _report.check(sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}),
-                    "the previous runtime selection was not cleared by the header-only choice");
+      _report.check(_trackListPtr->selection() == std::vector{_firstTrack, _secondTrack},
+                    "the header-only choice preserves the prior runtime selection order");
       _report.check(!hasNativeSelectionHeader(), "the non-selectable header was pruned from the native selection");
-      _report.check(_listView.SelectedItems().Size() == 2,
-                    std::format("the native selection was restored to the previous runtime rows, saw {} item(s)",
-                                _listView.SelectedItems().Size()));
+      _report.check(nativeSelectionCount() == 2, "the native selection was restored to two track positions");
       _report.check(selectedNativeTrackIds() == sortIds({_firstTrack, _secondTrack}),
                     "the restored native selection names the previous runtime track ids");
+
+      enqueueStep(&WinUiTrackTableProbeApplication::finishHeaderOnlyStep);
+    }
+
+    void finishHeaderOnlyStep()
+    {
+      checkGroupedContainerSelection(true, "header-only cleanup clears the same header and restores the track locally");
+      auto const optSecondIndex = _trackListPtr->displayIndexOfTrack(_secondTrack);
+
+      if (optSecondIndex)
+      {
+        _listView.DeselectRange(Data::ItemIndexRange{static_cast<std::int32_t>(*optSecondIndex), 1});
+        checkGroupedContainerSelection(false, "a genuine deselection clears the same realized second track locally");
+      }
+
+      _groupHeaderContainer = nullptr;
+      _groupTrackContainer = nullptr;
 
       // Filtering does not discard stable Runtime ids. Select tracks from two
       // albums so native restoration can exercise both partial and empty matches.
       _secondTrack = _seededTrackIds[kTracksPerAlbum + 3];
-      auto const selectedRes = _runtimePtr->views().setSelection(_trackListPtr->viewId(), {_firstTrack, _secondTrack});
+      auto const selectedRes = _runtimePtr->views().setSelection(_trackListPtr->viewId(), {_secondTrack, _firstTrack});
 
       if (!selectedRes)
       {
@@ -1360,21 +2126,22 @@ namespace
                       _trackListPtr->displayIndexOfTrack(_secondTrack).has_value(),
                     "the current filter hides A but projects selected B");
       _report.check(_selectionPublications.empty(), "the filter publishes no selection change");
-      _headerItem = firstHeaderItem();
+      auto const optHeaderIndex = firstHeaderIndex();
 
-      if (!_headerItem)
+      if (!optHeaderIndex)
       {
         failSetup("the partially selected filtered projection has no current header");
         return;
       }
 
-      _listView.SelectedItem(_headerItem);
-      _report.check(_listView.SelectedItems().Size() == 1 && selectedNativeTrackIds() == sortIds({_secondTrack}) &&
+      _listView.SelectedIndex(*optHeaderIndex);
+      _report.check(nativeSelectionCount() == 1 && selectedNativeTrackIds() == std::vector{_secondTrack} &&
                       !hasNativeSelectionHeader(),
                     "the header-only gesture restores exactly the projected selected B track");
       _report.check(
-        sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}) && _selectionPublications.empty(),
-        "hidden A remains runtime-selected without header-gesture publication");
+        _trackListPtr->selection() == std::vector{_secondTrack, _firstTrack} && _selectionPublications.empty(),
+        "hidden A remains runtime-selected in its original order without header-gesture publication");
+      verifyAutomationSelection({_secondTrack});
       auto const filterRes = _runtimePtr->views().setFilter(_trackListPtr->viewId(), "$album = \"Probe Album C\"");
 
       if (!filterRes)
@@ -1392,20 +2159,21 @@ namespace
       _report.check(
         !_trackListPtr->displayIndexOfTrack(_firstTrack) && !_trackListPtr->displayIndexOfTrack(_secondTrack),
         "the populated C projection hides both selected tracks");
-      _headerItem = firstHeaderItem();
+      auto const optHeaderIndex = firstHeaderIndex();
 
-      if (!_headerItem)
+      if (!optHeaderIndex)
       {
         failSetup("the populated projection with fully hidden selection has no current header");
         return;
       }
 
-      _listView.SelectedItem(_headerItem);
-      _report.check(_listView.SelectedItems().Size() == 0 && !hasNativeSelectionHeader(),
+      _listView.SelectedIndex(*optHeaderIndex);
+      _report.check(nativeSelectionCount() == 0 && !hasNativeSelectionHeader(),
                     "a header-only choice restores no native row when neither selected id is projected");
       _report.check(
-        sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}) && _selectionPublications.empty(),
-        "both hidden runtime ids survive without any selection publication");
+        _trackListPtr->selection() == std::vector{_secondTrack, _firstTrack} && _selectionPublications.empty(),
+        "both hidden runtime ids retain their order without any selection publication");
+      verifyAutomationSelection({});
       auto const filterRes = _runtimePtr->views().setFilter(_trackListPtr->viewId(), "");
 
       if (!filterRes)
@@ -1421,8 +2189,8 @@ namespace
     {
       _report.beginScenario("clearing the filter restores hidden selected rows without a new selection gesture");
       verifyRestoration({_firstTrack, _secondTrack});
-      _report.check(sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}),
-                    "the restored projection retains exactly the original stable runtime ids");
+      _report.check(_trackListPtr->selection() == std::vector{_secondTrack, _firstTrack},
+                    "the restored projection retains the original stable runtime selection order");
       enqueueStep(&WinUiTrackTableProbeApplication::clearAndSelectAllStep);
     }
 
@@ -1431,12 +2199,30 @@ namespace
       _report.beginScenario("a genuine native clear empties the runtime selection");
 
       clearSelectionPublications();
-      _listView.SelectedItems().Clear();
+      clearNativeSelection();
 
       _report.check(_selectionPublications.size() == 1 && _selectionPublications.front().empty(),
                     "a genuine clear published exactly one empty selection");
       _report.check(_trackListPtr->selection().empty(), "the runtime selection is empty after the genuine clear");
-      _report.check(_listView.SelectedItems().Size() == 0, "the native selection is empty after the genuine clear");
+      _report.check(nativeSelectionCount() == 0, "the native selection is empty after the genuine clear");
+
+      _report.beginScenario("removing the final selected track publishes an empty selection");
+      auto const optIndex = _trackListPtr->displayIndexOfTrack(_firstTrack);
+
+      if (!optIndex)
+      {
+        failSetup("the restored projection is missing the final-removal fixture track");
+        return;
+      }
+
+      auto const single = Data::ItemIndexRange{static_cast<std::int32_t>(*optIndex), 1};
+      _listView.SelectRange(single);
+      _report.check(_trackListPtr->selection() == std::vector{_firstTrack}, "the single range selects one track");
+      clearSelectionPublications();
+      _listView.DeselectRange(single);
+      _report.check(_listView.SelectedRanges().Size() == 0 && _trackListPtr->selection().empty() &&
+                      _selectionPublications.size() == 1 && _selectionPublications.front().empty(),
+                    "removing the only track clears both selections and publishes once");
 
       _report.beginScenario("SelectAll publishes valid ids and filters the native selection");
 
@@ -1472,9 +2258,8 @@ namespace
       _report.check(sortIds(_trackListPtr->selection()) == _sortedSeedIds,
                     "the real view service holds every valid track id after SelectAll");
       _report.check(!hasNativeSelectionHeader(), "SelectAll leaves no group header in the native selection");
-      _report.check(
-        _listView.SelectedItems().Size() == kTrackCount,
-        std::format("the native selection holds {} item(s) after SelectAll", _listView.SelectedItems().Size()));
+      _report.check(nativeSelectionCount() == kTrackCount,
+                    std::format("the native selection holds {} item(s) after SelectAll", nativeSelectionCount()));
 
       clearSelectionPublications();
 
@@ -1514,8 +2299,10 @@ namespace
       _report.beginScenario("the top visible track stays anchored across a source replacement");
 
       auto const optTopTrack = topVisibleTrackId();
-      _report.check(optTopTrack && *optTopTrack == _anchorTrack,
-                    "the leading scroll exposed the anchor track at the top of the viewport");
+      auto const anchored = optTopTrack && *optTopTrack == _anchorTrack;
+      auto const before = anchorObservation(optTopTrack);
+      std::cerr << std::format("  ScrollAnchor before: {}\n", before);
+      _report.check(anchored, std::format("the leading scroll exposed the anchor track: {}", before));
 
       clearSelectionPublications();
 
@@ -1534,7 +2321,8 @@ namespace
     {
       auto const optTopTrack = topVisibleTrackId();
       _report.check(optTopTrack && *optTopTrack == _anchorTrack,
-                    "the top visible track kept its stable id across the source replacement");
+                    std::format("the top visible track kept its stable id across the source replacement: {}",
+                                anchorObservation(optTopTrack)));
       _report.check(
         _selectionPublications.empty(), "the anchored source replacement published no runtime selection change");
 
@@ -1571,7 +2359,7 @@ namespace
       auto const optRevealIndex = _trackListPtr->displayIndexOfTrack(_revealTrackId);
       _report.check(optRevealIndex.has_value(), "the revealed track has a display index");
 
-      auto const selectedRow = _listView.SelectedItem().try_as<ProjectedTrackRow>();
+      auto const selectedRow = singleSelectedNativeRow();
       _report.check(
         selectedRow && selectedRow.TrackId() == _revealTrackId.raw(), "the revealed row is the native selected item");
 
@@ -1598,6 +2386,42 @@ namespace
         _report.check(!isDisplayIndexVisible(*optRevealIndex), "the view scrolled away from the revealed row");
       }
 
+      _report.beginScenario("UIA Selection reads an unrealized track without scrolling the list");
+      auto const scroll = findScrollViewer(_listView);
+
+      if (!scroll || !optRevealIndex || _rowsPanel.FirstVisibleIndex() < 0 || isDisplayIndexVisible(*optRevealIndex) ||
+          _listView.ContainerFromIndex(static_cast<std::int32_t>(*optRevealIndex)))
+      {
+        _report.record("the selected track must start offscreen without a realized container");
+        enqueueStep(&WinUiTrackTableProbeApplication::dedupeResizeStep);
+        return;
+      }
+
+      _selectionReadOffset = scroll.VerticalOffset();
+      verifyAutomationSelection({_revealTrackId});
+      checkUnrealizedSelectionViewport();
+      afterNextLayoutStep(&WinUiTrackTableProbeApplication::selectionReadLayoutStep);
+      _root.InvalidateArrange();
+    }
+
+    void checkUnrealizedSelectionViewport()
+    {
+      auto const optIndex = _trackListPtr->displayIndexOfTrack(_revealTrackId);
+      auto const scroll = findScrollViewer(_listView);
+      _report.check(scroll && scroll.VerticalOffset() == _selectionReadOffset && optIndex &&
+                      !isDisplayIndexVisible(*optIndex) &&
+                      !_listView.ContainerFromIndex(static_cast<std::int32_t>(*optIndex)),
+                    "UIA readback leaves the offset unchanged and the selected track unrealized");
+    }
+
+    void selectionReadLayoutStep()
+    {
+      checkUnrealizedSelectionViewport();
+      dedupeResizeStep();
+    }
+
+    void dedupeResizeStep()
+    {
       clearSelectionPublications();
 
       auto const resizedRes = _trackListPtr->resizeColumn("title", -24.0);
@@ -1621,7 +2445,7 @@ namespace
           !isDisplayIndexVisible(*optRevealIndex), "the processed reveal did not re-scroll to the revealed row");
       }
 
-      auto const selectedRow = _listView.SelectedItem().try_as<ProjectedTrackRow>();
+      auto const selectedRow = singleSelectedNativeRow();
       _report.check(selectedRow && selectedRow.TrackId() == _revealTrackId.raw(),
                     "the revealed selection survived the later source replacement");
       _report.check(
@@ -1718,7 +2542,7 @@ namespace
       };
     }
 
-    bool isSameInstance(Item const& lhs, Item const& rhs)
+    static bool isSameInstance(Item const& lhs, Item const& rhs)
     {
       if (!lhs || !rhs)
       {
@@ -3206,6 +4030,13 @@ namespace
         _activityPtr.reset();
         _selectionSub.reset();
 
+        if (_largeList)
+        {
+          _largeList.ItemsSource(nullptr);
+          _hostBorder.Child(nullptr);
+          _largeList = nullptr;
+        }
+
         if (_hostPtr)
         {
           _hostPtr->retire();
@@ -3283,6 +4114,8 @@ namespace
 
     // main owns the result until Application::Start returns after native shutdown.
     std::int32_t& _exitCode;
+    bool const _identityOnly;
+    std::uint32_t const _fragmentCount;
     bool _contentLoaded = false;
     bool _finishing = false;
     bool _windowClosed = false;
@@ -3307,7 +4140,6 @@ namespace
     TrackId _secondTrack{};
     TrackId _anchorTrack{};
     TrackId _revealTrackId{};
-    Item _headerItem{nullptr};
 
     std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
     // AppRuntime owns this borrow through executor closing and runtime destruction.
@@ -3395,18 +4227,50 @@ namespace
     ao::winui::layout::WindowActivityState _windowActivity{.visible = true, .minimized = false};
     std::string _statusMessage{};
 
+    ListView _largeList{nullptr};
+    std::shared_ptr<std::size_t> _largeListCallsPtr;
     ListView _listView{nullptr};
     ItemsStackPanel _rowsPanel{nullptr};
+    double _selectionReadOffset = 0.0;
+    Item _rowsBeforeSort{nullptr};
+    ProjectedTrackRow _selectedBeforeSort{nullptr};
+    ProjectedTrackRow _replacementAtStaleIndex{nullptr};
+    Controls::ListViewItem _groupHeaderContainer{nullptr};
+    Controls::ListViewItem _groupTrackContainer{nullptr};
   };
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
   try
   {
+    auto const identityOnly = argc == 2 && std::string_view{argv[1]} == "--row-identity";
+
+    std::uint32_t fragmentCount = 0;
+
+    if (argc == 3 && std::string_view{argv[1]} == "--fragmented-selection")
+    {
+      char const* const first = argv[2];
+      char const* const end = first + std::char_traits<char>::length(first);
+      auto const [ptr, error] = std::from_chars(first, end, fragmentCount);
+
+      if (ptr != end || error != std::errc{} || fragmentCount > 10000)
+      {
+        fragmentCount = 0;
+      }
+    }
+
+    if (argc != 1 && !identityOnly && fragmentCount == 0)
+    {
+      std::cerr << "Usage: ao_winui_track_table_probe [--row-identity | --fragmented-selection <1..10000>]\n";
+      return 1;
+    }
+
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t exitCode = 1;
-    Application::Start([&exitCode](auto&&) { std::ignore = winrt::make<WinUiTrackTableProbeApplication>(exitCode); });
+    Application::Start(
+      [&exitCode, identityOnly, fragmentCount](auto&&)
+      { std::ignore = winrt::make<WinUiTrackTableProbeApplication>(exitCode, identityOnly, fragmentCount); });
     return exitCode;
   }
   catch (winrt::hresult_error const& error)

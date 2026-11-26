@@ -109,7 +109,7 @@ def _selection(platform: str, request: Request, *, scoped_lint: bool = False) ->
     if platform == "windows":
         required.update(windows_probes | windows_analysis)
         if request.desktop_tests:
-            required.add("//test:winui_uia_test")
+            required.update({"//test:winui_uia_test", "//test:winui_uia_selection_test"})
     else:
         optional.update(windows_probes | windows_analysis)
     # The ordinary suite expands these Linux-only tests on every host.

@@ -21,11 +21,11 @@ namespace ao::winui::test
   {
     using uimodel::KeyChord;
 
-    WindowsAccelerator translated(std::string const& text)
+    WindowsAccelerator translated(std::string const& text, CharacterKeyResolver const& resolveCharacter = {})
     {
       auto const optChord = KeyChord::parse(text);
       REQUIRE(optChord);
-      auto const optAccelerator = toWindowsAccelerator(*optChord);
+      auto const optAccelerator = toWindowsAccelerator(*optChord, resolveCharacter);
       REQUIRE(optAccelerator);
       return *optAccelerator;
     }
@@ -48,6 +48,28 @@ namespace ao::winui::test
     CHECK(translated("Super+L").modifiers == kAcceleratorModifierWindows);
     CHECK(translated("Ctrl+Shift+Right").modifiers == (kAcceleratorModifierControl | kAcceleratorModifierShift));
     CHECK(translated("Right").modifiers == kAcceleratorModifierNone);
+  }
+
+  TEST_CASE("KeyChordAccelerator - canonical letter case does not imply Shift on the active layout")
+  {
+    // VkKeyScanEx distinguishes typing lowercase p from typing uppercase P.
+    auto const usLayout = [](char const character) -> std::optional<CharacterKey>
+    {
+      switch (character)
+      {
+        case 'p': return CharacterKey{.virtualKey = 0x50, .needsShift = false};
+        case 'P': return CharacterKey{.virtualKey = 0x50, .needsShift = true};
+        default: return std::nullopt;
+      }
+    };
+
+    auto const plain = translated("Ctrl+P", usLayout);
+    CHECK(plain.virtualKey == 0x50);
+    CHECK(plain.modifiers == kAcceleratorModifierControl);
+
+    auto const shifted = translated("Ctrl+Shift+P", usLayout);
+    CHECK(shifted.virtualKey == 0x50);
+    CHECK(shifted.modifiers == (kAcceleratorModifierControl | kAcceleratorModifierShift));
   }
 
   TEST_CASE("KeyChordAccelerator - named navigation and editing keys translate")
@@ -201,14 +223,17 @@ namespace ao::winui::test
 
   TEST_CASE("KeyChordAccelerator - a character the layout cannot reach installs nothing")
   {
-    // A resolver that answers is authoritative, including when it says the
-    // character needs AltGr. Falling back to the US table there would bind a
-    // key the user never pressed.
+    // On German layouts '[' needs AltGr. The resolver rejects it, and the
+    // US fallback must not install its unrelated bracket key.
     auto const unreachable = [](char) -> std::optional<CharacterKey> { return std::nullopt; };
 
-    auto const optChord = uimodel::KeyChord::parse("Ctrl+@");
+    auto const optChord = uimodel::KeyChord::parse("Ctrl+[");
     REQUIRE(optChord);
     CHECK_FALSE(toWindowsAccelerator(*optChord, unreachable));
+
+    auto const optLetter = uimodel::KeyChord::parse("Ctrl+P");
+    REQUIRE(optLetter);
+    CHECK_FALSE(toWindowsAccelerator(*optLetter, unreachable));
 
     // Named keys are layout-independent and stay unaffected.
     auto const optNamed = uimodel::KeyChord::parse("Ctrl+Left");

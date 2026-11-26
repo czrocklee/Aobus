@@ -4,6 +4,7 @@
 #include <ao/winui/input/KeyChordAccelerator.h>
 
 #include <ao/uimodel/input/KeyChord.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <array>
@@ -39,18 +40,13 @@ namespace ao::winui
     });
 
     /**
-     * @brief The punctuation this shell can name, by key position.
+     * @brief US-layout fallback for single-character punctuation keys.
      *
-     * Windows numbers the OEM keys by where they sit rather than by what they
-     * produce, and where they sit is decided by the active keyboard layout.
-     * These positions are the ones a US layout carries; on a layout that moves
-     * them, a chord naming punctuation reaches a different physical key. The
-     * shipped keymap binds no punctuation at all, so this affects only a user's
-     * own overrides, and it is recorded here rather than guessed around.
-     *
-     * `needsShift` marks a character the key only produces while Shift is held.
-     * Without it, `Ctrl++` would install as `Ctrl+=`: the same key, a different
-     * shortcut, and one the user never asked for.
+     * This table is used only when no character resolver is supplied. The shell
+     * resolves characters using the system layout at installation instead;
+     * named keys are mapped independently of that resolver. On a US layout,
+     * `+` and `=` share a key and `needsShift` distinguishes `Ctrl++` from
+     * `Ctrl+=`. Other layouts may map either character differently.
      */
     struct PunctuationKey final
     {
@@ -149,7 +145,9 @@ namespace ao::winui
       }
 
       auto const character = token.front();
-      auto const optResolved = resolveCharacter(character);
+      // Canonical uppercase letters name keys, not shifted text. Resolve the
+      // lowercase base character; an explicit Shift still comes from the chord.
+      auto const optResolved = resolveCharacter(utility::toAsciiLower(character));
 
       // A resolver that answers is authoritative, including when it answers
       // "this layout cannot reach that character". Falling back to the US table
@@ -217,8 +215,8 @@ namespace ao::winui
     }
 
     // A character the key only produces with Shift held carries that Shift
-    // whether or not the chord spelled it out. `+` and `=` share one key, and
-    // installing `+` without the implicit Shift would silently bind `=`.
+    // whether or not the chord spelled it out. On a US layout, installing `+`
+    // without the implicit Shift would silently bind `=`.
     auto modifiers = modifierFlags(chord);
 
     if (optKey->needsShift)

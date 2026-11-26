@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "layout/component/track/TrackListSelectionEvents.h"
+#include "layout/component/track/TrackListView.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -11,6 +13,7 @@
 #include "platform/StringResourceFormat.h"
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
+#include "track/TrackListSelection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
@@ -26,6 +29,7 @@
 #include <winrt/Aobus.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Data.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -34,16 +38,18 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -65,6 +71,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Controls::ItemsPanelTemplate;
     using winrt::Microsoft::UI::Xaml::Controls::ItemsStackPanel;
     using winrt::Microsoft::UI::Xaml::Controls::ListView;
+    using winrt::Microsoft::UI::Xaml::Controls::ListViewItem;
     using winrt::Microsoft::UI::Xaml::Controls::ListViewSelectionMode;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyout;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem;
@@ -78,6 +85,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs;
     using winrt::Microsoft::UI::Xaml::Controls::StackPanel;
     using winrt::Microsoft::UI::Xaml::Controls::TextBlock;
+    using winrt::Microsoft::UI::Xaml::Data::ISelectionInfo;
     using winrt::Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper;
@@ -232,14 +240,7 @@ namespace ao::winui::layout
           subscribeUiUpdate(_trackList.signalChanged(), "TrackTableComponent", [this] { refreshTrackList(); });
       }
 
-      ~TrackTableComponent() override
-      {
-        if (_contextFlyout)
-        {
-          _contextClickRevokers.clear();
-          _contextFlyout.Hide();
-        }
-      }
+      ~TrackTableComponent() override { dismissContextMenu(); }
 
       TrackTableComponent(TrackTableComponent const&) = delete;
       TrackTableComponent& operator=(TrackTableComponent const&) = delete;
@@ -249,23 +250,125 @@ namespace ao::winui::layout
       FrameworkElement element() const override { return _viewport; }
 
     private:
+      std::vector<std::uint32_t> selectedIndices(std::span<TrackId const> selection) const
+      {
+        auto indices = std::vector<std::uint32_t>{};
+        indices.reserve(selection.size());
+
+        for (auto const id : selection)
+        {
+          if (auto const optIndex = _trackList.displayIndexOfTrack(id); optIndex)
+          {
+            indices.push_back(static_cast<std::uint32_t>(*optIndex));
+          }
+        }
+
+        return indices;
+      }
+
+      enum class RowBinding : std::uint8_t
+      {
+        Stale,
+        Updating,
+        UpdateRequested,
+        Ready
+      };
+
+      bool acceptsRowInput() const
+      {
+        return _rowBinding == RowBinding::Ready && uimodel::isGenerationActive(_gatePtr) &&
+               _trackList.isCurrentRowSource(_rows.ItemsSource());
+      }
+
+      bool acceptsTrackRow(ProjectedTrackRowItem const& row) const
+      {
+        std::uint32_t index = 0;
+        return acceptsRowInput() && row && !row.IsGroupHeader() && row.TrackId() != 0 &&
+               _trackList.items().IndexOf(row, index);
+      }
+
+      ProjectedTrackRowItem trackRowForGesture(IInspectable const& source) const
+      {
+        if (!uimodel::isGenerationActive(_gatePtr))
+        {
+          return nullptr;
+        }
+
+        auto row = trackRowFromEventSource(source);
+        return acceptsTrackRow(row) ? row : nullptr;
+      }
+
       void refreshTrackList()
       {
+        _selectionEvents.interrupt();
+
+        if (_rowBinding == RowBinding::Updating || _rowBinding == RowBinding::UpdateRequested)
+        {
+          // A native setter can call back into the controller. Never restore two
+          // selections onto the same ListView concurrently on the dispatcher.
+          _rowBinding = RowBinding::UpdateRequested;
+          return;
+        }
+
+        {
+          auto retireIncomplete = gsl_lite::finally(
+            [this]
+            {
+              if (_rowBinding != RowBinding::Ready)
+              {
+                _rowBinding = RowBinding::Stale;
+              }
+            });
+          _rowBinding = RowBinding::UpdateRequested;
+
+          while (_rowBinding == RowBinding::UpdateRequested)
+          {
+            _rowBinding = RowBinding::Updating;
+            bindTrackRows();
+          }
+
+          _rowBinding = RowBinding::Ready;
+        }
+
+        if (auto const source = _rows.ItemsSource().try_as<ISelectionInfo>(); source)
+        {
+          _selectionEvents.commit(_rows, source.GetSelectedRanges(), _gatePtr);
+        }
+      }
+
+      void dismissContextMenu()
+      {
+        if (auto flyout = std::exchange(_contextFlyout, nullptr); flyout)
+        {
+          _contextClickRevokers.clear();
+          flyout.Hide();
+        }
+      }
+
+      void bindTrackRows()
+      {
+        dismissContextMenu();
+        auto const items = _trackList.items();
         auto optTopIndex = std::optional<std::size_t>{};
         auto topTrackId = kInvalidTrackId;
-        auto const oldSource = _rows.ItemsSource();
-        auto const oldItems =
-          oldSource ? oldSource.try_as<winrt::Windows::Foundation::Collections::IVectorView<IInspectable>>() : nullptr;
+        auto const selection = _trackList.selection();
 
         if (auto const panel = _rows.ItemsPanelRoot().try_as<ItemsStackPanel>(); panel)
         {
-          if (auto const firstVisible = panel.FirstVisibleIndex();
-              firstVisible >= 0 && oldItems && static_cast<std::uint32_t>(firstVisible) < oldItems.Size())
+          // At the top without a selection, show the new first row. Else anchor to
+          // the realized row, not a lazy read against an already changed projection.
+          auto const firstVisible = panel.FirstVisibleIndex();
+
+          if (firstVisible >= 0)
           {
             optTopIndex = static_cast<std::size_t>(firstVisible);
+          }
 
-            if (auto const row =
-                  oldItems.GetAt(static_cast<std::uint32_t>(firstVisible)).try_as<ProjectedTrackRowItem>();
+          if (firstVisible > 0 || (firstVisible == 0 && !selection.empty()))
+          {
+            auto const container = _rows.ContainerFromIndex(firstVisible).try_as<ListViewItem>();
+
+            if (auto const row = container ? container.Content().try_as<ProjectedTrackRowItem>() : nullptr;
                 row && !row.IsGroupHeader() && row.TrackId() != 0)
             {
               topTrackId = TrackId{row.TrackId()};
@@ -273,23 +376,14 @@ namespace ao::winui::layout
           }
         }
 
-        auto const previousSuppression = _suppressSelectionPublication;
-        _suppressSelectionPublication = true;
-        auto restoreSuppression =
-          gsl_lite::finally([this, previousSuppression] { _suppressSelectionPublication = previousSuppression; });
-        auto const items = _trackList.items();
         _rows.ItemsSource(items);
-        _rows.SelectedItems().Clear();
 
-        for (auto const trackId : _trackList.selection())
+        if (_rowBinding == RowBinding::UpdateRequested)
         {
-          auto const optIndex = _trackList.displayIndexOfTrack(trackId);
-
-          if (optIndex && *optIndex < items.Size())
-          {
-            _rows.SelectedItems().Append(items.GetAt(static_cast<std::uint32_t>(*optIndex)));
-          }
+          return;
         }
+
+        restoreTrackSelection(_rows, selectedIndices(selection));
 
         auto const headers = _trackList.headers();
         auto const showRecovery = _trackList.rowCount() != 0 && headers.Size() == 0;
@@ -297,6 +391,11 @@ namespace ao::winui::layout
         _headers.Visibility(showRecovery ? Visibility::Collapsed : Visibility::Visible);
         _columnsRecovery.Visibility(showRecovery ? Visibility::Visible : Visibility::Collapsed);
         _surface.Width(_trackList.contentWidth());
+
+        if (_rowBinding == RowBinding::UpdateRequested)
+        {
+          return;
+        }
 
         if (optTopIndex)
         {
@@ -319,16 +418,14 @@ namespace ao::winui::layout
 
         auto const optReveal = _trackList.revealTarget();
 
-        if (!optReveal || optReveal->serial == _lastRevealSerial ||
-            optReveal->displayIndex >= _trackList.items().Size())
+        if (_rowBinding == RowBinding::UpdateRequested || !optReveal || optReveal->serial == _lastRevealSerial ||
+            optReveal->displayIndex >= items.Size())
         {
           return;
         }
 
+        _rows.ScrollIntoView(items.GetAt(static_cast<std::uint32_t>(optReveal->displayIndex)));
         _lastRevealSerial = optReveal->serial;
-        auto const item = _trackList.items().GetAt(static_cast<std::uint32_t>(optReveal->displayIndex));
-        _rows.SelectedItem(item);
-        _rows.ScrollIntoView(item);
       }
 
       void onViewportSizeChanged(IInspectable const& /*sender*/, SizeChangedEventArgs const& args)
@@ -338,84 +435,121 @@ namespace ao::winui::layout
           return;
         }
 
+        auto const revision = _selectionEvents.revision();
         _trackList.setViewportWidth(args.NewSize().Width, _trailingChromeWidth);
-        _surface.Width(_trackList.contentWidth());
+
+        if (revision.isAlive() && uimodel::isGenerationActive(_gatePtr))
+        {
+          _surface.Width(_trackList.contentWidth());
+        }
       }
 
       void onSelectionChanged(IInspectable const& /*sender*/, SelectionChangedEventArgs const& /*args*/)
       {
-        if (_suppressSelectionPublication || !uimodel::isGenerationActive(_gatePtr))
+        if (!acceptsRowInput())
         {
           return;
         }
 
-        auto selected = std::vector<TrackId>{};
-        auto invalidSelectedIndices = std::vector<std::uint32_t>{};
-        auto const nativeSelection = _rows.SelectedItems();
-        std::uint32_t selectedItemIndex = 0;
+        using winrt::Microsoft::UI::Xaml::Data::ItemIndexRange;
+        auto const items = _trackList.items();
+        auto const revision = _selectionEvents.revision();
+        auto const source = items.as<ISelectionInfo>();
+        auto ranges = source.GetSelectedRanges();
+        auto const previous = _trackList.selection();
+        auto displayOrder = std::vector<TrackId>{};
+        auto headers = std::vector<std::int32_t>{};
 
-        for (auto const& item : nativeSelection)
+        for (auto const& range : ranges)
         {
-          if (auto const row = item.try_as<ProjectedTrackRowItem>(); row && !row.IsGroupHeader() && row.TrackId() != 0)
-          {
-            selected.emplace_back(row.TrackId());
-          }
-          else
-          {
-            invalidSelectedIndices.push_back(selectedItemIndex);
-          }
+          auto const start = static_cast<std::uint32_t>(range.FirstIndex());
+          auto const length = range.Length();
 
-          ++selectedItemIndex;
+          for (std::uint32_t offset = 0; offset < length; ++offset)
+          {
+            auto const index = start + offset;
+
+            if (auto const id = _trackList.trackIdAtDisplayIndex(index); id != kInvalidTrackId)
+            {
+              displayOrder.push_back(id);
+            }
+            else
+            {
+              headers.push_back(static_cast<std::int32_t>(index));
+            }
+          }
         }
 
-        if (!invalidSelectedIndices.empty())
+        if (!headers.empty())
         {
-          auto const previousSuppression = _suppressSelectionPublication;
-          _suppressSelectionPublication = true;
-          auto restoreSuppression =
-            gsl_lite::finally([this, previousSuppression] { _suppressSelectionPublication = previousSuppression; });
-
-          for (auto const invalidSelectedIndex : invalidSelectedIndices | std::views::reverse)
+          // ListView is still inside its selection transaction and ignores nested
+          // control gestures. Correct the source it consults for the final state.
+          for (auto const index : headers)
           {
-            nativeSelection.RemoveAt(invalidSelectedIndex);
+            source.DeselectRange(ItemIndexRange{index, 1});
           }
 
-          // A header-only gesture is not a request to clear the view's selection.
-          // Restore its visible tracks without publishing an intermediate empty set.
-          if (selected.empty())
+          if (displayOrder.empty())
           {
-            auto const items = _trackList.items();
-
-            for (auto const trackId : _trackList.selection())
+            // A header-only gesture leaves even filtered-out runtime IDs intact.
+            for (auto const& range : trackSelectionRanges(selectedIndices(previous)))
             {
-              if (auto const optIndex = _trackList.displayIndexOfTrack(trackId); optIndex && *optIndex < items.Size())
-              {
-                nativeSelection.Append(items.GetAt(static_cast<std::uint32_t>(*optIndex)));
-              }
+              source.SelectRange(range);
             }
 
+            _selectionEvents.commit(_rows, source.GetSelectedRanges(), _gatePtr);
             return;
+          }
+
+          ranges = source.GetSelectedRanges();
+        }
+
+        // Ranges arrive in display order; keep the user's first selected track
+        // first (including across reorders), then append newly selected tracks.
+        auto remaining = std::unordered_set<TrackId>{displayOrder.begin(), displayOrder.end()};
+        auto selected = std::vector<TrackId>{};
+        selected.reserve(displayOrder.size());
+
+        for (auto const id : previous)
+        {
+          if (remaining.erase(id) != 0)
+          {
+            selected.push_back(id);
           }
         }
 
-        // The selection belongs to the view, not to this control: everything that
-        // presents it reads it back from the runtime.
-        if (selected != _trackList.selection())
+        for (auto const id : displayOrder)
         {
+          if (remaining.erase(id) != 0)
+          {
+            selected.push_back(id);
+          }
+        }
+
+        if (selected != previous && _trackList.isCurrentRowSource(items) && acceptsRowInput())
+        {
+          dismissContextMenu();
+
+          if (!revision.isCurrent() || !acceptsRowInput())
+          {
+            return;
+          }
+
           _trackList.publishSelection(selected);
+        }
+
+        // Publishing to Runtime can synchronously rebind the table. Do not announce the old choice.
+        if (revision.isCurrent() && acceptsRowInput() && _trackList.isCurrentRowSource(items))
+        {
+          _selectionEvents.commit(_rows, ranges, _gatePtr);
         }
       }
 
       void onDoubleTapped(IInspectable const& /*sender*/, DoubleTappedRoutedEventArgs const& args)
       {
-        if (!uimodel::isGenerationActive(_gatePtr))
-        {
-          return;
-        }
+        auto const row = trackRowForGesture(args.OriginalSource());
 
-        auto const row = trackRowFromEventSource(args.OriginalSource());
-
-        if (!row || row.IsGroupHeader())
+        if (!row)
         {
           return;
         }
@@ -433,47 +567,31 @@ namespace ao::winui::layout
       // NOLINTNEXTLINE(readability-function-cognitive-complexity)
       void onRightTapped(IInspectable const& /*sender*/, RightTappedRoutedEventArgs const& args)
       {
-        if (!uimodel::isGenerationActive(_gatePtr))
+        auto const row = trackRowForGesture(args.OriginalSource());
+
+        if (!row)
         {
           return;
         }
 
-        auto const row = trackRowFromEventSource(args.OriginalSource());
-
-        if (!row || row.IsGroupHeader())
+        if (auto const trackId = TrackId{row.TrackId()}; !std::ranges::contains(_trackList.selection(), trackId))
         {
-          return;
-        }
+          auto const revision = _selectionEvents.revision();
+          _rows.SelectedItem(row);
 
-        bool selected = false;
-
-        for (auto const& item : _rows.SelectedItems())
-        {
-          if (auto const selectedRow = item.try_as<ProjectedTrackRowItem>();
-              selectedRow && selectedRow.TrackId() == row.TrackId())
+          if (!revision.isAlive() || !acceptsTrackRow(row) || !std::ranges::contains(_trackList.selection(), trackId))
           {
-            selected = true;
-            break;
+            return;
           }
         }
 
-        if (!selected)
-        {
-          _rows.SelectedItem(row);
-        }
-
-        if (_contextFlyout)
-        {
-          _contextClickRevokers.clear();
-          _contextFlyout.Hide();
-        }
-
+        dismissContextMenu();
         _contextFlyout = MenuFlyout{};
-        auto const appendItem = [this](auto const& items,
-                                       std::string_view const text,
-                                       std::function<void()> callback,
-                                       bool const enabled = true,
-                                       std::string_view const accelerator = {})
+        auto const appendItem = [this, &row](auto const& items,
+                                             std::string_view const text,
+                                             std::function<void()> callback,
+                                             bool const enabled = true,
+                                             std::string_view const accelerator = {})
         {
           auto item = MenuFlyoutItem{};
           item.Text(winrt::to_hstring(text));
@@ -488,10 +606,10 @@ namespace ao::winui::layout
           {
             _contextClickRevokers.push_back(
               item.Click(winrt::auto_revoke,
-                         [this, callback = std::move(callback)](
+                         [this, row, callback = std::move(callback)](
                            IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
                          {
-                           if (uimodel::isGenerationActive(_gatePtr))
+                           if (acceptsTrackRow(row))
                            {
                              callback();
                            }
@@ -506,9 +624,9 @@ namespace ao::winui::layout
         properties.KeyboardAcceleratorTextOverride(L"Alt+Enter");
         _contextClickRevokers.push_back(
           properties.Click(winrt::auto_revoke,
-                           [this](IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
+                           [this, row](IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
                            {
-                             if (uimodel::isGenerationActive(_gatePtr))
+                             if (acceptsTrackRow(row))
                              {
                                std::ignore = _actions.tryInvoke("track.presentProperties", ActionContext{});
                              }
@@ -602,7 +720,7 @@ namespace ao::winui::layout
       ItemsControl _headers{};
       StackPanel _columnsRecovery{};
       Button _chooseColumns{};
-      ListView _rows{};
+      ListView _rows = makeTrackListView();
       TrackListController& _trackList;
       std::function<Result<>(rt::ViewId, TrackId)> _playTrack;
       ActionRegistry const& _actions;
@@ -616,7 +734,8 @@ namespace ao::winui::layout
       std::function<void(std::string)> _reportStatus;
       double _trailingChromeWidth = kFallbackScrollBarSize;
       std::uint64_t _lastRevealSerial = 0;
-      bool _suppressSelectionPublication = false;
+      RowBinding _rowBinding = RowBinding::Stale;
+      TrackListSelectionEvents _selectionEvents;
       async::Subscription _trackListChangedSub;
       ListView::SelectionChanged_revoker _selectionChangedRevoker{};
       ListView::DoubleTapped_revoker _doubleTappedRevoker{};

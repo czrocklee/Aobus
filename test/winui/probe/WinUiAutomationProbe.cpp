@@ -10,7 +10,9 @@
 #undef GetCurrentTime
 
 #include "MainWindow.xaml.h"
+#include "WinUiSelectionEventClient.h"
 #include "WinUiSilentAudio.h"
+#include "WinUiTrackSelectionProbe.h"
 #include "XamlMetaDataProvider.h"
 #include "app/LibrarySession.h"
 #include "platform/NamedControl.h"
@@ -84,6 +86,7 @@
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Data.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -158,6 +161,7 @@ namespace
   constexpr auto kBackwardOffset = std::chrono::seconds{6};
   constexpr double kIntermediateRangeValue = 7000.0;
   constexpr std::size_t kProbeTrackCount = 12;
+  constexpr std::uint32_t kBulkTrackCount = 24;
   constexpr auto kComposerFilter = R"($composer = "Bach")";
   constexpr auto kAlphaFilter = R"($title = "Audit Alpha")";
   constexpr auto kExpectedMissing = kProbeTrackCount - 1; // Only the rescan target has a physical file.
@@ -425,7 +429,8 @@ namespace
 
   // The opt-in playback probes copy a private PCM WAV into the disposable library.
   ao::Result<SeededLibrary> seedLibrary(std::filesystem::path const& root,
-                                        std::optional<std::filesystem::path> const& optPrimaryFixture)
+                                        std::optional<std::filesystem::path> const& optPrimaryFixture,
+                                        std::size_t const trackCount = kProbeTrackCount)
   {
     if (optPrimaryFixture)
     {
@@ -463,11 +468,12 @@ namespace
 
     auto transaction = writableRes->writeTransaction();
     auto applyRes = transaction.apply(
-      [primaryPlay = optPrimaryFixture.has_value()](ao::library::LibraryWrite& write) -> ao::Result<SeededLibrary>
+      [primaryPlay = optPrimaryFixture.has_value(),
+       trackCount](ao::library::LibraryWrite& write) -> ao::Result<SeededLibrary>
       {
         auto seed = SeededLibrary{};
 
-        for (std::size_t index = 0; index < kProbeTrackCount; ++index)
+        for (std::size_t index = 0; index < trackCount; ++index)
         {
           constexpr auto kNamedTracks = std::array{"Audit Alpha", "Audit Beta"};
           auto const isNamedTrack = index < kNamedTracks.size();
@@ -639,13 +645,15 @@ namespace
                          bool const classicOutput,
                          std::optional<std::filesystem::path> optPrimaryFixture,
                          bool const seekSteps,
-                         std::optional<ao::winui::ShellMode> const optSeekRangeMode)
+                         std::optional<ao::winui::ShellMode> const optSeekRangeMode,
+                         std::string selectionEventsRunfile)
       : _result{result}
       , _optListPreviewLocale{optListPreviewLocale}
       , _classicOutput{classicOutput}
       , _optPrimaryFixture{std::move(optPrimaryFixture)}
       , _seekSteps{seekSteps}
       , _optSeekRangeMode{optSeekRangeMode}
+      , _selectionEventsRunfile{std::move(selectionEventsRunfile)}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& args)
@@ -686,7 +694,9 @@ namespace
       _scratch = std::move(*scratchRes);
       auto const libraryRoot = _scratch / "library";
 
-      auto const seedRes = seedLibrary(libraryRoot, _optPrimaryFixture);
+      auto const selectionEvents = !_selectionEventsRunfile.empty();
+      auto const seedRes =
+        seedLibrary(libraryRoot, _optPrimaryFixture, selectionEvents ? kBulkTrackCount : kProbeTrackCount);
 
       if (!seedRes)
       {
@@ -774,10 +784,11 @@ namespace
         ao::winui::test::registerSilentAudioProvider(_sessionPtr->runtime());
         // Selection is not restored from storage. Supply a live zero-duration
         // selection before binding the shipping shell, so no event can initialize its summary.
+        // The external event fixture instead starts empty.
         auto& runtime = _sessionPtr->runtime();
         _allTracksViewId = runtime.workspace().snapshot().activeViewId;
 
-        if (!runtime.views().setSelection(_allTracksViewId, {_seed.summaryTracks.back()}))
+        if (!selectionEvents && !runtime.views().setSelection(_allTracksViewId, {_seed.summaryTracks.back()}))
         {
           fail("could not select the unknown-duration track before binding the shell");
           finish();
@@ -808,11 +819,16 @@ namespace
         });
       _timeout.Start();
       _loaded = _root.Loaded(winrt::auto_revoke,
-                             [this](auto const&, auto const&)
+                             [this, selectionEvents](auto const&, auto const&)
                              {
                                _loaded.revoke();
 
-                               if (_optPrimaryFixture)
+                               if (selectionEvents)
+                               {
+                                 _window.AppWindow().ResizeClient(clientPixels(1200, 800));
+                                 afterFrame(&WinUiAutomationProbe::startSelectionEvents);
+                               }
+                               else if (_optPrimaryFixture)
                                {
                                  _window.AppWindow().ResizeClient(clientPixels(1200, 800));
                                  afterFrame(_optSeekRangeMode ? &WinUiAutomationProbe::startSeekRange
@@ -1225,7 +1241,9 @@ namespace
       auto const alpha = rows ? findVisual<Controls::ListViewItem>(rows, L"Audit Alpha") : nullptr;
       auto const beta = rows ? findVisual<Controls::ListViewItem>(rows, L"Audit Beta") : nullptr;
 
-      if (!alpha || !beta)
+      auto const betaIndex = beta ? rows.IndexFromContainer(beta) : -1;
+
+      if (!alpha || betaIndex < 0)
       {
         fail("the shipping track list did not realize both duration fixtures");
         return;
@@ -1234,21 +1252,32 @@ namespace
       auto const play = findVisualById<Button>(_root, L"modern-soul");
       check(play && play.IsEnabled(), "the primary transport must accept the existing row selection");
 
+      auto const checkProvider = [this, &rows](std::string_view choice, std::vector<ao::TrackId> const& ids)
+      {
+        if (auto const optError = ao::winui::test::trackSelectionProviderFailure(rows, ids); optError)
+        {
+          fail(std::format("{}: {}", choice, *optError));
+        }
+      };
+
       // Choose actual native items. Their SelectionChanged handler publishes
       // through the shipping controller; this is not physical pointer/keyboard input.
       rows.SelectedItem(rows.ItemFromContainer(alpha));
       check(activeState().selection == std::vector{_seed.summaryTracks.front()},
             "the runtime did not receive the native single-row selection");
       checkSelectionSummary("one known duration", "1 item selected (2:03)");
-      rows.SelectedItems().Append(rows.ItemFromContainer(beta));
+      checkProvider("Alpha selected", {_seed.summaryTracks.front()});
+      rows.SelectRange(Data::ItemIndexRange{betaIndex, 1});
       auto const selected = activeState().selection;
       check(selected.size() == 2 && std::ranges::contains(selected, _seed.summaryTracks.front()) &&
               std::ranges::contains(selected, _seed.summaryTracks.at(1)),
             "the runtime did not receive both native rows");
       checkSelectionSummary("two known durations", "2 items selected (3:08)");
-      rows.SelectedItems().Clear();
+      checkProvider("Alpha and Beta selected", {_seed.summaryTracks.front(), _seed.summaryTracks.at(1)});
+      rows.DeselectRange(Data::ItemIndexRange{0, rows.Items().Size()});
       check(activeState().selection.empty(), "the runtime did not receive the native clear");
       checkSelectionSummary("native clear", "");
+      checkProvider("selection cleared", {});
       check(play && !play.IsEnabled(), "a ready output and visible rows alone must not enable primary Play");
       rows.SelectedItem(rows.ItemFromContainer(alpha));
       check(play && play.IsEnabled(), "a fresh native selection must re-enable primary Play");
@@ -1949,6 +1978,60 @@ namespace
             "restoring the workspace rewrote the independent saved pin");
       checkNativeSelectionSummary();
       afterFrame(&WinUiAutomationProbe::selectedModern);
+    }
+
+    void startSelectionEvents()
+    {
+      _stage = "out-of-process UIA selection";
+      auto const state = activeState();
+      auto const projectionRes = _sessionPtr->runtime().views().findTrackListProjection(state.id);
+
+      if (state.presentation.groupBy != ao::rt::TrackGroupKey::None || !projectionRes ||
+          (*projectionRes)->size() != kBulkTrackCount || !state.selection.empty())
+      {
+        fail("expected 24 tracks in a flat, unselected shipping projection");
+        finish();
+        return;
+      }
+
+      ::HWND window = nullptr;
+      winrt::check_hresult(_window.as<::IWindowNative>()->get_WindowHandle(&window));
+      _selectionEventClientPtr =
+        std::make_unique<ao::winui::test::SelectionEventClient>(_selectionEventsRunfile, _scratch, window);
+      afterFrame(&WinUiAutomationProbe::pollSelectionEvents);
+    }
+
+    void pollSelectionEvents()
+    {
+      if (_selectionEventClientPtr->tryTakeBulkRequest())
+      {
+        auto const table = findVisualById<Controls::ScrollViewer>(_root, L"modern-track-table");
+        auto const rows =
+          table ? findVisualIf<Controls::ListView>(
+                    table,
+                    [](auto const& list) { return list.SelectionMode() == Controls::ListViewSelectionMode::Extended; })
+                : nullptr;
+
+        if (!rows || rows.Items().Size() != kBulkTrackCount || !activeState().selection.empty())
+        {
+          fail("expected the empty bulk fixture on the mounted native ListView");
+          finish();
+          return;
+        }
+
+        rows.SelectRange(Data::ItemIndexRange{0, kBulkTrackCount});
+      }
+
+      if (auto const optExitCode = _selectionEventClientPtr->exitCode(); optExitCode)
+      {
+        check(*optExitCode == 0, std::format("selection event client exited with status {}", *optExitCode));
+        check(*optExitCode != 0 || activeState().selection.size() == kBulkTrackCount,
+              "bulk gesture did not publish all fixture tracks");
+        finish();
+        return;
+      }
+
+      afterFrame(&WinUiAutomationProbe::pollSelectionEvents);
     }
 
     void selectedModern()
@@ -2853,6 +2936,16 @@ namespace
         return;
       }
 
+      // The inspector toggle is not the menu's anchor and the probe never focuses it.
+      if (auto const toggle = findVisualById<Button>(_root, L"modern-inspector-toggle"); toggle && toggle.IsLoaded())
+      {
+        _retiredInspectorToggle = winrt::make_weak(toggle);
+      }
+      else
+      {
+        fail("could not capture the loaded Modern inspector toggle before switching shells");
+      }
+
       _retiredSelectionSummary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
       invoke(classic);
       afterFrame(&WinUiAutomationProbe::classic);
@@ -2862,6 +2955,7 @@ namespace
     {
       check(_sessionPtr->settings().shellMode == ao::winui::ShellMode::Classic,
             "native menu did not switch the real shell to Classic");
+      _flyout = nullptr;
       auditShell("Classic");
 
       if (_retiredSelectionSummary)
@@ -3222,6 +3316,11 @@ namespace
       check(
         status && status.Visibility() == Visibility::Visible && status.ActualWidth() > 0 && status.Text() == _movedText,
         "Classic status line did not retain the Move outcome after tree restoration");
+
+      // Check after the existing Classic frames, rescan and navigation have let
+      // XAML release the retired tree and settle popup dismissal and focus.
+      _stage = "retired Modern shell release";
+      check(!_retiredInspectorToggle.get(), "the retired Modern inspector toggle still has a native owner");
       finish();
     }
 
@@ -3242,6 +3341,12 @@ namespace
       if (_timeout)
       {
         _timeout.Stop();
+      }
+
+      if (_selectionEventClientPtr)
+      {
+        _selectionEventClientPtr->log();
+        _selectionEventClientPtr.reset();
       }
 
       _windowSizing.reset();
@@ -3273,6 +3378,11 @@ namespace
 
       auto label = std::string_view{_optListPreviewLocale ? "localized List preview" : "naming audit"};
 
+      if (!_selectionEventsRunfile.empty())
+      {
+        label = "selection event probe";
+      }
+
       if (_optSeekRangeMode)
       {
         label = "seek range probe";
@@ -3289,6 +3399,8 @@ namespace
     std::optional<std::filesystem::path> const _optPrimaryFixture;
     bool const _seekSteps;
     std::optional<ao::winui::ShellMode> const _optSeekRangeMode;
+    std::string const _selectionEventsRunfile;
+    std::unique_ptr<ao::winui::test::SelectionEventClient> _selectionEventClientPtr;
     ao::rt::PlaybackOccurrenceId _primaryOccurrence{};
     std::size_t _failures = 0;
     bool _finished = false;
@@ -3339,6 +3451,7 @@ namespace
     ao::rt::ViewId _allTracksViewId{};
     ao::rt::ViewId _composerViewId{};
     Controls::TextBlock _retiredSelectionSummary{nullptr};
+    winrt::weak_ref<Button> _retiredInspectorToggle;
     ao::rt::TrackPresentationSpec const _restoredSpec{
       .id = "windows-column-sort",
       .sortBy = {{.field = ao::rt::TrackSortField::Year, .ascending = false}},
@@ -3359,6 +3472,8 @@ int main(int argc, char** argv)
 
   auto const seedAlbumColumns = argc == 2 && std::string_view{argv[1]} == "--seed-album-columns";
   auto const classicOutput = argc == 2 && std::string_view{argv[1]} == "--classic-output";
+  auto const selectionEventsRunfile =
+    argc == 3 && std::string_view{argv[1]} == "--selection-events" ? std::string{argv[2]} : std::string{};
   auto optPrimaryFixture = std::optional<std::filesystem::path>{};
 
   auto const seekSteps = argc == 3 && std::string_view{argv[1]} == "--seek-steps";
@@ -3377,7 +3492,7 @@ int main(int argc, char** argv)
     }
   }
 
-  if (argc != 1 && !seedAlbumColumns && !classicOutput && !optPrimaryFixture)
+  if (argc != 1 && !seedAlbumColumns && !classicOutput && !optPrimaryFixture && selectionEventsRunfile.empty())
   {
     if (argc == 3 && std::string_view{argv[1]} == "--list-preview")
     {
@@ -3392,7 +3507,8 @@ int main(int argc, char** argv)
     {
       std::cerr << "Usage: ao_winui_automation_probe.exe [--classic-output | --list-preview <packaged locale> | "
                    "--primary-play <absolute private .wav> | --seek-steps <private PCM .wav> | "
-                   "--seek-range <classic|modern> <private PCM .wav> | --seed-album-columns]\n"
+                   "--seek-range <classic|modern> <private PCM .wav> | --seed-album-columns | "
+                   "--selection-events <Bazel runfile>]\n"
                    "Seek modes require an absolute private PCM .wav longer than 11s, at most 16 MiB.\n"
                    "The List preview mode leaves the dialog open for capture; choose Cancel after LIST_PREVIEW_READY.\n"
                    "--seed-album-columns prints a new temporary fixture root for process-restart checks; the caller "
@@ -3419,10 +3535,21 @@ int main(int argc, char** argv)
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     std::int32_t result = 1;
     Application::Start(
-      [&result, optListPreviewLocale, classicOutput, optPrimaryFixture, seekSteps, optSeekRangeMode](auto&&)
+      [&result,
+       optListPreviewLocale,
+       classicOutput,
+       optPrimaryFixture,
+       seekSteps,
+       optSeekRangeMode,
+       selectionEventsRunfile](auto&&)
       {
-        std::ignore = winrt::make<WinUiAutomationProbe>(
-          result, optListPreviewLocale, classicOutput, optPrimaryFixture, seekSteps, optSeekRangeMode);
+        std::ignore = winrt::make<WinUiAutomationProbe>(result,
+                                                        optListPreviewLocale,
+                                                        classicOutput,
+                                                        optPrimaryFixture,
+                                                        seekSteps,
+                                                        optSeekRangeMode,
+                                                        selectionEventsRunfile);
       });
     return result;
   }

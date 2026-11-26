@@ -521,8 +521,9 @@ are manual, with independent entry points; plain `opt` compilation is not the
 managed Release IPO performance baseline. AppKit smoke and the WinUI GUI
 probes have independent native entry points and bundle/resource identities.
 They require explicit runs, except that desktop-enabled Windows wildcard tests
-run `//test:winui_uia_test` on an authenticated interactive console. The two
-WinUI console probes run without that desktop opt-in.
+run `//test:winui_uia_test` and `//test:winui_uia_selection_test` on an
+authenticated interactive console. The two WinUI console probes run without
+that desktop opt-in.
 
 Library/doc/WinUI source inputs use exact declared runfiles, including manifest-only
 Windows execution. The WinUI source-inspection case receives a manifest of authored

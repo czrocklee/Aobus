@@ -769,7 +769,6 @@ fr:table {
     winui_list_status { "Liste : {list}" }
     winui_presentation_failed { "Échec de la vue : {detail}" }
     winui_column_resize_failed { "Échec du redimensionnement de la colonne : {detail}" }
-    winui_column_settings_failed { "Échec des paramètres de colonne : {detail}" }
     winui_column_move_failed { "Échec du déplacement de colonne : {detail}" }
     winui_column_visibility_failed { "Échec de la visibilité de la colonne : {detail}" }
     winui_column_not_sortable { "La colonne ''{column}'' n''est pas triable" }

@@ -30,7 +30,6 @@ namespace ao::i18n::detail
     {.messageId = "winui_list_status", .argumentName = "list"},
     {.messageId = "winui_presentation_failed", .argumentName = "detail"},
     {.messageId = "winui_column_resize_failed", .argumentName = "detail"},
-    {.messageId = "winui_column_settings_failed", .argumentName = "detail"},
     {.messageId = "winui_column_move_failed", .argumentName = "detail"},
     {.messageId = "winui_column_visibility_failed", .argumentName = "detail"},
     {.messageId = "winui_column_not_sortable", .argumentName = "column"},

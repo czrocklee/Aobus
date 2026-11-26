@@ -14,6 +14,7 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 
@@ -29,6 +30,8 @@ namespace ao::rt
 
 namespace ao::winui
 {
+  struct TrackItemSourceIdentity;
+
   struct TrackColumnCellSpec final
   {
     rt::TrackField field = rt::TrackField::Title;
@@ -63,6 +66,16 @@ namespace winrt::Aobus::implementation
                  std::string tertiary,
                  std::string coverArtMonogram);
 
+    // A realized row can outlive its cache entry or its entire item source.
+    void bindSource(std::shared_ptr<ao::winui::TrackItemSourceIdentity const> const& sourcePtr)
+    {
+      _sourcePtr = sourcePtr;
+    }
+    bool hasSource(ao::winui::TrackItemSourceIdentity const& source) const noexcept
+    {
+      return _sourcePtr.get() == &source;
+    }
+
     // These names are the IDL-projected properties consumed by XAML bindings.
     // NOLINTBEGIN(readability-identifier-naming)
     std::uint32_t DisplayIndex() const noexcept { return _displayIndex; }
@@ -90,6 +103,7 @@ namespace winrt::Aobus::implementation
     static constexpr double kTrackRowHeight = 32.0;
     static constexpr double kGroupHeadingHeight = 72.0;
 
+    std::shared_ptr<ao::winui::TrackItemSourceIdentity const> _sourcePtr;
     std::uint32_t _displayIndex = 0;
     std::uint32_t _index = 0;
     std::uint32_t _trackId = 0;

@@ -4,9 +4,9 @@
 // Console probe for the native lazy track item view. The first-party
 // Aobus.TrackRowItem projection is generated only by the WinUI build, so this
 // is the one place the native view contract can meet real rows: lazy size,
-// bounded GetAt, null-result retry, the native least-recently-used cache,
-// display-index lookup, GetMany, iterator exhaustion, and the iterator's
-// strong view reference. Expected contract failures are reported and counted
+// bounded GetAt, read-only vector access, the selection interface, null-result
+// retry, the native least-recently-used cache, source-aware IndexOf, GetMany,
+// and the iterator's strong view reference. Expected failures are reported and counted
 // with a nonzero exit status; the probe never aborts on them.
 
 #include "track/TrackItemView.h"
@@ -17,6 +17,7 @@
 #include <ao/rt/TrackRow.h>
 
 #include <windows.h>
+#include <winrt/Microsoft.UI.Xaml.Data.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
@@ -40,7 +41,8 @@ namespace
 {
   using Item = winrt::Windows::Foundation::IInspectable;
   using ItemIterator = winrt::Windows::Foundation::Collections::IIterator<Item>;
-  using ItemView = winrt::Windows::Foundation::Collections::IVectorView<Item>;
+  using ItemVector = winrt::Windows::Foundation::Collections::IVector<Item>;
+  using winrt::Microsoft::UI::Xaml::Data::ISelectionInfo;
   using ProjectedTrackRow = winrt::Aobus::TrackRowItem;
 
   constexpr std::uint32_t kFirstTrackId = 9000;
@@ -169,7 +171,7 @@ namespace
       return false;
     }
 
-    return winrt::get_unknown(lhs) == winrt::get_unknown(rhs);
+    return lhs.as<::IUnknown>().get() == rhs.as<::IUnknown>().get();
   }
 
   /// The materialized item must be a real first-party projected track row.
@@ -228,6 +230,77 @@ namespace
     report.check(!emptyView.First().HasCurrent(), "an empty view iterates nothing");
   }
 
+  void scenarioIndexedReadOnlyVector(ScenarioReport& report)
+  {
+    report.beginScenario("the native vector exposes full indexed reads and rejects edits");
+    constexpr std::uint32_t kSize = 50000;
+    constexpr auto kLast = kSize - 1;
+    auto provider = RecordingRowProvider{};
+    auto const view = ao::winui::makeTrackItemView(kSize, provider, 4);
+    auto const vector = view.try_as<ItemVector>();
+
+    if (!vector)
+    {
+      report.record("the native item source must expose IVector<IInspectable>");
+      return;
+    }
+
+    auto const readView = vector.GetView();
+    report.check(isSameItem(readView.as<Item>(), view.as<Item>()), "GetView returns the same COM object");
+    report.check(vector.Size() == kSize && readView.Size() == kSize && provider.totalCalls() == 0,
+                 "both interfaces expose the full count without reading any rows");
+    auto const last = vector.GetAt(kLast);
+    checkRowProjection(report, last, kLast);
+    auto tail = std::array<Item, 2>{};
+    report.check(vector.GetMany(kLast, winrt::array_view<Item>{tail}) == 1 && isSameItem(tail[0], last) &&
+                   isSameItem(readView.GetAt(kLast), last),
+                 "indexed and read-only access to the far tail share the same cached row");
+
+    std::uint32_t foundAt = 0;
+    report.check(vector.IndexOf(last, foundAt) && foundAt == kLast, "the indexed lookup finds the last row");
+    report.check(!vector.IndexOf(makeRow(kLast), foundAt), "an unattached row at the same index is not found");
+
+    auto const readOnly = winrt::hresult{E_ACCESSDENIED};
+    report.expectHResult(readOnly, "SetAt must not replace a row", [&] { vector.SetAt(kLast, last); });
+    report.expectHResult(readOnly, "InsertAt must not insert a row", [&] { vector.InsertAt(kLast, last); });
+    report.expectHResult(readOnly, "RemoveAt must not remove a row", [&] { vector.RemoveAt(kLast); });
+    report.expectHResult(readOnly, "Append must not grow the view", [&] { vector.Append(last); });
+    report.expectHResult(readOnly, "RemoveAtEnd must not shrink the view", [&] { vector.RemoveAtEnd(); });
+    report.expectHResult(readOnly, "Clear must not empty the view", [&] { vector.Clear(); });
+    report.expectHResult(readOnly,
+                         "ReplaceAll must not replace the source",
+                         [&] { vector.ReplaceAll(winrt::array_view<Item const>{tail}); });
+    report.check(vector.Size() == kSize && isSameItem(vector.GetAt(kLast), last) && provider.totalCalls() == 1,
+                 "these operations neither mutate the collection nor enumerate its provider");
+  }
+
+  void scenarioSelectionInterface(ScenarioReport& report)
+  {
+    report.beginScenario("the indexed source owns a lazy selection interface");
+
+    constexpr std::int32_t kSize = 50000;
+    auto provider = RecordingRowProvider{};
+    auto const vector = ao::winui::makeTrackItemView(kSize, provider, 4).as<ItemVector>();
+    auto const selection = vector.try_as<ISelectionInfo>();
+
+    if (!selection)
+    {
+      report.record("the native item source must expose ISelectionInfo alongside IVector");
+      return;
+    }
+
+    report.check(
+      isSameItem(selection.as<Item>(), vector.as<Item>()), "the selection and indexed source share identity");
+    report.check(!selection.IsSelected(-1) && !selection.IsSelected(0) && !selection.IsSelected(kSize - 1) &&
+                   !selection.IsSelected(kSize),
+                 "a new source has no selection, including at the boundaries");
+
+    // The console can exercise the empty snapshot without activating a XAML ItemIndexRange.
+    auto const ranges = selection.GetSelectedRanges();
+    report.check(ranges.Size() == 0 && !ranges.First().HasCurrent(), "a new source exposes no selected ranges");
+    report.check(provider.totalCalls() == 0, "selection queries do not materialize rows");
+  }
+
   void scenarioNullProviderRetry(ScenarioReport& report)
   {
     report.beginScenario("null provider results throw and are retried");
@@ -283,33 +356,26 @@ namespace
       "five requested misses, including re-materialization, account for all calls; hits and eviction add none");
   }
 
-  void scenarioIndexOfRealDisplayIndexes(ScenarioReport& report)
+  void scenarioIndexOfSourceRows(ScenarioReport& report)
   {
-    report.beginScenario("IndexOf resolves real display indexes");
+    report.beginScenario("IndexOf finds evicted source rows but rejects rows from another source");
 
     auto provider = RecordingRowProvider{};
-    auto const view = ao::winui::makeTrackItemView(10, provider, 4);
-
+    auto const view = ao::winui::makeTrackItemView(10, provider, 1);
     auto const row = view.GetAt(5);
-    checkRowProjection(report, row, 5);
+    std::ignore = view.GetAt(0); // Evict index 5 from the native cache.
 
     std::uint32_t foundAt = 99;
-    report.check(
-      view.IndexOf(row, foundAt) && foundAt == 5, "IndexOf finds a real materialized row at its display index");
+    report.check(view.IndexOf(row, foundAt) && foundAt == 5, "a retained, evicted row still resolves in its source");
 
-    // IndexOf answers from the row's own projected display index, not from
-    // membership: a first-party row from another view still resolves here.
     auto otherProvider = RecordingRowProvider{};
     auto const otherView = ao::winui::makeTrackItemView(10, otherProvider, 4);
-    auto const borrowedRow = otherView.GetAt(3);
+    auto const borrowedRow = otherView.GetAt(5);
     foundAt = 99;
-    report.check(view.IndexOf(borrowedRow, foundAt) && foundAt == 3,
-                 "IndexOf follows the projected display index, not view membership");
-
-    foundAt = 99;
-    report.check(!view.IndexOf(makeRow(10), foundAt), "a display index at the size bound is not found");
-    foundAt = 99;
-    report.check(!view.IndexOf(makeRow(50), foundAt), "a display index beyond the size bound is not found");
+    report.check(!view.IndexOf(borrowedRow, foundAt) && foundAt == 0,
+                 "a row from another source is not found even with the same position and track id");
+    report.check(provider.totalCalls() == 2 && otherProvider.totalCalls() == 1,
+                 "neither lookup reads the provider or recreates an evicted row");
 
     foundAt = 99;
     report.check(!view.IndexOf(winrt::box_value(L"not a track row"), foundAt), "a non-row object is not found");
@@ -491,9 +557,11 @@ namespace
     auto report = ScenarioReport{};
 
     scenarioLazySizeAndBoundedGetAt(report);
+    scenarioIndexedReadOnlyVector(report);
+    scenarioSelectionInterface(report);
     scenarioNullProviderRetry(report);
     scenarioNativeLruEvictionAndPromotion(report);
-    scenarioIndexOfRealDisplayIndexes(report);
+    scenarioIndexOfSourceRows(report);
     scenarioGetMany(report);
     scenarioIterator(report);
     scenarioOversizedSizeRejected(report);

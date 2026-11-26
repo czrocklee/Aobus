@@ -51,6 +51,7 @@ At 1120 or wider navigation is expanded and the inspector is inline.
 In Modern's minimal presentation, the workspace toolbar remains below the native
 Back and pane-toggle controls. NavigationView owns that chrome clearance; the
 compact and expanded presentations return the reserved band to the workspace.
+The open/close toggle's hit target stays inside the navigation pane and does not cover the first track-table header.
 Below the wide tier the browser summary yields its space to the filter. At the
 narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
@@ -114,16 +115,19 @@ reverses the persisted workspace direction; clicking another sortable header
 starts that field in ascending order.
 The shared width solver uses the current viewport, and a single horizontal
 surface keeps headers and rows aligned when minimum widths overflow.
-Viewport, column, and projection refreshes restore the selected rows and the prior top-visible track after replacing the native item source; an explicit reveal request takes precedence over that scroll anchor.
+Replacing the row source restores the still-projected selected track ids as display-index ranges, without reading each selected row or changing which track has playback priority. If the viewport is at the top and nothing is selected, the refresh shows the new first row. Otherwise it anchors to the already realized top row's track when that track remains, rather than reading an unrealized index from the source being replaced. An explicit reveal still takes precedence.
+A retired row source retains only the rows still in its cache. An uncached read of that retired source does not query the replacement projection. Row gestures affect selection, playback, or track menus only after the table finishes binding the current source and restoring selection; a row still visible from a retired source cannot act on the track now at that position.
 Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
 Group headers are not selectable tracks. A header-only native selection keeps the
 Runtime-selected tracks; mixed selection and Select All retain only valid tracks,
 while a genuine clear still empties the selection.
+An explicit UI Automation Selection query on the list returns providers for selected tracks in the current projection, including virtualized rows. SelectionItem events identify the tracks whose selection changed, not intermediate changes while correcting group headers or restoring a selection. For a bulk change, or when replacing a row source with selected items, the list raises Selection Invalidated so clients can query the new providers. Sending that notification does not fetch every selected row.
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
 An explicit named choice submits the complete spec to Workspace with history recording.
 Only after Runtime accepts it does the picker pin that choice for the base List. Rejection reports an error and changes neither view, history, nor pin. Back and Forward restore the recorded spec, not the current pin.
 A column-header sort creates a temporary presentation labeled with localized
 “Column sort” text; it neither adds a history entry nor replaces the saved preference.
+A successful header sort requests the [coalesced workspace save](../workspace/session.md#frontend-lifecycle-integration). A refused sort does not.
 Only that synthetic presentation is relabeled; opaque unknown identifiers remain
 data. The button's tooltip and accessible name retain the complete label when
 its allocated layout space constrains the painted text.
@@ -153,8 +157,7 @@ WinUI provides no scoped Credits Undo offer.
 
 The selected-row menu also offers [membership and saved-order actions](windows-library-workflows.md#membership-and-saved-order) over a captured stable selection.
 
-The native item view reports the complete display count while materializing rows
-on demand; its row-model least-recently-used cache holds at most 2048 entries.
+The native row source reports the full display count and creates a row only when that index is read. Assigning the source does not enumerate the collection. It is read-only: membership and order stay with the projection. Its row cache holds at most 2048 entries.
 Category table cells own only first-name text/count projections and render localized `+N` including duplicates; sorting/grouping uses the primary name, not all-credit membership.
 Inspector Credits use complete owning sections, displaying every name/kind/role and independent per-kind mixed state. Its all-kind/category edit actions open Properties at the requested scope.
 Both shells pin the selection's cover above the scrolling Inspector fields. Classic uses a smaller size cap than Modern. Now Playing instead follows the playback track, including a restored track before playback resumes. [WinUI cover delivery](../resource/cover-art-delivery.md#winui) owns the shared cache, placeholder states, and cancellation rules.
