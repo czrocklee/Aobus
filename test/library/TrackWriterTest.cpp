@@ -11,6 +11,7 @@
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -23,6 +24,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/Sha256.h>
 
@@ -36,6 +38,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace ao::library::test
 {
@@ -87,11 +90,36 @@ namespace ao::library::test
     static_assert(!CanCommit<LibraryWrite>);
     static_assert(!CanAbort<LibraryWrite>);
 
-    TrackBuilder builderFrom(MusicLibrary& library, TrackWriter const& writer, TrackId const id)
+    TrackBuilder loadForEdit(TrackWriter const& writer,
+                             TrackId id,
+                             TrackWriter::EditTier tier = TrackWriter::EditTier::Complete)
     {
-      auto const optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      return TrackBuilder::fromCompleteView(*optView, library.dictionary());
+      auto optBuilder = writer.loadForEdit(id, tier);
+      REQUIRE(optBuilder);
+      return *std::move(optBuilder);
+    }
+
+    DictionaryId soleRoleId(TrackView const& view)
+    {
+      auto const entries = view.performance().credits();
+      REQUIRE(entries.size() == 1);
+      return entries.front().roleId;
+    }
+
+    CreditView soleCredit(TrackBuilder const& builder)
+    {
+      auto const entries = builder.metadata().credits();
+      REQUIRE(entries.size() == 1);
+      return entries.front();
+    }
+
+    void setRole(TrackWriter& writer, TrackId id, std::string_view role)
+    {
+      auto builder = loadForEdit(writer, id);
+      auto credit = soleCredit(builder);
+      credit.role = role;
+      builder.metadata().credits(std::array{credit});
+      REQUIRE(writer.updateCold(id, builder));
     }
   } // namespace
 
@@ -210,7 +238,7 @@ namespace ao::library::test
     auto transaction = writeTransaction(library);
 
     auto createRes = transaction.apply(
-      [&library, &oversizedValue, existingId](LibraryWrite& write) -> Result<TrackId>
+      [&oversizedValue, existingId](LibraryWrite& write) -> Result<TrackId>
       {
         auto writer = write.tracks();
         auto created = TrackBuilder::makeEmpty();
@@ -221,7 +249,7 @@ namespace ao::library::test
         REQUIRE_FALSE(createRejectedRes);
         CHECK(createRejectedRes.error().code == Error::Code::ValueTooLarge);
 
-        auto updated = builderFrom(library, writer, existingId);
+        auto updated = loadForEdit(writer, existingId);
         updated.metadata().artist("Must not be interned");
         updated.customMetadata().add("oversized-key", oversizedValue);
         auto const updateRejectedRes = writer.update(existingId, updated);
@@ -282,14 +310,10 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto const optComplete = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
-        REQUIRE(optComplete);
-        auto complete = TrackBuilder::fromCompleteView(*optComplete, library.dictionary());
+        auto complete = loadForEdit(writer, trackId);
         REQUIRE(writer.validate(complete));
 
-        auto const optHot = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(optHot);
-        auto hotOnly = TrackBuilder::fromHotView(*optHot, library.dictionary());
+        auto hotOnly = loadForEdit(writer, trackId, TrackWriter::EditTier::Hot);
         auto hotOnlyRes = writer.validate(hotOnly);
         REQUIRE_FALSE(hotOnlyRes);
         CHECK(hotOnlyRes.error().code == Error::Code::InvalidInput);
@@ -318,7 +342,7 @@ namespace ao::library::test
         [&](LibraryWrite& write)
         {
           auto writer = write.tracks();
-          auto full = builderFrom(library, writer, trackId);
+          auto full = loadForEdit(writer, trackId);
           full.metadata().title("Full update");
           full.property().duration(std::chrono::seconds{210});
           return writer.update(trackId, full);
@@ -332,7 +356,7 @@ namespace ao::library::test
         [&](LibraryWrite& write)
         {
           auto writer = write.tracks();
-          auto cold = builderFrom(library, writer, trackId);
+          auto cold = loadForEdit(writer, trackId);
           cold.metadata().title("Ignored by cold update");
           cold.property().duration(std::chrono::seconds{220});
           return writer.updateCold(trackId, cold);
@@ -349,7 +373,7 @@ namespace ao::library::test
         [&](LibraryWrite& write)
         {
           auto writer = write.tracks();
-          auto replacement = builderFrom(library, writer, trackId);
+          auto replacement = loadForEdit(writer, trackId);
           replacement.metadata().title("Replacement");
           replacement.property().duration(std::chrono::seconds{230});
           auto const optManifest = writer.manifest("updates.flac");
@@ -389,21 +413,18 @@ namespace ao::library::test
           auto writer = write.tracks();
 
           {
-            auto builder = builderFrom(library, writer, trackId);
+            auto builder = loadForEdit(writer, trackId);
             builder.metadata().clearTitleExplicitly();
             REQUIRE(writer.updateHot(trackId, builder));
           }
 
-          auto const optHot = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
-          REQUIRE(optHot);
-          auto hot = TrackBuilder::fromHotView(*optHot, library.dictionary());
+          auto hot = loadForEdit(writer, trackId, TrackWriter::EditTier::Hot);
           CHECK(hot.metadata().isTitleExplicitlyCleared());
           hot.tags().clear().add("first").add("second");
           return writer.updateHot(trackId, hot);
         }));
       REQUIRE(transaction.commit());
 
-      // Subsequent reconstruction can resolve the newly published tag IDs.
       transaction = writeTransaction(library);
       REQUIRE(transaction.apply(
         [&](LibraryWrite& write) -> Result<>
@@ -411,13 +432,13 @@ namespace ao::library::test
           auto writer = write.tracks();
 
           {
-            auto cold = builderFrom(library, writer, trackId);
+            auto cold = loadForEdit(writer, trackId);
             cold.metadata().title("Ignored by cold update");
             cold.property().duration(std::chrono::seconds{225});
             REQUIRE(writer.updateCold(trackId, cold));
           }
 
-          auto complete = builderFrom(library, writer, trackId);
+          auto complete = loadForEdit(writer, trackId);
           CHECK(complete.metadata().isTitleExplicitlyCleared());
           complete.metadata().year(2001);
           return writer.update(trackId, complete);
@@ -438,6 +459,156 @@ namespace ao::library::test
     CHECK(library.dictionary().get(optTrack->tags().id(1)) == "second");
   }
 
+  TEST_CASE("TrackWriter - an unpublished credit role survives a same-write duration edit and reopen")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const db = temp.path() / "db";
+    auto id = kInvalidTrackId;
+    auto stagedId = kInvalidDictionaryId;
+    constexpr auto kDuration = std::chrono::seconds{225};
+    auto expectedRole = std::string_view{"Pianist"};
+
+    SECTION("duration edit only")
+    {
+    }
+
+    SECTION("replace the role after the duration edit")
+    {
+      expectedRole = "Conductor";
+    }
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), db);
+      id = addTrack(library, TrackSpec{.credits = {{.name = "Performer"}}});
+      auto const& dictionary = library.dictionary();
+      REQUIRE(dictionary.findId("Performer"));
+      auto transaction = writeTransaction(library);
+      auto const observationRes = transaction.apply(
+        [&](LibraryWrite& write) -> Result<std::pair<std::string, std::string>>
+        {
+          auto writer = write.tracks();
+          auto const optSeed = writer.get(id);
+          REQUIRE(optSeed);
+          CHECK(soleRoleId(*optSeed) == kInvalidDictionaryId);
+          CHECK(soleCredit(loadForEdit(writer, id)).role.empty());
+          setRole(writer, id, "Pianist");
+
+          auto other = write.tracks();
+          auto const optStaged = other.get(id);
+          REQUIRE(optStaged);
+          stagedId = soleRoleId(*optStaged);
+          REQUIRE(stagedId != kInvalidDictionaryId);
+          CHECK_FALSE(dictionary.findId("Pianist"));
+          CHECK(dictionary.getOrDefault(stagedId, "unpublished") == "unpublished");
+          // Only the role is unpublished. The committed-only projection must not turn it into absence.
+          auto const rejectedRes = TrackBuilder::fromCommittedCompleteView(*optStaged, dictionary);
+          REQUIRE_FALSE(rejectedRes);
+          CHECK(rejectedRes.error().code == Error::Code::InvalidInput);
+
+          auto hot = loadForEdit(other, id, TrackWriter::EditTier::Hot);
+          hot.tags().add("studio");
+          REQUIRE(other.updateHot(id, hot));
+          auto const stagedHot = loadForEdit(writer, id, TrackWriter::EditTier::Hot);
+          REQUIRE(stagedHot.tags().names().size() == 1);
+          CHECK(stagedHot.tags().names().front() == "studio");
+          CHECK(stagedHot.metadata().credits().empty());
+          CHECK_FALSE(dictionary.findId("studio"));
+
+          auto complete = loadForEdit(other, id);
+          CHECK(soleCredit(complete).name == "Performer");
+          CHECK(soleCredit(complete).role == "Pianist");
+          complete.property().duration(kDuration);
+          REQUIRE(other.updateCold(id, complete));
+          auto const optAfter = writer.get(id);
+          REQUIRE(optAfter);
+          CHECK(optAfter->property().duration() == kDuration);
+          CHECK(soleRoleId(*optAfter) == stagedId);
+          auto before = std::string{soleCredit(loadForEdit(other, id)).role};
+
+          if (expectedRole != "Pianist")
+          {
+            setRole(writer, id, expectedRole);
+          }
+
+          CHECK_FALSE(dictionary.findId(expectedRole));
+          return std::pair{std::move(before), std::string{soleCredit(loadForEdit(other, id)).role}};
+        });
+      REQUIRE(observationRes);
+      CHECK(observationRes->first == "Pianist");
+      CHECK(observationRes->second == expectedRole);
+      REQUIRE(transaction.commit());
+    }
+
+    auto library = makeTestMusicLibrary(temp.path(), db);
+    auto const& dictionary = library.dictionary();
+    {
+      auto const read = library.readTransaction();
+      auto const optView = library.tracks().reader(read).get(id);
+      REQUIRE(optView);
+      CHECK(optView->property().duration() == kDuration);
+      CHECK(dictionary.findId("Pianist") == stagedId);
+      auto const roleId = soleRoleId(*optView);
+      REQUIRE(roleId != kInvalidDictionaryId);
+      CHECK(dictionary.findId(expectedRole) == roleId);
+      CHECK((roleId == stagedId) == (expectedRole == "Pianist"));
+      // Commit-first control: the row can now be decoded with the published dictionary alone.
+      auto const projected = ao::test::requireValue(TrackBuilder::fromCommittedCompleteView(*optView, dictionary));
+      CHECK(soleCredit(projected).role == expectedRole);
+    }
+
+    auto const generation = dictionary.generation();
+    auto unchanged = writeTransaction(library);
+    REQUIRE(unchanged.apply(
+      [&](LibraryWrite& write)
+      {
+        auto writer = write.tracks();
+        return writer.updateCold(id, loadForEdit(writer, id));
+      }));
+    REQUIRE(unchanged.commit());
+    CHECK(dictionary.generation() == generation);
+  }
+
+  TEST_CASE("TrackWriter - a failed commit does not bind a reused role ID to its old text")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const id = addTrack(library, TrackSpec{.credits = {{.name = "Performer"}}});
+    auto failed = writeTransaction(
+      library, {.optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "failed role commit"}});
+    auto const failedRoleRes = failed.apply(
+      [&](LibraryWrite& write) -> Result<DictionaryId>
+      {
+        auto writer = write.tracks();
+        setRole(writer, id, "Discarded");
+        CHECK(soleCredit(loadForEdit(writer, id)).role == "Discarded");
+        auto const optView = writer.get(id);
+        REQUIRE(optView);
+        return soleRoleId(*optView);
+      });
+    REQUIRE(failedRoleRes);
+    REQUIRE(*failedRoleRes != kInvalidDictionaryId);
+    auto const commitRes = failed.commit();
+    REQUIRE_FALSE(commitRes);
+    CHECK(commitRes.error().code == Error::Code::IoError);
+
+    auto retry = writeTransaction(library);
+    REQUIRE(retry.apply(
+      [&](LibraryWrite& write) -> Result<>
+      {
+        auto writer = write.tracks();
+        CHECK(soleCredit(loadForEdit(writer, id)).role.empty());
+        setRole(writer, id, "Pianist");
+        auto const optView = writer.get(id);
+        REQUIRE(optView);
+        REQUIRE(soleRoleId(*optView) == *failedRoleRes);
+        CHECK(soleCredit(loadForEdit(writer, id)).role == "Pianist");
+        return {};
+      }));
+    REQUIRE(retry.commit());
+    CHECK_FALSE(library.dictionary().findId("Discarded"));
+    CHECK(library.dictionary().findId("Pianist") == *failedRoleRes);
+  }
+
   TEST_CASE("TrackWriter - ordinary updates preserve the URI and manifest binding")
   {
     auto const temp = ao::test::TempDir{};
@@ -450,7 +621,7 @@ namespace ao::library::test
         [&](LibraryWrite& write) -> Result<>
         {
           auto writer = write.tracks();
-          auto track = builderFrom(library, writer, trackId);
+          auto track = loadForEdit(writer, trackId);
           track.metadata().title("After");
           track.property().uri("ignored-by-hot-update.flac");
 
@@ -491,7 +662,7 @@ namespace ao::library::test
       [&](LibraryWrite& write)
       {
         auto writer = write.tracks();
-        auto track = builderFrom(library, writer, trackId);
+        auto track = loadForEdit(writer, trackId);
         track.metadata().title("Rejected");
         track.property().uri("after.flac");
         return writer.update(trackId, track);
@@ -519,7 +690,7 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto track = builderFrom(library, writer, trackId);
+        auto track = loadForEdit(writer, trackId);
         track.property().uri("new.flac");
         auto optManifest = writer.manifest("old.flac");
         REQUIRE(optManifest);

@@ -500,8 +500,7 @@ namespace ao::rt
 
         auto& tagImpactWork = *optTagImpactWork;
         auto const tags = std::array{tagImpactWork.impact.tag};
-        auto tagEditRes =
-          detail::applyTagPatchInTransaction(library, transaction, tagImpactWork.taggedTrackIds, {}, tags);
+        auto tagEditRes = detail::applyTagPatchInTransaction(transaction, tagImpactWork.taggedTrackIds, {}, tags);
 
         if (!tagEditRes)
         {
@@ -578,8 +577,7 @@ namespace ao::rt
 
         auto& tagImpactWork = *optTagImpactWork;
         auto const tags = std::array{tagImpactWork.impact.tag};
-        auto tagEditRes =
-          detail::applyTagPatchInTransaction(library, transaction, tagImpactWork.taggedTrackIds, {}, tags);
+        auto tagEditRes = detail::applyTagPatchInTransaction(transaction, tagImpactWork.taggedTrackIds, {}, tags);
 
         if (!tagEditRes)
         {

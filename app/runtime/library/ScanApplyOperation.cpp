@@ -1082,7 +1082,6 @@ namespace ao::rt
     }
 
     auto trackWriter = write.tracks();
-    auto const& dictionary = _ml.dictionary();
 
     admitItemsAgainstDatabase(trackWriter, stopToken);
 
@@ -1104,7 +1103,7 @@ namespace ao::rt
           break;
         }
 
-        if (auto itemRes = applyScanItem(i, _preparedItems[i].get(), trackWriter, dictionary); !itemRes)
+        if (auto itemRes = applyScanItem(i, _preparedItems[i].get(), trackWriter); !itemRes)
         {
           return std::unexpected{std::move(itemRes.error())};
         }
@@ -1433,8 +1432,7 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::applyScanItem(std::size_t itemIndex,
                                              PreparedScanItem const* preparedItem,
-                                             library::TrackWriter& trackWriter,
-                                             library::DictionaryStore const& dictionary)
+                                             library::TrackWriter& trackWriter)
   {
     auto const& item = _plan.items()[itemIndex];
 
@@ -1461,13 +1459,13 @@ namespace ao::rt
 
     if (isPlainSpelling(item))
     {
-      applyPlainSpelling(item, trackWriter, dictionary);
+      applyPlainSpelling(item, trackWriter);
       return {};
     }
 
     if ((item.optManifestEvidence && !item.optManifestEvidence->members.empty()) || !preparedItem->segments.empty())
     {
-      return applyCarrierItem(item, *preparedItem, trackWriter, dictionary);
+      return applyCarrierItem(item, *preparedItem, trackWriter);
     }
 
     AO_INVARIANT(preparedItem->optBuilder, "Prepared media refresh has no builder");
@@ -1482,14 +1480,14 @@ namespace ao::rt
         return {};
       }
 
-      return applyChangedItem(item, trackWriter, dictionary, builder, *optIdentity);
+      return applyChangedItem(item, trackWriter, builder, *optIdentity);
     }
 
     if (isRelink(item))
     {
       _abortTransaction = true;
 
-      if (optIdentity && tryApplyRefreshedRelink(item, trackWriter, dictionary, builder, *optIdentity))
+      if (optIdentity && tryApplyRefreshedRelink(item, trackWriter, builder, *optIdentity))
       {
         _abortTransaction = false;
       }
@@ -1662,17 +1660,16 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::applyChangedItem(ScanItem const& item,
                                                 library::TrackWriter& trackWriter,
-                                                library::DictionaryStore const& dictionary,
                                                 library::TrackBuilder& builder,
                                                 library::AudioIdentity const& identity)
   {
-    auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
-    AO_INVARIANT(optExisting,
+    auto optMerged = trackWriter.loadForEdit(item.trackId);
+    AO_INVARIANT(optMerged,
                  "Prevalidated changed scan item '{}' lost Track {} inside one write transaction",
                  item.uri,
                  item.trackId.raw());
 
-    auto merged = library::TrackBuilder::fromCompleteView(*optExisting, dictionary);
+    auto& merged = *optMerged;
     merged.property()
       .duration(builder.property().duration())
       .bitrate(builder.property().bitrate())
@@ -1698,9 +1695,7 @@ namespace ao::rt
     return {};
   }
 
-  void ScanApplyOperation::applyPlainSpelling(ScanItem const& item,
-                                              library::TrackWriter& writer,
-                                              library::DictionaryStore const& dictionary)
+  void ScanApplyOperation::applyPlainSpelling(ScanItem const& item, library::TrackWriter& writer)
   {
     auto const optManifest = writer.manifest(item.oldUri);
     AO_INVARIANT(optManifest, "Admitted spelling source lost its manifest inside the write transaction");
@@ -1723,12 +1718,11 @@ namespace ao::rt
     }
     else
     {
-      auto const optTrack = writer.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
-      AO_INVARIANT(optTrack, "Admitted spelling source lost its Track inside the write transaction");
-      auto merged = library::TrackBuilder::fromCompleteView(*optTrack, dictionary);
-      merged.property().uri(item.uri);
+      auto optMerged = writer.loadForEdit(item.trackId);
+      AO_INVARIANT(optMerged, "Admitted spelling source lost its Track inside the write transaction");
+      optMerged->property().uri(item.uri);
 
-      if (auto res = writer.relink(item.trackId, merged, std::move(manifest)); !res)
+      if (auto res = writer.relink(item.trackId, *optMerged, std::move(manifest)); !res)
       {
         reportFailure(item.uri, "relink", res.error().message);
         _abortTransaction = true;
@@ -1743,7 +1737,6 @@ namespace ao::rt
 
   bool ScanApplyOperation::tryApplyRefreshedRelink(ScanItem const& item,
                                                    library::TrackWriter& trackWriter,
-                                                   library::DictionaryStore const& dictionary,
                                                    library::TrackBuilder& builder,
                                                    library::AudioIdentity const& identity)
   {
@@ -1768,21 +1761,22 @@ namespace ao::rt
       }
     }
 
-    auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
+    auto optMerged = trackWriter.loadForEdit(item.trackId);
 
-    if (!optExisting)
+    if (!optMerged)
     {
       reportFailure(item.uri, "read existing track for", "track record was not found");
       return false;
     }
 
-    if (optExisting->property().uri() != item.oldUri)
+    auto& merged = *optMerged;
+
+    if (merged.property().uri() != item.oldUri)
     {
       reportFailure(item.uri, "relink", "stored Track URI no longer matches the planned source");
       return false;
     }
 
-    auto merged = library::TrackBuilder::fromCompleteView(*optExisting, dictionary);
     merged.property()
       .uri(item.uri)
       .duration(builder.property().duration())
@@ -1851,8 +1845,7 @@ namespace ao::rt
 
   Result<> ScanApplyOperation::applyCarrierItem(ScanItem const& item,
                                                 PreparedScanItem const& prepared,
-                                                library::TrackWriter& writer,
-                                                library::DictionaryStore const& dictionary)
+                                                library::TrackWriter& writer)
   {
     AO_INVARIANT(prepared.optBuilder, "Prepared carrier has no media builder");
 
@@ -1869,17 +1862,16 @@ namespace ao::rt
     // Rate, range and derived duration belong to the immutable carrier structure.
     auto const mergeMember = [&](TrackId const trackId)
     {
-      auto const optTrack = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-      AO_INVARIANT(optTrack, "Admitted carrier lost its member inside the write transaction");
-      auto merged = library::TrackBuilder::fromCompleteView(*optTrack, dictionary);
-      merged.property()
+      auto optMerged = writer.loadForEdit(trackId);
+      AO_INVARIANT(optMerged, "Admitted carrier lost its member inside the write transaction");
+      optMerged->property()
         .uri(item.uri)
         .bitrate(parsed.property().bitrate())
         .channels(parsed.property().channels())
         .codec(parsed.property().codec())
         .bitDepth(parsed.property().bitDepth());
-      applyFileCoverArt(merged, parsed);
-      return merged;
+      applyFileCoverArt(*optMerged, parsed);
+      return std::move(*optMerged);
     };
 
     if (item.classification == ScanClassification::Moved &&

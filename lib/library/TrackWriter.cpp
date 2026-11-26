@@ -182,6 +182,28 @@ namespace ao::library
     return detail::WriteTransactionAccess::trackStoreWriter(*_transaction).get(id, mode);
   }
 
+  std::optional<TrackBuilder> TrackWriter::loadForEdit(TrackId id, EditTier tier) const
+  {
+    auto const hotOnly = tier == EditTier::Hot;
+    auto const optView = get(id, hotOnly ? TrackStore::Reader::LoadMode::Hot : TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return std::nullopt;
+    }
+
+    auto const& dictionary = detail::WriteTransactionAccess::dictionary(*_transaction);
+    auto const resolve = [&dictionary](DictionaryId reference)
+    {
+      auto const optText = dictionary.findText(reference);
+      AO_INVARIANT(optText, "Admitted Track references missing dictionary ID {}", reference.raw());
+      return *optText;
+    };
+
+    auto const baseline = hotOnly ? TrackBuilder::BaselineKind::HotOnly : TrackBuilder::BaselineKind::Complete;
+    return TrackBuilder::projectView(*optView, baseline, resolve);
+  }
+
   std::optional<FileManifestView> TrackWriter::manifest(std::string_view const uri) const
   {
     requireActiveOperation();

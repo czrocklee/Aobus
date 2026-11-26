@@ -30,6 +30,12 @@ namespace ao::library
   class TrackWriter final
   {
   public:
+    enum class EditTier : std::uint8_t
+    {
+      Hot,
+      Complete,
+    };
+
     ~TrackWriter() = default;
 
     TrackWriter(TrackWriter const&) = delete;
@@ -45,6 +51,16 @@ namespace ao::library
 
     std::optional<TrackView> get(TrackId id,
                                  TrackStore::Reader::LoadMode mode = TrackStore::Reader::LoadMode::Both) const;
+
+    /**
+     * Load an editable baseline from this writer, including dictionary text staged
+     * earlier in the transaction. Returns nullopt only for a missing Track.
+     * The builder borrows its inputs and retains library-local Resource IDs:
+     * consume it in this write before another mutation or the end of this
+     * apply operation. A Hot baseline is only for updateHot().
+     */
+    std::optional<TrackBuilder> loadForEdit(TrackId id, EditTier tier = EditTier::Complete) const;
+
     /** Looks up one manifest by canonical, root-relative LibraryUri text. */
     std::optional<FileManifestView> manifest(std::string_view uri) const;
 

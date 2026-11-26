@@ -253,7 +253,7 @@ namespace ao::rt
       }
 
       auto tags = std::array<std::string, 1>{tag};
-      auto editRes = detail::applyTagPatchInTransaction(library, transaction, targets, tags, {});
+      auto editRes = detail::applyTagPatchInTransaction(transaction, targets, tags, {});
 
       if (!editRes)
       {
@@ -333,7 +333,7 @@ namespace ao::rt
       }
 
       auto tags = std::array<std::string, 1>{tag};
-      auto editRes = detail::applyTagPatchInTransaction(library, transaction, targets, {}, tags);
+      auto editRes = detail::applyTagPatchInTransaction(transaction, targets, {}, tags);
 
       if (!editRes)
       {

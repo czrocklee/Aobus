@@ -89,8 +89,14 @@ The resolved dictionary and Resource IDs in prepared records are tied to the lib
 Once preparation or writing has staged an effect, a later failure must reach the root boundary so the whole transaction rolls back.
 Dictionary rows, Resource descriptors, Track records, manifest bindings, List records, the raised id space, and the candidate revision commit atomically when one operation composes them.
 
-Building from a Track view or setting text or cover bytes does not extend the input's lifetime.
-Supply live inputs at each writer call, and reacquire mapped inputs after an earlier write in the same transaction rather than reusing old views.
+To edit a Track in an active write, call `writer.loadForEdit(id)` rather than projecting a writer view against the committed dictionary.
+It resolves tags and other dictionary text staged in the same transaction and returns `std::nullopt` only for a missing Track.
+The default loads the complete Track; use `TrackWriter::EditTier::Hot` for `updateHot()` when no cold fields are needed.
+The [checked view factories](../../reference/library/storage/database.md#view-safety) are for committed views only.
+
+Building from a Track view or setting text or cover bytes does not extend the input's lifetime; supply live inputs at each writer call.
+Consume edit builders and inputs borrowed from the write transaction before any intervening mutation, even through another writer handle, and before the `apply()` callback ends.
+After a mutation, reload the builder or reacquire the mapped input instead of reusing it.
 
 Physical Store writers and mutable LMDB reservations are library implementation details.
 Production callers submit semantic builders to the logical writers rather than serialized records.

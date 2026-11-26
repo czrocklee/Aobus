@@ -99,7 +99,8 @@ namespace ao::rt::test
         auto const optView =
           storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optView);
-        auto builder = library::TrackBuilder::fromHotView(*optView, storage.library().dictionary());
+        auto const builder =
+          ao::test::requireValue(library::TrackBuilder::fromCommittedHotView(*optView, storage.library().dictionary()));
         return std::ranges::contains(builder.tags().names(), tag);
       }
 

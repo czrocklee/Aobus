@@ -136,7 +136,9 @@ namespace ao::library::test
           auto const view = *writer.get(ids[0]);
           CHECK(view.property().segment() == TrackSegment{.startFrame = 1000, .frameCount = 588, .ordinal = 9});
           CHECK(view.property().duration() == std::chrono::milliseconds{13});
-          auto builder = TrackBuilder::fromCompleteView(view, library.dictionary());
+          auto optBuilder = writer.loadForEdit(ids[0]);
+          REQUIRE(optBuilder);
+          auto& builder = *optBuilder;
           builder.metadata().title("Refreshed");
           builder.property().bitrate(Bitrate{1000}).duration(std::chrono::seconds{123});
           auto const coverBytes = std::array{std::byte{1}, std::byte{2}, std::byte{3}};
@@ -296,7 +298,9 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto builder = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
+        auto optBuilder = writer.loadForEdit(ids[0]);
+        REQUIRE(optBuilder);
+        auto& builder = *optBuilder;
 
         SECTION("complete update removes segment")
         {
@@ -324,9 +328,10 @@ namespace ao::library::test
 
         SECTION("hot-only update changes rate")
         {
-          builder = TrackBuilder::fromHotView(*writer.get(ids[0]), library.dictionary());
-          builder.property().sampleRate(SampleRate{48000});
-          return writer.updateHot(ids[0], builder);
+          auto optHot = writer.loadForEdit(ids[0], TrackWriter::EditTier::Hot);
+          REQUIRE(optHot);
+          optHot->property().sampleRate(SampleRate{48000});
+          return writer.updateHot(ids[0], *optHot);
         }
 
         SECTION("replace converts segment to whole")
@@ -379,16 +384,19 @@ namespace ao::library::test
         [&](LibraryWrite& write) -> Result<>
         {
           auto writer = write.tracks();
-          auto hot = TrackBuilder::fromHotView(*writer.get(ids[0]), library.dictionary());
-          hot.metadata().title("Hot refresh");
-          REQUIRE(writer.updateHot(ids[0], hot));
-          auto complete = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
-          complete.property().bitrate(Bitrate{2345});
-          REQUIRE(writer.updateCold(ids[0], complete));
+          auto optHot = writer.loadForEdit(ids[0], TrackWriter::EditTier::Hot);
+          REQUIRE(optHot);
+          optHot->metadata().title("Hot refresh");
+          REQUIRE(writer.updateHot(ids[0], *optHot));
+          auto optComplete = writer.loadForEdit(ids[0]);
+          REQUIRE(optComplete);
+          optComplete->property().bitrate(Bitrate{2345});
+          REQUIRE(writer.updateCold(ids[0], *optComplete));
           // Rebuild after each mutation: builders borrow mapped URI/metadata bytes.
-          complete = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
-          complete.metadata().title("Replacement");
-          REQUIRE(writer.replace(ids[0], complete, FileManifestBuilder::makeEmpty().fileSize(9876)));
+          optComplete = writer.loadForEdit(ids[0]);
+          REQUIRE(optComplete);
+          optComplete->metadata().title("Replacement");
+          REQUIRE(writer.replace(ids[0], *optComplete, FileManifestBuilder::makeEmpty().fileSize(9876)));
           REQUIRE(writer.updateManifest(ids[1], FileManifestBuilder::makeEmpty().status(FileStatus::Missing)));
           return {};
         }));

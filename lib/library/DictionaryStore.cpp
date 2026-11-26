@@ -141,28 +141,26 @@ namespace ao::library
 
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
-    auto const lock = std::shared_lock{_mutex};
-    auto index = id.raw();
-
-    // 0 is null/invalid
-    AO_EXPECTS(index != 0, "Invalid dictionary ID");
-
-    AO_EXPECTS(index <= _publishedSize, "Invalid dictionary ID");
-
-    return _idToStringStorage[index - 1];
+    auto const optText = findText(id);
+    AO_EXPECTS(optText, "Invalid dictionary ID");
+    return *optText;
   }
 
   std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
   {
-    auto const lock = std::shared_lock{_mutex};
-    auto index = id.raw();
+    return findText(id).value_or(defaultValue);
+  }
 
-    if (index == 0 || index > _publishedSize)
+  std::optional<std::string_view> DictionaryStore::findText(DictionaryId id) const
+  {
+    auto const lock = std::shared_lock{_mutex};
+
+    if (id == kInvalidDictionaryId || id.raw() > _publishedSize)
     {
-      return defaultValue;
+      return std::nullopt;
     }
 
-    return _idToStringStorage[index - 1];
+    return _idToStringStorage[id.raw() - 1];
   }
 
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
@@ -223,6 +221,24 @@ namespace ao::library
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
+
+    std::optional<std::string_view> findText(DictionaryId id) const
+    {
+      // Successful inserts append one iterator per dense ID in first-use order.
+      if (!delta.empty() && id >= delta.front()->second)
+      {
+        auto const offset = id.raw() - delta.front()->second.raw();
+
+        if (offset >= delta.size())
+        {
+          return std::nullopt;
+        }
+
+        return delta[offset]->first;
+      }
+
+      return dictionary->findText(id);
+    }
 
     std::optional<DictionaryId> findExactId(std::string_view value) const
     {
@@ -409,6 +425,11 @@ namespace ao::library
   Result<DictionaryId> DictionaryStore::Writer::intern(std::string_view value)
   {
     return _implPtr->intern(value);
+  }
+
+  std::optional<std::string_view> DictionaryStore::Writer::findText(DictionaryId id) const
+  {
+    return _implPtr->findText(id);
   }
 
   void DictionaryStore::Writer::preparePublication()

@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -50,11 +51,12 @@ namespace ao::library
    * immutable values and serializes them directly into storage-owned bytes.
    *
    * Usage:
-   *   // Pattern A: from existing view, modify hot only
-   *   auto builder = TrackBuilder::fromHotView(view, dictionary);
-   *   builder.tags().add("rock").remove("jazz");
+   *   // Pattern A: modify hot fields of an existing Track in the writer
    *   auto writer = write.tracks();
-   *   writer.updateHot(trackId, builder);
+   *   if (auto optBuilder = writer.loadForEdit(trackId, TrackWriter::EditTier::Hot)) {
+   *     optBuilder->tags().add("rock").remove("jazz");
+   *     return writer.updateHot(trackId, *optBuilder);
+   *   }
    *
    *   // Pattern B: create new track
    *   auto builder = TrackBuilder::makeEmpty();
@@ -70,11 +72,19 @@ namespace ao::library
   public:
     // Factory methods
     static TrackBuilder makeEmpty();
-    static TrackBuilder fromCompleteView(TrackView const& view, DictionaryStore const& dictionary);
-    static TrackBuilder fromHotView(TrackView const& view, DictionaryStore const& dictionary);
+
+    /**
+     * Project an admitted, committed Track using its own library's dictionary.
+     * The requested sides must be loaded. A reference outside the published
+     * dictionary returns InvalidInput; in-range IDs cannot prove provenance.
+     * Text remains borrowed and cover Resource IDs are local to that library.
+     * Use TrackWriter::loadForEdit for views of an active write transaction.
+     */
+    static Result<TrackBuilder> fromCommittedCompleteView(TrackView const& view, DictionaryStore const& dictionary);
+    static Result<TrackBuilder> fromCommittedHotView(TrackView const& view, DictionaryStore const& dictionary);
 
     //=============================================================================
-    // Sub-builders - own the data as string_view
+    // Sub-builders store borrowed string views.
     //=============================================================================
     class MetadataBuilder
     {
@@ -384,6 +394,13 @@ namespace ao::library
       Complete,
       HotOnly,
     };
+
+    static Result<TrackBuilder> fromCommittedView(TrackView const& view,
+                                                  DictionaryStore const& dictionary,
+                                                  BaselineKind baseline);
+    static TrackBuilder projectView(TrackView const& view,
+                                    BaselineKind baseline,
+                                    std::function<std::string_view(DictionaryId)> const& resolve);
 
     // Private helper methods for serialization
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);

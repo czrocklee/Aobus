@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureDirectory.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
@@ -95,7 +96,8 @@ namespace ao::rt::test
       auto const optView =
         libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
-      auto builder = library::TrackBuilder::fromHotView(*optView, libraryFixture.library().dictionary());
+      auto const builder = ao::test::requireValue(
+        library::TrackBuilder::fromCommittedHotView(*optView, libraryFixture.library().dictionary()));
       return std::ranges::contains(builder.tags().names(), tag);
     }
 

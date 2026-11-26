@@ -31,6 +31,7 @@
 #include <cstring>
 #include <expected>
 #include <format>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <span>
@@ -196,15 +197,63 @@ namespace ao::library
     return TrackBuilder{};
   }
 
-  TrackBuilder TrackBuilder::fromHotView(TrackView const& view, DictionaryStore const& dictionary)
+  Result<TrackBuilder> TrackBuilder::fromCommittedCompleteView(TrackView const& view, DictionaryStore const& dictionary)
+  {
+    return fromCommittedView(view, dictionary, BaselineKind::Complete);
+  }
+
+  Result<TrackBuilder> TrackBuilder::fromCommittedHotView(TrackView const& view, DictionaryStore const& dictionary)
+  {
+    return fromCommittedView(view, dictionary, BaselineKind::HotOnly);
+  }
+
+  Result<TrackBuilder> TrackBuilder::fromCommittedView(TrackView const& view,
+                                                       DictionaryStore const& dictionary,
+                                                       BaselineKind baseline)
+  {
+    auto const resolve = [&dictionary](DictionaryId id)
+    {
+      auto const optText = dictionary.findText(id);
+
+      if (!optText)
+      {
+        detail::throwLibraryError(
+          Error::Code::InvalidInput, std::format("Track references unpublished dictionary ID {}", id.raw()));
+      }
+
+      return *optText;
+    };
+
+    try
+    {
+      return projectView(view, baseline, resolve);
+    }
+    catch (detail::LibraryException const& error)
+    {
+      return std::unexpected{error.error()};
+    }
+  }
+
+  TrackBuilder TrackBuilder::projectView(TrackView const& view,
+                                         BaselineKind baseline,
+                                         std::function<std::string_view(DictionaryId)> const& resolve)
   {
     AO_EXPECTS(view.isHotValid());
+    AO_EXPECTS(baseline == BaselineKind::HotOnly || view.isColdValid());
 
     auto builder = TrackBuilder{};
-    builder._baselineKind = BaselineKind::HotOnly;
+    builder._baselineKind = baseline;
+    auto const optionalText = [&resolve](DictionaryId id)
+    { return id == kInvalidDictionaryId ? std::string_view{} : resolve(id); };
 
-    auto metadata = view.metadata();
-    builder.metadata().year(metadata.year());
+    auto const metadata = view.metadata();
+    builder.metadata()
+      .year(metadata.year())
+      .artist(optionalText(metadata.artistId()))
+      .album(optionalText(metadata.albumId()))
+      .albumArtist(optionalText(metadata.albumArtistId()))
+      .composer(optionalText(metadata.composerId()))
+      .genre(optionalText(metadata.genreId()));
 
     if (metadata.isTitleExplicitlyCleared())
     {
@@ -215,49 +264,19 @@ namespace ao::library
       builder.metadata().title(metadata.title());
     }
 
-    auto prop = view.property();
+    auto const prop = view.property();
     builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
-
-    if (auto artistId = metadata.artistId(); artistId.raw() > 0)
-    {
-      builder.metadata().artist(dictionary.get(artistId));
-    }
-
-    if (auto albumId = metadata.albumId(); albumId.raw() > 0)
-    {
-      builder.metadata().album(dictionary.get(albumId));
-    }
-
-    if (auto albumArtistId = metadata.albumArtistId(); albumArtistId.raw() > 0)
-    {
-      builder.metadata().albumArtist(dictionary.get(albumArtistId));
-    }
-
-    if (auto composerId = metadata.composerId(); composerId.raw() > 0)
-    {
-      builder.metadata().composer(dictionary.get(composerId));
-    }
-
-    if (auto genreId = metadata.genreId(); genreId.raw() > 0)
-    {
-      builder.metadata().genre(dictionary.get(genreId));
-    }
 
     for (auto const tagId : view.tags())
     {
-      builder.tags().add(dictionary.get(tagId));
+      builder.tags().add(resolve(tagId));
     }
 
-    return builder;
-  }
+    if (baseline == BaselineKind::HotOnly)
+    {
+      return builder;
+    }
 
-  TrackBuilder TrackBuilder::fromCompleteView(TrackView const& view, DictionaryStore const& dictionary)
-  {
-    AO_EXPECTS(view.isHotValid());
-    AO_EXPECTS(view.isColdValid());
-    auto builder = fromHotView(view, dictionary);
-    builder._baselineKind = BaselineKind::Complete;
-    auto prop = view.property();
     builder.property()
       .uri(prop.uri())
       .duration(prop.duration())
@@ -265,7 +284,6 @@ namespace ao::library
       .channels(prop.channels())
       .segment(prop.segment());
 
-    auto metadata = view.metadata();
     builder.metadata()
       .trackNumber(metadata.trackNumber())
       .trackTotal(metadata.trackTotal())
@@ -275,6 +293,8 @@ namespace ao::library
     auto const work = view.work();
     auto const performance = view.performance();
     builder.metadata()
+      .work(optionalText(work.workId()))
+      .movement(optionalText(work.movementId()))
       .movementNumber(work.movementNumber())
       .movementTotal(work.movementTotal())
       .recordingDate(performance.recordingDate());
@@ -286,7 +306,7 @@ namespace ao::library
       for (auto const& entry : performance.credits(kind))
       {
         builder._metadataBuilder._credits.push_back(
-          {.name = dictionary.get(entry.nameId), .kind = kind, .role = dictionary.getOrDefault(entry.roleId)});
+          {.name = resolve(entry.nameId), .kind = kind, .role = optionalText(entry.roleId)});
       }
     }
 
@@ -295,19 +315,9 @@ namespace ao::library
       builder.coverArt().add(cover.type, cover.resourceId);
     }
 
-    if (auto workId = work.workId(); workId.raw() > 0)
-    {
-      builder.metadata().work(dictionary.get(workId));
-    }
-
-    if (auto movementId = work.movementId(); movementId.raw() > 0)
-    {
-      builder.metadata().movement(dictionary.get(movementId));
-    }
-
     for (auto const& [dictionaryId, value] : view.customMetadata())
     {
-      builder.customMetadata().add(dictionary.get(dictionaryId), value);
+      builder.customMetadata().add(resolve(dictionaryId), value);
     }
 
     return builder;

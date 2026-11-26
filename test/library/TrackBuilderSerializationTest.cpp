@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "lib/library/TrackRecordValidation.h"
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackBuilderTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -508,7 +509,7 @@ namespace ao::library::test
     CHECK(context.dictionary().get(DictionaryId{2}) == "key2");
   }
 
-  TEST_CASE("TrackBuilder - fromCompleteView reconstructs builder fields")
+  TEST_CASE("TrackBuilder - committed complete projection reconstructs builder fields")
   {
     auto context = TrackSerializationFixture{};
 
@@ -525,7 +526,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = context.serialize(original);
     auto view = TrackView{hotData, coldData};
 
-    auto reconstructed = TrackBuilder::fromCompleteView(view, context.dictionary());
+    auto reconstructed = ao::test::requireValue(TrackBuilder::fromCommittedCompleteView(view, context.dictionary()));
     CHECK(reconstructed.metadata().title() == "Title");
     CHECK(reconstructed.metadata().albumArtist() == "Test Album Artist");
     CHECK(reconstructed.metadata().composer() == "Test Composer");

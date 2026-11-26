@@ -28,7 +28,6 @@
 namespace ao::library
 {
   class MusicLibrary;
-  class DictionaryStore;
   class LibraryWrite;
   class TrackWriter;
   class WritableMusicLibrary;
@@ -119,8 +118,7 @@ namespace ao::rt
 
     Result<> applyScanItem(std::size_t itemIndex,
                            PreparedScanItem const* preparedItem,
-                           library::TrackWriter& trackWriter,
-                           library::DictionaryStore const& dictionary);
+                           library::TrackWriter& trackWriter);
 
     bool trySkipNonActionableItem(ScanItem const& item);
 
@@ -138,24 +136,17 @@ namespace ao::rt
 
     Result<> applyChangedItem(ScanItem const& item,
                               library::TrackWriter& trackWriter,
-                              library::DictionaryStore const& dictionary,
                               library::TrackBuilder& builder,
                               library::AudioIdentity const& identity);
 
-    void applyPlainSpelling(ScanItem const& item,
-                            library::TrackWriter& writer,
-                            library::DictionaryStore const& dictionary);
+    void applyPlainSpelling(ScanItem const& item, library::TrackWriter& writer);
 
     bool tryApplyRefreshedRelink(ScanItem const& item,
                                  library::TrackWriter& trackWriter,
-                                 library::DictionaryStore const& dictionary,
                                  library::TrackBuilder& builder,
                                  library::AudioIdentity const& identity);
 
-    Result<> applyCarrierItem(ScanItem const& item,
-                              PreparedScanItem const& prepared,
-                              library::TrackWriter& writer,
-                              library::DictionaryStore const& dictionary);
+    Result<> applyCarrierItem(ScanItem const& item, PreparedScanItem const& prepared, library::TrackWriter& writer);
 
     Result<> insertCarrierSegments(ScanItem const& item,
                                    PreparedScanItem const& prepared,

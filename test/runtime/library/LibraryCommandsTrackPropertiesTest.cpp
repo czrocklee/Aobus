@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -56,7 +57,8 @@ namespace ao::rt::test
     auto const optTrack =
       storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrack);
-    auto const track = library::TrackBuilder::fromHotView(*optTrack, storage.library().dictionary());
+    auto const track = ao::test::requireValue(
+      library::TrackBuilder::fromCommittedHotView(*optTrack, storage.library().dictionary()));
     CHECK(track.metadata().title() == "After");
     CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}));
   }

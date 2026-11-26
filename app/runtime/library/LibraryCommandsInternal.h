@@ -58,8 +58,7 @@ namespace ao::rt
     delta::RegularTrackEditScript removalScriptFor(std::span<TrackId const> storedTrackIds,
                                                    std::unordered_set<TrackId> const& selectedTrackIds);
 
-    Result<EditTrackTagsReply> applyTagPatchInTransaction(library::MusicLibrary& library,
-                                                          library::LibraryWrite& transaction,
+    Result<EditTrackTagsReply> applyTagPatchInTransaction(library::LibraryWrite& transaction,
                                                           std::span<TrackId const> trackIds,
                                                           std::span<std::string const> tagsToAdd,
                                                           std::span<std::string const> tagsToRemove);

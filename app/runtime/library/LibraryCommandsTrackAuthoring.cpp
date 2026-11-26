@@ -8,10 +8,9 @@
 #include <ao/async/Task.h>
 #include <ao/library/Credits.h>
 #include <ao/library/LibraryWrite.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -561,8 +560,7 @@ namespace ao::rt
       return true;
     }
 
-    Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
-                                                                     library::LibraryWrite& transaction,
+    Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::LibraryWrite& transaction,
                                                                      std::span<TrackId const> trackIds,
                                                                      MetadataPatch const& patch)
     {
@@ -581,20 +579,19 @@ namespace ao::rt
 
       for (auto const trackId : trackIds)
       {
-        // Do not reload dictionary IDs staged by an earlier write of this track.
         if (!seenTrackIds.insert(trackId).second)
         {
           continue;
         }
 
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        auto optBuilder = writer.loadForEdit(trackId);
 
-        if (!optView)
+        if (!optBuilder)
         {
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
+        auto& builder = *optBuilder;
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto const patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
         auto const wroteRes =
@@ -647,8 +644,7 @@ namespace ao::rt
       return tagsChanged;
     }
 
-    Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::MusicLibrary& library,
-                                                                         library::LibraryWrite& transaction,
+    Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::LibraryWrite& transaction,
                                                                          std::span<TrackId const> trackIds,
                                                                          TrackPropertiesPatch const& patch)
     {
@@ -690,20 +686,19 @@ namespace ao::rt
 
       for (auto const trackId : trackIds)
       {
-        // Do not reload dictionary IDs staged by an earlier write of this track.
         if (!seenTrackIds.insert(trackId).second)
         {
           continue;
         }
 
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        auto optBuilder = writer.loadForEdit(trackId);
 
-        if (!optView)
+        if (!optBuilder)
         {
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
+        auto& builder = *optBuilder;
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
 
@@ -759,8 +754,8 @@ namespace ao::rt
   {
     return detail::applyInteractivePreviewAsync(
       std::move(submission),
-      [this, trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
-      { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
+      [trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
+      { return applyMetadataPatchInTransaction(transaction, trackIds, patch); });
   }
 
   async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::Impl::applyUpdateMetadataAsync(
@@ -772,10 +767,10 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Update track metadata",
-      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+      [patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
         -> Result<OperationOutcome<UpdateTrackMetadataReply>>
       {
-        auto replyRes = applyMetadataPatchInTransaction(library, transaction, trackIds, patch);
+        auto replyRes = applyMetadataPatchInTransaction(transaction, trackIds, patch);
 
         if (!replyRes)
         {
@@ -806,9 +801,9 @@ namespace ao::rt
   {
     return detail::applyInteractivePreviewAsync(
       std::move(submission),
-      [this, trackIds = std::move(trackIds), tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+      [trackIds = std::move(trackIds), tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
         library::LibraryWrite& transaction)
-      { return detail::applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
+      { return detail::applyTagPatchInTransaction(transaction, trackIds, tagsToAdd, tagsToRemove); });
   }
 
   async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::Impl::applyEditTagsAsync(
@@ -821,11 +816,11 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Edit track tags",
-      [this, tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+      [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
         library::LibraryWrite& transaction,
         std::span<TrackId const> trackIds) -> Result<OperationOutcome<EditTrackTagsReply>>
       {
-        auto replyRes = detail::applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove);
+        auto replyRes = detail::applyTagPatchInTransaction(transaction, trackIds, tagsToAdd, tagsToRemove);
 
         if (!replyRes)
         {
@@ -857,10 +852,10 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Update track properties",
-      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+      [patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
         -> Result<OperationOutcome<UpdateTrackPropertiesReply>>
       {
-        auto replyRes = applyPropertiesPatchInTransaction(library, transaction, trackIds, patch);
+        auto replyRes = applyPropertiesPatchInTransaction(transaction, trackIds, patch);
 
         if (!replyRes)
         {

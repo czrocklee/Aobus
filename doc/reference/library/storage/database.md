@@ -528,9 +528,11 @@ A directly constructed raw view may therefore expose a present all-zero prefix; 
 `PerformanceView::credits()` and `credits(kind)` borrow physical entry spans, sharing the cold record's transaction/buffer lifetime; each entry carries its kind byte.
 The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, cold block ordering, and every credit name id.
 Those linear checks do not add a per-row scan to normal decoded access.
-`TrackBuilder::fromCompleteView()` requires both valid sides.
-It preserves every work/performance field, exact date precision, and canonical credit name/kind/role entry when rebuilding a complete record.
-`fromHotView()` does not fetch cold fields or list entries and the resulting builder may serialize only hot data, preventing absent cold fields from being written back as defaults.
+`TrackBuilder::fromCommittedCompleteView()` requires both valid sides and preserves every work/performance field, exact date precision, and canonical credit name/kind/role entry.
+`TrackBuilder::fromCommittedHotView()` requires only the valid hot side and produces a builder that can write only hot data, so unloaded cold fields cannot be written back as defaults.
+Both return `Result<TrackBuilder>` and require a committed view and its own library coordinator's published dictionary.
+A reference outside the published dictionary prefix returns `InvalidInput`; the check cannot detect a foreign-library id with the same numeric value as a published id.
+The projected builder still borrows text, and its cover Resource ids remain library-local.
 
 A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
 That `ListView` behavior is not the `ListStore` absence contract.
