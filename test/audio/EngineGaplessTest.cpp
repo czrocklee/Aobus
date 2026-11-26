@@ -6,6 +6,7 @@
 #include "test/audio/ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
@@ -616,12 +617,15 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - transport and route changes cancel prepared successor", "[concurrency]")
   {
-    auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
+    auto device = makeEngineTestDevice();
+    device.backendId = backendPtr->backendId();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x49}, std::byte{0x4A}, std::byte{0x4B}, std::byte{0x4C}};
     auto const secondData = std::vector{std::byte{0x59}, std::byte{0x5A}, std::byte{0x5B}, std::byte{0x5C}};
+    auto advancedLatch = CallbackLatch{};
+    auto endedLatch = CallbackLatch{};
     auto engine = Engine{std::move(backendPtr),
                          device,
                          makePathScriptedDecoderFactory({
@@ -629,13 +633,13 @@ namespace ao::audio::test
                            {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
                          })};
 
-    auto advancedLatch = CallbackLatch{};
-    auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
+    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
 
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
@@ -645,15 +649,28 @@ namespace ao::audio::test
       engine.seek(std::chrono::milliseconds{0});
     }
 
-    SECTION("updateDevice")
+    SECTION("device ID changes")
     {
-      engine.updateDevice(makeEngineTestDevice("replacement-device"));
+      auto replacement = device;
+      replacement.id = DeviceId{"replacement-device"};
+      engine.updateDevice(replacement);
+    }
+
+    SECTION("backend ID changes but device ID does not")
+    {
+      auto replacement = device;
+      replacement.backendId = BackendId{"other-backend"};
+      engine.updateDevice(replacement);
+      // The descriptor invalidates lookahead; only setBackend can install a different backend.
+      CHECK(engine.backendId() == device.backendId);
     }
 
     auto firstOut = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(std::vector<std::byte>{firstOut.begin(), firstOut.end()} == firstData);
-    CHECK(target->renderPcm(firstOut).drained);
+    auto const end = target->renderPcm(firstOut);
+    REQUIRE(end.drained);
+    CHECK(end.bytesWritten == 0);
 
     backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.tryWaitForCount(1));
@@ -661,14 +678,18 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - an unchanged device snapshot preserves the prepared successor")
+  TEST_CASE("Engine - a device refresh with the same identity preserves the prepared successor")
   {
-    auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto device = makeEngineTestDevice();
+    device.backendId = backendPtr->backendId();
     auto* const backendRaw = backendPtr.get();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
     auto const secondData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
+    // Callback captures must outlive Engine, including teardown after a failed assertion.
+    auto advancedLatch = CallbackLatch{};
+    auto advancedItemId = Engine::PlaybackItemId{};
     auto engine = Engine{std::move(backendPtr),
                          device,
                          makePathScriptedDecoderFactory({
@@ -676,12 +697,29 @@ namespace ao::audio::test
                            {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
                          })};
 
-    auto advancedLatch = CallbackLatch{};
-    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
+    engine.setOnTrackAdvanced(
+      [&](Engine::TrackAdvanced const& event)
+      {
+        advancedItemId = event.itemId;
+        advancedLatch.notify();
+      });
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
+    auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
+    REQUIRE(engine.setNext(secondItem));
 
-    engine.updateDevice(device);
+    SECTION("unchanged descriptor")
+    {
+      engine.updateDevice(device);
+    }
+
+    SECTION("refreshed metadata")
+    {
+      auto refreshed = device;
+      refreshed.displayName = "Studio monitors";
+      refreshed.description = "Control room";
+      refreshed.isDefault = true;
+      engine.updateDevice(refreshed);
+    }
 
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
@@ -690,7 +728,9 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
     REQUIRE(target->renderPcm(output).bytesWritten == output.size());
     CHECK(std::vector<std::byte>{output.begin(), output.end()} == secondData);
+    // notify() follows the ID write; waiting publishes that write to the test thread.
     REQUIRE(advancedLatch.tryWaitForCount(1));
+    CHECK(advancedItemId == secondItem.id);
   }
 
   TEST_CASE("Engine - clearNext before end of stream restores drain fallback", "[concurrency]")
@@ -802,8 +842,9 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - rejected staged starts preserve the current generation and prepared lookahead", "[concurrency]")
   {
-    auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto device = makeEngineTestDevice();
+    device.backendId = backendPtr->backendId();
     auto* const backendRaw = backendPtr.get();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -814,13 +855,13 @@ namespace ao::audio::test
       {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
       {.path = "candidate.flac", .info = makeScriptedStreamInfo(format), .data = candidateData},
     };
-    auto engine = Engine{std::move(backendPtr), device, makePathScriptedDecoderFactory(tracks)};
-    auto optAdvancedItemId = std::optional<Engine::PlaybackItemId>{};
+    auto optAdvance = std::optional<Engine::TrackAdvanced>{};
     auto advanced = CallbackLatch{};
+    auto engine = Engine{std::move(backendPtr), device, makePathScriptedDecoderFactory(tracks)};
     engine.setOnTrackAdvanced(
       [&](Engine::TrackAdvanced const& event)
       {
-        optAdvancedItemId = event.itemId;
+        optAdvance = event;
         advanced.notify();
       });
 
@@ -830,6 +871,7 @@ namespace ao::audio::test
     REQUIRE(preparedNextRes);
     auto const originalGeneration = engine.playbackGeneration();
     REQUIRE(preparedNextRes->generation == originalGeneration);
+    auto expectedNextId = secondItem.id;
 
     SECTION("failed stage")
     {
@@ -838,13 +880,38 @@ namespace ao::audio::test
       CHECK(candidateRes.error().code == Error::Code::NotSupported);
     }
 
+    SECTION("stale commit after device identity changes away and back")
+    {
+      auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate.flac"}));
+      REQUIRE(candidateRes);
+      auto otherDevice = device;
+      otherDevice.id = DeviceId{"other-device"};
+      engine.updateDevice(otherDevice);
+      engine.updateDevice(device);
+
+      // The identity change retired the original lookahead. The stale start must not disarm its replacement.
+      auto const replacement = makePlaybackItem(secondItem.input);
+      expectedNextId = replacement.id;
+      auto const replacementRes = engine.setNext(replacement);
+      REQUIRE(replacementRes);
+      REQUIRE(replacementRes->transition == Engine::PreparedTransitionMode::Gapless);
+      auto const commitRes = engine.commitPlayback(std::move(*candidateRes));
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::Conflict);
+    }
+
     CHECK(engine.playbackGeneration() == originalGeneration);
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
-    auto output = std::array<std::byte, 8>{};
+    auto output = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == secondData);
     REQUIRE(advanced.tryWaitForCount(1));
-    CHECK(optAdvancedItemId == secondItem.id);
+    REQUIRE(optAdvance);
+    CHECK(optAdvance->itemId == expectedNextId);
+    CHECK(optAdvance->generation == originalGeneration);
   }
 
   TEST_CASE("Engine - staging inspects without decoding or replacing active playback", "[concurrency]")

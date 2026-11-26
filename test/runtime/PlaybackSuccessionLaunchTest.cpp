@@ -352,7 +352,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - device evidence refresh silently rejects a stale pending start", "[concurrency]")
+  TEST_CASE("PlaybackSuccession - device metadata refresh preserves a pending explicit start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -367,15 +367,17 @@ namespace ao::rt::test
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
 
-    fixture.transport.status.devices.front().description = "Refreshed active device evidence";
+    auto& device = fixture.transport.status.devices.front();
+    device.description = "Renamed active output";
     fixture.transport.onDevicesChangedCb(fixture.transport.status.devices);
     fixture.transport.executor.drain();
+    REQUIRE(fixture.transport.playbackTransport.state().output.availableBackends.at(0).devices.at(0).description ==
+            device.description);
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryWaitUntilQueuedCount(1, std::chrono::seconds{10}));
-    fixture.transport.executor.drain();
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
+      [&] { return succession.state().currentTrackId == fixture.thirdTrackId; }));
 
-    CHECK(succession.state().currentTrackId == fixture.firstTrackId);
-    CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
+    CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.thirdTrackId);
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }

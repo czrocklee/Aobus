@@ -35,6 +35,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <fakeit.hpp>
 
 #include <algorithm>
@@ -657,6 +658,58 @@ namespace ao::audio::test
     CHECK(updated.availableBackends.front().devices.front().displayName == "Studio DAC (Updated)");
     CHECK(updated.engine.backendId == kBackendPipeWire);
     CHECK(updated.engine.currentDeviceId == dacId);
+  }
+
+  TEST_CASE("Player - prepared gapless successor survives a metadata refresh but not an output switch")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    auto speakers =
+      Device{.id = DeviceId{"speakers"}, .displayName = "Speakers", .isDefault = true, .backendId = kBarrierBackend};
+    auto dac = Device{.id = DeviceId{"dac"}, .backendId = kBarrierBackend};
+    probePtr->emitDevices({speakers, dac});
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, speakers.id, kProfileShared));
+    auto const input = PlaybackInput{.filePath = requireAudioFixture("basic_metadata.flac")};
+    REQUIRE(player.play({.id = Engine::PlaybackItemId{1}, .input = input}));
+    auto const next = Engine::PlaybackItem{.id = Engine::PlaybackItemId{2}, .input = input};
+    auto const preparedRes = player.prepareNext(next);
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::Gapless);
+
+    SECTION("new metadata for the selected output")
+    {
+      // Only the already-open stream can supply audio after this point.
+      probePtr->setOpenError(Error{.code = Error::Code::ResourceBusy, .message = "cannot reopen output"});
+      speakers.displayName = "Studio monitors";
+      speakers.description = "Control room";
+      speakers.isDefault = false;
+      dac.isDefault = true;
+      probePtr->emitDevices({dac, speakers});
+      executor.drain();
+      auto const status = player.status();
+      REQUIRE(status.engine.currentDeviceId == speakers.id);
+      CHECK(status.engine.transport == Transport::Playing);
+      REQUIRE(status.availableBackends.size() == 1);
+      auto const& devices = status.availableBackends.front().devices;
+      CHECK(std::ranges::contains(devices, speakers));
+      CHECK(std::ranges::contains(devices, dac));
+      auto* const target = probePtr->target();
+      REQUIRE(target != nullptr);
+      auto frame = std::vector<std::byte>(frameBytes(status.engine.routeState.engineOutputFormat));
+      REQUIRE_FALSE(frame.empty());
+      CHECK(target->renderPcm(frame).bytesWritten == frame.size());
+      CHECK(player.clearPreparedNext() == next.id);
+    }
+
+    SECTION("selecting another available output")
+    {
+      REQUIRE(player.setOutputDevice(kBarrierBackend, dac.id, kProfileShared));
+      REQUIRE(player.status().engine.currentDeviceId == dac.id);
+      CHECK_FALSE(player.clearPreparedNext());
+    }
   }
 
   TEST_CASE("Player - requesting a missing output stops fixed playback until a new play command")
@@ -1500,6 +1553,33 @@ namespace ao::audio::test
           gatePtr->createdPtr->load(std::memory_order_relaxed));
   }
 
+  TEST_CASE("Player - selected device metadata refresh preserves in-flight gapless lookahead", "[concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "next.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    auto const deviceId = DeviceId{"barrier-device"};
+    REQUIRE(player.setOutputDevice(kBarrierBackend, deviceId, kProfileShared));
+    REQUIRE(player.play({.id = Engine::PlaybackItemId{1}, .input = {.filePath = "current.flac"}}));
+    auto const next = Engine::PlaybackItem{.id = Engine::PlaybackItemId{2}, .input = {.filePath = "next.flac"}};
+    auto optCompletion = std::optional<Result<Engine::PreparedNextResult>>{};
+    REQUIRE(player.prepareNextAsync(
+      next, [] { return true; }, [&](auto preparedRes) { optCompletion.emplace(std::move(preparedRes)); }));
+    REQUIRE(gatePtr->tryWaitForEntry());
+    probePtr->emitDevices({Device{.id = deviceId, .displayName = "Studio monitors", .backendId = kBarrierBackend}});
+    executor.drain();
+    gatePtr->release.release();
+
+    REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+    REQUIRE(*optCompletion);
+    CHECK((**optCompletion).transition == Engine::PreparedTransitionMode::Gapless);
+    CHECK(player.clearPreparedNext() == next.id);
+  }
+
   TEST_CASE("Player - explicit cancellation discards a blocked lookahead preparation", "[concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
@@ -1697,7 +1777,52 @@ namespace ao::audio::test
     CHECK(completions.front().error().code == Error::Code::Conflict);
   }
 
-  TEST_CASE("Player - asynchronous start distinguishes unchanged and stale device evidence", "[concurrency]")
+  TEST_CASE("Player - a staged start survives a metadata refresh but not an output switch")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    auto speakers = Device{.id = DeviceId{"speakers"}, .displayName = "Speakers", .backendId = kBarrierBackend};
+    probePtr->emitDevices({speakers});
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, speakers.id, kProfileShared));
+    auto stagedRes = player.stagePlayback(
+      {.id = Engine::PlaybackItemId{1}, .input = {.filePath = requireAudioFixture("basic_metadata.flac")}});
+    REQUIRE(stagedRes);
+    auto const generation = player.audioPlaybackGeneration();
+
+    SECTION("updated selected device metadata")
+    {
+      speakers.displayName = "Studio monitors";
+      probePtr->emitDevices({speakers});
+      executor.drain();
+      REQUIRE(player.audioPlaybackGeneration() == generation);
+      auto const commitRes = player.commitPlayback(std::move(*stagedRes));
+      REQUIRE(commitRes);
+      CHECK(player.isCurrentPlaybackItem(Engine::PlaybackItemId{1}));
+      CHECK(player.transport() == Transport::Playing);
+      CHECK(probePtr->target() != nullptr);
+    }
+
+    SECTION("another selected device")
+    {
+      auto const dac = Device{.id = DeviceId{"dac"}, .backendId = kBarrierBackend};
+      probePtr->emitDevices({speakers, dac});
+      executor.drain();
+      REQUIRE(player.setOutputDevice(kBarrierBackend, dac.id, kProfileShared));
+      auto const replacementGeneration = player.audioPlaybackGeneration();
+      auto const commitRes = player.commitPlayback(std::move(*stagedRes));
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::Conflict);
+      CHECK(player.audioPlaybackGeneration() == replacementGeneration);
+      CHECK(player.status().engine.currentDeviceId == dac.id);
+      CHECK(player.transport() == Transport::Idle);
+      CHECK(probePtr->target() == nullptr);
+    }
+  }
+
+  TEST_CASE("Player - device discovery preserves an asynchronous start on the same output", "[concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1721,26 +1846,19 @@ namespace ao::audio::test
                          .isDefault = true,
                          .backendId = kBarrierBackend};
 
-    SECTION("unchanged snapshot")
-    {
-      probePtr->emitDevices({device});
-      executor.drain();
-      gatePtr->release.release();
-      REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
-      REQUIRE(*optCompletion);
-      CHECK(player.commitPlayback(std::move(**optCompletion)));
-    }
-
-    SECTION("changed snapshot")
+    if (GENERATE(false, true))
     {
       device.description = "Changed output description";
-      probePtr->emitDevices({device});
-      executor.drain();
-      gatePtr->release.release();
-      REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
-      REQUIRE_FALSE(*optCompletion);
-      CHECK(optCompletion->error().code == Error::Code::Conflict);
     }
+
+    probePtr->emitDevices({device});
+    executor.drain();
+    gatePtr->release.release();
+    REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+    REQUIRE(*optCompletion);
+    auto const commitRes = player.commitPlayback(std::move(**optCompletion));
+    REQUIRE(commitRes);
+    CHECK(commitRes->itemId == Engine::PlaybackItemId{105});
   }
 
   TEST_CASE("Player - asynchronous start adopts before commit and preserves the old session until settlement",

@@ -352,16 +352,31 @@ namespace ao::rt::test
     CHECK_FALSE(gate.hasTimedOut());
   }
 
-  TEST_CASE("PlaybackSuccession - natural prepared winner is adopted exactly once", "[concurrency]")
+  TEST_CASE("PlaybackSuccession - device metadata refresh preserves pending lookahead for one gapless advance",
+            "[concurrency]")
   {
-    auto fixture = PlaybackSuccessionTransportFixture{};
-    fixture.buildThreeTrackManualView();
+    auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr, .blockedFileName = "transport-playable-1.flac"}};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
+    fixture.buildTwoTrackManualView();
+    auto& transport = fixture.transport;
+    REQUIRE(playback_succession::playFromViewAndWait(
+      *fixture.successionPtr, transport.executor, fixture.viewId, fixture.firstTrackId));
+    REQUIRE(gatePtr->tryWaitForEntry());
+
+    auto& device = transport.status.devices.front();
+    device.description = "Renamed active output";
+    transport.onDevicesChangedCb(transport.status.devices);
+    transport.executor.drain();
+    REQUIRE(transport.playbackTransport.state().output.availableBackends.at(0).devices.at(0).description ==
+            device.description);
+    releaseGuard.release();
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.secondTrackId, 0));
+
     auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
-    auto const subscription = fixture.transport.playbackTransport.onNowPlayingChanged(
+    auto const subscription = transport.playbackTransport.onNowPlayingChanged(
       [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { events.push_back(event); });
-    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-    fixture.transport.executor.drain();
-    events.clear();
 
     fixture.queueNaturalAdvance();
     fixture.transport.executor.drain();
