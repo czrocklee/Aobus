@@ -1046,9 +1046,11 @@ namespace ao::rt
           return PlaybackFailureDisposition::Unhandled;
         });
       idleSubscription = transport.onIdle(
-        [this]
+        [this](std::optional<PlaybackTransport::EmptyPlayback> const& optEmpty)
         {
-          if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
+          if (!isClosing() && sessionPtr && !stoppingTransport &&
+              transport.state().transport == audio::Transport::Idle &&
+              (!optEmpty || optEmpty->trackId == sessionPtr->cursor().currentTrackId()))
           {
             runAutomaticTransition([this] { advanceNatural(); });
           }

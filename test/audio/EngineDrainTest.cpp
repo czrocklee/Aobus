@@ -19,22 +19,23 @@
 #include <ao/audio/Transport.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <memory>
 #include <optional>
 #include <semaphore>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::test
@@ -155,42 +156,64 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - an already drained prepared source completes without starting the backend")
   {
+    auto const startAtEnd = GENERATE(false, true);
+    CAPTURE(startAtEnd);
+    constexpr auto kShortTrackDuration = std::chrono::milliseconds{5};
+    auto const initialOffset = startAtEnd ? kShortTrackDuration : std::chrono::milliseconds{0};
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
-    auto const factory = [format](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+    auto const factory = [format, initialOffset](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
       auto const sourceFormat = signalFormat(format);
-      return std::make_unique<ScriptedDecoderSession>(
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = sourceFormat,
                           .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
-                          .duration = std::chrono::milliseconds{0},
+                          .duration = initialOffset,
                           .isLossy = false});
+
+      if (initialOffset != std::chrono::milliseconds{0})
+      {
+        // Five frames at 1 kHz. With no seek worker configured, the initial
+        // seek synchronously replaces this playable stream with clean EOF.
+        decoderPtr->setReadScript({{.data = std::vector(10, std::byte{0x11}), .endOfStream = true}});
+        decoderPtr->setSeekReadScript({});
+      }
+
+      return decoderPtr;
     };
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto endedLatch = CallbackLatch{};
-    auto endedGeneration = std::atomic<std::uint64_t>{0};
+    auto ended = std::promise<Engine::TrackEnded>{};
+    auto endedFuture = ended.get_future();
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), factory};
-    engine.setOnTrackEnded(
-      [&](Engine::TrackEnded const& event)
-      {
-        endedGeneration.store(event.generation, std::memory_order_release);
-        endedLatch.notify();
-      });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const& event) { ended.set_value(event); });
 
-    auto stagedRes = engine.stagePlayback(makePlaybackItem("empty.flac"));
+    auto const item = makePlaybackItem(startAtEnd ? "short.flac" : "empty.flac");
+    auto stagedRes = engine.stagePlayback(item, initialOffset);
     REQUIRE(stagedRes);
-    auto committedRes = engine.commitPlayback(std::move(*stagedRes));
+    auto const committedRes = engine.commitPlayback(std::move(*stagedRes));
 
     REQUIRE(committedRes);
     CHECK_FALSE(committedRes->playbackStarted);
-    REQUIRE(endedLatch.tryWaitForCount(1));
-    CHECK(endedGeneration.load(std::memory_order_acquire) == committedRes->generation);
+    REQUIRE(endedFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto const event = endedFuture.get();
+    CHECK(event.generation == committedRes->generation);
+    REQUIRE(event.optNaturalEnd);
+    CHECK(event.optNaturalEnd->itemId == item.id);
+    CHECK(event.optNaturalEnd->generation == committedRes->generation);
+    CHECK(event.optNaturalEnd->endedWithoutPcm == !startAtEnd);
     CHECK(engine.status().transport == Transport::Idle);
     auto const events = backendRaw->events();
     REQUIRE(events.size() == 3);
     CHECK(events[0].name == "open");
     CHECK(events[1].name == "stop");
     CHECK(events[2].name == "close");
+
+    REQUIRE(engine.stopWithBarrier().covers(committedRes->generation));
+    auto const optTerminal = engine.takeRetiredTerminalReceipt(committedRes->generation);
+    REQUIRE(optTerminal);
+    auto const* receipt = std::get_if<Engine::NaturalEndReceipt>(&*optTerminal);
+    REQUIRE(receipt != nullptr);
+    CHECK(*receipt == *event.optNaturalEnd);
   }
 
   TEST_CASE("Engine - play ignores stale pending drain from retired session", "[concurrency]")

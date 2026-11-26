@@ -79,6 +79,12 @@ namespace ao::rt
       std::optional<PreparedNextToken> optPreparedNextToken{};
     };
 
+    struct EmptyPlayback final
+    {
+      TrackId trackId = kInvalidTrackId;
+      audio::PlaybackInput input;
+    };
+
     struct QualityChanged final
     {
       QualityState quality{};
@@ -144,7 +150,10 @@ namespace ao::rt
     async::Subscription onStarted(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onBufferingFinished(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onPaused(compat::MoveOnlyFunction<void()> handler);
+    // Lifecycle observers receive every published idle edge in registration order. The typed observer
+    // checks occurrence ownership for succession and reports empty playback only on matching native proof.
     async::Subscription onIdle(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onIdle(compat::MoveOnlyFunction<void(std::optional<EmptyPlayback> const&)> handler);
     async::Subscription onNowPlayingChanged(compat::MoveOnlyFunction<void(NowPlayingChanged const&)> handler);
     async::Subscription onOutputDeviceChanged(
       compat::MoveOnlyFunction<void(audio::OutputDeviceSelection const&)> handler);

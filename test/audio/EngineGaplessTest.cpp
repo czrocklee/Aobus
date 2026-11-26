@@ -7,6 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
@@ -92,18 +93,18 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
+    // The successor reaches EOF in preroll, but still has two buffered PCM frames to splice.
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
+    auto advancedLatch = CallbackLatch{};
+    auto endedLatch = CallbackLatch{};
+    auto advancedPath = std::filesystem::path{};
+    auto advancedItemId = Engine::PlaybackItemId{};
     auto engine = Engine{std::move(backendPtr),
                          device,
                          makePathScriptedDecoderFactory({
                            {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
                            {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
                          })};
-
-    auto advancedLatch = CallbackLatch{};
-    auto endedLatch = CallbackLatch{};
-    auto advancedPath = std::filesystem::path{};
-    auto advancedItemId = Engine::PlaybackItemId{};
     engine.setOnTrackAdvanced(
       [&](Engine::TrackAdvanced const& event)
       {
@@ -142,6 +143,54 @@ namespace ao::audio::test
     auto const events = backendRaw->events();
     CHECK(countBackendEvents(events, "open") == 1);
     CHECK(countBackendEvents(events, "start") == 1);
+  }
+
+  TEST_CASE("Engine - prepared lossless same-format track without PCM takes drain fallback")
+  {
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const info = makeScriptedStreamInfo(format);
+    auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
+    auto const firstItem = makePlaybackItem("first.flac");
+    auto const emptyItem = makePlaybackItem("empty.flac");
+    auto advanced = CallbackLatch{};
+    auto ended = std::promise<Engine::TrackEnded>{};
+    auto endedFuture = ended.get_future();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makePathScriptedDecoderFactory({
+                           {.path = firstItem.input.filePath, .info = info, .data = firstData},
+                           {.path = emptyItem.input.filePath, .info = info, .data = {}},
+                         })};
+    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const& event) { ended.set_value(event); });
+    engine.play(firstItem);
+
+    auto const preparedRes = engine.setNext(emptyItem);
+
+    REQUIRE(preparedRes);
+    CHECK(preparedRes->itemId == emptyItem.id);
+    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 4>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
+    auto const drain = target->renderPcm(output);
+    REQUIRE(drain.drained);
+    CHECK(drain.bytesWritten == 0);
+    backend->emitDrainComplete();
+
+    REQUIRE(endedFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto const event = endedFuture.get();
+    CHECK(event.generation == preparedRes->generation);
+    REQUIRE(event.optNaturalEnd);
+    CHECK(event.optNaturalEnd->itemId == firstItem.id);
+    CHECK(event.optNaturalEnd->generation == preparedRes->generation);
+    CHECK_FALSE(event.optNaturalEnd->endedWithoutPcm);
+    CHECK(advanced.count() == 0);
+    CHECK(engine.transport() == Transport::Idle);
   }
 
   TEST_CASE("Engine - cross-boundary gapless render advances position only for successor frames")
@@ -951,20 +1000,26 @@ namespace ao::audio::test
   TEST_CASE("Engine - staged commit before decode error publishes one active failure", "[concurrency]")
   {
     auto failureGate = StagedFailureGate{};
+    auto failureLatch = CallbackLatch{};
+    auto endedLatch = CallbackLatch{};
+    auto endedWithNaturalReceipt = std::atomic<bool>{false};
+    auto optFailure = std::optional<Engine::PlaybackFailure>{};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto engine = Engine{std::move(backendPtr),
                          makeEngineTestDevice(),
                          makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
-    auto failureLatch = CallbackLatch{};
-    auto endedLatch = CallbackLatch{};
-    auto optFailure = std::optional<Engine::PlaybackFailure>{};
     engine.setOnPlaybackFailure(
       [&](Engine::PlaybackFailure const& failure)
       {
         optFailure = failure;
         failureLatch.notify();
       });
-    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
+    engine.setOnTrackEnded(
+      [&](Engine::TrackEnded const& event)
+      {
+        endedWithNaturalReceipt.store(event.optNaturalEnd.has_value(), std::memory_order_relaxed);
+        endedLatch.notify();
+      });
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
 
     auto const candidateItem = makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"});
@@ -988,6 +1043,7 @@ namespace ao::audio::test
     CHECK(optFailure->error.message == "gated staged decode failure");
     CHECK(failureLatch.count() == 1);
     CHECK(endedLatch.count() == 1);
+    CHECK_FALSE(endedWithNaturalReceipt.load(std::memory_order_relaxed));
     CHECK(engine.playbackGeneration() == committedRes->generation);
     CHECK(engine.transport() == Transport::Error);
   }
