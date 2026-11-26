@@ -264,7 +264,7 @@ The realtime consumer checks the positioning flag and otherwise reads the ring; 
 
 ### Prepared lookahead
 
-Player captures lookahead input, route, current PCM mode, playback generation, and start-context evidence on the callback executor.
+Player captures lookahead input, output route identity and revision, current PCM mode, and playback generation on the callback executor.
 When the current session is gapless-capable, decoder inspection runs on an async worker.
 After inspection, Engine queries the backend's installed-mode reuse contract under control serialization, outside state and transition locks.
 If reuse is authorized and the installed encoding and retained confirmed endpoint preserve the successor's inspected signal, a worker opens the final successor decoder in that encoding and prerolls it.
@@ -282,10 +282,13 @@ The current physical PCM mode cannot change without consuming or clearing lookah
 
 `clearNext` returns the disarmed opaque item id when the render thread has not consumed it.
 If already consumed, it returns empty and upper runtime retains matching metadata for the later advanced callback.
-Explicit `play`, `stop`, and output-device changes clear unconsumed lookahead.
+An explicit start clears unconsumed lookahead only after Engine accepts the new playback generation, before it opens the backend.
+Failed inspection or rejection of a staged start does not disarm the successor; a backend open failure after acceptance does not restore it.
+`stop`, backend replacement, and changes to the selected device's backend or device ID also clear unconsumed lookahead.
 A seek clears lookahead only after passing its initial Error and expected-item admission checks.
-An `updateDevice` call carrying the unchanged device snapshot is a no-op and
-does not invalidate pending starts or prepared lookahead.
+Player publishes refreshed device names, descriptions, and default flags in its available-backend snapshots.
+Engine's `updateDevice` records the descriptor without switching the open stream. For the same backend and device ID, a refresh preserves pending explicit and lookahead preparations, staged starts awaiting commit, and armed successors. A default-flag change does not itself select another output.
+A change to either ID advances the output route revision, as does every `setBackend` installation, even with identical IDs and profile. Returning to a previous route cannot make an earlier preparation or staged token valid again.
 Prepared-source failure clears lookahead without changing the current track. If render has already claimed that successor, Engine settles the handoff and delivers its advance before reducing the failure against the new current item. If an advance callback starts another item or seeks the same source, the displaced item's or decode attempt's error is discarded. A stale error cannot disarm an unrelated successor. Backend loss retires the failed stream immediately. If a splice already made its successor current, observers receive that successor's advance before its device-loss notification; a newer start or stop can still supersede delivery.
 
 A splice requires both sessions to be gapless-capable and `Backend::canReuseFormat` to authorize the successor's canonical PCM mode, both before preparation and again at adoption.
@@ -352,7 +355,7 @@ Activation installs the Engine callbacks before the decode thread begins its pen
 
 For `startFromView`, Player captures a move-only preparation value from Engine and runs inspection on the async worker pool.
 The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional final-decoder open and source preparation.
-Across both worker phases that value owns copied device, backend/profile, input, decoder factory, generation evidence, inspection, and prepared-source values and holds no Player, Engine, runtime, frontend, or Backend reference.
+Across both worker phases that value owns the captured backend, profile and device IDs, route revision, playback generation, input, decoder factory, inspection, and prepared source. It holds no Player, Engine, runtime, frontend, or Backend reference.
 Final completion resumes on Player's executor through another stop-token checkpoint.
 Player retires the applicable task handle before invoking the upper acceptance predicate. Acceptance
 and completion are outward publications; after acceptance Player rechecks its
@@ -361,7 +364,7 @@ error result before invoking completion without later Player access.
 When the gate remains open, an acceptance veto completes exactly once with
 `Conflict`. The same rule applies to worker lookahead and callback-executor
 logical `DrainFallback` lookahead.
-To adopt an accepted preparation, Engine revalidates playback generation, start context, and route before producing the staged start token for commit.
+To adopt an accepted preparation, Engine revalidates the playback generation and output route identity and revision. Commit checks the staged token's generation and route revision again before retiring the current stream.
 An evidence mismatch returns `Conflict`; upper playback owners discard that stale preparation without presenting it as a media-open or route failure.
 The staged start token is separate from the application's [prepared-next token](cursor.md#prepared-next), which correlates a successor with its succession commitment.
 The [application commit contract](application-commit.md#explicit-start-and-navigation) owns acceptance of explicit starts and navigation.

@@ -119,7 +119,7 @@ For a track of unknown duration, show elapsed time and `--:--` for the total and
 
 ### Explicit start
 
-A view start captures a launch description and constructs a candidate cursor session before changing active state. Player performs decoder inspection and optional optimistic decoder preparation on runtime workers. Acceptance returns to the callback executor and revalidates the source, request, playback generation, route, and start context before Engine commits.
+A view start captures a launch description and constructs a candidate cursor session before changing active state. Player performs decoder inspection and optional optimistic decoder preparation on runtime workers. Acceptance returns to the callback executor and revalidates the source, request, playback generation, and output route identity and revision before Engine commits.
 
 The old application and audio state remains authoritative while preparation is pending. Commit is the destructive boundary: it retires the old render target, opens the backend, validates the returned PCM mode, and either reuses the exact matching prepared source or creates the final decoder in that mode. The [application commit](application-commit.md), [audio execution](audio-execution.md), and [decoder session](decoder-session.md) specifications own failure and cancellation outcomes.
 

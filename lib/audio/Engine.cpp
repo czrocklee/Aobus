@@ -566,7 +566,8 @@ namespace ao::audio
     std::uint64_t nextRenderTargetGeneration = 1;
     std::uint64_t nextSourceGeneration = 1;
     std::uint64_t nextPlaybackGeneration = 2;
-    std::uint64_t startContextRevision = 1;
+    // A backend install or device identity change retires earlier route evidence, even if the IDs later match again.
+    std::uint64_t outputRouteRevision = 1;
     std::optional<PlaybackItem> optCurrentItem;
     Status status;
     OnTrackEnded onTrackEnded;
@@ -812,6 +813,8 @@ namespace ao::audio
       BackendId backendId;
       ProfileId profileId;
       DeviceId deviceId;
+
+      bool operator==(BackendIdentity const&) const = default;
     };
 
     struct BackendControlObservation final
@@ -1793,7 +1796,7 @@ namespace ao::audio
     std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack;
     std::chrono::milliseconds initialOffset{0};
     std::uint64_t baseGeneration = 0;
-    std::uint64_t startContextRevision = 0;
+    std::uint64_t outputRouteRevision = 0;
   };
 
   Engine::PreparedPlaybackStart::PreparedPlaybackStart(std::unique_ptr<PreparedPlaybackStart::Impl> implPtr)
@@ -1808,13 +1811,11 @@ namespace ao::audio
   struct detail::TrackPreparation::Impl final
   {
     Engine::PlaybackItem item;
-    Device device;
-    BackendId backendId;
-    ProfileId profileId;
+    Engine::Impl::BackendIdentity backendIdentity;
     DecoderFactoryFn decoderFactory;
     std::chrono::milliseconds initialOffset{0};
     std::uint64_t basePlaybackGeneration = 0;
-    std::uint64_t startContextRevision = 0;
+    std::uint64_t outputRouteRevision = 0;
     Purpose purpose = Purpose::ExplicitStart;
     std::optional<PcmFormat> optCurrentBackendFormat;
     std::optional<DecodedStreamInfo> optCurrentStreamInfo;
@@ -1846,10 +1847,8 @@ namespace ao::audio
                                                        std::uint64_t const currentGeneration) const
   {
     return _implPtr != nullptr && _implPtr->basePlaybackGeneration == currentGeneration &&
-           _implPtr->startContextRevision == engine._implPtr->startContextRevision &&
-           _implPtr->device == engine._implPtr->currentDevice &&
-           _implPtr->backendId == engine._implPtr->backendPtr->backendId() &&
-           _implPtr->profileId == engine._implPtr->backendPtr->profileId();
+           _implPtr->outputRouteRevision == engine._implPtr->outputRouteRevision &&
+           _implPtr->backendIdentity == engine._implPtr->observeBackendIdentity();
   }
 
   Result<> detail::TrackPreparation::inspect()
@@ -2010,7 +2009,7 @@ namespace ao::audio
       };
     }();
 
-    ++startContextRevision;
+    ++outputRouteRevision;
     stopUnlocked();
     backendPtr = std::move(nextBackendPtr);
     currentDevice = device;
@@ -2041,9 +2040,14 @@ namespace ao::audio
       return;
     }
 
-    ++startContextRevision;
+    auto const identityChanged = device.id != currentDevice.id || device.backendId != currentDevice.backendId;
     currentDevice = device;
-    clearPreparedNext();
+
+    if (identityChanged)
+    {
+      ++outputRouteRevision;
+      clearPreparedNext();
+    }
   }
 
   void Engine::Impl::markPlaybackStartFailureUnlocked(Notifications& notifications,
@@ -2621,14 +2625,12 @@ namespace ao::audio
   {
     auto preparationImplPtr = std::make_unique<Impl>();
     preparationImplPtr->item = item;
-    preparationImplPtr->device = engine._implPtr->currentDevice;
-    preparationImplPtr->backendId = engine._implPtr->backendPtr->backendId();
-    preparationImplPtr->profileId = engine._implPtr->backendPtr->profileId();
+    preparationImplPtr->backendIdentity = engine._implPtr->observeBackendIdentity();
     preparationImplPtr->decoderFactory = engine._implPtr->decoderFactory;
     preparationImplPtr->initialOffset = initialOffset;
     preparationImplPtr->basePlaybackGeneration =
       engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
-    preparationImplPtr->startContextRevision = engine._implPtr->startContextRevision;
+    preparationImplPtr->outputRouteRevision = engine._implPtr->outputRouteRevision;
     preparationImplPtr->purpose = purpose;
 
     if (purpose == Purpose::GaplessLookahead)
@@ -2687,7 +2689,7 @@ namespace ao::audio
     preparedImplPtr->optPreparedTrack = std::move(preparationImpl->optPreparedTrack);
     preparedImplPtr->initialOffset = preparationImpl->initialOffset;
     preparedImplPtr->baseGeneration = preparationImpl->basePlaybackGeneration;
-    preparedImplPtr->startContextRevision = preparationImpl->startContextRevision;
+    preparedImplPtr->outputRouteRevision = preparationImpl->outputRouteRevision;
     return Engine::PreparedPlaybackStart{std::move(preparedImplPtr)};
   }
 
@@ -2828,7 +2830,7 @@ namespace ao::audio
       auto const currentGeneration = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
       if (preparedImpl->baseGeneration != currentGeneration ||
-          preparedImpl->startContextRevision != _implPtr->startContextRevision)
+          preparedImpl->outputRouteRevision != _implPtr->outputRouteRevision)
       {
         return makeError(Error::Code::Conflict, "Playback changed after this start was staged");
       }

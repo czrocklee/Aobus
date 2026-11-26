@@ -3,6 +3,7 @@
 
 #include "EngineTestSupport.h"
 #include "FakeCapturingBackend.h"
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
@@ -19,6 +20,28 @@
 
 namespace ao::audio::test
 {
+  TEST_CASE("Engine - replacing an idle backend with the same IDs rejects a staged start")
+  {
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto device = makeEngineTestDevice();
+    device.backendId = backendPtr->backendId();
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+    auto stagedRes = engine.stagePlayback(makePlaybackItem("staged.flac"));
+    REQUIRE(stagedRes);
+
+    auto replacementPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const replacement = replacementPtr.get();
+    engine.setBackend(std::move(replacementPtr), device);
+    auto const installedGeneration = engine.playbackGeneration();
+    auto const commitRes = engine.commitPlayback(std::move(*stagedRes));
+
+    REQUIRE_FALSE(commitRes);
+    CHECK(commitRes.error().code == Error::Code::Conflict);
+    CHECK(engine.playbackGeneration() == installedGeneration);
+    CHECK(engine.transport() == Transport::Idle);
+    CHECK(replacement->events().empty());
+  }
+
   TEST_CASE("Engine - setBackend with active track resumes playback")
   {
     auto const device = makeEngineTestDevice();

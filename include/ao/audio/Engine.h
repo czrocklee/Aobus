@@ -243,8 +243,11 @@ namespace ao::audio
     Engine(Engine&&) = delete;
     Engine& operator=(Engine&&) = delete;
 
+    /// Installs the backend for a selected output. Even an installation with the same IDs retires the old route.
     void setBackend(std::unique_ptr<Backend> backendPtr,
-                    Device const& device);   // NOLINT(aobus-strict-forward-declaration)
+                    Device const& device); // NOLINT(aobus-strict-forward-declaration)
+    /// Records a device descriptor without switching or reopening the backend. Changing only its name, description,
+    /// or default flag preserves preparations; a different backend or device ID invalidates them.
     void updateDevice(Device const& device); // NOLINT(aobus-strict-forward-declaration)
 
     void setOnTrackEnded(OnTrackEnded callback);

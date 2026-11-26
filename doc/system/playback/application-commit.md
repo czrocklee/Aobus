@@ -222,8 +222,8 @@ replace the current public snapshot with a `Preparing` transport snapshot.
 
 Completion returns to the callback executor. Succession revalidates its pending
 candidate, live source, and membership; transport re-resolves the track and
-compares `PlaybackInput`; Engine revalidates playback generation, route, and
-start context. Player task-handle cancellation and the callback-resumption
+compares `PlaybackInput`; Engine revalidates the playback generation and the
+output route's identity and revision. Player task-handle cancellation and the callback-resumption
 stop-token checkpoint prevent a superseded worker completion from reaching
 those acceptance checks. Only then may Engine adopt the prepared token and
 commit it: the commit retires the old render target and opens the backend on its
@@ -348,8 +348,7 @@ clear, source or membership mutation, or shutdown invalidates the pending
 start. A semantic acceptance veto completes once as `Conflict`, allowing start
 or lookahead completion to clear the matching pending state deterministically;
 task cancellation, replacement, or teardown may suppress completion entirely.
-Engine reports captured playback, route, or start-context evidence that became
-stale as `Conflict`; transport treats that result as supersession and does not
+Engine reports a stale playback generation or output route as `Conflict`; transport treats that result as supersession and does not
 publish a track-open or route-activation notification.
 Lookahead preparation is best-effort: completion clears only its matching
 pending bookkeeping, and stale or `Conflict` completion has no semantic effect.
