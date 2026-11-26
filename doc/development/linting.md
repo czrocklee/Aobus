@@ -9,7 +9,7 @@ Checker internals, fixture design, AST proof, and native replay mechanics are in
 
 Use project commands as the public entry points:
 
-- `./ao check lint` runs C++ clang-tidy, Python Ruff/mypy, Buildifier semantic lint, naming/test audits, and workflow lint for one source scope. It performs no formatting or global documentation check. The C++ stage consumes the Bazel lint report actions; full `ao check` gates the complete native project graph separately.
+- `./ao check lint` runs C++ clang-tidy, Python Ruff/mypy, Buildifier semantic lint, naming/test audits, and workflow lint for one source scope. It performs no formatting or global documentation check. The C++ stage consumes the Bazel lint report actions; it is separate from [completion lint](bazel.md#completion-gate).
 - `./ao check analyzer` runs path-sensitive analysis; findings fail by default. Use `--report-only` for advisory lint or analyzer warnings; selected compiler errors, tool and admission failures still fail.
 - `bazel test //test/lint:lint_test --nocache_test_results` runs fresh assertions on the Aobus clang-tidy fixture result; it is not the Python lint command.
 - `./ao format` rewrites native, Python, Bazel, Markdown, JSON, YAML, and CSS sources; `./ao check format` verifies the same scope without rewriting it.
@@ -21,13 +21,14 @@ Keep lint work scoped to the task; do not turn another change into a drive-by cl
 
 ## Scope behavior
 
-With no explicit scope, the portal compares the topic to its merge base with local `main`, then includes working-tree, staged, and untracked sources.
+With no explicit scope, standalone `check lint` compares the topic to its merge base with local `main`, then includes working-tree, staged, and untracked sources.
 On `main`, or when local `main` is unavailable, it uses `HEAD~1`.
 An explicit `--commit <rev>` compares the endpoint against that revision.
 
 `check lint` resolves source scope once for applicable naming and test audits, workflow lint, and language lint.
 Paths accept files or directories; missing paths fail before source discovery or native preparation. Empty subsets are skipped.
-`ao check` does not diff-scope anything: the graph's format, audit, workflow and lint targets check the complete source snapshot on the current host regardless of local changes, so a documentation-only edit still validates every applicable translation unit. Explicit `ao check lint` scopes do not narrow completion.
+[Completion](bazel.md#completion-gate) uses its own comparison base and
+fallback rules; standalone lint selectors do not change them.
 
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
@@ -48,20 +49,21 @@ nonportable-include-path warnings.
 
 ### Bazel-backed reports
 
-The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows. The native CI jobs gate the complete project C++ graph through `//:production_lint` inside `ao check`. Linux also checks one paired-header report via bare Bazel; that smoke is not another whole-graph lint pass.
-It accepts file/directory paths and the `--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
+The C++ stage's Bazel lint report route has bounded native Debug evidence on Linux, macOS and Windows.
+For standalone lint, the C++ stage accepts file/directory paths and the `--commit`/`--all` selectors plus repeatable `--target`; `--target` alone covers every actual translation unit and paired header main in those owners, not unpaired declared headers.
 Without `--target`, scope maps through actual Bazel `srcs` owners (including filegroups and aliases), not a dependency closure; with `--target`, those owners restrict the request and the selected scope gates the reports.
 For example, `./ao check lint --target //lib/utility:utility include/ao/utility/Base64.h` checks just the header in its owner's native context; omit `include/ao/utility/Base64.h` to check the entire owner. Both requests require an index proving the owner has a native translation unit. The header-only request does not need its sibling `.cpp` report.
 For a supported direct main path, a direct-only scope requests its existing reports in all actual native contexts and the owner inventory, not sibling reports from those owners; donor discovery may also request sibling native TU reports.
 If any path is unsupported by the selection codec, all compatible owners in the request fall back to the full output group while gating only selected mains.
 For a header without a same-component companion, or an include fragment, lint discovers an actual consumer through translation-unit reports, then analyzes in that consumer's native context. Fragment warnings are scoped to its normalized file identity; consumer compiler errors and unlocated diagnostics remain, and scoping cannot hide an incomplete attempt.
-Scoped lint defers discovered platform-incompatible files. With `--gtk off` it also defers discovered GTK files only if the configured graph proves every candidate owner incompatible. Explicit files still require reports; a compatible header or fragment that no analyzed translation unit includes, or a compatible path with no owner, fails rather than producing a partial pass.
-`--all` selects the project C++ scope with the same rules.
+Batched scopes, including `--all`, follow the [configured report deferral rules](bazel.md#lint-reports).
+Explicit files still require reports; compatible files without a compile owner
+or an observed consumer fail rather than producing a partial pass.
 
-The completion gate's C++ stage is the declared `//test/lint:production_lint` test, which applies the report aspect to the declared completion roots without a diff selector, so `--commit` never narrows it: every compile owner's declared `srcs`, `hdrs`, `textual_hdrs` and additional compiler inputs that classify STRICT or RELAXED are gated — authored sources only, so external and generated inputs stay out — and all direct reports are validated.
-A direct main report from any configured owner in the gate makes replay unnecessary for that path.
-Headers and fragments without a direct main still replay through a real consumer selected from the baseline reports' include evidence.
-Only recognized foreign-native-platform paths may be deferred ([report contracts](bazel.md#lint-reports)). The gate uses the same report graph, lint rules, and filename classification as scoped lint. Full coverage does not mean fresh execution: the gate reuses reports from the action cache and runs the analysis on a cache miss. The independent authored-source ownership scan belongs to `//:native_policy` ([test ownership](bazel.md#test-ownership)). GLib-generated C and catalog arrays are compiled in the normal graph, but the lint test excludes generated-only owners from authored-source checks.
+Full completion checks declared authored sources with the same lint rules.
+The [Bazel report contract](bazel.md#lint-reports) defines owner coverage,
+header replay, and cache reuse for the whole-graph test. The independent
+[ownership audit](bazel.md#test-ownership) still runs in both completion modes.
 
 The native C++ stage of `./ao check lint` reads reports from the current BEP: it returns 0 for a clean selection, 1 for warnings, and 2 for selected compiler errors or an incomplete attempt.
 `--report-only` makes only warnings advisory. Reusing a cached report does not change the verdict.
@@ -122,11 +124,8 @@ the target compiler.
 - Windows owns WASAPI and other Windows-only units.
 - Shared units are intentionally checked on every host that builds them.
 
-Changed-file, folder, and `--all` scopes may defer only files incompatible with the current host, and the portal reports every deferral.
-A declared path that no admitted configuration selects fails rather than silently passing.
-An explicitly selected uncovered file always fails.
-If a compatible project file lacks an exact translation-unit command or a proved header consumer, the whole requested scope fails before a partial tidy pass.
-Check the selected owner and native prerequisites, then retry through `ao check lint`.
+The portal reports every deferral. For an uncovered path, check the selected
+owner and native prerequisites, then retry through `ao check lint`.
 The report actions derive their own real Bazel compile contexts; no exported
 workspace compilation database or prerequisite whole-project build is needed.
 Header consumer selection, WinUI command merging, and Windows flag replay are specified in [native replay and header diagnostics](lint/checker-development.md#native-replay-and-header-diagnostics).
@@ -177,7 +176,7 @@ Use `NOLINT` only for an external API shape, a clear false positive, or a test-o
 
 Acceptable cases include GTKmm ownership handoff such as `Glib::make_refptr_for_instance(new T)`, GLib or GTK macros, C varargs or arrays at an API boundary, unavoidable test `reinterpret_cast`, framework-required method names, and genuine template or framework false positives.
 
-`./ao check lint` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode, and a complete `ao check` runs the same stale-suppression scan over the whole project C++ set, not only changed files.
+`./ao check lint` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode, and the native policy test in `ao check` runs the same stale-suppression scan over the whole project C++ set, not only changed files.
 Because it cannot suppress a diagnostic, such a directive is stale.
 Remove local suppressions in the same change that disables a check or removes it from a mode.
 
@@ -251,8 +250,10 @@ Both routes follow the version policy in `script/ao/toolchain.json`.
 `./ao format` formats `.bzl`, `.bazel`, and exactly named `BUILD`/`WORKSPACE`
 files with the [governed Buildifier](dependency-governance.md#repository-tooling).
 `./ao check format` never rewrites them. `./ao check lint` checks semantic lint
-only; full completion gates formatting and lint through separate graph tests. The existing changed-file, explicit-file, folder and `--all`
-selectors apply, including root module/repository files and `asset/BUILD.bazel`.
+only; native completion gates formatting and semantic lint through separate
+graph tests, regardless of production lint scope. The changed-file, explicit-file,
+folder and `--all` selectors apply to the standalone commands, including root
+module/repository files and `asset/BUILD.bazel`.
 `.bazelrc`, `.bazelversion`, lockfiles and templates are not Starlark inputs.
 Bazel-only scopes do not prepare a C++ compiler, compile database or lint plugin.
 Bazel graph files under `test/lint/` remain ordinary Buildifier inputs; the
@@ -350,8 +351,7 @@ Prefer hand edits for ownership, public API, behavior, naming, readability trade
 After C++ lint edits, rerun the narrowest `./ao check lint` scope covering modified C++ files.
 After Python hygiene edits, rerun `./ao check lint` for modified Python and the
 [tooling runner](test/test-suite.md#tooling-and-lint-fixtures) when tooling
-behavior changed; complete `ao check` includes both the tooling targets and the
-graph's format and audit targets.
+behavior changed; local completion also runs the tooling, format, and audit targets.
 After workflow edits, rerun `./ao check lint` over the changed
 `.github/workflows` files, or run the graph's `workflows` target.
 Run focused build or test validation when a lint fix changes behavior, ownership, public API, or test semantics.

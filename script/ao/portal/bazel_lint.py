@@ -21,7 +21,7 @@ from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from ao.core import bazel_native as native
@@ -33,6 +33,7 @@ from ao.portal import bazel_workflows, bazel_workspace, build_dir, tidy_engine
 
 if TYPE_CHECKING:
     from ao.portal.source_analyzer import AnalyzerRequest
+    from ao.portal.source_scope import SourceScope
 
 _ASPECT = "//bazel/lint:lint.bzl%lint_aspect"
 _ANALYZER_ASPECT = "//bazel/lint:lint.bzl%analyzer_aspect"
@@ -50,9 +51,13 @@ _CQUERY_EXPRESSION = 'str(target.label) + "|" + str("IncompatiblePlatformProvide
 _SOURCE_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
 _HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
 _INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
-_LINT_SUFFIXES = tuple(sorted(_SOURCE_SUFFIXES | _HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES))
+LINT_SUFFIXES = tuple(sorted(_SOURCE_SUFFIXES | _HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES))
 _COMPILE_OWNER_KINDS = frozenset({"cc_library", "cc_binary", "cc_test", "objc_library"})
 _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
+_FEATURE_PATH_PREFIXES = {
+    "gtk": ("app/linux-gtk/", "test/linux-gtk/"),
+    "system-media": ("app/systemmedia/linux/", "app/include/ao/systemmedia/linux/", "test/systemmedia/linux/"),
+}
 _RETAINED_RUNS = 8
 _NO_CONSUMER = "no analyzed translation unit includes it"
 _LABEL = re.compile(r"^//([A-Za-z0-9._+~/-]*):([A-Za-z0-9._+~/-]+)$")
@@ -624,33 +629,6 @@ def _owner_targets(value: object) -> list[str]:
     return targets
 
 
-def _validate_explicit_paths(files: Sequence[str]) -> None:
-    root = absolute_path(PROJECT_ROOT)
-    missing: list[str] = []
-    outside: list[str] = []
-    for name in files:
-        if "\x00" in name:
-            raise ValueError("explicit path contains a NUL byte")
-        path = Path(name)
-        if not path.is_absolute():
-            path = PROJECT_ROOT / path
-        resolved = absolute_path(path)
-        try:
-            resolved.relative_to(root)
-        except ValueError:
-            outside.append(name)
-            continue
-        if not resolved.is_file():
-            missing.append(name)
-    if missing or outside:
-        details: list[str] = []
-        if missing:
-            details.append("missing: " + ", ".join(missing))
-        if outside:
-            details.append("outside checkout: " + ", ".join(outside))
-        raise ValueError("explicit lint paths are invalid (" + "; ".join(details) + ")")
-
-
 def _relative_selected(paths: Iterable[Path]) -> list[str]:
     root = absolute_path(PROJECT_ROOT)
     selected: list[str] = []
@@ -672,7 +650,7 @@ def _relative_selected(paths: Iterable[Path]) -> list[str]:
 
 
 def _validate_selected_suffix(path: str) -> None:
-    if PurePosixPath(path).suffix.lower() not in _LINT_SUFFIXES:
+    if PurePosixPath(path).suffix.lower() not in LINT_SUFFIXES:
         raise ValueError(f"unsupported C++ lint file type: {path}")
 
 
@@ -819,19 +797,26 @@ def _platform_incompatible(path: str) -> bool:
     return tidy_engine._is_platform_incompatible(absolute_path(PROJECT_ROOT / path), PROJECT_ROOT)
 
 
-def _gtk_disabled_paths(graph: QueryGraph, selected: Sequence[str], incompatible: set[str]) -> set[str]:
-    """Prove a GTK path is configured out; its directory alone cannot establish that."""
-    disabled: set[str] = set()
-    for path in selected:
-        if not path.startswith(("app/linux-gtk/", "test/linux-gtk/")):
+def _disabled_feature_paths(
+    graph: QueryGraph, selected: Sequence[str], incompatible: set[str], args: bazel_workflows.NativeRequest
+) -> dict[str, str]:
+    """Map configured-out paths to disabled features using positive owner evidence."""
+    disabled: dict[str, str] = {}
+    for feature, prefixes in _FEATURE_PATH_PREFIXES.items():
+        if bazel_workflows.feature_enabled(getattr(args, feature.replace("-", "_"), None), feature):
             continue
-        owners = (
-            graph.source_owners(path) if _is_source(path) else graph.header_owners(path) + graph.consumer_owners(path)
-        )
-        # Some test helpers in this tree still compile with GTK off. An
-        # unknown or compatible candidate must keep ordinary coverage checks.
-        if owners and incompatible.issuperset(owners):
-            disabled.add(path)
+        for path in selected:
+            if not path.startswith(prefixes):
+                continue
+            owners = (
+                graph.source_owners(path)
+                if _is_source(path)
+                else graph.header_owners(path) + graph.consumer_owners(path)
+            )
+            # Feature directories can contain compatible helpers and adapters.
+            # Every possible owner must have an incompatible cquery row.
+            if owners and incompatible.issuperset(owners):
+                disabled[path] = feature
     return disabled
 
 
@@ -841,7 +826,7 @@ def _deferred_paths(
     *,
     allow: bool,
     explicit_files: Collection[str] = (),
-    gtk_disabled: Collection[str] = (),
+    feature_disabled: Collection[str] = (),
 ) -> set[str]:
     if not allow:
         return set()
@@ -857,20 +842,26 @@ def _deferred_paths(
         # the native platform policy then makes its deferral defensible.
         if _scope_key(path) in explicit or path in reported:
             continue
-        if path in gtk_disabled or _platform_incompatible(path):
+        if path in feature_disabled or _platform_incompatible(path):
             deferred.add(path)
     return deferred
 
 
-def _print_deferred(paths: set[str], *, gtk_disabled: Collection[str] = ()) -> None:
-    for heading, group in (
-        ("Deferred files that are incompatible with this platform:", paths.difference(gtk_disabled)),
-        ("Deferred GTK files whose owners are incompatible with --gtk off:", paths.intersection(gtk_disabled)),
-    ):
-        if group:
-            print(heading, file=sys.stderr)
-            for path in sorted(group):
-                print(f"  {path}", file=sys.stderr)
+def _print_deferred(paths: set[str], *, feature_disabled: Mapping[str, str] | None = None) -> None:
+    groups: dict[str, list[str]] = {}
+    for path in sorted(paths):
+        feature = feature_disabled.get(path) if feature_disabled else None
+        label = "GTK" if feature == "gtk" else feature
+        heading = (
+            f"Deferred {label} files whose owners are incompatible with --{feature} off:"
+            if feature
+            else "Deferred files that are incompatible with this platform:"
+        )
+        groups.setdefault(heading, []).append(path)
+    for heading, group in groups.items():
+        print(heading, file=sys.stderr)
+        for path in group:
+            print(f"  {path}", file=sys.stderr)
 
 
 def _print_stale(stale: Sequence[Any]) -> None:
@@ -886,10 +877,12 @@ def _print_stale(stale: Sequence[Any]) -> None:
 
 
 def _finish_unowned(
-    selected: Sequence[str], *, explicit_files: Collection[str], gtk_disabled: Collection[str] = ()
+    selected: Sequence[str], *, explicit_files: Collection[str], feature_disabled: Mapping[str, str] | None = None
 ) -> int:
-    deferred = _deferred_paths(selected, (), allow=True, explicit_files=explicit_files, gtk_disabled=gtk_disabled)
-    _print_deferred(deferred, gtk_disabled=gtk_disabled)
+    deferred = _deferred_paths(
+        selected, (), allow=True, explicit_files=explicit_files, feature_disabled=feature_disabled or ()
+    )
+    _print_deferred(deferred, feature_disabled=feature_disabled)
     failures = [path for path in selected if path not in deferred]
     if failures:
         raise ValueError("no native lint owner covers selected path(s): " + ", ".join(sorted(failures)))
@@ -932,6 +925,7 @@ def _report_pass(
     parameters = _write_consumer_parameters(prepared, consumers, output_groups=output_groups)
     aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile)
     bep = run_dir / f"{name}.bep.json"
+    log = run_dir / f"{name}.log"
     build_targets = [
         *owners,
         f"--aspects={aspect}",
@@ -946,17 +940,27 @@ def _report_pass(
         # Diagnostic evidence only; the gate still inventories TargetComplete
         # output groups, never action-execution events or cached stdout.
         build_targets.append("--build_event_publish_all_actions")
-    status = bazel_workspace.execute(
-        executable,
-        tree,
-        prepared,
-        "build",
-        config,
-        build_targets,
-        jobs=jobs,
-        remote_cache=remote_cache,
-        isolate_rc=True,
-    )
+    try:
+        status = bazel_workspace.execute(
+            executable,
+            tree,
+            prepared,
+            "build",
+            config,
+            build_targets,
+            jobs=jobs,
+            remote_cache=remote_cache,
+            isolate_rc=True,
+            log=log,
+        )
+    finally:
+        if log.is_file():
+            # Other portal commands truncate build.log in place; a link would
+            # let the next invocation overwrite retained pass evidence.
+            try:
+                shutil.copyfile(log, tree / "build.log")
+            except OSError as error:
+                print(f"Cannot refresh build.log from {log}: {error}", file=sys.stderr)
     _write_json(
         run_dir / f"{name}.receipt.json",
         {
@@ -972,7 +976,7 @@ def _report_pass(
         },
     )
     if status:
-        raise ValueError(f"Bazel {profile} report build failed (exit {status}); log: {tree / 'build.log'}")
+        raise ValueError(f"Bazel {profile} report build failed (exit {status}); log: {log}")
     return bep, bazel_lint_reports.read_reports(
         bep,
         [_canonical_owner(owner) for owner in owners],
@@ -1021,7 +1025,7 @@ def _common_lint_request(args: bazel_workflows.NativeRequest) -> _LintRequest:
 
 @contextmanager
 def _lint_workspace(
-    request: _LintRequest, args: bazel_workflows.NativeRequest
+    request: _LintRequest, args: bazel_workflows.NativeRequest, *, lockfile_readonly: bool = False
 ) -> Iterator[tuple[Path, Path, Path, Path]]:
     """Prepare one governed lint tree and hold its lock through the gate.
 
@@ -1035,55 +1039,47 @@ def _lint_workspace(
     native.require_supported_source()
     with build_tree_lock(tree):
         tree.mkdir(parents=True, exist_ok=True)
-        lint_configuration = tree / "configuration" / "lint.json"
-        _write_lint_config(
-            lint_configuration, _lint_configuration(request.check, request.header_filter, request.clang_tidy_args)
-        )
+        # Keep the repository's default policy selected across both completion phases.
+        lint_configuration = None
+        if request.check is not None or request.header_filter is not None or request.clang_tidy_args:
+            lint_configuration = tree / "configuration" / "lint.json"
+            _write_lint_config(
+                lint_configuration, _lint_configuration(request.check, request.header_filter, request.clang_tidy_args)
+            )
         prepared = bazel_workspace.prepare_workspace(
             tree,
             request.config,
             prefix=request.vcpkg_prefix,
             graph_options=bazel_workflows.feature_options(args),
             lint_configuration=lint_configuration,
+            lockfile_readonly=lockfile_readonly,
         )
         run_dir = _new_run_dir(tree)
         if request.debug:
             print(f"Bazel lint tree: {tree}", file=sys.stderr)
-            print(f"Bazel lint evidence: {run_dir}", file=sys.stderr)
+        if request.debug or lockfile_readonly:
+            print(f"Bazel lint evidence: {run_dir}", file=sys.stderr, flush=True)
         yield executable, tree, prepared, run_dir
 
 
-def _run(args: bazel_workflows.NativeRequest) -> int:
+def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_readonly: bool) -> int:
     request = _common_lint_request(args)
     output, jobs, config, remote_cache = request.output, request.jobs, request.config, request.remote_cache
     debug = request.debug
     targets = _owner_targets(getattr(args, "owner_targets", []))
-    files = _string_list(getattr(args, "files", []), "files")
-    all_sources = bool(getattr(args, "all", False))
-    folders = _string_list(getattr(args, "folder", []), "folder")
-    commit = _optional_text(getattr(args, "commit", None), "commit")
-    prepared_sources = getattr(args, "_resolved_sources", None)
-    has_scope = bool(files or all_sources or folders or commit or prepared_sources)
-    target_only = bool(targets) and not has_scope
+    target_only = bool(targets) and not scope.files
 
     selected_paths: list[Path] = []
-    explicit_selected = set(_relative_selected([absolute_path(PROJECT_ROOT / name) for name in files]))
+    explicit_selected = _relative_selected([absolute_path(PROJECT_ROOT / name) for name in scope.explicit_files])
     stale_status = 0
     if not target_only:
-        # The legacy scope helper is annotated as a Namespace but consumes only
-        # these structural scope properties, including frozen resolved sources.
-        resolved, _ = tidy_engine.resolve_scope(
-            cast(Any, args), tidy_engine.ALL_FOLDERS, "Checking", suffixes=_LINT_SUFFIXES
-        )
-        if files:
-            _validate_explicit_paths(files)
         explicit_keys = {_scope_key(path) for path in explicit_selected}
-        resolved = _relative_selected([absolute_path(PROJECT_ROOT / name) for name in resolved])
+        resolved = _relative_selected([absolute_path(PROJECT_ROOT / name) for name in scope.files])
         explicit_sources = [name for name in resolved if _scope_key(name) in explicit_keys]
         scanned_sources = [name for name in resolved if _scope_key(name) not in explicit_keys]
-        buckets = tidy_engine.classify_existing(scanned_sources, False)
+        buckets = tidy_engine.classify_existing(scanned_sources, False, require_checkout=True)
         if explicit_sources:
-            explicit_buckets = tidy_engine.classify_existing(explicit_sources, True)
+            explicit_buckets = tidy_engine.classify_existing(explicit_sources, True, require_checkout=True)
             for mode, paths in explicit_buckets.items():
                 buckets[mode].extend(paths)
         selected_paths = [*buckets["STRICT"], *buckets["RELAXED"]]
@@ -1102,7 +1098,12 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
     for path in selected:
         _validate_selected_suffix(path)
 
-    with _lint_workspace(request, args) as (executable, tree, prepared, run_dir):
+    with _lint_workspace(request, args, lockfile_readonly=lockfile_readonly) as (
+        executable,
+        tree,
+        prepared,
+        run_dir,
+    ):
         if debug:
             print(f"Bazel lint selected: {' '.join(selected) if selected else '<explicit owners>'}", file=sys.stderr)
 
@@ -1127,7 +1128,6 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
                 rows = _query_compatibility(executable, prepared, run_dir, held_owners, name="cquery-consumers")
                 incompatible.update(owner for owner, value in rows.items() if value)
                 compatible.extend(owner for owner in held_owners if not rows[owner])
-        gtk_off = not bazel_workflows.feature_enabled(getattr(args, "gtk", None), "gtk")
         if incompatible:
             print("Deferred lint owners incompatible with the selected configuration:", file=sys.stderr)
             for owner in sorted(incompatible):
@@ -1135,12 +1135,13 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
         if not compatible:
             if targets:
                 raise ValueError("all explicit lint owners are incompatible with this platform")
-            gtk_disabled = _gtk_disabled_paths(graph, selected, incompatible) if gtk_off else set()
+            feature_disabled = _disabled_feature_paths(graph, selected, incompatible, args)
             return max(
-                stale_status, _finish_unowned(selected, explicit_files=explicit_selected, gtk_disabled=gtk_disabled)
+                stale_status,
+                _finish_unowned(selected, explicit_files=explicit_selected, feature_disabled=feature_disabled),
             )
 
-        direct_groups = _lint_output_groups([] if target_only or all_sources else selected)
+        direct_groups = _lint_output_groups(selected)
         discovery_groups = (
             direct_groups
             if direct_groups == (_OUTPUT_GROUP,)
@@ -1211,12 +1212,16 @@ def _run(args: bazel_workflows.NativeRequest) -> int:
             # they belong to its scope; unpaired declared headers do not.
             selected = sorted({report.identity.main for inventory in inventories for report in inventory.reports})
         else:
-            gtk_disabled = _gtk_disabled_paths(graph, selected, incompatible) if gtk_off and not targets else set()
+            feature_disabled = _disabled_feature_paths(graph, selected, incompatible, args) if not targets else {}
             deferred = _deferred_paths(
-                selected, inventories, allow=not targets, explicit_files=explicit_selected, gtk_disabled=gtk_disabled
+                selected,
+                inventories,
+                allow=not targets,
+                explicit_files=explicit_selected,
+                feature_disabled=feature_disabled,
             )
             selected = [path for path in selected if path not in deferred]
-            _print_deferred(deferred, gtk_disabled=gtk_disabled)
+            _print_deferred(deferred, feature_disabled=feature_disabled)
         _write_json(
             run_dir / "run.receipt.json",
             {
@@ -1247,13 +1252,13 @@ def _context_failed(inventories: Sequence[bazel_lint_reports.OwnerInventory], se
     )
 
 
-def run(args: bazel_workflows.NativeRequest) -> int:
+def run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_readonly: bool = False) -> int:
     """Return 0 for success, 1 for findings, 2 for tool/admission/context failure.
 
     Report-only requests suppress only ordinary findings, never failures.
     """
     try:
-        status = _run(args)
+        status = _run(args, scope, lockfile_readonly=lockfile_readonly)
         return 0 if status == 1 and getattr(args, "report_only", False) else status
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Bazel lint failed: {error}", file=sys.stderr)

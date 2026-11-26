@@ -22,7 +22,7 @@ from ao.portal import (
 from . import options
 
 NAME = "check"
-HELP = "Validate the complete native graph, or one explicitly selected subject"
+HELP = "Build and test with change-scoped native lint, or check one subject"
 REQUIRES_BUILD_ENV = True
 
 
@@ -55,14 +55,18 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     bazel_workflows.add_arguments(parser)
     parser.add_argument("--clean", action="store_true", help="clean the selected outputs before complete validation")
     parser.add_argument("--fresh", action="store_true", help="disable Bazel test-result caching")
-    parser.add_argument(
-        "--ci", action="store_true", help="validate the native CI partition, including Windows desktop tests"
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument(
+        "--extend", action="store_true", help="check the whole native lint graph instead of changed inputs"
     )
+    scope.add_argument("--lint-base", metavar="SHA", help="select native lint from this verified base to a clean HEAD")
+    parser.add_argument("--native-only", action="store_true", help="omit the standalone repository checks")
+    parser.add_argument("--desktop-tests", action="store_true", help="include tests that require a Windows desktop")
     parser.set_defaults(func=run_command, check_action=None)
     checks = parser.add_subparsers(dest="check_action", metavar="<subject>")
 
     repository = checks.add_parser(
-        "repository", help="validate the repository CI partition on Linux", allow_abbrev=False
+        "repository", help="validate the standalone repository checks on Linux", allow_abbrev=False
     )
     repository.add_argument("--path", help="external Bazel tree (honors BUILD_DIR)")
     repository.add_argument("--jobs", type=bazel_workflows.positive_jobs, default=jobs.default_workers())
@@ -112,7 +116,15 @@ def validate_syntax(args: argparse.Namespace, arguments: list[str], parser: argp
 
 
 def _completion_request(args: argparse.Namespace) -> completion.Request:
-    return completion.Request(**options.native_values(args), ci=args.ci, fresh=args.fresh, clean=args.clean)
+    return completion.Request(
+        **options.native_values(args),
+        extend=args.extend,
+        lint_base=args.lint_base,
+        native_only=args.native_only,
+        desktop_tests=args.desktop_tests,
+        fresh=args.fresh,
+        clean=args.clean,
+    )
 
 
 def _lint_request(args: argparse.Namespace) -> source_lint.LintRequest:

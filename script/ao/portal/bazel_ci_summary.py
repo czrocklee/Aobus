@@ -277,7 +277,7 @@ def _check_attempt_lines(tree: Path, directory: Path, *, expect_wasapi: bool) ->
     events, summaries, state = _bep_stream(path)
     lines = [
         f"#### `{_cell(path.relative_to(tree).as_posix())}`",
-        f"- status **{_cell(_outcome(events.get('finished'), state))}**",
+        f"- Bazel test graph status **{_cell(_outcome(events.get('finished'), state))}**",
         f"- {_test_summary_line(summaries)}",
     ]
     # testlogs can be overwritten by the next invocation on the same tree.
@@ -294,7 +294,7 @@ def _check_attempt_lines(tree: Path, directory: Path, *, expect_wasapi: bool) ->
 
 
 def _completion(tree: Path, *, expect_wasapi: bool) -> list[str]:
-    lines = [f"### Bazel completion — `{_cell(tree)}`", ""]
+    lines = [f"### Bazel validation evidence — `{_cell(tree)}`", ""]
     receipts = sorted(tree.glob(_RECEIPT_GLOB))
     attempts = [
         directory

@@ -1,12 +1,5 @@
-"""Tests for the CMake-free tidy scope, platform and SDK descriptors.
+"""Tests for native platform ownership, LLVM SDK selection and component mapping."""
 
-Bazel owns compile commands and header inputs; this module only describes
-scope selection, native platform ownership, verified SDK tool selection and
-public/private component mapping. No compile database, Ninja or CMake cache
-appears here.
-"""
-
-import argparse
 import contextlib
 import io
 import unittest
@@ -14,60 +7,6 @@ from pathlib import Path
 from unittest import mock
 
 from ao.portal import tidy_engine
-
-
-class ScopeResolutionTest(unittest.TestCase):
-    def arguments(self, **overrides):
-        arguments = argparse.Namespace(
-            files=[], all=False, folder=[], commit=None, check=None, debug=False, output=None, jobs=1, path=None
-        )
-        for key, value in overrides.items():
-            setattr(arguments, key, value)
-        return arguments
-
-    def test_explicit_files_are_the_scope(self):
-        files, explicit = tidy_engine.resolve_scope(self.arguments(files=["lib/A.cpp", "lib/B.cpp"]), [], "Checking")
-        self.assertEqual(files, ["lib/A.cpp", "lib/B.cpp"])
-        self.assertTrue(explicit)
-
-    def test_prepared_scope_is_consumed_without_rescanning(self):
-        arguments = self.arguments(_resolved_sources=["lib/Prepared.cpp"])
-        with mock.patch.object(tidy_engine.git_files, "changed_files", side_effect=AssertionError("rescanned")):
-            files, explicit = tidy_engine.resolve_scope(arguments, [], "Checking")
-        self.assertEqual(files, ["lib/Prepared.cpp"])
-        self.assertFalse(explicit)
-
-    def test_all_uses_the_project_folders(self):
-        with (
-            mock.patch.object(tidy_engine.git_files, "find_sources", return_value=["lib/A.cpp"]) as find,
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            files, explicit = tidy_engine.resolve_scope(self.arguments(all=True), ["lib", "app"], "Checking")
-        self.assertEqual(files, ["lib/A.cpp"])
-        self.assertFalse(explicit)
-        find.assert_called_once_with(["lib", "app"], suffixes=tidy_engine.git_files.CPP_SUFFIXES)
-
-    def test_folder_uses_the_selected_directories(self):
-        with (
-            mock.patch.object(tidy_engine.git_files, "find_sources", return_value=["app/A.cpp"]) as find,
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            files, explicit = tidy_engine.resolve_scope(self.arguments(folder=["app/runtime"]), ["lib"], "Checking")
-        self.assertEqual(files, ["app/A.cpp"])
-        self.assertFalse(explicit)
-        find.assert_called_once_with(["app/runtime"], suffixes=tidy_engine.git_files.CPP_SUFFIXES)
-
-    def test_without_selection_the_changed_files_are_the_scope(self):
-        with (
-            mock.patch.object(tidy_engine.git_files, "diff_base", return_value="HEAD~1") as base,
-            mock.patch.object(tidy_engine.git_files, "changed_files", return_value=["lib/Changed.cpp"]) as changed,
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            files, explicit = tidy_engine.resolve_scope(self.arguments(commit="HEAD~1"), [], "Checking")
-        self.assertEqual(files, ["lib/Changed.cpp"])
-        self.assertFalse(explicit)
-        base.assert_called_once_with("HEAD~1")
-        changed.assert_called_once_with("HEAD~1", suffixes=tidy_engine.git_files.CPP_SUFFIXES)
 
 
 class ClangToolTest(unittest.TestCase):

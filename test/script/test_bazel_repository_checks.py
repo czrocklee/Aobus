@@ -115,6 +115,28 @@ class RepositoryChecksTests(unittest.TestCase):
                 self.assertEqual(checks.main(args), 1)
                 run.assert_not_called()
 
+    def test_source_format_reports_discovery_errors_at_the_command_boundary(self):
+        manifests = self.manifest_args("clang-format", "buildifier", "prettier")
+        for failure in (git_files.GitBindingError("invalid Git binding"), OSError("cannot read checkout")):
+            with (
+                self.subTest(failure=failure),
+                mock.patch.object(documentation_checks, "markdown_scope", return_value=source_scope.SourceScope()),
+                mock.patch.object(source_scope, "resolve", side_effect=failure),
+                contextlib.redirect_stderr(io.StringIO()) as errors,
+            ):
+                self.assertEqual(checks.main([*manifests, "--ruff", str(self.root / "ruff"), "format-sources"]), 1)
+                self.assertIn(str(failure), errors.getvalue())
+
+    def test_formatter_programming_error_propagates_from_the_command_boundary(self):
+        manifests = self.manifest_args("prettier")
+        with (
+            mock.patch.dict(os.environ, {"TEST_TMPDIR": ""}),
+            mock.patch.object(documentation_checks, "markdown_scope", return_value=source_scope.SourceScope()),
+            mock.patch.object(source_format, "check", side_effect=TypeError("unexpected formatter state")),
+            self.assertRaisesRegex(TypeError, "unexpected formatter state"),
+        ):
+            checks.main([*manifests, "format-docs"])
+
     def test_source_formatter_requires_an_absolute_ruff_executable(self):
         manifests = self.manifest_args("clang-format", "buildifier", "prettier")
         with (

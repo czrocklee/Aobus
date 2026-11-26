@@ -1077,6 +1077,19 @@ class BazelWorkspaceTests(unittest.TestCase):
         self.assertIn("--repo_env=AOBUS_CHECKOUT_ID=selected-native-checkout", rc)
         self.assertNotIn(str(redirector), rc)
 
+    def test_prepare_workspace_clears_per_invocation_lockfile_and_desktop_options(self):
+        tree = self.root / "tree"
+        lockfile = "common --lockfile_mode=error"
+        desktop = "--//bazel:desktop_tests=true"
+        with patch.object(native, "native_platform", return_value="linux"):
+            prepared = workspace.prepare_workspace(tree, "fastbuild", graph_options=(desktop,), lockfile_readonly=True)
+            enabled = (prepared / "aobus.bazelrc").read_text(encoding="utf-8").splitlines()
+            prepared = workspace.prepare_workspace(tree, "fastbuild")
+            defaults = (prepared / "aobus.bazelrc").read_text(encoding="utf-8").splitlines()
+        for option in (lockfile, f"build {desktop}"):
+            self.assertIn(option, enabled)
+            self.assertNotIn(option, defaults)
+
     def test_launch_rc_requires_an_available_base_interpreter(self):
         with (
             patch.object(native, "native_platform", return_value="linux"),

@@ -132,6 +132,7 @@ _PORTAL = [
     "script/ao/portal/git_files.py",
     "script/ao/portal/guardrails.py",
     "script/ao/portal/host_checks.py",
+    "script/ao/portal/lint_scope.py",
     "script/ao/portal/measurements.py",
     "script/ao/portal/name_audit.py",
     "script/ao/portal/performance_review.py",

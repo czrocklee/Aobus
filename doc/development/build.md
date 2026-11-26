@@ -16,12 +16,12 @@ across checkouts. Each build tree keeps its own outputs.
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `setup <component>`         | Explicit preparation: `bazel`, `deps`, `llvm-sdk`, `winui-runtime`, `buildifier`, `prettier`, or `git-hooks`; each component exposes only its relevant options. |
 | `format [paths...]`         | Source rewriting only; paths accept files or directories.                                                                                                       |
-| `check`                     | [Full local completion or the native CI selection](bazel.md#completion-gate).                                                                                   |
+| `check`                     | [Local completion](bazel.md#completion-gate) with scoped production lint; add `--extend` for full lint.                                                         |
 | `check format [paths...]`   | Read-only formatting; `--docs` selects the global Markdown inventory instead of paths, `--all`, or `--commit`.                                                  |
 | `check lint [paths...]`     | Scoped semantic lint and source audits, without formatting or global documentation semantics.                                                                   |
 | `check analyzer [paths...]` | Path-sensitive analysis; findings fail unless `--report-only` is explicit.                                                                                      |
 | `check docs`                | Global document semantics only; no paths, commit scope, formatting, or native SDK options.                                                                      |
-| `check repository`          | [Repository-only CI checks](bazel.md#completion-gate) on Linux.                                                                                                 |
+| `check repository`          | [Standalone repository checks](bazel.md#completion-gate) on Linux.                                                                                              |
 | `check contracts`           | Compile-contract analysis, not product or sanitizer runtime execution.                                                                                          |
 | `check deps`                | SDK admission, digest validation, and dependency reporting; optional JSON output.                                                                               |
 | `check winui`               | Read-only WinUI prerequisites; `--build-only` omits runtime prerequisites.                                                                                      |
@@ -50,17 +50,15 @@ for prerequisites.
 bazel build //app/cli:aobus //app/tui:aobus-tui
 bazel run //app/tui:aobus-tui
 bazel test //:tests
-./ao check
+./ao check --extend
 ```
 
 Bazel builds incrementally and defaults to fastbuild. Linux targets compile with
 pinned GCC by default: `--compiler=gcc|clang` on `bazel build`/`test`/`run`
 selects the actual target compiler. Project `check`, `measure performance`, and
 `check contracts` accept `--compiler gcc|clang`; there is no `--clang` alias. An unknown compiler value fails resolution; there is no silent
-fallback. Use `//:tests` for the ordinary test selection and `./ao check` for the [completion gate](bazel.md#completion-gate).
-Standalone `./ao check lint` validates source semantics in a selected scope;
-`./ao check format` verifies formatting separately. Choose completion checks from
-[validation and review](test/validation-and-review.md).
+fallback. Use `//:tests` during ordinary development; choose the applicable
+completion checks from [validation and review](test/validation-and-review.md).
 
 For project commands, the portal enters the pinned `nix-shell` automatically.
 It reuses an entered shell only when `AO_NIX_SHELL_FINGERPRINT` matches the
@@ -152,7 +150,9 @@ If native Git cannot follow a foreign linked worktree's `.git` pointer, set `AOB
 
 Before using the pair, compare the private directory, common directory, index path, exact HEAD, and staged entries with the intended checkout. Matching metadata does not verify the contents of a source mirror or its comparison base. Check the intended edits and the base revision separately. A matching `--show-toplevel` is not sufficient: the portal trusts the association. Both values must be nonempty native absolute paths. Discovery rejects a malformed pair and ignores a complete pair for a different normalized root; use the portal's spelling, not an assumed path alias. If the changed-files comparison fails because Git returned an error after ignoring the pair, the diagnostic names both roots.
 
-Name files individually to bypass Git-backed scope discovery. For `format`, `check format`, `check lint`, and `check analyzer`, directories and `--all` skip the changed-files comparison but can still call Git to enumerate authored text files. That enumeration falls back to a filesystem scan only if Git is missing or reports no repository and no effective binding selects this checkout. A malformed pair or a binding for this checkout that Git cannot use fails instead.
+Bare `check` and `check --lint-base SHA` use the binding to plan production lint. `check --extend` skips that planning, not all Git use by the checks it runs. See the [completion gate](bazel.md#completion-gate).
+
+For commands that accept file selectors, name files individually to bypass Git-backed scope discovery. For `format`, `check format`, `check lint`, and `check analyzer`, directories and `--all` skip the changed-files comparison but can still call Git to enumerate authored text files. That enumeration falls back to a filesystem scan only if Git is missing or reports no repository and no effective binding selects this checkout. A malformed pair or a binding for this checkout that Git cannot use fails instead.
 
 `--commit REV` requires Git and selects a base while still including staged, unstaged, and non-ignored untracked changes. A change only to timestamps or other cached file stats does not select a file; real content changes and applicable executable-bit changes still count. Discovery uses both `--no-optional-locks` and `-c diff.autoRefreshIndex=false` because optional-lock suppression alone does not prevent diff index refreshes.
 
@@ -174,9 +174,7 @@ actions declare their own worker/resource count in the graph. Coverage and
 instrumentation use the same baseline for `-j`; coverage collection retains
 its separate memory-specific limits.
 
-CI's stdlib-only bootstrap helper computes the same affinity-aware worker count
-before native work; an unknown or nonpositive count fails before exports are
-written. [Sharded Catch2 execution](test/test-suite.md#sharded-catch2-execution)
+[Sharded Catch2 execution](test/test-suite.md#sharded-catch2-execution)
 explains the native ordering constraints.
 
 ## Measure native validation
@@ -188,16 +186,16 @@ opt-in phase measurements while running the normal portal commands:
 AOBUS_PHASE_LOG_DIR=/tmp/aobus-phases ./ao check
 ```
 
-Each process writes its own JSONL file. This opt-in capture remains a local
-tool. CI summarizes its existing check BEP files and available
-cache stop accounting without enabling these measurements; see
-[CI evidence](bazel.md#ci-product-gates-and-r2-validation) for the retained artifacts.
+Each process writes its own JSONL file. To compare lint scopes, use separate
+capture directories for `check` and `check --extend` on the same checkout and
+host. Record the comparison base, selected lint scope, and cache conditions
+alongside elapsed times. Hosted runs use [CI evidence](ci.md#validation-evidence)
+instead of this opt-in capture.
 Validate collected records with `python -m ao.core.phases <directory>`; the
 reporter runs with `PYTHONPATH=script` and is not a second build or test entry point. Its
 optional `--github-summary <file>` appends the same Markdown table. Missing,
 malformed, or incomplete measurements fail the report instead of producing an
-apparently complete timing result. The complete `check` gate remains mandatory
-when required by the change.
+apparently complete timing result. Timings do not replace required validation.
 
 Records contain fixed phase/command labels, process and nesting identities,
 monotonic durations, exit statuses, and relevant numeric scope/concurrency
@@ -237,7 +235,7 @@ explicitly rejected with a diagnostic, and no private capture is created.
 ## Dependencies and optional setup
 
 - [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao check deps` validates and shows governed versions and native identities from the actual installed native and test SDK manifests and hash inputs.
-- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow and complete `ao check`, including its whole-graph lint test.
+- [Bazel build system](bazel.md): the graph, toolchains, profiles, lint, completion, coverage, and caching contracts behind the native workflow.
 - [Dependency upgrade](dependency-upgrade.md) owns pin changes, including C++, Python, Ruff, and mypy.
 - [Concept metrics](concept-metrics.md) owns `./ao measure concepts` and its interpretation.
 - [Contributor workflow](../../CONTRIBUTING.md) explains optional Git hooks and preparing a review.

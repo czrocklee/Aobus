@@ -6,7 +6,7 @@ import json
 import shutil
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -15,35 +15,44 @@ from ao.core.build_lock import build_tree_lock
 from ao.portal import (
     bazel_attempt,
     bazel_ci_summary,
+    bazel_lint,
     bazel_test_ownership,
     bazel_workflows,
     bazel_workspace,
+    lint_scope,
 )
+from ao.portal.source_scope import SourceScope
 
 
 @dataclass(frozen=True, kw_only=True)
 class Request(bazel_workflows.Request):
-    ci: bool = False
+    extend: bool = False
+    lint_base: str | None = None
+    native_only: bool = False
+    desktop_tests: bool = False
     fresh: bool = False
     clean: bool = False
 
 
 def validate(request: Request) -> str:
     """Reject unsupported requests before selecting or creating a build tree."""
-    config, _host = bazel_workflows.validate_request(request)
+    config, host = bazel_workflows.validate_request(request)
     if config == "profile":
         raise native.BazelWorkspaceError("sampling is not a validation profile; use ao measure performance")
     if config not in ("fastbuild", "debug", "release"):
         raise native.BazelWorkspaceError(f"{config} is not a completion profile; select a native Bazel test instead")
-    if request.ci and config != "fastbuild":
-        raise native.BazelWorkspaceError("daily CI uses fastbuild; select other profiles explicitly outside CI")
+    if request.extend and request.lint_base is not None:
+        raise native.BazelWorkspaceError("--extend and --lint-base select different lint scopes")
+    if request.desktop_tests and host != "windows":
+        raise native.BazelWorkspaceError("--desktop-tests requires Windows")
     return config
 
 
-_CI_REPOSITORY_SUITE = "//test/script:ci_repository_checks"
+_STANDALONE_SUITE = "//test/script:standalone_repository_checks"
 _COMMON_CHECKS = {"//test/script:" + name for name in ("docs", "format_docs", "ruff", "name_audit", "test_audit")}
 _WORKFLOWS = "//test/script:workflows"
 _NATIVE_POLICY = "//:native_policy"
+_PRODUCTION_LINT = "//test/lint:production_lint"
 
 
 class _CheckSelection(NamedTuple):
@@ -62,32 +71,33 @@ def validate_repository() -> None:
 
 def _repository_selection() -> _CheckSelection:
     return _CheckSelection(
-        suites={_CI_REPOSITORY_SUITE},
+        suites={_STANDALONE_SUITE},
         required=_COMMON_CHECKS | {_WORKFLOWS},
         optional=set(),
-        targets=(_CI_REPOSITORY_SUITE,),
+        targets=(_STANDALONE_SUITE,),
         options=("--keep_going",),
         attempt_prefix="repository-",
     )
 
 
-def _selection(platform: str, request: Request) -> _CheckSelection:
+def _selection(platform: str, request: Request, *, scoped_lint: bool = False) -> _CheckSelection:
     # Require published checks even if one is accidentally dropped from its suite.
     suites = {
         "//:check_tests",
-        "//test/script:native_repository_checks" if request.ci else "//test/script:repository_checks",
+        "//test/script:native_repository_checks" if request.native_only else "//test/script:repository_checks",
     }
     required = {
         _NATIVE_POLICY,
-        "//test/lint:production_lint",
         "//test/lint:lint_test",
         "//test:backend_test",
         "//test:media_test",
         "//test:tui_help_smoke",
     }
+    if not scoped_lint:
+        required.add(_PRODUCTION_LINT)
     required.update("//test/script:" + name for name in ("format_sources", "guardrails", "bazel_lint", "mypy"))
     optional: set[str] = set()
-    if not request.ci:
+    if not request.native_only:
         required.update(_COMMON_CHECKS)
         (required if platform == "linux" else optional).add(_WORKFLOWS)
     windows_probes = {"//test:winui_localization_probe_test", "//test:winui_track_item_probe_test"}
@@ -98,7 +108,7 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
     }
     if platform == "windows":
         required.update(windows_probes | windows_analysis)
-        if request.ci:
+        if request.desktop_tests:
             required.add("//test:winui_uia_test")
     else:
         optional.update(windows_probes | windows_analysis)
@@ -138,11 +148,18 @@ def _selection(platform: str, request: Request) -> _CheckSelection:
         else:
             optional.add(label)
 
-    if request.ci:
-        return _CheckSelection(
-            suites, required, optional, targets=("--", "//...", "-" + _CI_REPOSITORY_SUITE), options=("--config=ci",)
-        )
-    return _CheckSelection(suites, required, optional)
+    exclusions = ["-" + _STANDALONE_SUITE] if request.native_only else []
+    if scoped_lint:
+        # The wildcard also builds non-tests: the public alias and result/log providers reach the gate.
+        exclusions.append("-//:production_lint")
+        exclusions.extend("-" + _PRODUCTION_LINT + suffix for suffix in ("", ".gate", ".gate_result", ".gate_log"))
+    return _CheckSelection(
+        suites,
+        required,
+        optional,
+        targets=("--", "//...", *exclusions) if exclusions else ("//...",),
+        options=("--keep_going",) if request.native_only else (),
+    )
 
 
 def _main_label(label: str) -> str:
@@ -332,12 +349,21 @@ def run_repository(*, path: str | None, jobs: int) -> int:
 
 def run(request: Request) -> int:
     config = validate(request)
-    return _run(request, config, _selection(native.native_platform(), request))
+    plan = lint_scope.Plan(None, "--extend") if request.extend else lint_scope.plan(request.lint_base)
+    files = plan.files
+    scope = "full graph" if files is None else f"{len(files)} scoped file(s)"
+    print(f"Native lint: {scope} ({plan.reason})", flush=True)
+    selection = _selection(native.native_platform(), request, scoped_lint=files is not None)
+    return _run(request, config, selection, scoped_files=files or ())
 
 
-def _run(request: Request, config: str, selection: _CheckSelection) -> int:
+def _run(request: Request, config: str, selection: _CheckSelection, *, scoped_files: tuple[str, ...] = ()) -> int:
     tree = bazel_workspace.workspace_path(request.path, config)
     with build_tree_lock(tree):
         native.require_supported_source()
         tree.mkdir(parents=True, exist_ok=True)
-        return _test_graph(request, tree, config, selection)
+        status = _test_graph(request, tree, config, selection)
+        if status or not scoped_files:
+            return status
+        # Keep both phases on this locked tree; another invocation may request --clean.
+        return bazel_lint.run(replace(request, path=str(tree)), SourceScope(scoped_files), lockfile_readonly=True)

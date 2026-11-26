@@ -146,14 +146,14 @@ For catalog-only wording in a maintained locale:
 5. inspect native Windows UI when WinUI consumes the changed message.
 
 Unchanged projection rules do not independently require the full Windows locale-parity gate, but displayed WinUI text still needs native inspection.
-If documentation changed and full `ao check` is not needed, run `./ao check docs`
-separately; full `check` already includes it.
+If documentation changed without full completion, run the standalone
+[documentation checks](documentation.md#validation).
 
 ### New messages, locales, signatures, or projections
 
 Build every consuming frontend and run the catalog suite plus focused semantic and adapter tests.
 A new locale, changed locale selection, changed argument signature, or changed WinUI projection requires native Windows parity evidence from the WinUI localization probe in addition to the applicable implementation gate.
-Run the full native `ao check` when C++ code, headers,
+Run the full native `ao check --extend` when C++ code, headers,
 build configuration, or tests change, as required by the validation matrix.
 
 ### Visual review

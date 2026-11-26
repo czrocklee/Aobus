@@ -91,11 +91,11 @@ Keep the guardrail source scopes aligned when adding a new application subtree.
 
 Run focused owner tests while developing, then complete the C++ validation gate from the root.
 A managed-state change must update its current contract or exact format
-reference. Complete `check` includes live documentation validation and the
-graph's lint, formatting, and audit tests:
+reference. The full completion gate includes live documentation validation and
+the graph's lint, formatting, and audit tests:
 
 ```bash
-./ao check
+./ao check --extend
 ```
 
 Standalone `ao check docs`, `ao check format`, and `ao check lint` remain available for focused work.

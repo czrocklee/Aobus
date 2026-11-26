@@ -11,7 +11,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
@@ -58,17 +58,6 @@ class LintRequest:
     @property
     def clang_tidy_arg(self) -> tuple[str, ...]:
         return self.tidy_args
-
-
-@dataclass(frozen=True)
-class _NativeLintRequest(LintRequest):
-    """Frozen source and file provenance consumed by the native lint engine."""
-
-    files: tuple[str, ...] = ()
-    _resolved_sources: tuple[str, ...] | None = None
-    all: bool = False
-    folder: tuple[str, ...] = ()
-    commit: str | None = None
 
 
 def validate(request: LintRequest) -> None:
@@ -158,8 +147,7 @@ def check_workflows(
 
 def _cpp_scope(scope: SourceScope, files: Sequence[str]) -> SourceScope:
     explicit = {source_scope.spelling(name) for name in scope.explicit_files}
-    # A mixed file+directory selection cannot promote scanned fixtures to
-    # explicit files when the legacy engine receives its scope-wide flag.
+    # Naming a directory does not make the fixtures discovered inside it explicit.
     selected = [name for name in files if classify_relative(name, name in explicit) != "IGNORE"]
     return SourceScope(tuple(selected), tuple(name for name in selected if name in explicit))
 
@@ -175,7 +163,7 @@ def run(scope: SourceScope | None, request: LintRequest, *, python: Path | None 
     if scope is None:
         if not request.owner_targets:
             raise ValueError("a lint source scope or explicit native owner is required")
-        return bazel_lint.run(_NativeLintRequest(**asdict(request)))
+        return bazel_lint.run(request, SourceScope())
     source_scope.require_files(scope)
     if not scope.files:
         print("No files to check.")
@@ -190,12 +178,9 @@ def run(scope: SourceScope | None, request: LintRequest, *, python: Path | None 
     with destination as sink:
         status = 0
         if cpp_scope.files or request.owner_targets:
-            native_request = _NativeLintRequest(
-                **asdict(request), files=cpp_scope.explicit_files, _resolved_sources=cpp_scope.files
-            )
             if sink is not None:
                 sink.flush()
-            status = max(status, bazel_lint.run(native_request))
+            status = max(status, bazel_lint.run(request, cpp_scope))
             if sink is not None:
                 sink.seek(0, 2)
         if request.tidy_check:

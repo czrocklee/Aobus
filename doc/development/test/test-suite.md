@@ -82,7 +82,8 @@ source provenance or prepared runtime.
 
 ## Complete validation and native prerequisites
 
-Use `bazel test //:tests` for the ordinary portable selection; the [completion gate](../bazel.md#completion-gate) defines which suites `./ao check` runs and which products and harnesses it only builds.
+The [completion gate](../bazel.md#completion-gate) selects more suites than
+`//:tests` and builds additional products and harnesses without running them.
 
 Explicit native targets retain native prerequisites:
 
@@ -99,7 +100,7 @@ Explicit native targets retain native prerequisites:
   physical playback. Windows currently has only hidden cases and permits an
   empty unattended selection; choose an exact case only after preparing its
   hardware prerequisites.
-- [AppKit GUI scenarios](../macos.md#appkit-smoke-scenarios) and most WinUI GUI probes run only on explicit request. Windows CI also runs the [UI Automation probe](../windows.md#ui-automation-naming-gate), which requires an authenticated interactive console. Building a GUI harness does not prove it ran, and none of these probes establishes physical input or audible output.
+- [AppKit GUI scenarios](../macos.md#appkit-smoke-scenarios) and most WinUI GUI probes run only on explicit request. On Windows, `check --desktop-tests` runs the [UI Automation probe](../windows.md#ui-automation-naming-gate), which requires an authenticated interactive console. Building a GUI harness does not prove it ran, and none of these probes establishes physical input or audible output.
 
 `//:instrumentation_tests` is the Linux-only graph suite for the sanitizer
 compile/link canaries and coverage analysis; it never executes a sanitizer suite
@@ -130,6 +131,10 @@ unit suite in the ready pinned environment:
 bazel test //test/script:tooling_tests
 ```
 
+On Linux, `bazel test --keep_going //test/script:standalone_repository_checks`
+selects the independent repository checks. Use `./ao check repository` to run that
+suite with managed [completion evidence](../bazel.md#completion-gate).
+
 Tests with only declared inputs can reuse cached results. Host-backed units
 and live checks resolve the declared `VERSION.txt` anchor and re-execute
 from the physical checkout under the installed native `py_runtime`; their
@@ -158,8 +163,8 @@ bazel test //test/lint:lint_test --nocache_test_results
 ```
 
 It stays outside `//:tests` and is tagged `manual`, but `//:check_tests` lists
-it, so completion's wildcard test expansion runs it; the completion lint test
-consumes the same checker verification action. Fresh test-result assertions
+it, so completion's wildcard test expansion runs it in either lint mode. The
+whole-graph lint test also consumes the checker verification action. Fresh test-result assertions
 check the native fixture producer's completed report. That producer checks
 `POSITIVE`/`NEGATIVE` markers, optional message assertions, source-policy smokes,
 and compiler-error canaries. Clang parses original fixtures; compiler

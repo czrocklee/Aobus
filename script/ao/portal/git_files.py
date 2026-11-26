@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 from ao.core.paths import PROJECT_ROOT, absolute_path
-from ao.core.proc import die
 
 CPP_TRANSLATION_UNIT_SUFFIXES = (".cpp", ".mm")
 CPP_HEADER_SUFFIXES = (".h", ".hpp")
@@ -98,6 +97,23 @@ def _darwin_checkout_uses_smb() -> bool:
     return result.returncode == 0 and _path_is_on_smb_mount(PROJECT_ROOT, result.stdout)
 
 
+class GitBindingError(ValueError):
+    """A requested source-discovery binding is malformed or cannot be honored."""
+
+
+def discovery_git_directory() -> str | None:
+    """Validate the pair, ignoring a well-formed binding for a different checkout."""
+    directory = os.environ.get("AOBUS_GIT_DIR")
+    work_tree = os.environ.get("AOBUS_GIT_WORK_TREE")
+    if directory is None and work_tree is None:
+        return None
+    if not directory or not work_tree:
+        raise GitBindingError("AOBUS_GIT_DIR and AOBUS_GIT_WORK_TREE must be set together")
+    if not Path(directory).is_absolute() or not Path(work_tree).is_absolute():
+        raise GitBindingError("AOBUS_GIT_DIR and AOBUS_GIT_WORK_TREE must be absolute paths")
+    return directory if absolute_path(work_tree) == absolute_path(PROJECT_ROOT) else None
+
+
 def git_command(
     *args: str,
     os_name: str | None = None,
@@ -115,17 +131,8 @@ def git_command(
         # git diff can refresh stat-only changes even when optional locks are
         # disabled. Source discovery must not rewrite a shared checkout's index.
         command += ["--no-optional-locks", "-c", "diff.autoRefreshIndex=false"]
-        git_directory = os.environ.get("AOBUS_GIT_DIR")
-        work_tree = os.environ.get("AOBUS_GIT_WORK_TREE")
-        if git_directory is not None or work_tree is not None:
-            if not git_directory or not work_tree:
-                raise die("AOBUS_GIT_DIR and AOBUS_GIT_WORK_TREE must be set together")
-            if not Path(git_directory).is_absolute() or not Path(work_tree).is_absolute():
-                raise die("AOBUS_GIT_DIR and AOBUS_GIT_WORK_TREE must be absolute paths")
-            # Bind discovery only: setup mutations and disposable repositories
-            # must not inherit an alternate repository selection.
-            if _binds_this_checkout(work_tree):
-                command += ["--git-dir", git_directory, "--work-tree", str(PROJECT_ROOT)]
+        if directory := discovery_git_directory():
+            command += ["--git-dir", directory, "--work-tree", str(PROJECT_ROOT)]
     resolved_os_name = os.name if os_name is None else os_name
     resolved_platform_name = sys.platform if platform_name is None else platform_name
     if resolved_os_name == "nt":
@@ -154,13 +161,15 @@ def _git_output(stdout: str | bytes, null_terminated: bool) -> list[str]:
     return [line for line in os.fsdecode(stdout).splitlines() if line.strip()]
 
 
-def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
+def _git_lines(*args: str, null_terminated: bool = False, allow_no_match: bool = False) -> list[str]:
     result = subprocess.run(
         git_command(*args, source_discovery=True),
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=not null_terminated,
     )
+    if allow_no_match and result.returncode == 1:
+        return []
     if result.returncode != 0:
         detail = os.fsdecode(result.stderr).strip() or f"exit {result.returncode}"
         work_tree = os.environ.get("AOBUS_GIT_WORK_TREE")
@@ -168,7 +177,7 @@ def _git_lines(*args: str, null_terminated: bool = False) -> list[str]:
             detail += (
                 f"; ignored AOBUS_GIT_WORK_TREE={work_tree!r}: it does not match PROJECT_ROOT={str(PROJECT_ROOT)!r}"
             )
-        raise die(f"git {' '.join(args)} failed: {detail}")
+        raise ValueError(f"git {' '.join(args)} failed: {detail}")
     return _git_output(result.stdout, null_terminated)
 
 
@@ -191,58 +200,44 @@ def _git_lines_if_repository(*args: str, null_terminated: bool = False) -> list[
     except FileNotFoundError as exc:
         # Only a missing executable is an unavailable tool, and even then an
         # effective binding cannot be honored by a filesystem fallback.
-        if _explicit_git_binding():
-            raise die(f"git {' '.join(args)} failed: {exc}") from exc
+        if discovery_git_directory():
+            raise GitBindingError(f"git {' '.join(args)} failed: {exc}") from exc
         return None
     except OSError as exc:
-        raise die(f"git {' '.join(args)} failed: {exc}") from exc
+        raise ValueError(f"git {' '.join(args)} failed: {exc}") from exc
     if result.returncode != 0:
         detail = os.fsdecode(result.stderr).strip() or f"exit {result.returncode}"
-        if MISSING_REPOSITORY_DIAGNOSTIC in detail and not _explicit_git_binding():
+        if MISSING_REPOSITORY_DIAGNOSTIC in detail:
+            if discovery_git_directory():
+                raise GitBindingError(f"git {' '.join(args)} failed: {detail}")
             return None
-        raise die(f"git {' '.join(args)} failed: {detail}")
+        raise ValueError(f"git {' '.join(args)} failed: {detail}")
     return _git_output(result.stdout, null_terminated)
 
 
-def _binds_this_checkout(work_tree: str) -> bool:
-    """A discovery binding applies only to the checkout it names."""
-    return absolute_path(work_tree) == absolute_path(PROJECT_ROOT)
+class NoCommonAncestorError(ValueError):
+    """Local main exists, but its common history with HEAD is unavailable."""
 
 
-def _explicit_git_binding() -> bool:
-    """An effective binding selects this checkout and must fail loudly, never fall back.
-
-    A well-formed binding for another checkout is ignored by ``git_command``, so
-    it cannot make Git unavailable here and keeps the filesystem fallback.
-    """
-    git_directory = os.environ.get("AOBUS_GIT_DIR")
-    work_tree = os.environ.get("AOBUS_GIT_WORK_TREE")
-    return bool(git_directory and work_tree and _binds_this_checkout(work_tree))
-
-
-def _git_ok(*args: str) -> bool:
-    return (
-        subprocess.run(
-            git_command(*args, source_discovery=True),
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode
-        == 0
-    )
-
-
-def diff_base(commit: str | None = None) -> str:
-    """Default to the topic's merge base with main; on main, use the previous commit."""
+def diff_base(commit: str | None = None, *, ignore_replacements: bool = False, require_local_main: bool = False) -> str:
+    """Use HEAD~1 on main; topics use their local main merge base when available."""
     if commit:
         return commit
-    branches = _git_lines("branch", "--show-current")
-    current = branches[0] if branches else ""
-    if current != "main" and _git_ok("rev-parse", "--verify", "--quiet", "main"):
-        bases = _git_lines("merge-base", "main", "HEAD")
+    options = ("--no-replace-objects",) if ignore_replacements else ()
+    if _git_lines(*options, "branch", "--show-current") == ["main"]:
+        return "HEAD~1"
+
+    main_ref = "refs/heads/main"
+    for entry in _git_lines(*options, "for-each-ref", "--format=%(refname) %(objectname)", main_ref):
+        ref, oid = entry.split()
+        if ref != main_ref:
+            continue  # The ref filter also matches descendants such as refs/heads/main/topic.
+        bases = _git_lines(*options, "merge-base", oid, "HEAD", allow_no_match=True)
         if not bases:
-            raise die("git merge-base main HEAD returned no revision; select a base explicitly with --commit")
+            raise NoCommonAncestorError("main and HEAD have no common ancestor")
         return bases[0]
+    if require_local_main:
+        raise ValueError("local main branch (refs/heads/main) is unavailable")
     return "HEAD~1"
 
 
@@ -266,7 +261,10 @@ def changed_paths(commit: str | None = None) -> list[str]:
     Unfiltered: callers apply ``matches_source`` or their own selection, so a
     formatting-control edit stays visible before any suffix filter drops it.
     """
-    base = diff_base(commit)
+    try:
+        base = diff_base(commit)
+    except NoCommonAncestorError as exc:
+        raise ValueError(f"{exc}; select a comparison base with --commit <rev>") from exc
     names: set[str] = set()
     names.update(_git_lines("diff", "--name-only", "-z", f"{base}..HEAD", null_terminated=True))
     names.update(_git_worktree_files())

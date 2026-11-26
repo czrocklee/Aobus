@@ -18,6 +18,7 @@ from xml.etree import ElementTree as ET
 from ao.__main__ import make_parser
 from ao.command import check as check_command
 from ao.core import bazel_native as native
+from ao.core.paths import absolute_path
 from ao.graph import bazel_lint_reports
 from ao.portal import bazel_lint, build_dir, git_files, source_analyzer, source_lint, source_scope, tidy_engine
 from ao.portal.source_scope import SourceScope
@@ -188,8 +189,10 @@ class TidyLintParserTest(unittest.TestCase):
             self.assertTrue(check_command.requires_build_environment(args))
             self.assertEqual(check_command.run_command(args), 7)
         lint_run.assert_called_once()
-        self.assertIsInstance(lint_run.call_args.args[0], source_lint.LintRequest)
-        self.assertEqual(lint_run.call_args.args[0].owner_targets, ("//test/lint:cache_clean",))
+        request, native_scope = lint_run.call_args.args
+        self.assertIsInstance(request, source_lint.LintRequest)
+        self.assertEqual(request.owner_targets, ("//test/lint:cache_clean",))
+        self.assertEqual(native_scope, SourceScope())
         scope.assert_not_called()
 
 
@@ -386,7 +389,9 @@ class _OrchestrationHarness:
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def fake_prepare(self, tree, config, *, prefix=None, graph_options=None, lint_configuration=None):
+    def fake_prepare(
+        self, tree, config, *, prefix=None, graph_options=None, lint_configuration=None, lockfile_readonly=False
+    ):
         self.prepare_calls.append(
             {
                 "tree": tree,
@@ -394,6 +399,7 @@ class _OrchestrationHarness:
                 "prefix": prefix,
                 "graph_options": graph_options,
                 "lint_configuration": lint_configuration,
+                "lockfile_readonly": lockfile_readonly,
             }
         )
         prepared = tree / "configuration"
@@ -406,7 +412,18 @@ class _OrchestrationHarness:
         return prepared
 
     def fake_execute(
-        self, executable, tree, prepared, action, config, targets, *, jobs=2, remote_cache=None, isolate_rc=False
+        self,
+        executable,
+        tree,
+        prepared,
+        action,
+        config,
+        targets,
+        *,
+        jobs=2,
+        remote_cache=None,
+        isolate_rc=False,
+        log=None,
     ):
         self.assertEqual((executable, action), (Path("bazel"), "build"))
         group_options = [option for option in targets if option.startswith(_OUTPUT_GROUP_OPTION)]
@@ -438,6 +455,12 @@ class _OrchestrationHarness:
                 "consumers": decode_consumer_parameters(prepared),
             }
         )
+        (event_file,) = [
+            Path(option.split("=", 1)[1]) for option in targets if option.startswith("--build_event_json_file=")
+        ]
+        phase = event_file.name.removesuffix(".bep.json")
+        destination = tree / "build.log" if log is None else log
+        destination.write_bytes(f"{phase} stdout\n{phase} stderr\n".encode())
         return self.build_status
 
     def fake_read_reports(self, bep, owners, *, consumers="{}", profile="lint", output_groups=(_FULL_GROUP,)):
@@ -510,35 +533,8 @@ class _OrchestrationHarness:
             return self.cquery_status
         raise AssertionError(f"unexpected Bazel query command: {command}")
 
-    def args(self, **overrides):
-        values = {
-            "files": [],
-            "all": False,
-            "folder": [],
-            "commit": None,
-            "check": None,
-            "debug": False,
-            "output": None,
-            "jobs": 2,
-            "path": str(self.tree),
-            "config": "debug",
-            "vcpkg_prefix": None,
-            "owner_targets": [],
-            "clang_tidy_arg": [],
-            "header_filter": None,
-            "remote_cache": None,
-        }
-        values.update(overrides)
-        values["tidy_check"] = values.pop("check")
-        values["tidy_args"] = values.pop("clang_tidy_arg")
-        for key in ("files", "folder", "owner_targets", "tidy_args", "_resolved_sources"):
-            if isinstance(values.get(key), list):
-                values[key] = tuple(values[key])
-        return source_lint._NativeLintRequest(**values)
-
-    def run_quiet(self, args):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            return bazel_lint.run(args)
+    def lint_request(self, **options):
+        return source_lint.LintRequest(path=str(self.tree), config="debug", jobs=2, **options)
 
     def touch(self, *names: str) -> None:
         """Create authored checkout files the scope fixtures select."""
@@ -627,6 +623,84 @@ class PerFileProvenanceTest(_OrchestrationHarness, unittest.TestCase):
                 )
                 self.assertEqual(receipt["selected"], ["lib/sample/Sample.cpp"])
                 self.assertEqual(set(receipt["deferred"]), scanned)
+
+    def system_media_test_files(self):
+        files = (
+            "test/systemmedia/linux/MprisArtUrlSessionTest.cpp",
+            "test/systemmedia/linux/MprisTestSupport.cpp",
+            "test/systemmedia/linux/MprisTestSupport.h",
+        )
+        self.touch(*files)
+        self.query_xml = QUERY_XML.replace(
+            "</query>",
+            '<rule class="cc_test" name="//test:systemmedia_test.native"><list name="srcs">'
+            + "".join(f'<label value="//test:{path.removeprefix("test/")}"/>' for path in files)
+            + "</list></rule></query>",
+        )
+        return files
+
+    def test_completion_defers_disabled_system_media_tests_and_foreign_files_but_keeps_native_findings(self):
+        local = "lib/sample/Sample.cpp"
+        foreign = "app/macos-appkit/Foo.mm"
+        media_files = self.system_media_test_files()
+        self.cquery_text = (
+            "@@//app/macos-appkit:appkit|True\n@@//lib/sample:sample|False\n@@//test:systemmedia_test.native|True\n"
+        )
+        self.inventories = self.inventory(
+            "lint", outcome="warning", log=f"{local}:1:1: warning: scoped finding [aobus-test]\n"
+        )
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            contextlib.redirect_stderr(io.StringIO()) as diagnostics,
+        ):
+            status = bazel_lint.run(
+                self.lint_request(system_media="off"),
+                SourceScope((local, foreign, *media_files)),
+                lockfile_readonly=True,
+            )
+        self.assertEqual(status, 1, diagnostics.getvalue())
+        self.assertIn("scoped finding", output.getvalue())
+        self.assertIn("incompatible with --system-media off", diagnostics.getvalue())
+        self.assertIn("incompatible with this platform", diagnostics.getvalue())
+        self.assertTrue(self.prepare_calls[0]["lockfile_readonly"])
+        self.assertIn("--//bazel:system_media_enabled=false", self.prepare_calls[0]["graph_options"])
+        (receipt_path,) = (self.tree / "lint").glob("run-*/run.receipt.json")
+        self.assertIn(str(receipt_path.parent), diagnostics.getvalue())
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], [local])
+        self.assertCountEqual(receipt["deferred"], [foreign, *media_files])
+
+    def test_system_media_off_defers_folder_but_not_an_explicit_configured_out_file(self):
+        media_test, *_ = self.system_media_test_files()
+        self.cquery_text = "@@//test:systemmedia_test.native|True\n"
+        folder = "test/systemmedia/linux"
+        for paths, expected in (((folder,), 0), ((media_test, folder), 2)):
+            with self.subTest(paths=paths):
+                scope = source_scope.resolve(source_scope.Selection(paths=paths))
+                status, _output, diagnostics = self.run_service("lint", scope, system_media="off", report_only=True)
+                self.assertEqual(status, expected, diagnostics)
+                if expected:
+                    self.assertIn(f"no native lint owner covers selected path(s): {media_test}", diagnostics)
+        self.assertFalse(self.execute_calls)
+
+    def test_system_media_off_keeps_compatible_adapter_and_does_not_defer_unowned_file(self):
+        self.system_media_test_files()
+        adapter = "app/systemmedia/linux/MprisBridge.cpp"
+        unowned = "test/systemmedia/linux/UnownedTest.cpp"
+        self.touch(adapter, unowned)
+        self.query_xml = self.query_xml.replace(
+            "</query>",
+            '<rule class="cc_library" name="//app/systemmedia:linux">'
+            '<list name="srcs"><label value="//app/systemmedia:linux/MprisBridge.cpp"/></list></rule></query>',
+        )
+        self.cquery_text = "@@//app/systemmedia:linux|False\n@@//test:systemmedia_test.native|True\n"
+        self.inventories = self.inventory("lint", main=adapter, owner="@@//app/systemmedia:linux")
+        scope = source_scope.resolve(source_scope.Selection(paths=("app/systemmedia", "test/systemmedia")))
+        status, _output, diagnostics = self.run_service("lint", scope, system_media="off")
+        self.assertEqual(status, 2, diagnostics)
+        self.assertIn(unowned, diagnostics)
+        receipt = json.loads(next((self.tree / "lint").glob("run-*/run.receipt.json")).read_text(encoding="utf-8"))
+        self.assertCountEqual(receipt["selected"], [adapter, unowned])
 
     def gtk_scope(self):
         gtk_test = "test/linux-gtk/list/ListTest.cpp"
@@ -748,7 +822,15 @@ class PerFileProvenanceTest(_OrchestrationHarness, unittest.TestCase):
                     self.assertIn(explicit, diagnostics)
 
 
+def explicit_scope(*files: str) -> SourceScope:
+    return SourceScope(files, files)
+
+
 class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
+    def run_quiet(self, scope, **options):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return bazel_lint.run(self.lint_request(**options), scope)
+
     def test_report_only_suppresses_findings_but_not_compiler_or_missing_context_failures(self):
         owner = "@@//lib/sample:sample"
         for advisory in (False, True):
@@ -764,9 +846,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
                     )
                     self.inventories = (self.owner_inventory(owner, report),)
                     self.assertEqual(
-                        self.run_quiet(
-                            self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")], report_only=advisory)
-                        ),
+                        self.run_quiet(explicit_scope("lib/sample/Sample.cpp"), report_only=advisory),
                         expected,
                     )
         self.inventories = (
@@ -774,7 +854,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
                 owner, self.report(owner, "lib/sample/Sample.cpp", header="include/ao/sample/Sample.h")
             ),
         )
-        self.assertEqual(self.run_quiet(self.args(owner_targets=["//lib/sample:sample"], report_only=True)), 2)
+        self.assertEqual(self.run_quiet(SourceScope(), owner_targets=("//lib/sample:sample",), report_only=True), 2)
 
     def test_stale_findings_do_not_mask_explicit_missing_compile_context(self):
         owner = "@@//lib/sample:sample"
@@ -785,10 +865,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             with self.subTest(advisory=advisory):
                 self.assertEqual(
                     self.run_quiet(
-                        self.args(
-                            files=[str(source), str(self.checkout / "app/macos-appkit/Unmapped.mm")],
-                            report_only=advisory,
-                        )
+                        explicit_scope("lib/sample/Sample.cpp", "app/macos-appkit/Unmapped.mm"), report_only=advisory
                     ),
                     2,
                 )
@@ -802,9 +879,29 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             side_effect=AssertionError("named check must not audit unrelated suppressions"),
         ):
             self.assertEqual(
-                self.run_quiet(self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")], check="aobus-example")),
+                self.run_quiet(explicit_scope("lib/sample/Sample.cpp"), tidy_check="aobus-example"),
                 0,
             )
+
+    def test_default_lint_leaves_previous_custom_configuration_unselected(self):
+        owner = "@@//lib/sample:sample"
+        self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Sample.cpp")),)
+        scope = explicit_scope("lib/sample/Sample.cpp")
+        configuration = self.tree / "configuration" / "lint.json"
+        for option, value, key, expected in (
+            ("tidy_check", "aobus-example", "check", "aobus-example"),
+            ("header_filter", "sample", "header_filter", "sample"),
+            ("tidy_args", ("--quiet",), "clang_tidy_args", ["--quiet"]),
+        ):
+            with self.subTest(option=option):
+                self.assertEqual(self.run_quiet(scope, **{option: value}), 0)
+                self.assertEqual(self.prepare_calls[-1]["lint_configuration"], configuration)
+                custom = configuration.read_bytes()
+                self.assertEqual(json.loads(custom)[key], expected)
+
+                self.assertEqual(self.run_quiet(scope), 0)
+                self.assertIsNone(self.prepare_calls[-1]["lint_configuration"])
+                self.assertEqual(configuration.read_bytes(), custom)
 
     def test_advisory_stale_findings_do_not_bypass_native_admission(self):
         source = self.checkout / "lib/sample/Sample.cpp"
@@ -812,7 +909,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         with patch.object(
             bazel_lint.bazel_workspace, "prepare_workspace", side_effect=native.BazelWorkspaceError("missing ready SDK")
         ) as prepare:
-            self.assertEqual(self.run_quiet(self.args(files=[str(source)], report_only=True)), 2)
+            self.assertEqual(self.run_quiet(explicit_scope("lib/sample/Sample.cpp"), report_only=True), 2)
         prepare.assert_called_once()
 
     def test_lint_queries_select_the_windows_shell_without_admitting_ambient_rcs(self):
@@ -832,7 +929,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             patch.object(native, "native_platform", return_value="windows"),
             patch.object(bazel_lint.bazel_workspace, "_git_bash", return_value=shell),
         ):
-            self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")])), 0)
+            self.assertEqual(self.run_quiet(explicit_scope("lib/sample/Sample.cpp")), 0)
             # A real child observes the environment handed to the Bazel client.
             stdout, stderr = self.root / "child.env.json", self.root / "child.stderr"
             self.assertEqual(self.real_run_process([sys.executable, "-c", child], stdout, stderr), 0)
@@ -863,10 +960,9 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         # A fixed Linux profile keeps the cross-host assertion deterministic.
         linux = argparse.Namespace(name="linux")
         with patch.object(bazel_lint.bazel_workflows.build_dir, "platform_profile", return_value=linux):
-            status = self.run_quiet(
-                self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")], compiler="clang", gtk="off")
-            )
+            status = self.run_quiet(explicit_scope("lib/sample/Sample.cpp"), compiler="clang", gtk="off")
         self.assertEqual(status, 0)
+        self.assertFalse(self.prepare_calls[0]["lockfile_readonly"])
         # The scoped portal shares the same prepared analysis interface.
         self.assertEqual(
             self.prepare_calls[0]["graph_options"],
@@ -884,7 +980,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             log="include/ao/sample/Sample.h:1:1: warning: header [aobus-example]\n",
         )
         self.inventories = (self.owner_inventory(owner, source, header),)
-        self.assertEqual(self.run_quiet(self.args(owner_targets=["//lib/sample:sample"])), 1)
+        self.assertEqual(self.run_quiet(SourceScope(), owner_targets=("//lib/sample:sample",)), 1)
         self.assert_report_groups(("build", {_FULL_GROUP}))
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], ["include/ao/sample/Sample.h", "lib/sample/Sample.cpp"])
@@ -894,7 +990,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         <list name="srcs"><label value="//lib/sample:group"/></list></rule></query>"""
         owner = "@@//lib/sample:sample"
         self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/sample/Grouped.cpp")),)
-        self.assertEqual(self.run_quiet(self.args(owner_targets=["//lib/sample:sample"])), 0)
+        self.assertEqual(self.run_quiet(SourceScope(), owner_targets=("//lib/sample:sample",)), 0)
         query = next(command for command in self.commands if bazel_action_of(command) == "query")
         self.assertEqual(bazel_expression_of(query), 'kind("rule", set("//lib/sample:sample"))')
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
@@ -909,7 +1005,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         sibling = self.report(owner, "lib/sample/Grouped.cpp")
         self.inventories = (self.owner_inventory(owner, selected, sibling),)
 
-        self.assertEqual(self.run_quiet(self.args(files=[main])), 0)
+        self.assertEqual(self.run_quiet(explicit_scope(main)), 0)
         self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_ssample_hextra_sSelected__Name_dcpp"}))
 
     def test_windows_case_alias_materializes_and_gates_the_canonical_main(self):
@@ -923,7 +1019,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         report = replace(report, identity=replace(report.identity, platform="windows"))
         self.inventories = (self.owner_inventory(owner, report),)
         with patch.object(bazel_lint, "os", SimpleNamespace(name="nt")):
-            self.assertEqual(self.run_quiet(self.args(files=[alias], owner_targets=["//lib/sample:sample"])), 1)
+            self.assertEqual(self.run_quiet(explicit_scope(alias), owner_targets=("//lib/sample:sample",)), 1)
         self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_ssample_ssample_dcpp"}))
         receipt = json.loads(next((self.tree / "lint").glob("run-*/run.receipt.json")).read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], [canonical])
@@ -939,7 +1035,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         header = self.report(owner, "lib/sample/Sample.cpp", header="include/ao/sample/Sample.h")
         self.inventories = (self.owner_inventory(owner, source, header),)
         self.assertEqual(
-            self.run_quiet(self.args(files=["include/ao/sample/Sample.h"], owner_targets=["//lib/sample:sample"])),
+            self.run_quiet(explicit_scope("include/ao/sample/Sample.h"), owner_targets=("//lib/sample:sample",)),
             0,
         )
         self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_include_sao_ssample_sSample_dh"}))
@@ -958,7 +1054,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.cquery_text = odd + "|False\n"
         self.inventories = (self.owner_inventory(odd, self.report(odd, "lib/odd/Source=File.cpp")),)
         self.assertEqual(
-            self.run_quiet(self.args(files=[str(self.checkout / "lib/odd/Source=File.cpp")])),
+            self.run_quiet(explicit_scope("lib/odd/Source=File.cpp")),
             0,
         )
         cquery = next(command for command in self.commands if bazel_action_of(command) == "cquery")
@@ -969,7 +1065,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
     def test_all_explicit_owners_incompatible_fails_without_a_report_build(self):
         self.cquery_text = "@@//app/macos-appkit:appkit|True\n"
         self.assertEqual(
-            self.run_quiet(self.args(owner_targets=["//app/macos-appkit:appkit"])),
+            self.run_quiet(SourceScope(), owner_targets=("//app/macos-appkit:appkit",)),
             2,
         )
         self.assertFalse(self.execute_calls)
@@ -984,10 +1080,8 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         )
         self.assertEqual(
             self.run_quiet(
-                self.args(
-                    owner_targets=["//lib/sample:sample", "//lib/sample:header_only"],
-                    files=[str(self.checkout / "lib/sample/Sample.cpp")],
-                )
+                explicit_scope("lib/sample/Sample.cpp"),
+                owner_targets=("//lib/sample:sample", "//lib/sample:header_only"),
             ),
             2,
         )
@@ -998,7 +1092,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/utility/AtomicFile.cpp")),)
         with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
             self.assertEqual(
-                self.run_quiet(self.args(_resolved_sources=[str(self.checkout / "lib/utility/AtomicFileWindows.cpp")])),
+                self.run_quiet(SourceScope(("lib/utility/AtomicFileWindows.cpp",))),
                 0,
             )
         self.assertEqual(self.read_calls[0][1], [owner])
@@ -1027,7 +1121,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         )
         before_replay = (self.owner_inventory(owner, selected, source),)
         self.pass_inventories = [before_replay, before_replay, (self.owner_inventory(owner, selected, source, header),)]
-        self.assertEqual(self.run_quiet(self.args(files=[direct, SPAN])), 1)
+        self.assertEqual(self.run_quiet(explicit_scope(direct, SPAN)), 1)
 
         selected_groups = {
             _INDEX_GROUP,
@@ -1042,11 +1136,22 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.assertEqual(
             [call["consumers"] for call in self.execute_calls], [{}, {}, {owner: [["lib/util/Clock.cpp", SPAN]]}]
         )
-        # The next run must not inherit the previous header replay.
+        run_dir = self.read_calls[0][0].parent
+        latest = self.tree / "build.log"
+        replay_output = b"consumers stdout\nconsumers stderr\n"
+        self.assertEqual(latest.read_bytes(), replay_output)
+        # Other Bazel commands replace the convenience log by writing in place.
+        latest.write_bytes(b"unrelated Bazel command output\n")
+        self.assertEqual((run_dir / "consumers.log").read_bytes(), replay_output)
+        # The next run must not inherit the previous header replay or modify its logs.
         self.inventories = (self.owner_inventory(owner, source),)
-        self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / "lib/util/Clock.cpp")])), 0)
+        self.assertEqual(self.run_quiet(explicit_scope("lib/util/Clock.cpp")), 0)
         self.assertEqual(self.execute_calls[-1]["consumers"], {})
         self.assertCountEqual(self.read_calls[-1][2], {_INDEX_GROUP, "aobus_lint_main_lib_sutil_sClock_dcpp"})
+        self.assertEqual(latest.read_bytes(), b"build stdout\nbuild stderr\n")
+        self.assertEqual((run_dir / "build.log").read_bytes(), b"build stdout\nbuild stderr\n")
+        self.assertEqual((run_dir / "discovery.log").read_bytes(), b"discovery stdout\ndiscovery stderr\n")
+        self.assertEqual((run_dir / "consumers.log").read_bytes(), replay_output)
 
     def test_held_back_consumers_build_only_when_the_nearest_reports_miss_the_fragment(self):
         self.query_xml = CONSUMER_XML
@@ -1061,7 +1166,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             (self.owner_inventory(nearest, catalog), self.owner_inventory(compiler, main)),
             (self.owner_inventory(nearest, catalog), self.owner_inventory(compiler, main, fragment)),
         ]
-        self.assertEqual(self.run_quiet(self.args(files=[str(self.checkout / INVENTORY)])), 0)
+        self.assertEqual(self.run_quiet(explicit_scope(INVENTORY)), 0)
 
         selected_groups = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
         self.assert_report_groups(
@@ -1099,7 +1204,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             (self.owner_inventory(owner, source),),
             (self.owner_inventory(owner, source, header),),
         ]
-        self.assertEqual(self.run_quiet(self.args(files=[str(path)])), 1)
+        self.assertEqual(self.run_quiet(explicit_scope(header_path)), 1)
         receipt = json.loads(next((self.tree / "lint").glob("run-*/run.receipt.json")).read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], [header_path])
         self.assertEqual(receipt["deferred"], [])
@@ -1120,7 +1225,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         ]
         stderr = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-            self.assertEqual(bazel_lint.run(self.args(files=[str(self.checkout / SPAN)])), 2)
+            self.assertEqual(bazel_lint.run(self.lint_request(), explicit_scope(SPAN)), 2)
         selected_groups = {_INDEX_GROUP, "aobus_lint_main_include_sao_sutil_sSpan_dh"}
         self.assert_report_groups(
             ("build", selected_groups),
@@ -1145,46 +1250,60 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
                 patch.object(bazel_lint.bazel_workspace, "bazel_executable", side_effect=AssertionError("tool")),
             ):
                 self.assertEqual(
-                    self.run_quiet(
-                        self.args(
-                            files=[str(self.checkout / "lib/sample/Sample.cpp")],
-                            clang_tidy_arg=[argument],
-                        )
-                    ),
+                    self.run_quiet(explicit_scope("lib/sample/Sample.cpp"), tidy_args=(argument,)),
                     2,
                 )
 
-    def test_explicit_missing_and_outside_checkout_paths_fail_before_workspace(self):
+    def test_frozen_missing_and_outside_checkout_paths_fail_before_workspace(self):
         outside = self.root / "outside.cpp"
         outside.write_text("// outside\n", encoding="utf-8")
-        for path in (self.checkout / "lib/sample/Missing.cpp", outside):
-            with (
-                self.subTest(path=path),
-                patch.object(bazel_lint.bazel_workspace, "workspace_path", side_effect=AssertionError("workspace")),
-                patch.object(bazel_lint.bazel_workspace, "bazel_executable", side_effect=AssertionError("tool")),
-            ):
-                self.assertEqual(self.run_quiet(self.args(files=[str(path)])), 2)
+        for path in ("lib/sample/Missing.cpp", str(outside)):
+            for scope in (explicit_scope(path), SourceScope((path,))):
+                with (
+                    self.subTest(scope=scope),
+                    patch.object(bazel_lint.bazel_workspace, "workspace_path", side_effect=AssertionError("workspace")),
+                    patch.object(bazel_lint.bazel_workspace, "bazel_executable", side_effect=AssertionError("tool")),
+                ):
+                    self.assertEqual(self.run_quiet(scope), 2)
+
+    def test_file_removed_after_admission_is_still_required_by_lint(self):
+        name = "lib/sample/Sample.cpp"
+        source = absolute_path(self.checkout / name)
+        is_file = Path.is_file
+
+        def remove_after_check(path):
+            present = is_file(path)
+            if present and path == source:
+                path.unlink()
+            return present
+
+        # The report build cannot materialize the selected source after deletion.
+        self.build_status = 1
+        with patch.object(Path, "is_file", remove_after_check):
+            self.assertEqual(self.run_quiet(SourceScope((name,))), 2)
+        self.assertFalse(source.exists())
+        self.assertEqual(len(self.execute_calls), 1)
+        self.assertIn("aobus_lint_main_lib_ssample_sSample_dcpp", self.execute_calls[0]["output_groups"])
 
     def test_query_failure_stops_before_compatibility_or_report_build(self):
         self.query_status = 1
-        self.assertEqual(
-            self.run_quiet(self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")])),
-            2,
-        )
+        self.assertEqual(self.run_quiet(explicit_scope("lib/sample/Sample.cpp")), 2)
         self.assertFalse(any(bazel_action_of(command) == "cquery" for command in self.commands))
         self.assertFalse(self.execute_calls)
 
-    def test_report_build_failure_is_not_gated_as_a_clean_inventory(self):
+    def test_report_build_failure_preserves_its_output_without_gating_an_inventory(self):
         self.build_status = 1
-        self.assertEqual(
-            self.run_quiet(self.args(files=[str(self.checkout / "lib/sample/Sample.cpp")])),
-            2,
-        )
+        with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+            status = bazel_lint.run(self.lint_request(report_only=True), explicit_scope("lib/sample/Sample.cpp"))
+        self.assertEqual(status, 2)
         self.assertFalse(self.read_calls)
+        (log,) = (self.tree / "lint").glob("run-*/build.log")
+        self.assertIn(str(log), diagnostics.getvalue())
+        self.assertEqual(log.read_bytes(), b"build stdout\nbuild stderr\n")
+        self.assertEqual((self.tree / "build.log").read_bytes(), log.read_bytes())
 
     def test_empty_scope_returns_clean_without_preparing_a_workspace(self):
-        args = self.args(_resolved_sources=())
-        self.assertEqual(self.run_quiet(args), 0)
+        self.assertEqual(self.run_quiet(SourceScope()), 0)
         self.assertFalse(self.prepare_calls)
         self.assertFalse(self.commands)
 
