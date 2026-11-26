@@ -18,6 +18,7 @@
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
@@ -30,6 +31,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -49,6 +51,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -308,6 +311,102 @@ namespace ao::library::test
     auto const& reopened = *reopenedRes;
     CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
+  }
+
+  TEST_CASE("MusicLibrary - requiring a schema refuses absent or unusable data without creating storage")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const managedPath = temp.path() / ".aobus";
+    auto const databasePath = managedPath / "library";
+    auto const dataFile = databasePath / "data.mdb";
+    auto const checkRejectedOpen = [&](Error::Code expectedCode)
+    {
+      auto const res =
+        MusicLibrary::open(temp.path(), databasePath, {.schemaPolicy = LibrarySchemaPolicy::RequireExisting});
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == expectedCode);
+      CHECK_FALSE(std::filesystem::exists(databasePath / ".aobus-open.lock"));
+      CHECK_FALSE(std::filesystem::exists(databasePath / "lock.mdb"));
+    };
+
+    SECTION("missing database directory")
+    {
+      checkRejectedOpen(Error::Code::NotFound);
+      CHECK_FALSE(std::filesystem::exists(managedPath));
+    }
+
+    SECTION("existing empty database directory")
+    {
+      REQUIRE(std::filesystem::create_directories(databasePath));
+      checkRejectedOpen(Error::Code::NotFound);
+      REQUIRE(std::filesystem::is_directory(databasePath));
+      CHECK(std::filesystem::is_empty(databasePath));
+    }
+
+    SECTION("zero-length data file")
+    {
+      REQUIRE(std::filesystem::create_directories(databasePath));
+      {
+        auto const file = std::ofstream{dataFile};
+        REQUIRE(file);
+      }
+
+      checkRejectedOpen(Error::Code::NotFound);
+      REQUIRE(std::filesystem::is_regular_file(dataFile));
+      CHECK(std::filesystem::file_size(dataFile) == 0);
+    }
+
+    SECTION("directory in place of the data file")
+    {
+      REQUIRE(std::filesystem::create_directories(dataFile));
+      checkRejectedOpen(Error::Code::IoError);
+      REQUIRE(std::filesystem::is_directory(dataFile));
+      CHECK(std::filesystem::is_empty(dataFile));
+    }
+  }
+
+  TEST_CASE("MusicLibrary - requiring a schema leaves a valid empty LMDB environment uninitialized")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const& databasePath = temp.path();
+    auto const dataFile = databasePath / "data.mdb";
+    auto const countCatalogEntries = [&databasePath]
+    {
+      auto environment = openEnvironment(
+        databasePath, {.flags = kEnvNoTls, .maxDatabases = 8, .pinnedMapBytes = kTestMusicLibraryMapBytes});
+      auto write = beginWriteTransaction(environment);
+      auto const mainRes = ByteKeyDatabase::main(write);
+      REQUIRE(mainRes);
+      REQUIRE(write.commit());
+
+      auto const read = beginReadTransaction(environment);
+      return mainRes->reader(read).entryCount();
+    };
+    auto const openRequiringSchema = [&databasePath]
+    {
+      return MusicLibrary::open(databasePath,
+                                databasePath,
+                                {.pinnedMapBytes = kTestMusicLibraryMapBytes,
+                                 .flushCommits = false,
+                                 .schemaPolicy = LibrarySchemaPolicy::RequireExisting});
+    };
+
+    REQUIRE(countCatalogEntries() == 0);
+    REQUIRE(std::filesystem::file_size(dataFile) > 0);
+
+    auto const rejectedRes = openRequiringSchema();
+    REQUIRE_FALSE(rejectedRes);
+    CHECK(rejectedRes.error().code == Error::Code::NotFound);
+    REQUIRE(std::filesystem::file_size(dataFile) > 0);
+    CHECK(countCatalogEntries() == 0);
+
+    {
+      auto const initializedRes = openTestMusicLibrary(databasePath, databasePath);
+      REQUIRE(initializedRes);
+      CHECK(initializedRes->metadataHeader().magic == kMetadataMagic);
+    }
+
+    REQUIRE(openRequiringSchema());
   }
 
   TEST_CASE("MusicLibrary - storageCapacity reports the map it was opened with")

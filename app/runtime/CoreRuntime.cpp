@@ -10,6 +10,7 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -111,7 +112,8 @@ namespace ao::rt
                                           LibraryDurability const musicLibraryDurability,
                                           async::Sleeper* const sleeper,
                                           TextOrderingPolicy const* const textOrderingPolicy,
-                                          CompletionAliasPolicy const* const completionAliasPolicy)
+                                          CompletionAliasPolicy const* const completionAliasPolicy,
+                                          library::LibrarySchemaPolicy const schemaPolicy)
   {
     if (executorPtr == nullptr)
     {
@@ -122,7 +124,8 @@ namespace ao::rt
       musicRoot,
       databasePath,
       library::MusicLibrary::Options{.pinnedMapBytes = musicLibraryPinnedMapBytes,
-                                     .flushCommits = musicLibraryDurability == LibraryDurability::Durable});
+                                     .flushCommits = musicLibraryDurability == LibraryDurability::Durable,
+                                     .schemaPolicy = schemaPolicy});
 
     if (!storageRes)
     {

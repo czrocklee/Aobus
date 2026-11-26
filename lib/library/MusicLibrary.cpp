@@ -21,6 +21,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
@@ -57,6 +58,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -99,6 +101,38 @@ namespace ao::library
       }
 
       return lockRes;
+    }
+
+    Result<> requireNonemptyDataFile(std::filesystem::path const& databasePath)
+    {
+      auto const dataPath = databasePath / utility::pathFromUtf8("data.mdb");
+      auto error = std::error_code{};
+      auto const status = std::filesystem::status(dataPath, error);
+      std::uintmax_t size = 0;
+
+      if (!error && std::filesystem::exists(status))
+      {
+        if (!std::filesystem::is_regular_file(status))
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Expected a regular database file at '{}'", utility::pathToUtf8(dataPath)));
+        }
+
+        size = std::filesystem::file_size(dataPath, error);
+      }
+
+      if (error && error != std::errc::no_such_file_or_directory)
+      {
+        return makeError(Error::Code::IoError,
+                         std::format("Failed to inspect '{}': {}", utility::pathToUtf8(dataPath), error.message()));
+      }
+
+      if (error || size == 0)
+      {
+        return makeError(Error::Code::NotFound, "no existing library database; scan this root first");
+      }
+
+      return {};
     }
 
     /// Capacity management for one open, or none when the caller pinned the map.
@@ -1174,6 +1208,15 @@ namespace ao::library
         return std::unexpected{openLockRes.error()};
       }
 
+      if (options.schemaPolicy == LibrarySchemaPolicy::RequireExisting)
+      {
+        // An exclusive holder could have replaced the data file since preflight.
+        if (auto res = requireNonemptyDataFile(databasePath); !res)
+        {
+          return std::unexpected{std::move(res.error())};
+        }
+      }
+
       auto envRes = lmdb::Environment::open(databasePath,
                                             lmdb::Environment::Options{.flags = environmentFlagsFor(options),
                                                                        .mode = kLmdbFileMode,
@@ -1215,6 +1258,12 @@ namespace ao::library
 
       auto const mainDatabase = std::move(*mainDatabaseRes);
       auto const catalogEmpty = isCatalogEmpty(mainDatabase, *initializationTransactionRes);
+
+      if (catalogEmpty && options.schemaPolicy == LibrarySchemaPolicy::RequireExisting)
+      {
+        return makeError(Error::Code::NotFound, "No existing library schema; scan this root first");
+      }
+
       auto admittedSchemaRes = catalogEmpty ? createFreshSchema(*initializationTransactionRes)
                                             : admitCurrentSchema(mainDatabase, *initializationTransactionRes);
 
@@ -1305,7 +1354,18 @@ namespace ao::library
   {
     try
     {
-      std::filesystem::create_directories(databasePath);
+      if (options.schemaPolicy == LibrarySchemaPolicy::RequireExisting)
+      {
+        if (auto res = requireNonemptyDataFile(databasePath); !res)
+        {
+          return res;
+        }
+      }
+      else
+      {
+        std::filesystem::create_directories(databasePath);
+      }
+
       auto implRes = Impl::create(std::move(musicRoot), std::move(databasePath), options);
 
       if (!implRes)

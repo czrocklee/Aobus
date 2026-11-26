@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/rt/library/LibraryDurability.h>
 
 #include <cstddef>
@@ -52,15 +53,17 @@ namespace ao::rt
     ///        is supported: a cover read then re-extracts from a carrier file
     ///        every time, which costs latency, and costs the image itself for
     ///        content whose carrier files are all gone.
-    static Result<CoreRuntime> create(std::unique_ptr<async::Executor> executorPtr,
-                                      std::filesystem::path musicRoot,
-                                      std::filesystem::path databasePath,
-                                      std::filesystem::path cacheDirectory = {},
-                                      std::uint64_t musicLibraryPinnedMapBytes = 0,
-                                      LibraryDurability musicLibraryDurability = LibraryDurability::Durable,
-                                      async::Sleeper* sleeper = nullptr,
-                                      TextOrderingPolicy const* textOrderingPolicy = nullptr,
-                                      CompletionAliasPolicy const* completionAliasPolicy = nullptr);
+    static Result<CoreRuntime> create(
+      std::unique_ptr<async::Executor> executorPtr,
+      std::filesystem::path musicRoot,
+      std::filesystem::path databasePath,
+      std::filesystem::path cacheDirectory = {},
+      std::uint64_t musicLibraryPinnedMapBytes = 0,
+      LibraryDurability musicLibraryDurability = LibraryDurability::Durable,
+      async::Sleeper* sleeper = nullptr,
+      TextOrderingPolicy const* textOrderingPolicy = nullptr,
+      CompletionAliasPolicy const* completionAliasPolicy = nullptr,
+      library::LibrarySchemaPolicy schemaPolicy = library::LibrarySchemaPolicy::InitializeIfEmpty);
     ~CoreRuntime();
 
     // Composition-root teardown must not run from a synchronous runtime
