@@ -24,6 +24,7 @@ known-first-party = ["ao"]
 
 [tool.mypy]
 strict = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR/script"
 exclude = [
     '^test/script/'
 ]

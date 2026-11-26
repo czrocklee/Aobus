@@ -1011,6 +1011,7 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output["sha"], base)
         self.assertEqual(output["docs-only"], "false")
+        self.assertEqual(output["checker-reports"], "false")
         self.assertIn("4 commits, 3 changed paths", result.stdout)
         with mock.patch.object(git_files, "PROJECT_ROOT", self.root):
             self.assertEqual(git_files.changed_files(output["sha"]), ["first.cpp", "last.cpp", "middle.cpp"])
@@ -1060,7 +1061,7 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
         # A forced push can legitimately use a nonancestor as its before SHA.
         result, output = self.ci_scope(base, "push")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(output, {"sha": base, "docs-only": "true"})
+        self.assertEqual(output, {"sha": base, "docs-only": "true", "checker-reports": "false"})
 
     def test_ci_deployment_readme_keeps_the_docs_route_only_when_retained(self):
         readme = self.root / "app/windows-winui/deployment/README.md"
@@ -1117,6 +1118,34 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
 
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(output["docs-only"], "false")
+
+    def test_ci_checker_report_probe_selects_relevant_changes(self):
+        (self.root / "README.md").write_text("base\n", encoding="utf-8")
+        self.commit("base")
+        for name, docs_only, checker_reports in (
+            ("tool/lint/README.md", "true", "false"),
+            ("bazel/coverage/coverage.bzl", "false", "false"),
+            ("script/ao/portal/bazel_coverage.py", "false", "false"),
+            ("bazel/lint/lint.bzl", "false", "true"),
+            ("tool/lint/build.bzl", "false", "true"),
+            ("bazel/msvc_policy.bzl", "false", "true"),
+            ("script/ao/graph/bazel_lint_reports.py", "false", "true"),
+            ("script/ao/portal/bazel_lint.py", "false", "true"),
+            (".bazelrc", "false", "true"),
+            ("test/lint/check_checker_reports.py", "false", "true"),
+        ):
+            with self.subTest(name=name):
+                base = self.git("rev-parse", "HEAD")
+                path = self.root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+                self.commit("change input")
+
+                result, output = self.ci_scope(base)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output["docs-only"], docs_only)
+                self.assertEqual(output["checker-reports"], checker_reports)
 
     def test_ci_nested_documentation_and_skill_routes(self):
         (self.root / "README.md").write_text("base\n", encoding="utf-8")

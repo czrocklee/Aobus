@@ -105,10 +105,9 @@ def _arguments(ctx, command):
     return args
 
 def _verification_impl(ctx):
-    if len(ctx.files._host) != 1 or len(ctx.files._plugin) > 1:
-        fail("Lint requires one native host and at most one plugin")
-    host = ctx.files._host[0]
-    plugin = ctx.files._plugin[0] if ctx.files._plugin else None
+    checker = ctx.file._lint_checker
+    plugin = None if LINT_SDK_HOST == "windows" else checker
+    host = ctx.file._host if plugin else checker
     result = ctx.actions.declare_file(ctx.label.name + ".json")
     log = ctx.actions.declare_file(ctx.label.name + ".log")
     inputs = depset(
@@ -140,8 +139,8 @@ lint_verification = rule(
         "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_policy": attr.label(default = Label("@aobus_lint_policy//:policy.json"), allow_single_file = True),
         "_sdk": attr.label(default = Label("@aobus_lint_sdk//:metadata.json"), allow_single_file = True),
-        "_host": attr.label(default = Label("//tool/lint:host"), cfg = "exec"),
-        "_plugin": attr.label(default = Label("//tool/lint:plugin"), cfg = "exec"),
+        "_lint_checker": attr.label(default = Label("//tool/lint:checker"), cfg = "exec", allow_single_file = True),
+        "_host": attr.label(default = Label("//tool/lint:host"), cfg = "exec", allow_single_file = True),
         "_tools": attr.label(default = Label("//tool/lint:tools"), cfg = "exec"),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
         "_native_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),
@@ -464,11 +463,29 @@ def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
         contexts = context_files,
     )
 
+# Only the checker needs a scoped report from behind a configuration transition.
+# Carry its per-main groups across the same edges that supply the verified tool.
+_CheckerReportsInfo = provider(doc = "Selected report groups from the checker binary's native configuration.", fields = ["groups"])
+_CHECKER_EDGES = ["_lint_checker", "lint_checker_binary"]
+
 def _lint_impl(target, ctx, profile = "lint"):
+    if hasattr(ctx.rule.attr, "lint_checker_binary"):
+        return [ctx.rule.attr.lint_checker_binary[0][_CheckerReportsInfo]]
+    if LintVerificationInfo in target:
+        groups = dict(ctx.rule.attr._lint_checker[_CheckerReportsInfo].groups)
+
+        # Bind the forwarded index to the checker named by this configuration's
+        # successful registry verification, not a sibling product-mode binary.
+        for name in ["aobus_lint", "aobus_lint_index"]:
+            if name in groups:
+                groups[name] = depset([target[LintVerificationInfo].result], transitive = [groups[name]])
+        return [OutputGroupInfo(**groups)]
     owner = _lint_owner(target, ctx, profile, cli_groups = profile == "lint")
     groups = {"aobus_lint": depset(owner.artifacts), "aobus_lint_contexts": depset([owner.metadata])}
     if owner.selection_groups != None:
         groups.update({name: depset(files) for name, files in owner.selection_groups.items()})
+    if "aobus-lint-sdk-host" in getattr(ctx.rule.attr, "tags", []):
+        return [OutputGroupInfo(**groups), _CheckerReportsInfo(groups = groups)]
     return [OutputGroupInfo(**groups)]
 
 def _identity_mode(main, profile):
@@ -478,7 +495,7 @@ def _identity_mode(main, profile):
 
 lint_aspect = aspect(
     implementation = _lint_impl,
-    attr_aspects = [],
+    attr_aspects = _CHECKER_EDGES,
     requires = [header_origin_aspect],
     attrs = {
         # The portal names real consumers per run through --aspects_parameters;
@@ -498,7 +515,7 @@ def _analyzer_impl(target, ctx):
 
 analyzer_aspect = aspect(
     implementation = _analyzer_impl,
-    attr_aspects = [],
+    attr_aspects = _CHECKER_EDGES,
     requires = [header_origin_aspect],
     attrs = {
         "aobus_lint_consumers": attr.string(default = "{}"),

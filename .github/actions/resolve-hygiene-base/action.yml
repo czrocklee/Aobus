@@ -1,5 +1,5 @@
 name: Resolve validation scope
-description: Verify the hygiene base and classify documentation-only changes
+description: Verify the hygiene base and classify validation inputs
 
 outputs:
   sha:
@@ -8,6 +8,9 @@ outputs:
   docs-only:
     description: True only for a nonempty change containing documentation or skill Markdown
     value: ${{ steps.resolve.outputs.docs-only }}
+  checker-reports:
+    description: True when the range changes inputs to the native checker report probe
+    value: ${{ steps.resolve.outputs.checker-reports }}
 
 runs:
   using: composite

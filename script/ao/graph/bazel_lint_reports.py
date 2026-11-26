@@ -273,6 +273,47 @@ _INDEX = "aobus_lint_index"
 _SOURCES = "aobus_lint_sources"
 _MAIN = "aobus_lint_main_"
 
+CHECKER_VERIFICATION = "//tool/lint:verification"
+
+
+def _checker_binding(
+    owner: str, root_configuration: str, groups: dict[str, dict[str, Path]], index_group: str
+) -> tuple[str, str]:
+    receipt_name = root_configuration + "/tool/lint/verification.json"
+    receipt = groups.get(index_group, {}).pop(receipt_name, None)
+    if receipt is None:
+        raise ValueError(f"missing current checker verification in {index_group}: {receipt_name}")
+    if any(name.endswith("/tool/lint/verification.json") for files in groups.values() for name in files):
+        raise ValueError("unexpected additional checker verification output")
+    data = load_json(receipt)
+    if data.get("verified") is not True:
+        raise ValueError("checker verification did not verify the native tool")
+    sdk = _object(data.get("sdk"), "checker verification SDK")
+    platform = _text(sdk.get("platform"), "checker SDK platform")
+    if platform not in ("linux", "macos", "windows"):
+        raise ValueError("unsupported checker SDK platform")
+    target = re.fullmatch(r"@@//tool/lint:([^/]+)", owner)
+    if target is None:
+        raise ValueError("expected checker owner must be a concrete target in //tool/lint")
+    if platform == "windows":
+        if sdk.get("host_kind") != "standalone" or "plugin" not in data or data["plugin"] is not None:
+            raise ValueError("Windows checker verification must use the standalone host")
+        # The verifier records str(Path), which uses backslashes on Windows.
+        artifact = exec_path(_text(data.get("tidy"), "standalone checker path").replace("\\", "/"))
+    else:
+        if sdk.get("host_kind") != "plugin":
+            raise ValueError("Unix checker verification must use the native plugin")
+        artifact = exec_path(data.get("plugin"))
+    # The scheduled verifier sees the declared checker File through an exec
+    # dependency. Its path identifies the actual bin directory; the mnemonic
+    # need not have any particular spelling or be published as a BEP event.
+    binding = re.fullmatch(r"(bazel-out/[^/]+/bin)/tool/lint/([^/]+)", artifact)
+    if binding is None or binding[1] == root_configuration:
+        raise ValueError("checker verification does not describe a distinct native tool configuration")
+    if binding[2] != target[1] + (".exe" if platform == "windows" else ""):
+        raise ValueError("checker verification does not match the expected owner")
+    return binding[1], platform
+
 
 def main_output_group(path: str, *, windows: bool) -> str | None:
     """Encode the producer's fixed main group, or decline an unsupported spelling."""
@@ -290,6 +331,8 @@ def _inventory(
     requested: frozenset[str],
     execroot: Path,
     allowed_modes: frozenset[str],
+    *,
+    checker_platform: str | None = None,
 ) -> OwnerInventory:
     directory, index_name = _owner_directory(owner, configuration)
     full = _FULL in requested
@@ -322,6 +365,7 @@ def _inventory(
         if (
             identity.owner != owner
             or identity.configuration != configuration
+            or (checker_platform is not None and identity.platform != checker_platform)
             or identity.source not in sources
             or identity.main not in sources
             or any(not output.startswith(directory) for output in identity.outputs)
@@ -432,6 +476,7 @@ def read_reports(
     consumers: str = "{}",
     profile: str = "lint",
     output_groups: Sequence[str] = (_FULL,),
+    checker_owner: str | None = None,
 ) -> tuple[OwnerInventory, ...]:
     """Bind exactly one current aspect completion to each requested root.
 
@@ -444,10 +489,22 @@ def read_reports(
     is the producer's authority. The caller must first require the native
     Bazel process to exit successfully. No retained-directory scan or
     action-execution inventory is used here.
+
+    If requested, the concrete checker owner is published by the verification
+    root. Its inventory keeps that completion's BEP ID, but its native bin
+    directory comes from the verified checker artifact, not the publishing root.
     """
     expected = [canonical_owner(owner) for owner in owners]
-    if not expected or len(set(expected)) != len(expected):
+    roots = set(expected)
+    if not expected or len(roots) != len(expected):
         raise ValueError("expected owners must be nonempty and unique")
+    verification = canonical_owner(CHECKER_VERIFICATION)
+    checker = canonical_owner(checker_owner) if checker_owner is not None else None
+    if checker is not None:
+        if checker not in roots or verification in roots:
+            raise ValueError("expected owners must contain the concrete checker, not the verification root")
+        roots.remove(checker)
+        roots.add(verification)
     expected_aspect = lint_aspect_id(consumers, profile=profile)
     allowed_modes = _ANALYZER_MODES if profile == "analyzer" else _ANALYSIS_MODES
     requested = frozenset(output_groups)
@@ -478,20 +535,21 @@ def read_reports(
         target = _object(identity.get("targetCompleted", {}), "targetCompleted id")
         if target.get("aspect") != expected_aspect:
             continue
-        owner = canonical_owner(target.get("label"))
-        if owner not in expected or owner in completions:
+        root_owner = canonical_owner(target.get("label"))
+        if root_owner not in roots or root_owner in completions:
             raise ValueError("unexpected/duplicate configured lint owner completion")
         complete = _object(event.get("completed"), "target completion")
         if complete.get("success") is not True:
             raise ValueError("owning lint aspect did not complete")
         config_id = _text(_object(target.get("configuration"), "target configuration").get("id"), "configuration id")
-        completions[owner] = config_id, complete
-    if set(completions) != set(expected):
+        completions[root_owner] = config_id, complete
+    if set(completions) != roots:
         raise ValueError("missing requested lint owner completion")
     result = []
     execroot: Path | None = None
     for owner in expected:
-        config_id, complete = completions[owner]
+        is_checker = owner == checker
+        config_id, complete = completions[verification if is_checker else owner]
         if config_id not in configurations:
             raise ValueError("missing full BEP configuration")
         config = configurations[config_id]
@@ -507,7 +565,7 @@ def read_reports(
             group = _object(item, "output group")
             name = _text(group.get("name"), "output group name")
             if name not in requested:
-                if _FULL not in requested and name.startswith(_FULL):
+                if (is_checker or _FULL not in requested) and name.startswith(_FULL):
                     raise ValueError(f"unexpected lint output group: {name}")
                 continue
             if name in groups or group.get("incomplete", False) is not False:
@@ -519,7 +577,25 @@ def read_reports(
                 execroot = root
         if execroot is None:
             raise ValueError("lint output groups require a local execution root")
-        result.append(_inventory(owner, config_id, configuration, groups, requested, execroot, allowed_modes))
+        checker_platform = None
+        if is_checker:
+            if config.get("isTool", False) is not False:
+                raise ValueError("checker verification root must use the target configuration")
+            configuration, checker_platform = _checker_binding(
+                owner, configuration, groups, _FULL if _FULL in requested else _INDEX
+            )
+        result.append(
+            _inventory(
+                owner,
+                config_id,
+                configuration,
+                groups,
+                requested,
+                execroot,
+                allowed_modes,
+                checker_platform=checker_platform,
+            )
+        )
     return tuple(result)
 
 

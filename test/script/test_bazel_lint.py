@@ -143,6 +143,10 @@ _OUTPUT_GROUP_OPTION = "--output_groups="
 _FULL_GROUP = "aobus_lint"
 _INDEX_GROUP = "aobus_lint_index"
 _SOURCES_GROUP = "aobus_lint_sources"
+_CHECKER_OWNER = "//tool/lint:libAobusLintPlugin.so"
+_CHECKER_VERIFICATION = "//tool/lint:verification"
+_CHECKER_SOURCE = "tool/lint/check/UseEraseIfCheck.cpp"
+_CHECKER_SIBLING = "tool/lint/AobusLintModule.cpp"
 
 
 def bazel_action_of(command):
@@ -359,7 +363,7 @@ class _OrchestrationHarness:
         self.commands: list[list[str]] = []
         self.prepare_calls: list[dict[str, object]] = []
         self.execute_calls: list[dict[str, object]] = []
-        self.read_calls: list[tuple[Path, list[str], tuple[str, ...]]] = []
+        self.read_calls: list[tuple[Path, list[str], tuple[str, ...], str | None]] = []
         self.read_profiles: list[str] = []
         self.log_sequence = 0
         # The owned transport is faked below; the focused rc-isolation case
@@ -463,13 +467,20 @@ class _OrchestrationHarness:
         destination.write_bytes(f"{phase} stdout\n{phase} stderr\n".encode())
         return self.build_status
 
-    def fake_read_reports(self, bep, owners, *, consumers="{}", profile="lint", output_groups=(_FULL_GROUP,)):
-        self.read_calls.append((bep, list(owners), tuple(output_groups)))
+    def fake_read_reports(
+        self, bep, owners, *, checker_owner, consumers="{}", profile="lint", output_groups=(_FULL_GROUP,)
+    ):
+        self.read_calls.append((bep, list(owners), tuple(output_groups), checker_owner))
         self.read_profiles.append(profile)
         build = self.execute_calls[-1]
+        self.assertIn(f"--build_event_json_file={bep}", build["targets"])
         self.assertEqual(json.loads(consumers), build["consumers"])
         self.assertCountEqual(output_groups, build["output_groups"])
-        self.assertCountEqual(owners, ["@@" + word for word in build["targets"] if word.startswith("//")])
+        roots = [word for word in build["targets"] if word.startswith("//")]
+        if checker_owner is not None:
+            self.assertIn(_CHECKER_VERIFICATION, roots)
+            roots[roots.index(_CHECKER_VERIFICATION)] = checker_owner
+        self.assertCountEqual(owners, ["@@" + root for root in roots])
         inventory = self.pass_inventories.pop(0) if self.pass_inventories else self.inventories
         self.assertCountEqual([item.owner for item in inventory], owners)
 
@@ -498,7 +509,7 @@ class _OrchestrationHarness:
 
     def assert_report_groups(self, *passes):
         self.assertEqual(len(self.read_calls), len(passes))
-        for (bep, _, groups), (name, expected) in zip(self.read_calls, passes, strict=True):
+        for (bep, _, groups, _), (name, expected) in zip(self.read_calls, passes, strict=True):
             self.assertEqual(bep.name, f"{name}.bep.json")
             self.assertCountEqual(groups, expected)
 
@@ -579,6 +590,46 @@ class _OrchestrationHarness:
         return bazel_lint_reports.OwnerInventory(
             owner, configuration, "config-id", tuple(reports), paths, (), self.root / "execroot"
         )
+
+    def checker_inventory(self):
+        self.touch(_CHECKER_SOURCE, _CHECKER_SIBLING)
+        self.query_xml = QUERY_XML.replace(
+            "</query>",
+            f'''<rule class="cc_binary" name="{_CHECKER_OWNER}">
+              <list name="srcs">
+                <label value="//tool/lint:check/UseEraseIfCheck.cpp"/>
+                <label value="//tool/lint:AobusLintModule.cpp"/>
+              </list>
+              <list name="tags"><string value="aobus-lint-sdk-host"/></list>
+            </rule>
+            <rule class="lint_verification" name="{_CHECKER_VERIFICATION}">
+              <list name="tags"><string value="aobus-lint-sdk-host"/></list>
+            </rule></query>''',
+        )
+        owner = "@@" + _CHECKER_OWNER
+        return self.owner_inventory(
+            owner,
+            self.report(owner, _CHECKER_SOURCE),
+            self.report(
+                owner,
+                _CHECKER_SIBLING,
+                outcome="warning",
+                log=f"{_CHECKER_SIBLING}:1:1: warning: unselected checker finding [aobus-example]\n",
+            ),
+        )
+
+    def assert_checker_report_binding(self, *ordinary_owners):
+        (build,) = self.execute_calls
+        self.assertCountEqual(
+            [word for word in build["targets"] if word.startswith("//")], (*ordinary_owners, _CHECKER_VERIFICATION)
+        )
+        ((bep, owners, _, checker_owner),) = self.read_calls
+        raw_owners = (*ordinary_owners, _CHECKER_OWNER)
+        self.assertEqual(checker_owner, _CHECKER_OWNER)
+        self.assertCountEqual(owners, ["@@" + owner for owner in raw_owners])
+        receipt = json.loads((bep.parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertCountEqual(receipt["owners"], raw_owners)
+        return receipt["selected"]
 
 
 class PerFileProvenanceTest(_OrchestrationHarness, unittest.TestCase):
@@ -1008,6 +1059,42 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.assertEqual(self.run_quiet(explicit_scope(main)), 0)
         self.assert_report_groups(("build", {_INDEX_GROUP, "aobus_lint_main_lib_ssample_hextra_sSelected__Name_dcpp"}))
 
+    def test_mixed_file_scope_builds_checker_verification_without_widening_reports(self):
+        ordinary_owner = "//lib/sample:sample"
+        ordinary_source = "lib/sample/Sample.cpp"
+        checker = self.checker_inventory()
+        self.cquery_text += f"{checker.owner}|False\n"
+        self.inventories = (
+            self.owner_inventory(
+                "@@" + ordinary_owner,
+                self.report("@@" + ordinary_owner, ordinary_source),
+                self.report("@@" + ordinary_owner, "lib/sample/Grouped.cpp"),
+            ),
+            checker,
+        )
+
+        self.assertEqual(self.run_quiet(explicit_scope(_CHECKER_SOURCE, ordinary_source)), 0)
+        self.assert_report_groups(
+            (
+                "build",
+                {
+                    _INDEX_GROUP,
+                    "aobus_lint_main_lib_ssample_sSample_dcpp",
+                    "aobus_lint_main_tool_slint_scheck_sUseEraseIfCheck_dcpp",
+                },
+            )
+        )
+        self.assertCountEqual(self.assert_checker_report_binding(ordinary_owner), [ordinary_source, _CHECKER_SOURCE])
+
+    def test_explicit_checker_owner_uses_verification_with_all_its_reports(self):
+        checker = self.checker_inventory()
+        self.cquery_text = f"{checker.owner}|False\n"
+        self.inventories = (checker,)
+
+        self.assertEqual(self.run_quiet(SourceScope(), owner_targets=(_CHECKER_OWNER,)), 1)
+        self.assert_report_groups(("build", {_FULL_GROUP}))
+        self.assertCountEqual(self.assert_checker_report_binding(), [_CHECKER_SOURCE, _CHECKER_SIBLING])
+
     def test_windows_case_alias_materializes_and_gates_the_canonical_main(self):
         owner = "@@//lib/sample:sample"
         canonical = "lib/sample/Sample.cpp"
@@ -1175,7 +1262,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             ("consumers", selected_groups),
         )
         self.assertEqual(
-            [owners for _, owners, _ in self.read_calls], [[nearest], [nearest, compiler], [nearest, compiler]]
+            [owners for _, owners, _, _ in self.read_calls], [[nearest], [nearest, compiler], [nearest, compiler]]
         )
         self.assertEqual(self.execute_calls[-1]["consumers"], {compiler: [["tool/catalog/Main.cpp", INVENTORY]]})
 
@@ -1332,6 +1419,17 @@ class AnalyzerOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         self.assertEqual(prepared["config"], "fastbuild")
         self.assertEqual(self.read_profiles, ["analyzer"])
         self.assert_report_groups(("build", {_FULL_GROUP}))
+
+    def test_analyzer_uses_checker_verification_without_gating_unselected_sources(self):
+        checker = self.checker_inventory()
+        self.cquery_text = f"{checker.owner}|False\n"
+        self.inventories = (checker,)
+
+        status, _, diagnostics = self.run_analyzer(self.args(), [_CHECKER_SOURCE], explicit_files=(_CHECKER_SOURCE,))
+        self.assertEqual(status, 0, diagnostics)
+        self.assertEqual(self.read_profiles, ["analyzer"])
+        self.assert_report_groups(("build", {_FULL_GROUP}))
+        self.assertEqual(self.assert_checker_report_binding(), [_CHECKER_SOURCE])
 
     def test_analyzer_findings_fail_by_default_and_report_only_is_explicit(self):
         log = "lib/sample/Sample.cpp:1:1: warning: leak [clang-analyzer-cplusplus.NewDeleteLeaks]\n"

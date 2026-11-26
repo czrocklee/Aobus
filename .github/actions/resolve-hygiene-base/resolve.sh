@@ -39,6 +39,7 @@ git diff --name-status --no-renames -z "$base_sha" "$head_sha" > "$changed_files
 commit_count="$(git rev-list --count "$base_sha..$head_sha")"
 file_count=0
 docs_only=true
+checker_reports=false
 if [[ ! -s "$changed_files" || "${GITHUB_EVENT_NAME:-}" == workflow_dispatch ]]; then
   docs_only=false
 fi
@@ -52,7 +53,21 @@ while IFS= read -r -d '' status && IFS= read -r -d '' path; do
       fi
       ;;
     AGENTS.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md|tool/*.md|app/*.md|asset/*.md) ;;
-    *) docs_only=false ;;
+    *)
+      docs_only=false
+      # The Debug probe is for the checker forwarding and receipt contract,
+      # not every dependency shared by a native build.
+      case "$path" in
+        .bazelrc|.github/workflows/ci.yml|.github/actions/resolve-hygiene-base/*|\
+        bazel/lint/lint.bzl|bazel/compile_context.bzl|bazel/compiler_policy.bzl|bazel/msvc_policy.bzl|\
+        tool/lint/BUILD.bazel|tool/lint/build.bzl|\
+        tool/lint/check/LocalInitializationStyleCheck.*|lib/utility/BUILD.bazel|lib/utility/Base64.cpp|\
+        script/ao/graph/bazel_lint_action.py|script/ao/graph/bazel_lint_reports.py|\
+        script/ao/portal/bazel_lint.py|test/lint/check_checker_reports.py)
+          checker_reports=true
+          ;;
+      esac
+      ;;
   esac
 done < "$changed_files"
 printf 'Validation range: %s..%s (%s commits, %s changed paths)\n' \
@@ -61,4 +76,4 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   printf 'Hygiene checks the final tree across `%s..%s`: **%s commits**, **%s changed paths**. Platform-incompatible files are covered by their native job.\n' \
     "$base_sha" "$head_sha" "$commit_count" "$file_count" >> "$GITHUB_STEP_SUMMARY"
 fi
-printf 'docs-only=%s\n' "$docs_only" >> "$GITHUB_OUTPUT"
+printf 'docs-only=%s\nchecker-reports=%s\n' "$docs_only" "$checker_reports" >> "$GITHUB_OUTPUT"

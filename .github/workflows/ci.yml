@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       docs-only: ${{ steps.scope.outputs.docs-only }}
+      checker-reports: ${{ steps.scope.outputs.checker-reports }}
       lint-base: ${{ github.event_name == 'pull_request' && steps.scope.outputs.sha || '' }}
     steps:
       - name: Check out repository
@@ -211,6 +212,16 @@ jobs:
           ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" "${lint_args[@]}" \
             2>&1 | tee "$RUNNER_TEMP/aobus-completion.log"
 
+      - name: Test native checker reports
+        if: ${{ needs.changes.outputs.checker-reports == 'true' }}
+        shell: bash
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: |
+          # Expand runner paths inside the pinned Python environment.
+          # shellcheck disable=SC2016
+          script/ao/pinned-nix-shell.sh ./shell.nix --run 'PYTHONPATH=script "$AO_NIX_PORTAL_PYTHON" -S -B -X utf8 test/lint/check_checker_reports.py "$RUNNER_TEMP/aobus-bazel-fastbuild"'
+
       # Drain acknowledged uploads before stopping the owned proxy. A requested
       # manual cache must also finish its drain successfully.
       - name: Stop Bazel remote cache
@@ -315,6 +326,7 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.bep.json
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
+            ${{ runner.temp }}/aobus-bazel-fastbuild/checker-reports.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.log
             ${{ runner.temp }}/bazel-r2-stop.json
@@ -885,6 +897,18 @@ jobs:
             Tee-Object -FilePath (Join-Path $env:CHECK_TREE 'completion.log')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Test native checker reports
+        if: ${{ needs.changes.outputs.checker-reports == 'true' }}
+        shell: pwsh
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          PYTHONPATH: script
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          & $python -S -B -X utf8 test/lint/check_checker_reports.py D:\aobus-bazel-fastbuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Stop Bazel remote cache
         id: bazel-remote-stop
         if: ${{ always() && steps.bazel-remote.outcome != 'skipped' }}
@@ -979,6 +1003,7 @@ jobs:
             D:\aobus-bazel-fastbuild\lint\run-*\*.receipt.json
             D:\aobus-bazel-fastbuild\lint\run-*\*.log
             D:\aobus-bazel-fastbuild\lint\run-*\*.bep.json
+            D:\aobus-bazel-fastbuild\checker-reports.bep.json
             D:\aobus-bazel-fastbuild\state\output\execroot\_main\bazel-out\*\testlogs\**
           if-no-files-found: warn
 

@@ -1559,9 +1559,11 @@ sibling report and does not make sibling mains selected. For example, the
 header-scoped utility command above gates the selected header, unlike the
 broader target-only command. An ordinary compiler error in a delivered but
 unselected sibling report is not a selected-main result; failure of a required
-Bazel build instead makes the attempt incomplete. Compatibility uses the
-top-level target configuration, not an exec-configuration row for the same
-owner built as a tool.
+Bazel build instead makes the attempt incomplete. Query maps paths to compile
+owners, and `cquery` checks those roots in the top-level target configuration. Scoped reports likewise use that configuration,
+except for the tagged native SDK checker: lint and analyzer reports for its files
+follow the exact verified tool's exec edges, including the Windows opt edge.
+Ordinary products in the same request remain in the caller's configuration.
 Automatic discovery without `--target` queries the whole project graph.
 For a supported direct main path, the portal requests its reports in
 all actual native contexts plus the owner inventory, not owner sibling reports
@@ -1653,23 +1655,24 @@ path that no admitted configuration selects — for example, only under an
 off-by-default feature flag — fails rather than silently passing; deferral
 stays reserved for recognized foreign-native-platform paths.
 
-The graph lints each owner's top-level target configuration, including authored
-tool source, without separately covering exec-configuration compilations of the
-same source. Full coverage is not full fresh execution: matching reports are
-reused and cached warnings still fail. Cold caches pay the complete analysis
+The graph follows the completion roots and their actual dependency edges,
+including configured exec tools. It does not promise coverage of every
+configuration variant. Full coverage is not full fresh execution: matching
+reports are reused and cached warnings still fail. Cold caches pay the complete analysis
 cost; conservative declared input closures can invalidate more reports than the
 actual include relationships alone would require.
 
-The report aspect is nonpropagating; its required provider-only aspect follows
-dependencies solely to map virtual include headers. It captures actual native
-argv and declared inputs, adds reports for paired headers analyzed as main
+The scoped report aspect follows the checker verification edges; its required
+provider-only aspect follows dependencies to map virtual include headers. It
+captures actual native argv and declared inputs, adds reports for paired headers analyzed as main
 files, and retains
 AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
-fixed production aspect and that pass's exact consumer parameter. Before using
-reports from a pass, including for donor discovery, the portal requires every
+fixed production aspect and that pass's exact consumer parameter. For the
+verification root, the BEP carries its current verified native tool path and
+selected groups. Before using reports from a pass, including for donor discovery, the portal requires every
 owner's outputs to come from the same local execution root. It does not scan
 stale output directories or join `aquery` data. The native lint stage returns
 0 for a clean selection, 1 for warnings, and 2 for selected compiler errors,

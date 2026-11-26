@@ -44,7 +44,7 @@ _ANALYZER_CONFIG = "fastbuild"
 _OUTPUT_GROUP = "aobus_lint"
 _QUERY_EXPRESSION = 'kind("rule", //...)'
 _QUERY_ATTRIBUTES = frozenset(
-    {"srcs", "hdrs", "textual_hdrs", "additional_compiler_inputs", "deps", "implementation_deps", "actual"}
+    {"srcs", "hdrs", "textual_hdrs", "additional_compiler_inputs", "deps", "implementation_deps", "actual", "tags"}
 )
 _CQUERY_EXPRESSION = 'str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))'
 
@@ -87,6 +87,13 @@ class QueryGraph:
         self._headers: dict[str, tuple[str, ...]] = {}
         self._closures: dict[str, frozenset[str]] = {}
         self._declarers: dict[str, frozenset[str]] | None = None
+
+    def checker_owner(self, owners: Sequence[str]) -> str | None:
+        """The native SDK checker is linted as built for execution, not as a product."""
+        matches = [owner for owner in owners if "aobus-lint-sdk-host" in _attribute_labels(self.rules[owner], "tags")]
+        if len(matches) > 1:
+            raise ValueError(f"expected one native lint SDK checker, found {matches}")
+        return next(iter(matches), None)
 
     def source_owners(self, path: str) -> tuple[str, ...]:
         """Return every compile owner whose actual ``srcs`` contain ``path``."""
@@ -915,6 +922,7 @@ def _report_pass(
     profile: str,
     config: str,
     owners: Sequence[str],
+    checker_owner: str | None,
     consumers: Mapping[str, tuple[str, str]],
     jobs: int,
     remote_cache: str | None,
@@ -926,8 +934,9 @@ def _report_pass(
     aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile)
     bep = run_dir / f"{name}.bep.json"
     log = run_dir / f"{name}.log"
+    roots = [bazel_lint_reports.CHECKER_VERIFICATION if owner == checker_owner else owner for owner in owners]
     build_targets = [
-        *owners,
+        *roots,
         f"--aspects={aspect}",
         "--config=aobus_lint_consumers",
         f"--output_groups={_OUTPUT_GROUP}" if output_groups == (_OUTPUT_GROUP,) else "--config=aobus_lint_scope",
@@ -980,6 +989,7 @@ def _report_pass(
     return bep, bazel_lint_reports.read_reports(
         bep,
         [_canonical_owner(owner) for owner in owners],
+        checker_owner=checker_owner,
         consumers=parameters,
         profile=profile,
         output_groups=output_groups,
@@ -1162,6 +1172,7 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
                 profile="lint",
                 config=config,
                 owners=owners,
+                checker_owner=graph.checker_owner(owners),
                 consumers=consumers,
                 jobs=jobs,
                 remote_cache=remote_cache,
@@ -1336,6 +1347,7 @@ def _run_analyzer(args: AnalyzerRequest, files: Sequence[str], *, explicit_files
                 profile="analyzer",
                 config=_ANALYZER_CONFIG,
                 owners=owners,
+                checker_owner=graph.checker_owner(owners),
                 consumers=consumers,
                 jobs=jobs,
                 remote_cache=None,

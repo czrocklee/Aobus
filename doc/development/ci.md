@@ -85,6 +85,14 @@ without a portal launch rc or R2. It can reuse the disk cache. It does not
 run a bare `TestRunner`; to verify that boundary, run
 `bazel test --nocache_test_results //:tests` with the native prerequisites.
 
+On changes to checker forwarding, its probe, or its CI route, Linux and Windows
+also run the [mixed checker report probe](../../test/lint/check_checker_reports.py).
+To reproduce it after native completion, set `PYTHONPATH=script` and run
+`python test/lint/check_checker_reports.py <prepared-tree>` from the checkout
+with the pinned host Python (inside the pinned Nix shell on Linux). It compares
+the delivered Debug request with the native compiler arguments and objects for
+the verified tool and the product source. It does not run whole-graph lint.
+
 Use the **Check Bazel completion** step's exit status for the completion
 verdict. A passing Bazel test graph or report build does not prove scoped
 lint passed: the portal reads the reports and can still reject a finding or

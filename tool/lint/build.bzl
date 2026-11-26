@@ -20,12 +20,12 @@ _sdk_release = transition(
 def _release_checker_impl(ctx):
     # Forward files, not the executable provider: the binary belongs to the
     # transitioned rule. Omit CcInfo so generic PE validation stays out of lint.
-    return [DefaultInfo(files = ctx.attr.binary[0][DefaultInfo].files)]
+    return [DefaultInfo(files = ctx.attr.lint_checker_binary[0][DefaultInfo].files)]
 
 _release_checker = rule(
     implementation = _release_checker_impl,
     attrs = {
-        "binary": attr.label(cfg = _sdk_release, mandatory = True),
+        "lint_checker_binary": attr.label(cfg = _sdk_release, mandatory = True),
         "_allowlist_function_transition": attr.label(default = "@bazel_tools//tools/allowlists/function_transition_allowlist"),
     },
 )
@@ -53,7 +53,7 @@ def lint_checker(srcs, hdrs):
             tags = ["manual", "aobus-lint-sdk-host"],
             visibility = ["//visibility:private"],
         )
-        _release_checker(name = "checker", binary = ":AobusClangTidy")
+        _release_checker(name = "checker", lint_checker_binary = ":AobusClangTidy")
         native.filegroup(name = "host", srcs = [":checker"])
         native.filegroup(name = "plugin")
     else:

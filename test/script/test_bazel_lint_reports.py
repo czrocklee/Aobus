@@ -55,11 +55,12 @@ class ReportsTestCase(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
-    def file_entry(self, name):
+    def file_entry(self, name, configuration=None):
         path = self.root / "execroot/_main" / name
+        configuration = configuration or self.configuration
         return {
-            "name": name.removeprefix(self.configuration + "/"),
-            "pathPrefix": self.configuration.split("/"),
+            "name": name.removeprefix(configuration + "/"),
+            "pathPrefix": configuration.split("/"),
             "uri": path.as_uri(),
         }
 
@@ -541,6 +542,217 @@ class ScopedReportsTest(ReportsTestCase):
             entry["identity"]["mode"] = "ANALYZER"
         with self.assertRaises(ValueError):
             self.scoped(profile="analyzer")
+
+
+class CheckerReportsTest(ReportsTestCase):
+    INDEX = "aobus_lint_index"
+    SOURCES = "aobus_lint_sources"
+    MAIN = "aobus_lint_main_tool_slint_sAobusLintModule_dcpp"
+    CONSUMERS = '{"@@//tool/lint:libAobusLintPlugin.so":[["tool/lint/AobusLintModule.cpp","tool/lint/Table.def"]]}'
+
+    def attach_checker(self, *, mixed=False, scoped=False, platform="linux", profile="lint", consumers="{}"):
+        target = {
+            "linux": "libAobusLintPlugin.so",
+            "macos": "libAobusLintPlugin.dylib",
+            "windows": "AobusClangTidy",
+        }[platform]
+        self.checker = f"//tool/lint:{target}"
+        mnemonic = "windows_x64-opt-exec-ST-b06eb6476a5f" if platform == "windows" else "native_execution-opt-exec"
+        self.checker_bin = f"bazel-out/{mnemonic}/bin"
+        directory = self.checker_bin + "/tool/lint/"
+        self.verification_name = self.configuration + "/tool/lint/verification.json"
+        self.verification = {
+            "schema": 1,
+            "verified": True,
+            "sdk": {"platform": platform, "host_kind": "standalone" if platform == "windows" else "plugin"},
+            "tidy": (directory + "AobusClangTidy.exe").replace("/", "\\")
+            if platform == "windows"
+            else "external/+lint_sdk+aobus_lint_sdk/bin/clang-tidy",
+            "plugin": None if platform == "windows" else directory + target,
+            "expected_checks": ["aobus-example"],
+        }
+        self.checker_index_name = directory + target + ".aobus-lint.index.json"
+        main = "tool/lint/AobusLintModule.cpp"
+        self.checker_identity = {
+            "owner": "@@" + self.checker,
+            "configuration": self.checker_bin,
+            "source": main,
+            "main": main,
+            "outputs": [directory + f"_objs/{target}/AobusLintModule.o"],
+            "mode": "ANALYZER" if profile == "analyzer" else "STRICT",
+            "platform": platform,
+        }
+        report = directory + target + ".aobus-lint/module.report.json"
+        log = directory + target + ".aobus-lint/module.log"
+        self.checker_index = {
+            "schema": 1,
+            "owner": self.checker_identity["owner"],
+            "configuration": self.checker_bin,
+            "sources": [main],
+            "uncovered": [],
+            "reports": [{"identity": self.checker_identity, "report": report, "log": log}],
+        }
+        self.materialize(log, "")
+        index_files = [
+            self.file_entry(self.verification_name),
+            self.file_entry(self.checker_index_name, self.checker_bin),
+        ]
+        pair = [self.file_entry(name, self.checker_bin) for name in (report, log)]
+        self.checker_groups = (
+            [
+                {"name": self.INDEX, "inlineFiles": index_files},
+                {"name": self.SOURCES, "inlineFiles": pair.copy()},
+                {"name": self.MAIN, "inlineFiles": pair.copy()},
+            ]
+            if scoped
+            else [{"name": "aobus_lint", "inlineFiles": index_files + pair}]
+        )
+        self.checker_completion = {
+            "id": {
+                "targetCompleted": {
+                    "label": "//tool/lint:verification",
+                    "configuration": {"id": self.config_id},
+                    "aspect": lint_aspect_id(consumers, profile=profile),
+                }
+            },
+            "completed": {"success": True, "outputGroup": self.checker_groups},
+        }
+        children = self.events[0]["children"]
+        if not mixed:
+            children.remove(self.events.pop(4)["id"])
+        self.events.insert(5 if mixed else 4, self.checker_completion)
+        children.append(self.checker_completion["id"])
+
+    def read_checker(self, *, owners=None, checker_owner=None, **kwargs):
+        self.materialize(self.verification_name, json.dumps(self.verification))
+        self.materialize(self.checker_index_name, json.dumps(self.checker_index))
+        self.materialize(self.checker_index["reports"][0]["report"], self.report_json(self.checker_identity))
+        self.save()
+        return read_reports(
+            self.bep,
+            [self.checker] if owners is None else owners,
+            checker_owner=self.checker if checker_owner is None else checker_owner,
+            **kwargs,
+        )
+
+    def test_mixed_scoped_roots_keep_product_and_verified_checker_configurations(self):
+        self.attach_checker(mixed=True, scoped=True, consumers=self.CONSUMERS)
+        product = self.events[4]
+        product["id"]["targetCompleted"]["aspect"] = lint_aspect_id(self.CONSUMERS)
+        product["completed"]["outputGroup"] = [
+            {"name": self.INDEX, "inlineFiles": [self.file_entry(self.index_name)]},
+            {"name": self.SOURCES, "inlineFiles": self.files},
+        ]
+        # No BEP configuration event for the exec tool is needed: it publishes
+        # through the target-configured verification root, not as a root itself.
+        kwargs = {
+            "owners": [self.owner, self.checker],
+            "checker_owner": "@@" + self.checker,
+            "consumers": self.CONSUMERS,
+            "output_groups": (self.INDEX, self.SOURCES, self.MAIN),
+        }
+        inventories = self.read_checker(**kwargs)
+        self.assertEqual(
+            [(inventory.owner, inventory.configuration) for inventory in inventories],
+            [(self.owner, self.configuration), ("@@" + self.checker, self.checker_bin)],
+        )
+        self.assertEqual(inventories[1].bep_configuration, self.config_id)
+        selected = {self.identity["main"], self.checker_identity["main"]}
+        self.assertEqual(self.quiet_gate(inventories, selected), 0)
+        self.checker_groups[2]["inlineFiles"].pop()
+        with self.assertRaisesRegex(ValueError, "missing current report/log"):
+            self.read_checker(**kwargs)
+
+    def test_full_analyzer_binds_the_windows_native_executable_and_its_profile(self):
+        self.attach_checker(platform="windows", profile="analyzer")
+        (inventory,) = self.read_checker(profile="analyzer")
+        self.assertEqual(inventory.configuration, self.checker_bin)
+        self.assertEqual(inventory.reports[0].identity.as_json(), self.checker_identity)
+        with self.assertRaises(ValueError):
+            self.read_checker()
+        self.checker_groups.append({"name": self.INDEX})
+        with self.assertRaisesRegex(ValueError, "unexpected lint output group"):
+            self.read_checker(profile="analyzer")
+        self.checker_groups.pop()
+        tidy = self.verification["tidy"]
+        for bad in (tidy.removesuffix(".exe"), "C:\\" + tidy, tidy.replace("lint\\", "lint\\..\\lint\\")):
+            with self.subTest(tidy=bad), self.assertRaises(ValueError):
+                self.verification["tidy"] = bad
+                self.read_checker(profile="analyzer")
+
+    def test_only_the_expected_verification_root_can_publish_the_checker(self):
+        self.attach_checker(consumers=self.CONSUMERS)
+        self.read_checker(consumers=self.CONSUMERS)
+        with self.assertRaisesRegex(ValueError, "missing requested"):
+            self.read_checker()
+        direct = copy.deepcopy(self.checker_completion)
+        direct["id"]["targetCompleted"]["label"] = self.checker
+        self.events.insert(4, direct)
+        with self.assertRaisesRegex(ValueError, "unexpected/duplicate"):
+            self.read_checker(consumers=self.CONSUMERS)
+        self.events.remove(self.checker_completion)
+        self.events[0]["children"].remove(self.checker_completion["id"])
+        with self.assertRaisesRegex(ValueError, "unexpected/duplicate"):
+            self.read_checker(consumers=self.CONSUMERS)
+
+    def test_receipt_must_come_from_the_current_root_and_designated_group(self):
+        self.attach_checker(scoped=True)
+        requested = (self.INDEX, self.SOURCES, self.MAIN)
+        index_files = self.checker_groups[0]["inlineFiles"]
+        receipt = index_files.pop(0)
+        with self.assertRaisesRegex(ValueError, "missing current checker verification"):
+            self.read_checker(output_groups=requested)
+        sources = self.checker_groups[1]["inlineFiles"]
+        sources.append(receipt)
+        with self.assertRaisesRegex(ValueError, "missing current checker verification"):
+            self.read_checker(output_groups=requested)
+        sources.pop()
+        wrong = self.checker_bin + "/tool/lint/verification.json"
+        self.materialize(wrong, json.dumps(self.verification))
+        index_files.append(self.file_entry(wrong, self.checker_bin))
+        with self.assertRaisesRegex(ValueError, "missing current checker verification"):
+            self.read_checker(output_groups=requested)
+        index_files.append(receipt)
+        with self.assertRaisesRegex(ValueError, "additional checker verification output"):
+            self.read_checker(output_groups=requested)
+
+    def test_verification_rejects_unverified_or_foreign_bindings(self):
+        self.attach_checker()
+        original = copy.deepcopy(self.verification)
+        for fault in ("schema", "unverified", "sdk-kind", "target-config", "foreign-package", "basename"):
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                self.verification = copy.deepcopy(original)
+                if fault == "schema":
+                    self.verification["schema"] = 2
+                elif fault == "unverified":
+                    self.verification["verified"] = 1
+                elif fault == "sdk-kind":
+                    self.verification["sdk"]["host_kind"] = "standalone"
+                else:
+                    source, replacement = {
+                        "target-config": (self.checker_bin, self.configuration),
+                        "foreign-package": ("/tool/lint/", "/tool/other/"),
+                        "basename": ("libAobusLintPlugin.so", "libAobusLintPlugin.dylib"),
+                    }[fault]
+                    self.verification["plugin"] = original["plugin"].replace(source, replacement)
+                self.read_checker()
+        self.verification = original
+        for wrong_owner in ("//tool/lint:libAobusLintPlugin.dylib", "//tool/other:libAobusLintPlugin.so"):
+            with self.subTest(owner=wrong_owner), self.assertRaises(ValueError):
+                self.read_checker(owners=[wrong_owner], checker_owner=wrong_owner)
+
+    def test_verified_artifact_configuration_and_owner_bind_forwarded_index_contexts(self):
+        self.attach_checker(platform="macos")
+        (inventory,) = self.read_checker()
+        self.assertEqual(inventory.owner, "@@//tool/lint:libAobusLintPlugin.dylib")
+        self.assertEqual(inventory.reports[0].identity.as_json(), self.checker_identity)
+        self.checker_index["configuration"] = self.configuration
+        with self.assertRaisesRegex(ValueError, "index owner/configuration mismatch"):
+            self.read_checker()
+        self.checker_index["configuration"] = self.checker_bin
+        self.checker_identity["owner"] = "@@//tool/lint:verification"
+        with self.assertRaisesRegex(ValueError, "foreign report context"):
+            self.read_checker()
 
 
 class AnalyzerProfileTest(ReportsTestCase):
