@@ -176,7 +176,7 @@ _POLICY_DATA = [
     "script/ao/windows-llvm-sdk.json",
     "//bazel:compiler_policy.bzl",
     "//bazel:msvc_policy.bzl",
-    "//:dependency-contract.json",
+    "//:config/dependency-contract.json",
 ]
 
 # The provisioning, toolchain and host-provider modules read the pinned
@@ -195,7 +195,7 @@ _PORTAL_DATA = [
     "script/ao/toolchain.json",
     "script/ao/windows-requirements.txt",
     "//bazel:msvc_policy.bzl",
-    "//:dependency-contract.json",
+    "//:config/dependency-contract.json",
 ]
 
 # name -> (source files, library deps)
@@ -334,7 +334,7 @@ def aobus_python_libraries():
         # winui.require_runtime reads the Windows App Runtime contract; the
         # .vsconfig belongs to required_components, not UIA admission, so it
         # stays undeclared here.
-        data = [":dependency-contract.json"],
+        data = [":config/dependency-contract.json"],
         imports = ["script"],
         deps = [":ao_python_foundations"],
     )

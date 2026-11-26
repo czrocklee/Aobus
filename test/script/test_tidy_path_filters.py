@@ -1,7 +1,6 @@
 """Bazel-owned selected-file locations and native compiler-view admission.
 
-The retired CMake selected-file VFS overlay is not an input to these actions.
-Declared consumer argv and virtual-header origins now own that responsibility.
+Declared consumer arguments and virtual-header origins identify selected files.
 """
 
 import json

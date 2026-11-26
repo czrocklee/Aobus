@@ -285,7 +285,7 @@ class StbInterfaceTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(native.BazelWorkspaceError, "does not match the governed overlay"):
             dependencies._stb_interface([self.provider], "windows", "9.9.9")
-        overlay = native.read_json(native.PROJECT_ROOT / "cmake/vcpkg-ports/stb/vcpkg.json")
+        overlay = native.read_json(native.PROJECT_ROOT / "config/vcpkg/ports/stb/vcpkg.json")
         self.assertEqual(
             dependencies._stb_interface([self.provider], "windows", overlay["version-string"]),
             {"header_dirs": [str(self.provider / "include")]},
@@ -546,7 +546,7 @@ class FrontendNixClosureTest(unittest.TestCase):
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                 },
             )
 
@@ -700,7 +700,7 @@ class CatalogSdkTest(unittest.TestCase):
             report,
             {
                 "schemaVersion": 1,
-                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
             },
         )
         with (
@@ -736,7 +736,7 @@ class CatalogSdkTest(unittest.TestCase):
         ):
             tools, inputs, evidence = host_tools._catalog_sdk(root / "resolution", None, "linux")
             self.assertEqual(self.genrb_queries, [[str(self.genrb), "-V"]])
-            self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
+            self.assertIn(native.PROJECT_ROOT / "config/dependency-contract.json", evidence)
             self.assertIn(uvernum, evidence)
             # A tool report that drifts from the selected provider version fails.
             for reported in ("77.1", "78.3.1", "78.30", "78.3rc", "78.3-beta"):
@@ -757,7 +757,7 @@ class CatalogSdkTest(unittest.TestCase):
             self.icu_report = "79.2.1"
             self.write_uvernum(uvernum, "79.2.1")
             with self.assertRaisesRegex(
-                native.BazelWorkspaceError, "ICU 79.2.1 does not satisfy dependency-contract.json"
+                native.BazelWorkspaceError, r"ICU 79\.2\.1 does not satisfy config/dependency-contract\.json"
             ):
                 host_tools._catalog_sdk(root / "contract-drift", None, "linux")
             with self.contract("79.2.1"):
@@ -850,7 +850,7 @@ class CatalogSdkTest(unittest.TestCase):
                     self.assertIn(native_runtime, inputs)
                     self.assertIn(extension, inputs)
                     self.assertIn(uvernum, evidence)
-                    self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
+                    self.assertIn(native.PROJECT_ROOT / "config/dependency-contract.json", evidence)
                     if host == "windows":
                         self.assertEqual(tools["SystemRoot"], str(base / "windows"))
                         self.assertEqual(tools["UserProfile"], str(base / "profile"))
@@ -948,7 +948,7 @@ class CatalogSdkTest(unittest.TestCase):
         ):
             # The fixture contract admits only its own ICU release on the native branch.
             with self.assertRaisesRegex(
-                native.BazelWorkspaceError, "ICU 79.1 does not satisfy dependency-contract.json"
+                native.BazelWorkspaceError, r"ICU 79\.1 does not satisfy config/dependency-contract\.json"
             ):
                 host_tools._catalog_sdk(base / "contract-drift", prefix, "windows")
             with self.contract("79.1"):
@@ -959,7 +959,7 @@ class CatalogSdkTest(unittest.TestCase):
                 self.assertEqual(tools["genrb"], str(tool_bin / "genrb.exe"))
                 self.assertIn(uvernum, evidence)
                 self.assertIn(ownership, evidence)
-                self.assertIn(native.PROJECT_ROOT / "dependency-contract.json", evidence)
+                self.assertIn(native.PROJECT_ROOT / "config/dependency-contract.json", evidence)
                 # The installed header must match the actual provider observation.
                 self.write_uvernum(uvernum, "78.3")
                 with self.assertRaisesRegex(native.BazelWorkspaceError, "header version mismatch"):
@@ -993,7 +993,7 @@ class CatalogSdkTest(unittest.TestCase):
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                 },
             )
             with (
@@ -1045,8 +1045,6 @@ class AppVersionProjectionTest(unittest.TestCase):
                 host_tools._app_version(root)
 
     def test_checked_in_root_version_file_is_admitted_by_the_shared_reader(self):
-        # The real repository fact must stay admissible; CMake reads the same
-        # bytes before project(), so this is the one shared version source.
         self.assertEqual(
             host_tools._app_version(native.PROJECT_ROOT),
             (native.PROJECT_ROOT / "VERSION.txt").read_text(encoding="utf-8").strip(),

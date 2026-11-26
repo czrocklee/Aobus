@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHELL_INPUTS = (
     "shell.nix",
-    "nixpkgs.json",
+    "config/nixpkgs.json",
     "script/ao/toolchain.json",
     "script/ao/bazel-toolchain.json",
     "script/ao/buildifier.json",
@@ -55,7 +55,9 @@ class NativeNixPortalTest(unittest.TestCase):
         self.pinned_shell = self.package / "pinned-nix-shell.sh"
         shutil.copy2(PROJECT_ROOT / "script/ao/pinned-nix-shell.sh", self.pinned_shell)
         for name in SHELL_INPUTS:
-            shutil.copy2(PROJECT_ROOT / name, self.checkout / name)
+            destination = self.checkout / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(PROJECT_ROOT / name, destination)
         (self.package / "__init__.py").touch()
         (self.package / "__main__.py").write_text("print('portal entered')", encoding="utf-8")
         self.stubs = self.root / "bin"
@@ -228,7 +230,7 @@ class NativeNixPortalTest(unittest.TestCase):
 
     def test_native_pin_change_invalidates_the_entered_shell(self):
         fingerprint = self._fingerprint()
-        manifest = self.checkout / "nixpkgs.json"
+        manifest = self.checkout / "config/nixpkgs.json"
         pin = json.loads(manifest.read_text(encoding="utf-8"))
         for key in ("owner", "repo", "ref", "rev", "sha256"):
             self.assertIn(key, pin, "the native pin must carry a complete source identity")
@@ -287,7 +289,7 @@ class NativeNixPortalTest(unittest.TestCase):
         self._stub("nix-shell", "env -0")
         kept = {
             "AOBUS_UNRELATED_SETTING": "kept",
-            "CMAKE_BUILD_PARALLEL_LEVEL": "2",
+            "AOBUS_CI_JOBS": "2",
             "CMAKE_LIBRARY_PATH_SUFFIX": "kept",
             "NIX_CFLAGS": "kept",
             "NIXPKGS_UNRELATED": "kept",
@@ -373,6 +375,8 @@ class NativeNixPortalTest(unittest.TestCase):
                     )
                     self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
                     exported[name] = json.loads(evaluated.stdout)
+                # A fingerprint can agree on both sides even if it omits the pin.
+                self.assertIn("config/nixpkgs.json", exported["AO_NIX_SHELL_INPUTS"].split())
                 fingerprints[mode] = exported["AO_NIX_SHELL_FINGERPRINT"]
                 result = self._run_portal(**exported, AOBUS_NIX_UNSTRIPPED_GTK=mode)
 

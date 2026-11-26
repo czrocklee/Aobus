@@ -113,7 +113,7 @@ class EnvironmentError(RuntimeError):
 
 
 def pinned_nix_revision(report: Mapping[str, Any], pin: Mapping[str, Any]) -> str | None:
-    """Return the nixpkgs.json revision when the shell's dependency report was built from it.
+    """Return the pin's revision when the shell's dependency report was built from it.
 
     This standalone helper and the resolvers share the one admission rule.
     """
@@ -391,8 +391,8 @@ def discover_environment(
         if not report_path.resolve(strict=True).is_relative_to(_NIX_STORE):
             raise EnvironmentError("Linux dependency report must belong to the selected Nix store")
         report = _object(report_path, inventory)
-        if pinned_nix_revision(report, _object(PROJECT_ROOT / "nixpkgs.json", inventory)) is None:
-            raise EnvironmentError("Nix dependency report does not match nixpkgs.json")
+        if pinned_nix_revision(report, _object(PROJECT_ROOT / "config/nixpkgs.json", inventory)) is None:
+            raise EnvironmentError("Nix dependency report does not match config/nixpkgs.json")
     elif host == "windows":
         # The original client tuple, not a child capture/derived export, selects
         # upstream rules_cc. Portal requests already pin it in their launch rc.

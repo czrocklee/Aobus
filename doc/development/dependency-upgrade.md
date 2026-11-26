@@ -56,7 +56,7 @@ graph from a new lockfile after the update.
 ## Updating Nixpkgs
 
 1. Select the intended Nixpkgs revision for Linux.
-2. Update the revision, ref, and source hash in `nixpkgs.json`.
+2. Update the revision, ref, and source hash in `config/nixpkgs.json`.
 3. Compute the unpacked tarball hash rather than copying an unverified value:
 
 ```bash
@@ -76,7 +76,7 @@ nix-prefetch-url --unpack \
 
 6. Run the clean build, dependency report, and gate on Linux.
 7. Review every governed dependency change. The Nix result is a candidate; it
-   changes policy only when `dependency-contract.json` is edited explicitly.
+   changes policy only when `config/dependency-contract.json` is edited explicitly.
 8. Review monitor-only changes for API, security, license, patch, and build-option
    risk even though version skew is not a hard failure.
 
@@ -87,7 +87,7 @@ revision jump or split targeted package changes from the package-set update.
 
 ### 1. Change the contract deliberately
 
-Update the dependency's policy in `dependency-contract.json`. State whether the
+Update the dependency's policy in `config/dependency-contract.json`. State whether the
 policy remains exact or changes to a bounded range. Do not broaden a range only
 to make CI green.
 
@@ -98,7 +98,7 @@ package set cannot supply the accepted version, either retain the current
 contract or add a targeted, source-hash-verified Nix override. Do not use an
 ambient package outside `shell.nix`.
 
-Resolve and report the dependency against `nixpkgs.json`.
+Resolve and report the dependency against `config/nixpkgs.json`.
 
 ### 3. Resolve it on macOS and Windows
 
@@ -120,9 +120,9 @@ unchanged, and confine the change to the overridden ports; see
 
 When the default registry baseline changes, update the vcpkg revision, archive
 URL, and verified archive SHA-256 in `script/ao/macos-toolchain.json` in the
-same change. The macOS tool revision must equal the default registry baseline;
-the portal tests enforce that relationship. Compute the archive hash from the
-downloaded bytes with `shasum -a 256`; do not copy an unverified digest.
+same change. Manually verify that the macOS tool revision equals the default
+registry baseline in `config/vcpkg/vcpkg-configuration.json`. Compute the archive
+hash from the downloaded bytes with `shasum -a 256`; do not copy an unverified digest.
 
 ### Recovering a regenerated macOS vcpkg archive
 
@@ -171,7 +171,7 @@ overlay has additional source and native-check retirement requirements in
 
 Do not pin only one `boost-*` port. Boost is split into many vcpkg ports, and a
 single override can create a mixed release family. Update the Boost-scoped
-registry baseline in `vcpkg-configuration.json` to a vcpkg commit whose baseline
+registry baseline in `config/vcpkg/vcpkg-configuration.json` to a vcpkg commit whose baseline
 contains the contracted Boost release for all selected ports. Keep the scoped
 package selection broad enough for `boost*`, `boost-*`, and the `vcpkg-boost`
 helper used by current releases.
@@ -184,7 +184,7 @@ version schemes to the Boost release number.
 
 For Windows App SDK or C++/WinRT upgrades:
 
-1. Select the exact top-level releases in `dependency-contract.json`.
+1. Select the exact top-level releases in `config/dependency-contract.json`.
 2. Regenerate `app/windows-winui/packages.config` with every transitive NuGet
    package and exact version; do not leave transitive selection to an IDE.
 3. Confirm `NuGet.Config` still contains the current official nuget.org
@@ -211,7 +211,7 @@ as `version-semver` for FTXUI.
 ### fast_float
 
 Treat the fast_float version and decimal-conversion behavior as one contract.
-Update its exact version in `dependency-contract.json`, its source tag and hash
+Update its exact version in `config/dependency-contract.json`, its source tag and hash
 in `shell.nix`, and the shared vcpkg resolution together. Run
 `bazel test //test:utility_test --test_filter="FromChars - *"` on Linux,
 macOS, and Windows, including representable subnormals,
@@ -224,7 +224,7 @@ Treat the LMDB release as the library's storage format, not only as an API.
 LMDB 1.0 changed the data and lock file formats and cannot open an environment
 written by 0.9, so every platform moves together and a format change needs an
 explicit migration decision. Update its exact version in
-`dependency-contract.json`, its source tag and hash in `shell.nix`, and the
+`config/dependency-contract.json`, its source tag and hash in `shell.nix`, and the
 vcpkg resolution together. Nixpkgs still packages 0.9, so the Linux derivation
 builds the same GitHub archive the vcpkg port verifies; compare the archive's
 SHA-512 with the port's before accepting a new hash. The contract checks the
@@ -249,7 +249,7 @@ Run the Release performance review on Linux and native Windows, run the macOS
 Release gate, and compare first-use transform construction, the 50,000-track
 ASCII snapshot, the 5,155-track CJK-heavy snapshot, and the four cached lookup
 shapes where performance baselines exist.
-Keep `script-transliteration` declared in `dependency-contract.json`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid imported interface.
+Keep `script-transliteration` declared in `config/dependency-contract.json`, and exercise both lazy transform constructors so a missing packaged transform is not mistaken for a valid imported interface.
 
 ## Updating Python, Ruff, mypy, or the documentation parser
 
@@ -368,7 +368,7 @@ Choose one explicit outcome:
 3. add a versioned custom registry for a maintained long-term need;
 4. use an overlay port for a short-lived emergency.
 
-A platform exception in `dependency-contract.json` must include a unique ID,
+A platform exception in `config/dependency-contract.json` must include a unique ID,
 the dependency and platform, allowed version, reason, owner, issue, creation
 date, expiry, and exit condition. Normal availability exceptions expire within
 30 days. Expired exceptions fail `./ao check deps`.
@@ -460,7 +460,7 @@ security impact, and open the reconciliation work immediately.
 
 - [ ] The change has one clear dependency/tooling purpose.
 - [ ] The before/after governed dependency summary is attached.
-- [ ] `dependency-contract.json` changed only when project policy changed.
+- [ ] `config/dependency-contract.json` changed only when project policy changed.
 - [ ] The affected Nix pin and all vcpkg source revisions and hashes are immutable.
 - [ ] New vcpkg overrides have a reason and exit condition.
 - [ ] Boost ports use one scoped-registry release family.

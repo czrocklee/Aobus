@@ -77,9 +77,9 @@ class VcpkgProvisionTest(unittest.TestCase):
     def overlays(host):
         # The provisioner owns the overlay locations: project overlay ports on
         # every vcpkg host, plus the project overlay triplets on macOS only.
-        overlays = [f"--overlay-ports={os.path.normpath(str(native.PROJECT_ROOT / 'cmake/vcpkg-ports'))}"]
+        overlays = [f"--overlay-ports={native.PROJECT_ROOT / 'config/vcpkg/ports'}"]
         if host == "macos":
-            overlays.append(f"--overlay-triplets={os.path.normpath(str(native.PROJECT_ROOT / 'cmake/vcpkg-triplets'))}")
+            overlays.append(f"--overlay-triplets={native.PROJECT_ROOT / 'config/vcpkg/triplets'}")
         return overlays
 
     def test_windows_tree_installs_the_standard_dynamic_target_and_host_then_shared_sdks(self):
@@ -88,7 +88,8 @@ class VcpkgProvisionTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--triplet") + 1], "x64-windows")
         self.assertIn("--host-triplet=x64-windows", argv)
         self.assertIn(f"--x-install-root={self.tree / 'vcpkg_installed'}", argv)
-        self.assertIn(f"--x-manifest-root={native.PROJECT_ROOT}", argv)
+        self.assertIn(f"--x-manifest-root={native.PROJECT_ROOT / 'config/vcpkg'}", argv)
+        self.assertIn("--x-wait-for-lock", argv)
         self.assertEqual([arg for arg in argv if arg.startswith("--overlay-")], self.overlays("windows"))
         self.assertEqual(log, self.tree / "vcpkg-install.log")
         restore.assert_called_once_with(self.tree)

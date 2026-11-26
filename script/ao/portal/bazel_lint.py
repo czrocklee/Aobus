@@ -2,8 +2,8 @@
 
 The portal owns scope selection, owner discovery, configured compatibility,
 the report build and the public failure gate.  Bazel owns the actual native
-compile contexts and report actions; this module never prepares CMake or runs
-clang-tidy itself.  ``run`` keeps the caller's file scope; the complete graph
+compile contexts and report actions; this module doesn't run clang-tidy itself.
+``run`` keeps the caller's file scope; the complete graph
 gate is the declared Bazel test, not a portal route.
 """
 

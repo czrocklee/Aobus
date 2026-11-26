@@ -47,7 +47,7 @@ def resolve(name: str) -> dict[str, object]:
         # Its consumer must fail, and setup changes the watched missing input.
         selection["unavailable"] = str(error)
         tool = ReadyTool((), error.files)
-    nix_pin = (PROJECT_ROOT / "nixpkgs.json",) if sys.platform == "linux" else ()
+    nix_pin = (PROJECT_ROOT / "config/nixpkgs.json",) if sys.platform == "linux" else ()
     imports = {
         str(path)
         for module in tuple(sys.modules.values())

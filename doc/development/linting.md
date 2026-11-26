@@ -317,7 +317,7 @@ workflow YAML through `./ao format`; actionlint remains check-only. An empty
 workflow-lint scope is skipped without resolving actionlint.
 
 On Linux the stage runs the actionlint pinned by
-[`nixpkgs.json`](../../nixpkgs.json), including the packaged ShellCheck and
+[`config/nixpkgs.json`](../../config/nixpkgs.json), including the packaged ShellCheck and
 Pyflakes. The portal selects it through `AO_NIX_ACTIONLINT`; the `workflows`
 test uses the [ready host command](dependency-governance.md#ready-host-tools-in-bazel)
 from the same Nix provider. The Nixpkgs pin is its sole version authority;

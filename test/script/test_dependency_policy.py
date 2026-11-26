@@ -227,7 +227,7 @@ class VcpkgManifestFeatureTest(unittest.TestCase):
     """
 
     def test_frontend_packages_remain_default_but_not_unconditional_core_inputs(self):
-        manifest = json.loads((dependency_policy.PROJECT_ROOT / "vcpkg.json").read_text(encoding="utf-8"))
+        manifest = json.loads((dependency_policy.PROJECT_ROOT / "config/vcpkg/vcpkg.json").read_text(encoding="utf-8"))
         base = {entry if isinstance(entry, str) else entry["name"] for entry in manifest["dependencies"]}
         frontend = set(manifest["features"]["frontends"]["dependencies"])
         self.assertEqual(frontend, {"cli11", "ftxui", "stb"})

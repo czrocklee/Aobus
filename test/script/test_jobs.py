@@ -69,7 +69,7 @@ class ExportCiTest(unittest.TestCase):
                 self.assertEqual(status, 0, output)
                 self.assertEqual(
                     github_env.read_text(encoding="utf-8").splitlines(),
-                    [f"{jobs.BUILD_PARALLEL_ENV}={cores}"],
+                    [f"AOBUS_CI_JOBS={cores}"],
                 )
                 self.assertEqual(
                     output,
@@ -84,7 +84,7 @@ class ExportCiTest(unittest.TestCase):
         self.assertEqual(status, 0, output)
         self.assertEqual(
             github_env.read_text(encoding="utf-8").splitlines(),
-            ["PRIOR=kept", f"{jobs.BUILD_PARALLEL_ENV}=8"],
+            ["PRIOR=kept", "AOBUS_CI_JOBS=8"],
         )
 
     def test_an_unknown_count_does_not_create_or_change_the_environment_file(self):

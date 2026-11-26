@@ -212,23 +212,12 @@ def _compiler_identity(host: str, compiler: str = "gcc") -> dict[str, Any]:
     return {"schema": 1, "context": context, "files": records}
 
 
-def _read_nix_report() -> dict[str, Any]:
-    """Load the pinned shell's report after checking its Nixpkgs pin."""
-    report_path = Path(os.environ.get("AOBUS_NIX_DEPENDENCY_REPORT", ""))
-    if not report_path.is_file():
-        raise native.BazelWorkspaceError("Nix hardening policy is missing; enter the pinned shell through ./ao")
-    report = native.read_json(report_path)
-    pin = native.read_json(native.PROJECT_ROOT / "nixpkgs.json")
-    if report.get("schemaVersion") != 1 or report.get("nixpkgsRevision") != pin["rev"]:
-        raise native.BazelWorkspaceError("Nix hardening policy does not match the pinned shell; re-enter through ./ao")
-    return report
-
-
 def nix_cc_wrapper(compiler: str = "gcc") -> dict[str, Any]:
     """Read one validated raw compiler wrapper, without constructing action environments."""
     if compiler not in _LINUX_COMPILERS:
         raise native.BazelWorkspaceError(f"unsupported Linux Nix compiler wrapper: {compiler}")
-    wrappers = _read_nix_report().get("ccWrappers", {})
+    report, _, _ = providers.nix_report()
+    wrappers = report.get("ccWrappers", {})
     wrapper = wrappers.get(compiler) if isinstance(wrappers, dict) else None
     if not isinstance(wrapper, dict):
         raise native.BazelWorkspaceError("Nix hardening policy does not match the pinned shell; re-enter through ./ao")
@@ -261,7 +250,8 @@ def nix_cc_wrapper(compiler: str = "gcc") -> dict[str, Any]:
 
 def nix_symbolizer() -> str:
     """Read the report's explicit LLVM symbolizer, admitted as a pinned Nix root."""
-    tools = _read_nix_report().get("llvmTools", {})
+    report, _, _ = providers.nix_report()
+    tools = report.get("llvmTools", {})
     symbolizer = tools.get("symbolizer") if isinstance(tools, dict) else None
     if not isinstance(symbolizer, str) or not symbolizer:
         raise native.BazelWorkspaceError("Nix LLVM symbolizer metadata is missing; re-enter the pinned shell")

@@ -250,7 +250,7 @@ class GateRoutingTest(unittest.TestCase):
                         **os.environ,
                         **env,
                         "CHECK_TREE": str(tree),
-                        "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                        "AOBUS_CI_JOBS": "4",
                         "FAKE_AO_EXIT": str(status),
                     },
                     capture_output=True,
@@ -320,7 +320,7 @@ class GateRoutingTest(unittest.TestCase):
                         {
                             **env,
                             "RUNNER_TEMP": str(runner_temp),
-                            "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                            "AOBUS_CI_JOBS": "4",
                             "FAKE_AO_EXIT": str(status),
                         },
                         cwd=root,
@@ -383,7 +383,8 @@ class LinuxVerdictTest(unittest.TestCase):
         )
         bazel = stub(
             "bazel",
-            '[[ " $* " == *" build "* && " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
+            '[[ " $* " == *" build "* && " $* " == *" --jobs=4 "* ]] || exit 2\n'
+            '[[ " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
             "[[ -z ${AOBUS_BAZEL_CONFIGURATION+x} && -z ${AOBUS_BAZEL_REMOTE_CACHE+x} ]] || exit 3\n"
             "[[ -z ${NIX_BUILD_SHELL+x} ]] || exit 4\n"
             ': > "$0.ran"\n'
@@ -400,7 +401,7 @@ class LinuxVerdictTest(unittest.TestCase):
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "AOBUS_BAZEL_DISK_CACHE": str(root / "cache"),
                 "AOBUS_STATE_ROOT": str(root / "state"),
-                "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                "AOBUS_CI_JOBS": "4",
                 "AOBUS_BAZEL_CONFIGURATION": "must-not-inherit",
                 "AOBUS_BAZEL_REMOTE_CACHE": "must-not-inherit",
             },

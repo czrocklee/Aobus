@@ -14,13 +14,10 @@ See [validation and review](test/validation-and-review.md) to choose checks and
 The public portal has four commands: `setup` explicitly prepares components,
 `format` rewrites source, `check` validates, and `measure` collects coverage,
 performance, or concept metrics. There are no
-ordinary lifecycle aliases or `ao bazel` command tree. Nix/vcpkg remain the
-dependency version and
-installation authorities; Bazel consumes their artifacts without configuring
-an Aobus CMake graph or parsing installed CMake exports — vcpkg package
-builds may still use CMake internally, and the repository retains the
-CMake-language provider assets those ports need. BCR supplies build rules, not
-application dependencies.
+ordinary lifecycle aliases or `ao bazel` command tree. Nix and vcpkg own
+dependency versions and installation. Bazel consumes their installed artifacts
+without parsing CMake exports. vcpkg may use CMake internally to build packages.
+BCR supplies build rules, not application dependencies.
 
 [Standalone lint](linting.md#bazel-backed-reports) and [completion](#completion-gate)
 use the same cacheable [Bazel lint reports](#lint-reports) and STRICT/RELAXED policy.
@@ -50,10 +47,10 @@ bazel test //:tests
 ./ao check contracts --config release --path /tmp/build/aobus-native-sdk --jobs 2
 ```
 
-On native macOS and Windows, `./ao setup deps` installs the shared vcpkg manifest
-into the selected tree's `vcpkg_installed`
-with the pinned vcpkg and the governed triplets, overlays and binary cache,
-without a CMake configure, so unchanged package ABIs restore from that cache.
+On native macOS and Windows, `./ao setup deps` uses `config/vcpkg/` as the
+manifest root and installs into the selected tree's `vcpkg_installed`,
+using the pinned vcpkg and the governed triplets, overlays and binary cache.
+Unchanged package ABIs can restore from that cache.
 On Windows, `ao.bat setup llvm-sdk` is the second explicit provisioning
 spelling: it calls the same native LLVM SDK installer as `./ao setup deps`. Ordinary
 ready-only build, lint and format commands never install an SDK.
@@ -802,9 +799,9 @@ header evidence remain guards. Installed identity does not certify original
 registry/build provenance.
 
 Version claims in this projection have distinct owners. The shared
-`dependency-contract.json` and the resolver inputs (`nixpkgs.json`,
-`vcpkg-configuration.json`, `vcpkg.json`) remain the only version-selection
-authorities; Bazel adds no installer pin, and
+`config/dependency-contract.json` and the resolver inputs (`config/nixpkgs.json`,
+`config/vcpkg/vcpkg-configuration.json`, `config/vcpkg/vcpkg.json`) remain the
+only version-selection authorities; Bazel adds no installer pin, and
 [config/bazel/dependencies.json](../../config/bazel/dependencies.json) holds no
 accepted-version table. [Dependency governance](dependency-governance.md) owns
 what a version change requires. Installed Nix reports and triplet-filtered
@@ -2160,8 +2157,8 @@ The `test_audit` and `name_audit` targets run the same Catch2 naming/tag and
 class/file naming audits their standalone commands expose, and `workflows` runs
 the pinned actionlint over direct `.github/workflows` YAML on Linux. The
 application version is owned by the
-plaintext root [VERSION.txt](../../VERSION.txt) file: the build reads those bytes
-directly and never parses CMake syntax.
+plaintext root [VERSION.txt](../../VERSION.txt) file, which the build reads
+directly.
 The `.txt` suffix avoids shadowing the standard C++
 `<version>` header on case-insensitive filesystems.
 
@@ -2193,8 +2190,8 @@ tooling venv or its site packages.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.
-The application version header expands its template from the project's
-version declaration without a CMake configure.
+Bazel expands the application version header template from the project's
+version declaration.
 
 [Audio fixtures](../../test/data/audio/BUILD.bazel) are checked-in files;
 generation scripts are not run. The shared helper uses official rules_cc runfiles

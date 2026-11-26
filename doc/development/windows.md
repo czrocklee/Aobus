@@ -128,9 +128,13 @@ not use `CALL`. Parsing keeps the caller's working directory, while command
 execution uses the repository root; UNC roots retain a `pushd` mapping until the
 foreground portal exits. This does not replace build-tree or provisioning locks.
 
-`start-msbuild-env.bat <command> [args...]` is available when another tool needs
-the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
-otherwise selects Visual Studio's bundled vcpkg.
+`script\windows\start-msbuild-env.bat <command> [args...]` runs another tool
+from the repository root with an initialized x64 Visual Studio environment.
+It preserves an explicit `VCPKG_ROOT` and otherwise selects Visual Studio's
+bundled vcpkg. Use a local or mapped-drive repository path, not a UNC root.
+Arguments are forwarded only until the first empty argument. Pass `cmd` as the
+command for an interactive prompt; omitting the command prints usage and exits
+without initializing Visual Studio.
 
 `ao.bat check --extend` uses the ready native environment to run the full
 [completion gate](bazel.md#completion-gate). Ordinary native Bazel builds and
@@ -432,7 +436,7 @@ From the repository root on the build host, stage the matching signed x64 VC
 redistributable, the consumed
 `VC\Tools\MSVC` directory version (not the `cl.exe` file version), and the
 Windows App Runtime installer governed by
-[dependency-contract.json](../../dependency-contract.json):
+[dependency-contract.json](../../config/dependency-contract.json):
 
 ```powershell
 .\script\windows\stage-prerequisites.ps1 `
@@ -915,10 +919,10 @@ run from new state before manually removing old files.
 - **`vswhere` or toolset discovery failure**: install or repair Visual Studio
   Build Tools with the required `.vsconfig`, including
   `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Both `ao.bat` and
-  `start-msbuild-env.bat` use the same discovery script, so opening the latter
-  cannot repair missing discovery tools or components. Use
-  `start-msbuild-env.bat cmd` when a separate tool needs an initialized x64
-  environment after discovery succeeds.
+  `script\windows\start-msbuild-env.bat` use the same discovery script, so
+  opening the latter cannot repair missing discovery tools or components. Use
+  `script\windows\start-msbuild-env.bat cmd` for a separate initialized x64
+  prompt after discovery succeeds.
 - **Windows Store Python interception**: running python commands directly outside
   `ao.bat` may trigger the Windows Store app execution alias. Disable the
   "App execution aliases" for `python.exe` and `python3.exe` in Windows Settings

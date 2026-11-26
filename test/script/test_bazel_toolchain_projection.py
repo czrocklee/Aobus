@@ -102,8 +102,8 @@ class ToolchainObservationTest(unittest.TestCase):
             },
         }
         checkout = self.root / "checkout"
-        checkout.mkdir()
-        (checkout / "nixpkgs.json").write_text(json.dumps({"rev": "fixture-pin"}), encoding="utf-8")
+        (checkout / "config").mkdir(parents=True)
+        (checkout / "config/nixpkgs.json").write_text(json.dumps({"rev": "fixture-pin"}), encoding="utf-8")
         self.report = self.root / "nix-report.json"
         self.report_data = {
             "schemaVersion": 1,

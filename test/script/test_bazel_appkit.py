@@ -251,8 +251,11 @@ class BazelAppkitBundleHelperTest(unittest.TestCase):
                 self.assertEqual(build_bundle.bundle_localizations(self.inventory), expected)
 
     def test_unresolved_plist_placeholder_fails_without_writing_outputs(self):
-        text = self.template.read_text(encoding="utf-8").replace("${PROJECT_VERSION}", "${UNRESOLVED_VERSION}")
-        self.template.write_text(text, encoding="utf-8")
+        text = self.template.read_text(encoding="utf-8")
+        self.template.write_text(
+            text.replace("</dict>", "  <key>TestUnresolved</key><string>${UNRESOLVED_VALUE}</string>\n</dict>", 1),
+            encoding="utf-8",
+        )
         with self.assertRaisesRegex(ValueError, "Unresolved"):
             build_bundle.run(self.options())
         self.assertFalse((self.root / "Aobus.app").exists())

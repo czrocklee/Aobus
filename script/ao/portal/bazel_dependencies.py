@@ -1225,7 +1225,7 @@ def _stb_interface(roots: list[Path], host: str, version: str) -> dict[str, Any]
     include = native.header_root(roots, marker)
     header = include / marker
     if host != "linux":
-        overlay = native.read_json(native.PROJECT_ROOT / "cmake/vcpkg-ports/stb/vcpkg.json")
+        overlay = native.read_json(native.PROJECT_ROOT / providers.VCPKG_DIRECTORY / "ports/stb/vcpkg.json")
         if version != overlay["version-string"]:
             raise native.BazelWorkspaceError(f"stb does not match the governed overlay: {version}")
         native.native_path(header)
@@ -1268,16 +1268,17 @@ def resolve_dependencies(tree: Path, config: str, *, group: str, prefix: str | N
             provider_prefix, config, host, identity_path=tree / "provider-identity.json", policy=policy
         )
     identity = native.read_json(tree / "provider-identity.json")
-    contract = dependency_policy.load_contract()
+    contract_path = native.PROJECT_ROOT / dependency_policy.CONTRACT_PATH
+    contract = dependency_policy.load_contract(contract_path)
     for package in (package for group in groups.values() for package in group):
         source = package["nix"]
         if source in contract["dependencies"] and not dependency_policy.effective_policy(
             contract, source, host
         ).accepts(versions[package["name"]]):
             raise native.BazelWorkspaceError(
-                f"{source} {versions[package['name']]} does not satisfy dependency-contract.json"
+                f"{source} {versions[package['name']]} does not satisfy {dependency_policy.CONTRACT_PATH}"
             )
-    common_evidence = native.evidence([providers.POLICY, native.PROJECT_ROOT / "dependency-contract.json"])
+    common_evidence = native.evidence([providers.POLICY, contract_path])
     base["provider"]["evidence"].extend(common_evidence)
     base["allowed_roots"].extend(item["path"] for item in common_evidence)
     for selected_group, packages in groups.items():

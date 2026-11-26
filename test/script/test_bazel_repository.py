@@ -330,7 +330,7 @@ class LaunchConfigurationTest(unittest.TestCase):
                 json.dumps(
                     {
                         "schemaVersion": 1,
-                        "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                        "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                         "dependencies": {
                             "catch2": {
                                 "version": "1",

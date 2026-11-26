@@ -1,15 +1,14 @@
 @echo off
 setlocal
 
-set "AOBUS_ROOT=%~dp0"
-if "%AOBUS_ROOT:~-1%"=="\" set "AOBUS_ROOT=%AOBUS_ROOT:~0,-1%"
+for %%i in ("%~dp0..\..") do set "AOBUS_ROOT=%%~fi"
 if not defined AOBUS_STATE_ROOT set "AOBUS_STATE_ROOT=%LOCALAPPDATA%\Aobus"
 
 set "CMD=%~1"
 if "%CMD%"=="" (
-  echo Usage: %~nx0 ^<command^> [args...]
-  echo Example: %~nx0 codex
-  echo Example: %~nx0 claude
+  echo Usage from the repository root: .\script\windows\%~nx0 ^<command^> [args...]
+  echo Example: .\script\windows\%~nx0 cmd
+  echo Example: .\script\windows\%~nx0 where cl
   exit /b 1
 )
 

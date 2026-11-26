@@ -17,7 +17,7 @@ from ao.portal import bazel_providers as providers
 
 
 def _linux_gperf() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
-    report, report_path, revision = providers.nix_report()
+    report, evidence, revision = providers.nix_report()
     root, version, derivation, outputs = providers.nix_dependency(report, "gperf")
     executable = root / "bin/gperf"
     if not executable.is_file() or providers.nix_root(executable) not in outputs:
@@ -32,12 +32,12 @@ def _linux_gperf() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
         },
         executable,
         [],
-        [report_path, native.PROJECT_ROOT / "nixpkgs.json"],
+        evidence,
     )
 
 
 def _native_gperf(prefix: Path, host: str) -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
-    manifest = native.PROJECT_ROOT / "vcpkg.json"
+    manifest = native.PROJECT_ROOT / providers.VCPKG_DIRECTORY / "vcpkg.json"
     status = prefix.resolve().parent / "vcpkg/status"
     # The host tool can live in a sibling triplet. Windows selects its reviewed
     # host role explicitly; other native layouts must remain unambiguous.
@@ -51,7 +51,7 @@ def _native_gperf(prefix: Path, host: str) -> tuple[dict[str, Any], Path, list[P
     if "gperf" not in packages:
         raise native.BazelWorkspaceError(f"gperf host port is not installed: {status}")
     package = packages["gperf"]
-    evidence = [status, manifest, native.PROJECT_ROOT / "vcpkg-configuration.json"]
+    evidence = [status, manifest, manifest.with_name("vcpkg-configuration.json")]
     if host == "windows" and (prefix.name != "x64-windows" or package.triplet != "x64-windows"):
         raise native.BazelWorkspaceError("Windows gperf requires the installed x64-windows host tool")
     if host not in {"windows", "macos"} or not re.fullmatch(r"[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)+", package.triplet):
@@ -111,7 +111,7 @@ def _owned_nix_executable(name: str, outputs: list[Path]) -> tuple[Path, Path]:
 
 def _linux_dbus() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
     """Only the already selected private-bus test tool; no ambient PATH lookup."""
-    report, report_path, revision = providers.nix_report()
+    report, evidence, revision = providers.nix_report()
     _, version, derivation, outputs = providers.nix_dependency(report, "dbus")
     executable, _ = _owned_nix_executable("dbus-daemon", outputs)
     runtime = sorted({path.resolve() for root in outputs for path in (root / "lib").glob("libdbus-1.so*")})
@@ -128,14 +128,14 @@ def _linux_dbus() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
         },
         executable,
         runtime,
-        [report_path, native.PROJECT_ROOT / "nixpkgs.json"],
+        evidence,
     )
 
 
 def _linux_fixture_tools(files: set[Path], directories: set[Path]) -> dict[str, str]:
     """Select fixture executables, trusting the installed immutable Nix runtime."""
-    report, report_path, _ = providers.nix_report()
-    files.update({report_path, native.PROJECT_ROOT / "nixpkgs.json"})
+    report, evidence, _ = providers.nix_report()
+    files.update(evidence)
     tools = {}
     for package, binaries in (
         ("pipewire", (("pipewire", "pipewire"), ("pw_cli", "pw-cli"))),
@@ -153,7 +153,7 @@ def _linux_fixture_tools(files: set[Path], directories: set[Path]) -> dict[str, 
 
 def _linux_gresource() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
     """Select the resource compiler and its GLib runtime from report-owned outputs only."""
-    report, report_path, revision = providers.nix_report()
+    report, evidence, revision = providers.nix_report()
     root, version, derivation, outputs = providers.nix_dependency(report, "glib")
     candidates = {
         path.resolve(): path
@@ -186,7 +186,7 @@ def _linux_gresource() -> tuple[dict[str, Any], Path, list[Path], list[Path]]:
         },
         executable,
         sorted(runtime),
-        [report_path, native.PROJECT_ROOT / "nixpkgs.json"],
+        evidence,
     )
 
 
@@ -201,12 +201,13 @@ def _catalog_sdk(
     """Installed tool locations plus explicit SDK bytes, not a hermetic runtime claim."""
     if watch_directories is None:
         watch_directories = set()
-    evidence = [native.PROJECT_ROOT / "dependency-contract.json"]
+    contract_path = native.PROJECT_ROOT / dependency_policy.CONTRACT_PATH
+    evidence = [contract_path]
     parsed_windows_inputs: dict[str, str] = {}
     if prefix is None:
-        report, report_path, _ = providers.nix_report()
+        report, nix_files, _ = providers.nix_report()
         _, version, _, outputs = providers.nix_dependency(report, "icu")
-        evidence.extend([report_path, native.PROJECT_ROOT / "nixpkgs.json"])
+        evidence.extend(nix_files)
     else:
         if host == "windows" and prefix.resolve().name != "x64-windows":
             raise native.BazelWorkspaceError("Windows catalog tools require the x64-windows ICU tools provider")
@@ -218,7 +219,8 @@ def _catalog_sdk(
         if package is None or set(package.features) != {"core", "tools"}:
             raise native.BazelWorkspaceError("catalog tools require installed ICU core/tools features")
         version = package.upstream_version
-        evidence.extend([status, native.PROJECT_ROOT / "vcpkg.json", native.PROJECT_ROOT / "vcpkg-configuration.json"])
+        manifest_root = native.PROJECT_ROOT / providers.VCPKG_DIRECTORY
+        evidence.extend([status, manifest_root / "vcpkg.json", manifest_root / "vcpkg-configuration.json"])
         if host == "windows":
             info = prefix.resolve().parent / "vcpkg/info"
             ownership = native.native_path(info / f"icu_{package.upstream_version}_{package.triplet}.list")
@@ -229,9 +231,9 @@ def _catalog_sdk(
             if any(tool_directory + name + ".exe" not in owned for name in ("genrb", "pkgdata")):
                 raise native.BazelWorkspaceError("unowned Windows ICU tools manifest")
             evidence.append(ownership)
-    contract = dependency_policy.load_contract()
+    contract = dependency_policy.load_contract(contract_path)
     if not dependency_policy.effective_policy(contract, "icu", host).accepts(version):
-        raise native.BazelWorkspaceError(f"ICU {version} does not satisfy dependency-contract.json")
+        raise native.BazelWorkspaceError(f"ICU {version} does not satisfy {dependency_policy.CONTRACT_PATH}")
     components = version.split(".")
     if len(components) not in {2, 3}:
         raise native.BazelWorkspaceError(f"unsupported ICU provider version format: {version}")

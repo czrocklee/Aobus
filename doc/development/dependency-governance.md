@@ -25,7 +25,7 @@ each platform's resolution.
 
 Linux Nix is the normal lead resolver for routine updates, not the policy source
 of truth. A resolved version becomes project policy only through an explicit
-`dependency-contract.json` change and the affected native validation.
+`config/dependency-contract.json` change and the affected native validation.
 
 ## Find the source of truth
 
@@ -33,17 +33,17 @@ Use the owner for the question being asked:
 
 | Question                                                                                          | Owner                                                                                      |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions          | `dependency-contract.json`                                                                 |
-| Linux package-set revision and source hash                                                        | `nixpkgs.json`                                                                             |
-| vcpkg registry snapshots                                                                          | `vcpkg-configuration.json`                                                                 |
-| vcpkg ports, features, and exact overrides                                                        | `vcpkg.json`                                                                               |
+| Accepted cross-platform C++/Windows SDK versions, capabilities, and temporary exceptions          | `config/dependency-contract.json`                                                          |
+| Linux package-set revision and source hash                                                        | `config/nixpkgs.json`                                                                      |
+| vcpkg registry snapshots                                                                          | `config/vcpkg/vcpkg-configuration.json`                                                    |
+| vcpkg ports, features, and exact overrides                                                        | `config/vcpkg/vcpkg.json`                                                                  |
 | macOS compiler, deployment target, and vcpkg tool archive                                         | `script/ao/macos-toolchain.json`                                                           |
 | Windows tidy LLVM SDK version, archive SHA-256, and required files                                | `script/ao/windows-llvm-sdk.json`                                                          |
 | CI Bazel remote-cache proxy version and artifact SHA-256, and its Windows WSL host rootfs SHA-256 | `script/ao/bazel-remote.json`                                                              |
 | Bazel version                                                                                     | `script/ao/bazel-toolchain.json`, `.bazelversion`                                          |
 | Buildifier formatter/linter version and native artifact SHA-256                                   | `script/ao/buildifier.json`                                                                |
 | Prettier formatter, Node runtime, and managed artifact SHA-256                                    | `script/ao/prettier.json`                                                                  |
-| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux)           | `nixpkgs.json`                                                                             |
+| GitHub Actions workflow linter (actionlint, with packaged ShellCheck/Pyflakes on Linux)           | `config/nixpkgs.json`                                                                      |
 | WinUI NuGet closure and trusted source                                                            | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config`                      |
 | Python, Ruff, mypy, and documentation-parser policy                                               | `script/ao/toolchain.json`                                                                 |
 | Accepted Python tooling and documentation-parser artifacts                                        | `script/ao/python-wheels.json`; the three `*-requirements.txt` files are generated from it |
@@ -95,9 +95,9 @@ the source is mounted from another host.
 ## What belongs in the shared contract
 
 The current governed dependency names and policies are enumerated by
-`dependency-contract.json`; do not maintain a second list here. Promote another
-dependency only when an explicit contract is cheaper and safer than recurring
-diagnosis, for example when:
+`config/dependency-contract.json`; do not maintain a second list here. Promote
+another dependency only when an explicit contract is cheaper and safer than
+recurring diagnosis, for example when:
 
 - observed API or behavior drift caused cross-platform failures;
 - templates, macros, public types, or build options create ABI/ODR risk;
@@ -114,8 +114,8 @@ triplet, features, tool version, and `version#port-version`.
 
 ### Linux
 
-`shell.nix` imports the exact revision and hash in `nixpkgs.json` and rejects
-ambient `NIX_PATH`, channel, or `PATH` packages as substitutes. Project
+`shell.nix` imports the exact revision and hash in `config/nixpkgs.json` and
+rejects ambient `NIX_PATH`, channel, or `PATH` packages as substitutes. Project
 derivations remain governed by their own source hashes and the shared contract.
 Nix evaluation also checks applicable Python, Ruff, mypy, Buildifier, Prettier,
 and formatter Node pins. One package set supplies both the native dependencies and these tools,
@@ -124,15 +124,16 @@ change that moves a tool version must update the corresponding contract in
 the same change, and a tool upgrade needs a package set that supplies it.
 The standalone `check lint` workflow stage selects pinned actionlint through
 `AO_NIX_ACTIONLINT`; the graph declares the same Nix provider. The package
-includes ShellCheck and Pyflakes. `nixpkgs.json` is the sole version authority,
-with no separate manifest, native installer, or setup command.
+includes ShellCheck and Pyflakes. `config/nixpkgs.json` is the sole version
+authority, with no separate manifest, native installer, or setup command.
 
 ### macOS and Windows vcpkg
 
-`vcpkg-configuration.json` owns registry identity; `vcpkg.json` owns requested
-ports, features, and any exact override. macOS bootstraps the verified vcpkg
-archive in `script/ao/macos-toolchain.json`; Windows uses Visual Studio's
-bundled vcpkg tool. Project triplets own platform linkage and deployment flags.
+In the `config/vcpkg/` manifest root, `vcpkg-configuration.json` owns registry
+identity; `vcpkg.json` owns requested ports, features, and any exact override.
+macOS bootstraps the verified vcpkg archive in `script/ao/macos-toolchain.json`;
+Windows uses Visual Studio's bundled vcpkg tool. The project triplets in
+`config/vcpkg/triplets/` own platform linkage and deployment flags.
 
 A package family that must remain coherent, such as split Boost ports, uses a
 package-scoped registry rather than one top-level port override. An override
@@ -152,7 +153,7 @@ Repository overlay ports are exceptional and temporary.
 
 #### Temporary overlay ports
 
-The `cmake/vcpkg-ports/stb` overlay is an active, short-lived exception to the
+The `config/vcpkg/ports/stb` overlay is an active, short-lived exception to the
 normal resolver order. The official vcpkg `stb` port at the approved baseline
 installs `stb_image_resize2` v2.10, whose vertical edge-region calculation
 triggers UndefinedBehaviorSanitizer. The overlay shadows the complete `stb`
@@ -178,13 +179,15 @@ were rejected for explicit reasons:
 
 `stb_image_resize2.h` exposes no version macro. Remove the overlay when the
 selected official vcpkg port installs a header whose leading version banner is
-v2.18 or newer and whose source contains the upstream edge-region fix. Removal
-also means deleting the overlay settings in the vcpkg configuration and the
-pin-consistency tests, then
-passing the focused cover-art loader under macOS ASan/UBSan, the Windows native
-TUI tests, and both platforms' full checks with the official port. Do not let
-the overlay become an untracked fork or intentionally change unrelated stb
-headers in its frozen payload.
+v2.18 or newer and whose source contains the upstream edge-region fix. Remove
+the stb overlay, its Bazel inputs, and its overlay-specific pin tests. If no
+other overlay remains, stop passing its directory to vcpkg. In
+`script/ao/portal/bazel_dependencies.py`, remove or replace the native version
+check against the overlay port's `vcpkg.json`; keep the shared header API check
+and its test. Verify the official port with the focused macOS ASan/UBSan
+cover-art loader test, the Windows native TUI tests, and both platforms' full
+checks. Do not let the overlay become an untracked fork or intentionally
+change unrelated stb headers in its frozen payload.
 
 ### Windows App SDK and C++/WinRT
 
@@ -295,7 +298,7 @@ The normal enforcement path is:
 
 1. the native bootstrap validates its applicable tool contract;
 2. the Bazel repository rules admit the installed providers against
-   `dependency-contract.json`, rejecting expired exceptions and checking
+   `config/dependency-contract.json`, rejecting expired exceptions and checking
    versions, interfaces, and capabilities;
 3. `./ao check deps` checks the installed native and test SDK manifests and
    hash inputs against current source inputs; and
@@ -308,9 +311,9 @@ than pasting the complete transitive graph into a pull request.
 ## Temporary exceptions and security response
 
 Silent skew is not allowed. A temporary platform exception is a narrow entry in
-`dependency-contract.json` naming one dependency and platform, allowed version,
-technical reason and risk, owner, issue, creation and expiry dates, and exit
-condition. Expiry is a UTC calendar date and fails closed. A normal ecosystem
+`config/dependency-contract.json` naming one dependency and platform, allowed
+version, technical reason and risk, owner, issue, creation and expiry dates,
+and exit condition. Expiry is a UTC calendar date and fails closed. A normal ecosystem
 availability exception should not exceed 30 days; security-driven skew should
 normally reconcile within 14 days unless security policy is stricter.
 

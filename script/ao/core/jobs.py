@@ -15,7 +15,6 @@ from pathlib import Path
 
 # The pinned CI provider sets this automatically in every workflow step.
 CI_ENV = "GITHUB_ACTIONS"
-BUILD_PARALLEL_ENV = "CMAKE_BUILD_PARALLEL_LEVEL"
 
 
 def available_cores() -> int | None:
@@ -44,7 +43,7 @@ def export_runner_cores(*, github_env: Path) -> None:
     if cores is None or cores < 1:
         raise ValueError(f"the runner core count was reported as {cores!r}; expected a positive integer")
     with github_env.open("a", encoding="utf-8", newline="\n") as stream:
-        stream.write(f"{BUILD_PARALLEL_ENV}={cores}\n")
+        stream.write(f"AOBUS_CI_JOBS={cores}\n")
     print(f"Detected {cores} runner cores: Bazel and tidy jobs={cores}.")
 
 

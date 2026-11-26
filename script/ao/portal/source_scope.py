@@ -14,7 +14,6 @@ TOP_DIRS = (
     "app",
     "asset",
     "bazel",
-    "cmake",
     "config",
     "doc",
     "include",

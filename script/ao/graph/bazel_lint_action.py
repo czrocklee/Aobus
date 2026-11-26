@@ -74,7 +74,7 @@ def validate_configuration(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def prepare(args: argparse.Namespace) -> int:
-    """Repository-time policy rendering; never starts clang-tidy or CMake."""
+    """Render fixture policy at repository time, without starting clang-tidy."""
     # Fixture discovery is repository-time only and imports no portal commands.
     from ao.policy.lint_fixtures import expected_aobus_checks
 

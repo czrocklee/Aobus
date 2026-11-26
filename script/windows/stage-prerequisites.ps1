@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$contract = Get-Content -LiteralPath (Join-Path $root 'dependency-contract.json') -Raw | ConvertFrom-Json
+$contract = Get-Content -LiteralPath (Join-Path $root 'config\dependency-contract.json') -Raw | ConvertFrom-Json
 $runtime = $contract.dependencies.'windows-app-sdk'.runtime
 if ($runtime.architecture -ne 'x64') {throw 'Only the governed x64 deployment is supported'}
 $toolset = $null

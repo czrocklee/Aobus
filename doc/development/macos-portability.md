@@ -34,18 +34,18 @@ load with a missing symbol.
 Every entry below exists only because of a defect or gap outside this
 repository. None of them is a design choice.
 
-| #   | Deviation                                    | Location                                                                                         | Retire when                                                                                 |
-| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| 1   | `ao::compat::MoveOnlyFunction`               | `include/ao/compat/MoveOnlyFunction.h`                                                           | libc++ defines `__cpp_lib_move_only_function`                                               |
-| 2   | `ao::compat::views::enumerate`               | `include/ao/compat/Enumerate.h`                                                                  | libc++ defines `__cpp_lib_ranges_enumerate`                                                 |
-| 3   | `ao::compat::AtomicSharedPtr`                | `include/ao/compat/AtomicSharedPtr.h`                                                            | libc++ defines `__cpp_lib_atomic_shared_ptr`                                                |
-| 4   | libc++ `expected` shim                       | `script/ao/macos-vcpkg-bootstrap.sh`, Bazel macOS toolchain composition                          | libc++ constrains `expected`'s equality operators without self-reference                    |
-| 5   | `-Wno-c2y-extensions`                        | governed Unix warning policy (`bazel/compiler_policy.bzl`)                                       | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it                           |
-| 6   | `StringMaker<file_time_type>`                | `test/FilesystemTestSupport.h`                                                                   | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock                |
-| 7   | c4core `C4_CPP=17` header mode               | Bazel imported-interface declarations                                                            | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes     |
-| 8   | Objective-C++26 compiler flag mapping        | Bazel macOS toolchain composition                                                                | the composed toolchain supplies Clang's Objective-C++26 standard flags                      |
-| 9   | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h`                              | libc++ defines `__cpp_lib_chrono` as at least `201907L`                                     |
-| 10  | `date` time-zone database                    | `vcpkg.json`, Bazel imported-interface declarations, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
+| #   | Deviation                                    | Location                                                                                                      | Retire when                                                                                 |
+| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | `ao::compat::MoveOnlyFunction`               | `include/ao/compat/MoveOnlyFunction.h`                                                                        | libc++ defines `__cpp_lib_move_only_function`                                               |
+| 2   | `ao::compat::views::enumerate`               | `include/ao/compat/Enumerate.h`                                                                               | libc++ defines `__cpp_lib_ranges_enumerate`                                                 |
+| 3   | `ao::compat::AtomicSharedPtr`                | `include/ao/compat/AtomicSharedPtr.h`                                                                         | libc++ defines `__cpp_lib_atomic_shared_ptr`                                                |
+| 4   | libc++ `expected` shim                       | `script/ao/macos-vcpkg-bootstrap.sh`, Bazel macOS toolchain composition                                       | libc++ constrains `expected`'s equality operators without self-reference                    |
+| 5   | `-Wno-c2y-extensions`                        | governed Unix warning policy (`bazel/compiler_policy.bzl`)                                                    | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it                           |
+| 6   | `StringMaker<file_time_type>`                | `test/FilesystemTestSupport.h`                                                                                | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock                |
+| 7   | c4core `C4_CPP=17` header mode               | Bazel imported-interface declarations                                                                         | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes     |
+| 8   | Objective-C++26 compiler flag mapping        | Bazel macOS toolchain composition                                                                             | the composed toolchain supplies Clang's Objective-C++26 standard flags                      |
+| 9   | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/FilesystemTestSupport.h`                                           | libc++ defines `__cpp_lib_chrono` as at least `201907L`                                     |
+| 10  | `date` time-zone database                    | `config/vcpkg/vcpkg.json`, Bazel imported-interface declarations, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
 
 ### 1-3: standard-library seams
 
@@ -241,7 +241,7 @@ separate process isolation, not a before-and-after environment comparison, keeps
 probe changes out of the formatter process.
 
 To retire it: remove the alias and the conditional include, the `date` entry from
-`vcpkg.json`, its imported interface, and its link from `app/uimodel`. Keep only
+`config/vcpkg/vcpkg.json`, its imported interface, and its link from `app/uimodel`. Keep only
 the standard chrono branch in the formatter test. Delete `TrackFieldLocalTimeProbeMacos.cpp`
 and its `ao_track_field_local_time_probe` target, and remove the macOS-only probe
 data and `fatal_probe_support` dependency from `uimodel_test`. Run the full macOS

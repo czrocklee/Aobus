@@ -1,6 +1,6 @@
 @echo off
-rem Shared Visual Studio discovery for the Aobus Windows entry scripts
-rem (ao.bat, start-msbuild-env.bat). On success it exports to the caller:
+rem Shared Visual Studio discovery for ao.bat and
+rem script\windows\start-msbuild-env.bat. On success it exports to the caller:
 rem   VSROOT      Visual Studio installation with the C++ x64 toolset
 rem   VSDEVCMD    full path to that installation's VsDevCmd.bat
 rem   VCPKG_ROOT  defaulted to the bundled vcpkg when not already set

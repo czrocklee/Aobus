@@ -162,8 +162,8 @@ layout engine for cell or pixel measurement.
   both boundary directions for interior cursor movement and deletion, and the
   boundary predicate for range replacement. Replacement refuses failed boundary
   checks; cursor recovery falls back to the text end if segmentation fails.
-- [`dependency-contract.json`](../../dependency-contract.json),
-  [`shell.nix`](../../shell.nix), and [`vcpkg.json`](../../vcpkg.json)
+- [`dependency-contract.json`](../../config/dependency-contract.json),
+  [`shell.nix`](../../shell.nix), and [`vcpkg.json`](../../config/vcpkg/vcpkg.json)
   align the ICU version across native resolvers.
 
 ## Test map
