@@ -15,6 +15,7 @@ The [linting guide](doc/development/linting.md) explains diagnosis and justified
 
 ## Prepare a review
 
+See [CI and Release validation](doc/development/ci.md) for hosted checks and their evidence.
 Use the [commit-message guide](doc/development/commit-message.md) for the project's Conventional Commit format and scope selection.
 Explain motivation, consequential tradeoffs, and validation rather than duplicating the diff.
 The [pull request template](.github/pull_request_template.md) prompts for them without restating CI results; GitHub pre-fills it in the web form, but a description passed through `gh pr create --body` or `--body-file` must follow it by hand.

@@ -24,6 +24,7 @@ class BuildEnvSelectionTest(unittest.TestCase):
     def test_native_subjects_require_admission_while_sdk_free_subjects_do_not(self):
         for argv, expected in (
             (["check"], True),
+            (["check", "--native-only", "--extend"], True),
             (["check", "contracts"], True),
             (["check", "lint", "lib/utility/Path.cpp"], True),
             (["check", "lint", "script/ao/core/proc.py"], False),
@@ -81,10 +82,7 @@ class BuildEnvSelectionTest(unittest.TestCase):
         self.assertEqual(result.stdout, "0\n0\n")
 
     def test_invalid_requests_fail_before_environment_selection(self):
-        for argv in (
-            ["setup"],
-            ["check", "docs", "--fresh"],
-        ):
+        for argv in (["setup"], ["check", "docs", "--fresh"]):
             with (
                 self.subTest(argv=argv),
                 contextlib.redirect_stderr(io.StringIO()),
@@ -107,7 +105,7 @@ class BuildEnvSelectionTest(unittest.TestCase):
     def test_python_tools_follow_actual_python_sources_and_documentation_semantics(self):
         for argv, expected in (
             (["check"], False),
-            (["check", "--ci"], False),
+            (["check", "--native-only", "--extend"], False),
             (["check", "docs"], True),
             (["check", "format", "--docs"], False),
             (["check", "format", "README.md"], False),

@@ -106,11 +106,11 @@ require Debug and cannot be combined with Release or sampling.
 A Release completion gate is the direct IPO evidence:
 
 ```bash
-./ao check --config release
+./ao check --extend --config release
 ```
 
 Run the full check on every affected native platform, locally or through
-[manual Release validation](test/validation-and-review.md#manual-release-validation).
+[manual Release validation](ci.md#manual-release-validation).
 A Release build alone does not establish that Release tests ran. On macOS,
 run the applicable AppKit GUI scenarios in Release when native UI behavior changes.
 

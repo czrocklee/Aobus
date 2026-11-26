@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from ao.core.paths import PROJECT_ROOT
-from ao.portal import python_env
+from ao.portal import build_dir, python_env
 
 # Fixture pins deliberately differ from the checked-in contract so
 # config-driven tests cannot pass by reading the real toolchain.
@@ -309,6 +309,7 @@ class NativePythonEnvironmentTest(unittest.TestCase):
             self.assertFalse(capability.call_args.kwargs["scope_file"].parent.exists())
 
     def test_windows_result_file_selection_uses_the_parsed_tooling_capability(self):
+        self.enterContext(mock.patch.object(build_dir, "platform_profile", return_value=build_dir.WINDOWS_PROFILE))
         commands = (
             ([], True),  # no command tail retains the explicit legacy tooling query
             (["--"], False),
@@ -318,8 +319,7 @@ class NativePythonEnvironmentTest(unittest.TestCase):
             (["--", "check", "format", "README.md"], False),
             (["--", "check", "lint", "script/ao/core/proc.py"], True),
             (["--", "check", "lint", "--tidy-check", "aobus-no-c-assert", "script/ao/core/proc.py"], False),
-            (["--", "check"], False),
-            (["--", "check", "--ci"], False),
+            (["--", "check", "--native-only", "--desktop-tests", "--lint-base", "b" * 40], False),
             (["--", "setup", "llvm-sdk"], False),
         )
         for command, needs_tools in commands:

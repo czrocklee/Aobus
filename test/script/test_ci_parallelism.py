@@ -2,21 +2,28 @@
 
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from ao.core.paths import PROJECT_ROOT
 
 WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+RELEASE_WORKFLOW = WORKFLOW.with_name("release.yml")
 CODE_SCOPE = "needs.changes.outputs.docs-only == 'false'"
+COMPLETION_DIAGNOSTIC = "completion fixture stderr diagnostic"
+LINT_BASE_SHA = "a1" * 20
+COMPLETION_CASES = (("", ["--extend"], 0), (LINT_BASE_SHA, ["--lint-base", LINT_BASE_SHA], 37))
 
 
-def _job(name: str) -> str:
-    remainder = WORKFLOW.read_text(encoding="utf-8").split(f"  {name}:\n", 1)[1]
+def _job(name: str, workflow: Path = WORKFLOW) -> str:
+    remainder = workflow.read_text(encoding="utf-8").split(f"  {name}:\n", 1)[1]
     return re.split(r"\n(?=  \w+:\n)", remainder, maxsplit=1)[0]
 
 
@@ -29,6 +36,11 @@ def _field(block: str, indent: int, key: str) -> str:
     prefix = " " * indent
     match = re.search(rf"(?m)^{prefix}{key}:[ \t]*(.*(?:\n{prefix}  .+)*)", block)
     return match[1].strip() if match else ""
+
+
+def _windows_completion_step() -> str:
+    (step,) = (block for block in re.split(r"(?m)^      - ", _job("windows")) if _field(block, 8, "id") == "build")
+    return step
 
 
 def _condition(block: str, indent: int) -> str:
@@ -101,10 +113,14 @@ def _run_bash(step: str, env: dict[str, str], *, cwd: Path | None = None) -> sub
     )
 
 
-def _run_verdict(step: str, context: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _step_env(step: str, context: dict[str, str]) -> dict[str, str]:
     # Feed the actual workflow bindings so a swapped result cannot pass the shell test.
     bindings = re.findall(r"(?m)^ *(\w+):[ \t]*\$\{\{\s*([\w.-]+)\s*\}\}", _field(step, 8, "env"))
-    return _run_bash(step, {name: context[source] for name, source in bindings if source in context})
+    return {name: context[source] for name, source in bindings if source in context}
+
+
+def _run_verdict(step: str, context: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return _run_bash(step, _step_env(step, context))
 
 
 class WorkflowNixShellTest(unittest.TestCase):
@@ -135,8 +151,8 @@ class WorkflowNixShellTest(unittest.TestCase):
 
 
 class GateRoutingTest(unittest.TestCase):
-    def test_code_changes_trigger_macos_and_windows(self):
-        for job in ("macos", "windows"):
+    def test_code_changes_trigger_all_native_jobs(self):
+        for job in ("linux", "macos", "windows"):
             with self.subTest(job=job):
                 native = _job(job)
                 self.assertIn("changes", _needs(native))
@@ -160,10 +176,144 @@ class GateRoutingTest(unittest.TestCase):
             with self.subTest(job=job):
                 native = _job(job)
                 self.assertIn(_field(native, 4, "continue-on-error"), ("", "false"))
-                gate = _step(native, "Check Bazel completion")
-                self.assertRegex(gate, r"(?m)^ +(?:run: )?(?:\./ao|\.\\ao\.bat) check --ci\b")
+                gate = _windows_completion_step() if job == "windows" else _step(native, "Check Bazel completion")
                 self.assertEqual(_condition(gate, 8), "")
                 self.assertIn(_field(gate, 8, "continue-on-error"), ("", "false"))
+
+    def test_native_lint_base_comes_only_from_verified_pr_scope(self):
+        self.assertEqual(
+            _field(_job("changes"), 6, "lint-base"),
+            "${{ github.event_name == 'pull_request' && steps.scope.outputs.sha || '' }}",
+        )
+
+    def test_windows_native_completion_binds_verified_lint_base(self):
+        step = _windows_completion_step()
+        self.assertEqual(_field(step, 8, "shell"), "pwsh")
+        self.assertEqual(
+            _step_env(step, {"needs.changes.outputs.lint-base": LINT_BASE_SHA}), {"LINT_BASE_SHA": LINT_BASE_SHA}
+        )
+
+    def _assert_completion_output(
+        self, result: subprocess.CompletedProcess[str], transcript: Path, argv: list[str], status: int
+    ) -> None:
+        self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+        self.assertEqual(
+            [line.removeprefix("arg=") for line in result.stdout.splitlines() if line.startswith("arg=")], argv
+        )
+        self.assertIn(COMPLETION_DIAGNOSTIC, result.stdout)
+        self.assertIn(COMPLETION_DIAGNOSTIC, transcript.read_text(encoding="utf-8-sig"))
+
+    @unittest.skipUnless(os.name == "nt", "Windows CI completion requires native batch execution")
+    def test_windows_native_completion_invocation(self):
+        pwsh = shutil.which("pwsh.exe")
+        if pwsh is None:
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                self.fail("Windows CI completion requires pwsh.exe on PATH")
+            self.skipTest("PowerShell 7 is not installed on this Windows host")
+
+        step = _windows_completion_step()
+        run = re.search(r"(?m)^        run:[ \t]*\|[+-]?[ \t]*\n((?: {10}.*\n|[ \t]*\n)+)", step)
+        if run is None:
+            self.fail("No literal run block in Windows completion step")
+        root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="native check ")))
+        script = root / "check.ps1"
+        # Actions prepends Stop. Do not let an implicit exit footer mask lost propagation in the body.
+        script.write_text("$ErrorActionPreference = 'stop'\n" + textwrap.dedent(run[1]), encoding="utf-8")
+        (root / "ao.bat").write_text(
+            "@echo off\n:arg\nif [%1]==[] goto done\necho(arg=%~1\nshift\ngoto arg\n"
+            f":done\necho({COMPLETION_DIAGNOSTIC} 1>&2\nexit /b %FAKE_AO_EXIT%\n",
+            encoding="ascii",
+            newline="\r\n",
+        )
+        for base, lint_args, status in COMPLETION_CASES:
+            with self.subTest(base=base, status=status):
+                tree = root / f"check tree {status}"
+                env = _step_env(step, {"needs.changes.outputs.lint-base": base})
+                result = subprocess.run(
+                    [pwsh, "-NoProfile", "-NonInteractive", "-File", str(script)],
+                    cwd=root,
+                    env={
+                        **os.environ,
+                        **env,
+                        "CHECK_TREE": str(tree),
+                        "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                        "FAKE_AO_EXIT": str(status),
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+                argv = ["check", "--native-only", "--desktop-tests", "--path", str(tree), "--jobs", "4", *lint_args]
+                self._assert_completion_output(result, tree / "completion.log", argv, status)
+
+    def test_release_completion_requests_full_release_lint_without_desktop_tests(self):
+        for job in ("linux", "macos", "windows"):
+            with self.subTest(job=job):
+                step = _step(_job(job, RELEASE_WORKFLOW), "Check Release")
+                argv = shlex.split(_field(step, 8, "run"), comments=True)
+                args = argv[argv.index("check") + 1 :]
+                self.assertIn("--extend", args)
+                self.assertEqual(args[args.index("--config") + 1], "release")
+                self.assertTrue({"--native-only", "--desktop-tests"}.isdisjoint(args))
+
+    def test_native_artifacts_include_transcript_and_scoped_lint_evidence(self):
+        for job, step in (
+            ("linux", "Preserve Bazel completion evidence"),
+            ("macos", "Preserve Bazel evidence"),
+            ("windows", "Preserve Bazel evidence"),
+        ):
+            with self.subTest(job=job):
+                upload = _step(_job(job), step)
+                self.assertEqual(_condition(upload, 8), "always()")
+                globs = [path.strip() for path in _field(upload, 10, "path").replace("\\", "/").splitlines()[1:]]
+                if job == "windows":
+                    tree = _field(_windows_completion_step(), 10, "CHECK_TREE").replace("\\", "/")
+                    self.assertRegex(tree, r"^[A-Za-z]:/")
+                    transcript = f"{tree}/completion.log"
+                else:
+                    tree = "${{ runner.temp }}/aobus-bazel-fastbuild"
+                    transcript = "${{ runner.temp }}/aobus-completion.log"
+                lint_run = f"{tree}/lint/run-example"
+                for path in (
+                    transcript,
+                    f"{lint_run}/run.receipt.json",
+                    f"{lint_run}/build.bep.json",
+                    f"{lint_run}/build.log",
+                    f"{lint_run}/consumers.log",
+                ):
+                    self.assertTrue(any(fnmatchcase(path, glob) for glob in globs), path)
+
+    @unittest.skipUnless(os.name == "posix", "Unix CI completion steps require bash")
+    def test_unix_native_completion_invocation(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="native check ")))
+        portal = root / "ao"
+        portal.write_text(
+            f'#!/usr/bin/env bash\nprintf "arg=%s\\n" "$@"\nprintf "%s\\n" "{COMPLETION_DIAGNOSTIC}" >&2\n'
+            'exit "$FAKE_AO_EXIT"\n',
+            encoding="utf-8",
+        )
+        portal.chmod(0o755)
+        for job in ("linux", "macos"):
+            step = _step(_job(job), "Check Bazel completion")
+            for base, lint_args, status in COMPLETION_CASES:
+                with self.subTest(job=job, base=base, status=status):
+                    runner_temp = root / f"{job} temp {status}"
+                    runner_temp.mkdir()
+                    env = _step_env(step, {"needs.changes.outputs.lint-base": base})
+                    result = _run_bash(
+                        step,
+                        {
+                            **env,
+                            "RUNNER_TEMP": str(runner_temp),
+                            "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                            "FAKE_AO_EXIT": str(status),
+                        },
+                        cwd=root,
+                    )
+                    tree = runner_temp / "aobus-bazel-fastbuild"
+                    argv = ["check", "--native-only", "--path", str(tree), "--jobs", "4", *lint_args]
+                    self._assert_completion_output(result, runner_temp / "aobus-completion.log", argv, status)
 
 
 @unittest.skipUnless(os.name == "posix", "Linux CI steps require bash")

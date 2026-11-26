@@ -1,4 +1,4 @@
-# Native Bazel owns build and validation; ./ao check prepares the same test graph.
+# Native Bazel owns build and validation; the portal selects the requested targets.
 common --enable_bzlmod
 common --repo_contents_cache=
 
@@ -148,7 +148,3 @@ build:windows --run_validations
 test --test_output=errors
 # Tests that use installed host tools inherit their inputs on the target.
 # Do not key ordinary TestRunner actions on portal state or the caller's PATH.
-
-# completion.py selects the daily native targets; this config does not partition the graph.
-build:ci --keep_going
-build:ci --//bazel:desktop_tests=true

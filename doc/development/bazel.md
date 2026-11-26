@@ -8,9 +8,9 @@ Bazel owns the complete native product build: Core, CLI, TUI, Linux GTK,
 incremental macOS AppKit and the bounded native Windows WinUI product. The
 ordinary workflow uses pinned native `bazel build`, `bazel test`, and
 `bazel run` from the checkout root; see [native setup](#direct-bazel-without-the-portal).
-Run `./ao check` for the full local [completion gate](#completion-gate). See
-[validation and review](test/validation-and-review.md) to choose checks and
-understand [CI routing](test/validation-and-review.md#continuous-integration).
+Run `./ao check --extend` for the full local [completion gate](#completion-gate).
+See [validation and review](test/validation-and-review.md) to choose checks and
+[CI](ci.md) for workflow routing.
 The public portal has four commands: `setup` explicitly prepares components,
 `format` rewrites source, `check` validates, and `measure` collects coverage,
 performance, or concept metrics. There are no
@@ -22,13 +22,10 @@ builds may still use CMake internally, and the repository retains the
 CMake-language provider assets those ports need. BCR supplies build rules, not
 application dependencies.
 
-The cacheable native C++ lint reports come from the Bazel lint report actions;
-[lint reports](#lint-reports) defines their workflow, cache and failure contracts,
-`./ao check lint` consumes those actions for a selected scope, and
-the completion gate consumes them through the declared `//:production_lint`
-test, with the same STRICT/RELAXED policy. Explicit scoped sanitizer and
-coverage instrumentation routes exist beside the ordinary fastbuild/Release
-modes and explicit Debug instrumentation; [sanitizer and coverage
+[Standalone lint](linting.md#bazel-backed-reports) and [completion](#completion-gate)
+use the same cacheable [Bazel lint reports](#lint-reports) and STRICT/RELAXED policy.
+Explicit scoped sanitizer and coverage instrumentation routes exist beside the
+ordinary fastbuild/Release modes and explicit Debug instrumentation; [sanitizer and coverage
 instrumentation](#sanitizer-and-coverage-instrumentation) owns their commands,
 profile design and boundaries.
 
@@ -49,7 +46,7 @@ The pins are owned by [bazel-toolchain.json](../../script/ao/bazel-toolchain.jso
 ./ao setup deps --path /tmp/build/aobus-native-sdk  # native macOS/Windows only
 # After native setup below, ordinary tests use the pinned executable:
 bazel test //:tests
-./ao check --config release --path /tmp/build/aobus-native-sdk
+./ao check --extend --config release --path /tmp/build/aobus-native-sdk
 ./ao check contracts --config release --path /tmp/build/aobus-native-sdk --jobs 2
 ```
 
@@ -97,7 +94,7 @@ or the native SDK prerequisites.
 explicitly provisions vcpkg/NuGet/LLVM, and `./ao check contracts` runs
 [compile-contract analysis](#compile-contract-verification). `./ao check`
 accepts `--config fastbuild|debug|release` and defaults to fastbuild.
-See [completion](#completion-gate) for CI selections and evidence.
+See [completion](#completion-gate) for selections and evidence.
 Common project-command options include `--path`, `--vcpkg-prefix`, `--jobs`,
 `--remote-cache`, and the Linux target-compiler selector `--compiler=gcc|clang`
 (no `--clang` alias); availability depends on the command.
@@ -292,8 +289,8 @@ base reuses the fetched environment rather than re-entering Nix on every
 invocation, but that is not a performance
 guarantee, and private experiment metrics are not production acceptance. A
 native build or test success is not a lint, hygiene or completion gate;
-`ao check` retains complete validation and standalone `ao check lint` retains
-scoped check-only validation.
+`ao check --extend` runs the full validation gate, and standalone
+`ao check lint` retains scoped check-only validation.
 
 ## Scope
 
@@ -1607,15 +1604,16 @@ completion gate declares its own fallback replay actions without a
 portal-written consumer parameter.
 
 Scoped lint defers unreported, discovered paths that are incompatible with the
-current platform. With `--gtk off` on Linux it also defers discovered GTK paths
-when the configured query proves **all** their candidate owners incompatible.
+current platform. With `--gtk off` or `--system-media off` on Linux it also
+defers discovered paths in that feature when the configured query proves
+**all** their candidate owners incompatible.
 Naming a file explicitly still requires a report. A compatible header or fragment
 that no analyzed translation unit includes, or a compatible selected path with
 no owner, fails the operation; it is not a quiet partial pass. `--all` selects
 the project C++ scope and uses the same rules. The portal prints every deferred
 owner or path.
 
-The completion gate's C++ stage is the declared `//test/lint:production_lint`
+Full completion's C++ stage is the declared `//test/lint:production_lint`
 test ([graph.bzl](../../bazel/lint/graph.bzl)), published as the root
 `//:production_lint` alias so bounded product builds do not load the analysis
 SDK until it is requested. It applies the report aspect to the
@@ -1634,8 +1632,8 @@ header closure. The other contexts remain available during template expansion,
 but their unrelated source edits cannot by themselves invalidate the selected
 diagnostic. The header is the main file; a `.def` fragment instead retains the
 consumer TU as its main. No test runs Bazel or an `ao` command; the launcher
-only reads the completed gate result. The CLI's scoped diagnostic entries are
-[`ao check lint`](../../script/ao/portal/bazel_lint.py) and `ao check analyzer`.
+only reads the completed full lint gate result. The standalone scoped diagnostic
+entries are [`ao check lint`](../../script/ao/portal/bazel_lint.py) and `ao check analyzer`.
 Bazel source-file targets distinguish
 authored checkout inputs from generated ones. Eligible owners declare STRICT or
 RELAXED inputs through `srcs`, `hdrs`, `textual_hdrs` or additional compiler inputs;
@@ -1875,7 +1873,7 @@ header, complete scopes, other native profiles, GUI or hardware acceptance.
 Record actual invocation scope, deferrals and fresh execution versus cache reuse
 with PR/CI evidence, not as a second changing acceptance ledger here. The
 `./ao check lint` command consumes these same report actions for a
-selected scope; the completion role belongs to `//:production_lint`.
+selected scope; the full completion verdict belongs to `//:production_lint`.
 
 ### Scoped lint and tool selection
 
@@ -1892,10 +1890,8 @@ them advisory; selected compiler errors, tool and admission failures always fail
 
 Lint performs no formatting or global document check. Use `./ao check format`
 for scoped read-only formatting and `./ao check docs` for global semantics.
-`ao check` does not invoke scoped lint: its whole-graph coverage is the declared
-`//:production_lint` test ([lint reports](#lint-reports)), where `--commit`
-selects nothing. Its test-name, class-name and workflow-lint stages also run as
-`test_audit`, `name_audit`, and `workflows` graph targets
+Standalone `ao check lint` is not a completion gate. Test-name, class-name and workflow-lint checks run
+as `test_audit`, `name_audit`, and `workflows` graph targets
 ([shared audits](#shared-audits-and-the-root-version)).
 
 On Windows, `format` and `check format` use the ready `clang-format` from the
@@ -1911,33 +1907,74 @@ declared tools and keep the governed Bazel interpreter. See
 
 ## Completion gate
 
-Use `./ao check` (`ao.bat check` on Windows) for full local validation. To
-reproduce a [daily CI lane](test/validation-and-review.md#continuous-integration)
-locally, select its command explicitly. Each command runs a Bazel test graph
-and verifies the required suite expansions in the Build Event Protocol (BEP).
-The portal does not prepare a tooling venv for these commands; the graph uses
-its [own Python tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
+Use `./ao check --extend` (`ao.bat check --extend` on Windows) for full local
+validation; add `--config release` for full Release validation. `--extend`
+bypasses lint scope discovery and selects the declared `//:production_lint`
+test with normal Bazel caching.
 
-| Command                 | Bazel test selection                               | Required BEP suite expansions                                 |
-| ----------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `./ao check`            | `//...`                                            | `//:check_tests` and `//test/script:repository_checks`        |
-| `./ao check --ci`       | `//...` minus `//test/script:ci_repository_checks` | `//:check_tests` and `//test/script:native_repository_checks` |
-| `./ao check repository` | `//test/script:ci_repository_checks` only          | `//test/script:ci_repository_checks`                          |
+Bare `check` compares the live worktree, including staged, unstaged, and
+non-ignored untracked changes, to its base. It does not lint a separate
+snapshot of the index. On `main`, the base is `HEAD~1`. On any other branch
+or at detached `HEAD`, the base is the merge base with the local branch
+`refs/heads/main`. If that branch is missing, completion uses full lint;
+a tag or remote-tracking branch does not substitute for it.
 
-The native selections build the products and run the applicable tests, the
-[native-policy checks](#in-graph-native-policy) and whole-graph C++ lint.
-Both also require `//:instrumentation_tests` on Linux. `--ci` requires fastbuild
-and adds `--config=ci` to keep going after failures and enable Windows desktop
-tests. `check repository` runs on Linux in the pinned shell, keeps going after
-failures and accepts only `--path` (honoring `BUILD_DIR`) and `--jobs`.
-The [tooling BUILD](../../test/script/BUILD.bazel) owns suite membership;
-`//test/script:format` checks both the documentation inventory and the
-remaining source files.
+`--lint-base SHA` compares that commit to `HEAD` only if `SHA` is the exact
+full SHA of an ancestor commit and Git reports the checkout as clean. If either
+condition is unmet, completion uses full lint instead of rejecting the invocation.
+`--lint-base` and `--extend` cannot be combined.
 
-Use ordinary `check --config release` for the full Release graph. Run
-[instrumented tests](#sanitizer-profiles) separately.
-No completion command takes a diff, targets, forwarded Bazel arguments or test
-filters. Checks lock the selected tree and use `--lockfile_mode=error` to avoid
+Both comparisons use the paths Git reports and ignore Git replacement refs.
+Neither verifies the entire worktree byte for byte; edits Git treats as unchanged
+can be absent from the lint scope.
+
+A bounded comparison selects reports for applicable changed inputs, or skips
+production lint if there are none. Scoped header reports do not check every
+dependent. Semantic BUILD changes,
+generation or lint-policy changes, deleted native sources, and other
+unbounded inputs select the full native lint graph. A modified BUILD file
+adds no lint inputs if its supported token stream is unchanged after
+ignoring comments and insignificant whitespace. The current graph alone
+cannot recover consumers removed by a semantic edit. The portal also selects
+the full graph if it cannot verify the comparison (including when history
+is unavailable) or an explicitly based comparison has no changed paths. A malformed [Git binding](build.md#shared-source-git-discovery),
+or one that cannot open this checkout, is a configuration error: the portal
+stops before starting Bazel.
+
+Scope selection changes only production lint, not formatting, audits, lint
+fixtures, product builds, or other tests. For a bounded, nonempty lint scope,
+the portal runs [scoped report checks](#lint-reports) after the Bazel test graph
+passes, under the same build-tree lock. Both phases must pass. Keep the
+worktree unchanged from invocation through completion: the lock protects build
+outputs, not source files. If you edit the worktree during a check, rerun it
+before relying on the result.
+
+Use [standalone lint](linting.md#bazel-backed-reports) for explicit paths and
+targets; run [instrumented tests](#sanitizer-profiles) separately.
+
+Each command runs a Bazel test graph and verifies required suite expansions in
+the Build Event Protocol (BEP). The portal does not prepare a tooling venv;
+the graph uses its [own Python tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
+See [CI](ci.md#reproduce-the-native-jobs) for the workflow invocations.
+
+| Command                    | Bazel test selection before production lint scoping        | Required BEP suite expansions                                 |
+| -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `./ao check`               | `//...`                                                    | `//:check_tests` and `//test/script:repository_checks`        |
+| `./ao check --native-only` | `//...` minus `//test/script:standalone_repository_checks` | `//:check_tests` and `//test/script:native_repository_checks` |
+| `./ao check repository`    | `//test/script:standalone_repository_checks` only          | `//test/script:standalone_repository_checks`                  |
+
+`--native-only` partitions out the independent repository checks and passes
+`--keep_going` to Bazel. `check repository` runs those checks on Linux in the
+pinned shell, also keeps going, and accepts only `--path` (honoring `BUILD_DIR`)
+and `--jobs`. The [tooling BUILD](../../test/script/BUILD.bazel) owns suite
+membership; `//test/script:format` checks both the documentation inventory
+and the remaining source files. Both native selections build the products and
+run applicable tests and [native-policy checks](#in-graph-native-policy),
+including `//:instrumentation_tests` on Linux.
+
+Completion does not accept source paths, `--commit`, targets, forwarded Bazel
+arguments or test filters. Checks lock the selected tree and use
+`--lockfile_mode=error` to avoid
 rewriting the module lock. They load only the checked-in repository rc and the
 tree's launch rc, excluding system and personal rc files and removing `BAZELRC`
 (including Windows case variants) so local options cannot silently filter tests.
@@ -1974,7 +2011,8 @@ also independently requires `//test/winui/projection:winui_projection_test` and
 `//bazel/windows_header_share:mode_interfaces_test`. The latter analyzes the
 public RapidYAML import in all three modes and verifies that only Debug depends
 on the Release header helper. These requirements do not apply on other hosts.
-`--config=ci` additionally enables the [WinUI automation probe](windows.md#ui-automation-naming-gate),
+The Windows-only `check --desktop-tests` option sets `--//bazel:desktop_tests=true`
+and enables the [WinUI automation probe](windows.md#ui-automation-naming-gate),
 which requires the Windows App Runtime and an authenticated interactive console.
 Other GUI probes and performance harnesses remain build-only in wildcard
 completion; the gate does not certify manual scenarios, performance, coverage
@@ -2010,21 +2048,25 @@ interactive-session admission itself.
 On Linux the isolated launcher selects the pinned Nix JDK through
 `AOBUS_BAZEL_SERVER_JAVABASE`. Coverage keeps its own per-attempt rc snapshots.
 
-Each attempt writes `tests.bep.json`, `profile.json.gz` and `test.log` under
-`<tree>/checks/<config>/check-*` or, for `check repository`,
-`<tree>/checks/fastbuild/repository-*`. The test stream goes to stderr and
-is copied to `build.log`. Failed attempts retain their evidence; interruption
+Each test-graph attempt writes `tests.bep.json`, `profile.json.gz`, and
+`test.log` under `<tree>/checks/<config>/check-*` or, for `check repository`,
+`<tree>/checks/fastbuild/repository-*`. If scoped lint follows, the portal
+prints its `<tree>/lint/run-*` directory. Each report build there retains
+its own `<pass>.log` and BEP. Top-level `build.log` is only a convenience
+copy of the latest test or report build, not the entire check.
+Failed attempts retain their evidence; interruption
 alone does not establish that native writers have stopped.
 
-After Bazel exits successfully, the launcher requires complete BEP evidence
-from that invocation. Every applicable suite member and independently required
-check must have one passing configured test summary. Removing the backend or an enabled GTK or system-media
-test from its suite cannot silently drop it; WinUI automation is required on
-Windows under `--ci`. Missing or skipped required checks fail, and a Bazel
-`SKIPPED` abort reports the skipped configuration. No second query or test
-invocation is needed. Full local and CI native checks require the
-[ownership audit's label list](#in-graph-native-policy) to be nonempty, with
-one passing BEP summary per label in the audited configuration. For a wrapped
+After the Bazel test invocation exits successfully, the launcher requires
+complete BEP evidence from that invocation. Every applicable suite member and
+independently required test must have one passing configured test summary.
+Removing the backend or an enabled GTK or system-media test from its suite
+cannot silently drop it; WinUI automation is required with `--desktop-tests`.
+Missing or skipped required checks fail, and a Bazel `SKIPPED` abort reports the
+skipped configuration. This test verification needs no second query or test
+invocation. Local and CI native checks require the
+[ownership audit's label list](#in-graph-native-policy) to be nonempty, with one
+passing BEP summary per label in the audited configuration. For a wrapped
 `cc_test` owner, the graph supplies its public wrapper label; `cc_binary` owners
 need only be built. These summaries establish target-level passes, not that
 every registered case executed.
@@ -2037,7 +2079,7 @@ from retries, repeated runs, or shards.
 ### Test-result cache admission
 
 A passing Bazel test summary counts toward local or CI completion whether the
-test ran on this host or its result came from a [trusted cache](#native-hosts-and-caching).
+test ran on this host or its result came from a [trusted cache](#shared-local-action-cache).
 Another checkout can reuse the result, not just the executable, when Bazel's
 declared inputs, options and relevant environment match. The repository rc does
 not forward the caller's `PATH`, `AOBUS_STATE_ROOT`, `LOCALAPPDATA` or `CI` to
@@ -2062,8 +2104,7 @@ fresh-producer claim beyond test results.
 
 Coverage reconciles passing BEP summaries against its exact configured selection,
 records run/cached/executed counts in its receipt, and rejects cached results ([sanitizer and coverage
-instrumentation](#sanitizer-and-coverage-instrumentation)). The CI summary
-reads the standard BEP test summaries of a check attempt instead of a receipt.
+instrumentation](#sanitizer-and-coverage-instrumentation)).
 
 ### Test ownership
 
@@ -2100,7 +2141,7 @@ platform policy or by an explicitly reported disabled-frontend
 boundary (`gtk_enabled`/`system_media_enabled`), with the reason printed;
 compatible orphans always fail. Deferral follows the configured scope, so each
 native policy test catches orphans applicable to its analyzed host. The
-[configured native CI matrix](test/validation-and-review.md#continuous-integration)
+[configured native CI matrix](ci.md#ci-routing)
 covers the paths that a single host's policy test cannot reconcile. The audit combines the declared sources from the supplied
 configured graphs, including their `select()` results; diagnostics name the
 source or label, not a per-source configuration matrix. Source ownership is not a line-coverage claim.
@@ -2321,99 +2362,8 @@ not establish that the test result was reused.
 invocations of the default aggregate. Cached results from other tests are not
 fresh binary executions.
 
-Only `Linux / native` archives its Bazel disk cache across runs. The portal,
-bare Bazel lint build and cache steps share `$RUNNER_TEMP/aobus-state/cache/bazel`;
-Windows's job-local disk cache is `D:\aobus-bazel-cache`. Tool and dependency
-archives are separate. The OS, architecture, pin contract and commit identify
-candidate archives, with fallback to the same pin contract. Bazel action keys
-still decide reuse. PRs may restore the main archive subject to GitHub's cache
-access rules, but only pushes to `main` can save, after native completion and
-its scoped lint build pass.
-
-A marker outside the cache records when restore finished. Exact hits need no
-trim or save. Before saving, trim deletes only `ac/` and `cas/` files whose
-mtime is not newer than the marker, preserving `gc/lock` and `tmp/`. Bazel
-updates mtime on cache access, so this retains the run's working set rather
-than imposing a size quota or waiting for idle GC. A failed restore, marker or
-trim prevents saving; cache transport is optional and does not waive validation.
-Restore and save select only `ac/` and `cas/`; locks and in-progress writes
-stay on the runner.
-
-### CI product gates and R2 validation
-
-See [CI routing](test/validation-and-review.md#continuous-integration) for job
-selection and required verdicts.
-
-After native completion passes on Linux, a [scoped lint build](../../test/lint/check_scoped_reports.py)
-checks bare Bazel bootstrap and delivery of a usable paired-header report
-without the portal launch rc or R2. It can reuse the disk cache. This daily
-step does not run a bare `TestRunner`; to check that boundary directly, run
-`bazel test --nocache_test_results //:tests` with the [native prerequisites](#direct-bazel-without-the-portal).
-
-The daily Bazel jobs upload attempt evidence and per-target test logs even
-when checks fail. Each native job also appends a best-effort summary to
-`GITHUB_STEP_SUMMARY`: the standard BEP verdict and admitted test counts of the
-check attempt, per-invocation Bazel timing and action-cache counters, and
-available R2 stop accounting. Nested phase times overlap and are not additive job time.
-Bazel's local incremental action-cache counters, reported execution runners,
-test-result reuse and whole-job R2 blob transfers remain separate; none is
-presented as an R2 hit rate. Missing or incomplete evidence is marked unavailable,
-not zero or successful. Summary generation adds no measurements, cache probes or
-validation gates and does not replace the raw artifacts.
-The macOS and Windows jobs restore separately keyed vcpkg and managed-tool
-caches. They seal vcpkg archives after dependency preparation so an admitted
-cache fill can survive a later validation failure. The workflow saves managed
-tools only after their preparation checks pass; Windows keys the LLVM SDK
-separately and checks its completion marker before saving. For local timing
-and evidence, see [phase capture](build.md#measure-native-validation).
-
-With `AOBUS_BAZEL_R2_CACHE_AUTHORIZED=true`, trusted main pushes write the shared
-`bazel-v1/` prefix and same-repository PRs consume it with proxy uploaders
-disabled. Fork PRs receive no R2 binding; secretless runs keep their local cache.
-Only CI supplies this R2 binding; local commands retain their disk-cache
-default. A manual `r2=true` dispatch trusts the selected checkout and uses
-run/attempt-isolated `bazel-ci-validation/` prefixes. It requires a nonempty
-proxy URL and a successful drain, so local-cache fallback cannot pass. It uses
-the `R2_SCCACHE_ENDPOINT`,
-`R2_SCCACHE_ACCESS_KEY_ID` and `R2_SCCACHE_SECRET_ACCESS_KEY` secrets and the
-`aobus-sccache` bucket; it needs no other bucket or credential.
-
-Same-repository PR consumers use the same credentials with proxy uploads
-disabled; they do not receive a backend read-only token. Reused bucket-level
-writer credentials retain their write rights, including in an upload-disabled
-consumer. Prefix separation, a YAML condition and disabling
-upload workers are **not backend authorization**. Repository-level secrets
-remain addressable by a malicious same-repository workflow edit; this route
-does not claim to isolate that threat. Fork/secretless runs cannot perform the
-requested live validation.
-
-The [remote-cache helper](../../script/ao/portal/bazel_remote_cache.py) downloads
-the version and SHA-256 that
-[`bazel-remote.json`](../../script/ao/bazel-remote.json) pins. Its CI start and
-stop calls use the governed Python: the Nix shell on Linux, the selected
-Homebrew Python on macOS, and the managed interpreter selected from
-`toolchain.json` on Windows, never an ambient runner Python. Each cached Bazel
-step selects its loopback URL explicitly. Startup
-rejects occupied fixed ports and checks that its own child is live even when
-HTTP status answers. Shutdown first waits for uploads with a bounded drain,
-matching acknowledged writes and backend completions by object kind/hash;
-timeout or stalled progress does not imply completion. An optional structured
-stop receipt records prefix, traffic, failures and unfinished uploads without
-credentials. Expired backend blobs make bazel-remote's gRPC dependency check
-miss; a lifecycle rule is a storage/retention choice, not build correctness.
-
-bazel-remote refuses Windows builds, so the Windows job hosts the pinned
-Linux binary in WSL2. The helper imports a throwaway distribution from the
-base rootfs that the same manifest pins, copies in the verified binary and
-starts it detached; WSL forwards its loopback listeners, so Windows Bazel
-steps use the same `grpc://127.0.0.1:9092` URL. The base rootfs has no trust
-store: the runner image's Git for Windows CA bundle supplies it through
-`SSL_CERT_FILE`. Only the three backend variables named in `WSLENV` enter the
-distribution, and the call that carries them never echoes shell output.
-`stop` reads the access log from the distribution, drains, signals the Linux
-process and unregisters the distribution. This depends on the hosted
-`windows-2025-vs2026` image's WSL2; where the import or start fails, an
-automatic run keeps its local Bazel cache and a manual `r2=true` run fails.
+See [workflow caches](ci.md#workflow-caches) for CI archive transport and
+[trusted R2 validation](ci.md#r2-validation) for the optional remote cache.
 
 <a id="scope-boundaries"></a>
 

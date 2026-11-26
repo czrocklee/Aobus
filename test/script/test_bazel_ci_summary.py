@@ -30,7 +30,7 @@ class CiSummaryTest(unittest.TestCase):
         # Shape from PR #158's Windows BEP; protobuf omits the false boolean.
         self.events({"finished": {"exitCode": {"name": "TESTS_FAILED", "code": 3}}}, {"lastMessage": True})
         text = self.render()
-        self.assertIn("status **failed (TESTS_FAILED)**", text)
+        self.assertIn("test graph status **failed (TESTS_FAILED)**", text)
         self.assertNotIn("unknown (TESTS_FAILED)", text)
 
     def test_no_log_or_truncated_stream_can_establish_success(self):

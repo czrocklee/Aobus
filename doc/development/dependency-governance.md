@@ -229,7 +229,7 @@ and [workflow lint](linting.md#github-actions-workflow-lint).
 Prettier and its Node runtime are governed by `script/ao/prettier.json`.
 Linux selects the matching Nix formatter through `AO_NIX_PRETTIER`, with the
 contracted Node provider. Native macOS/Windows and
-[documentation-only CI](test/validation-and-review.md#continuous-integration)
+[documentation-only CI](ci.md#ci-routing)
 use the hash-verified Node and Prettier archives in managed tool state, without
 npm install or checkout-local `node_modules`. Manifest digests verify freshly
 extracted and cached files before execution; receipts record provenance, not

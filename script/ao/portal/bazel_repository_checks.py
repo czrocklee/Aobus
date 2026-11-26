@@ -413,13 +413,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_bazel_lint(tool=_command_for(_declared_commands(manifests, "buildifier"), "buildifier")[0])
         tools = ("prettier",) if docs else ("clang-format", "buildifier", "prettier")
         commands = _declared_commands(manifests, *tools)
+        if not docs and (arguments.ruff is None or not arguments.ruff.is_absolute()):
+            raise ValueError("An absolute declared Ruff executable is required for source formatting")
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-        print(f"Repository check tool selection failed: {error}", file=sys.stderr)
+        print(f"Repository check failed: {error}", file=sys.stderr)
         return 1
-    if not docs and (arguments.ruff is None or not arguments.ruff.is_absolute()):
-        print("An absolute declared Ruff executable is required for source formatting", file=sys.stderr)
+
+    try:
+        return run_format(docs=docs, commands=commands, ruff=arguments.ruff)
+    except (OSError, ValueError) as error:
+        print(f"Repository check failed: {error}", file=sys.stderr)
         return 1
-    return run_format(docs=docs, commands=commands, ruff=arguments.ruff)
 
 
 if __name__ == "__main__":

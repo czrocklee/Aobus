@@ -300,10 +300,9 @@ class SourceLintTest(unittest.TestCase):
     def test_mixed_scope_appends_all_diagnostics_after_native_report(self):
         scope = self.scope("lib/Example.cpp", "script/example.py", "BUILD.bazel")
         report = self.root / "diagnostics.txt"
+        request = LintRequest(output=str(report))
 
-        def native(request):
-            self.assertEqual(request._resolved_sources, ("lib/Example.cpp",))
-            self.assertIsInstance(request, LintRequest)
+        def native(request, _scope):
             Path(request.output).write_text("native diagnostic\n", encoding="utf-8")
             return 1
 
@@ -321,16 +320,18 @@ class SourceLintTest(unittest.TestCase):
         self.native.side_effect = native
         self.python.side_effect = python
         self.bazel.side_effect = bazel
-        self.assertEqual(source_lint.run(scope, LintRequest(output=str(report))), 1)
+        self.assertEqual(source_lint.run(scope, request), 1)
+        self.native.assert_called_once_with(request, SourceScope(("lib/Example.cpp",)))
         self.assertEqual(
             report.read_text(encoding="utf-8"), "native diagnostic\nPython diagnostic\nBuildifier diagnostic\n"
         )
 
     def test_named_native_check_skips_all_unrelated_languages_audits_and_formatters(self):
         scope = self.scope("lib/Example.cpp", "script/example.py", "BUILD.bazel")
+        request = LintRequest(tidy_check="aobus-no-c-assert")
         with mock.patch.object(source_format, "check", side_effect=AssertionError("no formatter")):
-            self.assertEqual(source_lint.run(scope, LintRequest(tidy_check="aobus-no-c-assert")), 0)
-        self.native.assert_called_once()
+            self.assertEqual(source_lint.run(scope, request), 0)
+        self.native.assert_called_once_with(request, SourceScope(("lib/Example.cpp",)))
         for stage in (self.tests, self.names, self.python, self.bazel, self.workflows):
             stage.assert_not_called()
 
@@ -344,10 +345,9 @@ class SourceLintTest(unittest.TestCase):
         explicit = "test/lint/fixture/aobus-no-c-assert/Explicit.cpp"
         scanned = "test/lint/fixture/aobus-no-c-assert/Scanned.cpp"
         scope = self.scope("lib/Foo.cpp", explicit, scanned, explicit=(explicit,))
-        self.assertEqual(source_lint.run(scope, LintRequest()), 0)
-        request = self.native.call_args.args[0]
-        self.assertEqual(request._resolved_sources, ("lib/Foo.cpp", explicit))
-        self.assertEqual(request.files, (explicit,))
+        request = LintRequest()
+        self.assertEqual(source_lint.run(scope, request), 0)
+        self.native.assert_called_once_with(request, SourceScope(("lib/Foo.cpp", explicit), (explicit,)))
         self.tests.assert_not_called()
 
     def test_empty_scope_and_missing_prepared_path_do_not_expand_or_prepare_native_context(self):
@@ -381,8 +381,7 @@ class SourceLintTest(unittest.TestCase):
         request = LintRequest(owner_targets=("//lib:audio",), config="debug", jobs=3)
         with mock.patch.object(source_scope, "resolve", side_effect=AssertionError("no discovery")):
             self.assertEqual(source_lint.run(None, request), 0)
-        selected = self.native.call_args.args[0]
-        self.assertEqual((selected.owner_targets, selected.config, selected.jobs), (("//lib:audio",), "debug", 3))
+        self.native.assert_called_once_with(request, SourceScope())
 
 
 class SourceAuditTest(unittest.TestCase):

@@ -31,7 +31,7 @@ separate pull requests.
 Capture the current state before editing:
 
 ```bash
-./ao check
+./ao check --extend
 ./ao check deps --json /tmp/aobus-dependencies-before.json
 ```
 
@@ -42,7 +42,7 @@ for example `/tmp/aobus-dependencies-linux-before.json` and
 On Windows:
 
 ```bat
-ao.bat check
+ao.bat check --extend
 ao.bat check deps --json %TEMP%\aobus-dependencies-before.json
 ```
 
@@ -70,7 +70,7 @@ nix-prefetch-url --unpack \
 5. Build and generate the new dependency report:
 
 ```bash
-./ao check --clean
+./ao check --extend --clean
 ./ao check deps --json /tmp/aobus-dependencies-after.json
 ```
 
@@ -192,7 +192,7 @@ For Windows App SDK or C++/WinRT upgrades:
 4. Update the Windows App Runtime identity, installer URL, and SHA-256 in the
    contract when the SDK requires a new runtime.
 5. Run `ao.bat check winui`, explicitly reprovision the selected SDK, then
-   `ao.bat check --clean`, dependency verification for the configured trees,
+   `ao.bat check --extend --clean`, dependency verification for the configured trees,
    and an interactive RDP smoke launch of
    `bazel run //app/windows-winui:aobus-winui`. The clean build exercises the application
    target; the probes are `testonly` and `manual`, so the shipping and default build
@@ -229,7 +229,7 @@ vcpkg resolution together. Nixpkgs still packages 0.9, so the Linux derivation
 builds the same GitHub archive the vcpkg port verifies; compare the archive's
 SHA-512 with the port's before accepting a new hash. The contract checks the
 imported LMDB interface both resolvers feed. Run the complete native gate
-(`./ao check` on Linux and macOS, `ao.bat check` on Windows) so LMDB primitives,
+(`./ao check --extend` on Linux and macOS, `ao.bat check --extend` on Windows) so LMDB primitives,
 library/storage consumers, and frontend library consumers are covered together.
 
 ### spdlog
@@ -281,11 +281,11 @@ Keep `script-transliteration` declared in `dependency-contract.json`, and exerci
 6. Run the complete check, including each host's compatible tooling tests:
 
 ```bash
-./ao check
+./ao check --extend
 ```
 
 ```bat
-ao.bat check
+ao.bat check --extend
 ```
 
 Use the [standalone tooling suite](test/test-suite.md#tooling-and-lint-fixtures)
@@ -396,8 +396,8 @@ provider and action-cache state can hide selection and ABI errors.
 Linux:
 
 ```bash
-./ao check --clean
-./ao check --config release --clean
+./ao check --extend --clean
+./ao check --extend --config release --clean
 ./ao check deps --json /tmp/aobus-dependencies-linux.json
 ```
 
@@ -405,8 +405,8 @@ macOS, using host-local build state:
 
 ```bash
 ./ao setup deps
-./ao check --clean
-./ao check --config release --clean
+./ao check --extend --clean
+./ao check --extend --config release --clean
 ./ao check deps --json /tmp/aobus-dependencies-macos.json
 ```
 
@@ -414,8 +414,8 @@ Windows, in a new build directory or CI cache generation:
 
 ```bat
 ao.bat setup deps
-ao.bat check --clean
-ao.bat check --config release --clean
+ao.bat check --extend --clean
+ao.bat check --extend --config release --clean
 ao.bat check deps --json %TEMP%\aobus-dependencies-windows.json
 ```
 

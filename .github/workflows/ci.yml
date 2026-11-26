@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       docs-only: ${{ steps.scope.outputs.docs-only }}
+      lint-base: ${{ github.event_name == 'pull_request' && steps.scope.outputs.sha || '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -199,10 +200,16 @@ jobs:
 
       - name: Check Bazel completion
         id: bazel-check
+        shell: bash
         env:
           AOBUS_STATE_ROOT: ${{ runner.temp }}/aobus-state
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
-        run: ./ao check --ci --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          LINT_BASE_SHA: ${{ needs.changes.outputs.lint-base }}
+        run: |
+          lint_args=(--extend)
+          if [[ -n "$LINT_BASE_SHA" ]]; then lint_args=(--lint-base "$LINT_BASE_SHA"); fi
+          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" "${lint_args[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/aobus-completion.log"
 
       # Drain acknowledged uploads before stopping the owned proxy. A requested
       # manual cache must also finish its drain successfully.
@@ -301,8 +308,12 @@ jobs:
         with:
           name: bazel-linux-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/aobus-completion.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/build.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/checks/fastbuild/check-*
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.receipt.json
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.log
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.bep.json
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
             ${{ runner.temp }}/aobus-bare/scoped-lint.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.log
@@ -573,9 +584,15 @@ jobs:
       # Reuse matching passing test results; diagnostics can request --fresh.
       - name: Check Bazel completion
         id: build
+        shell: bash
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
-        run: ./ao check --ci --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
+          LINT_BASE_SHA: ${{ needs.changes.outputs.lint-base }}
+        run: |
+          lint_args=(--extend)
+          if [[ -n "$LINT_BASE_SHA" ]]; then lint_args=(--lint-base "$LINT_BASE_SHA"); fi
+          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" "${lint_args[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/aobus-completion.log"
 
       - name: Stop Bazel remote cache
         id: bazel-remote-stop
@@ -608,8 +625,12 @@ jobs:
         with:
           name: bazel-macos-${{ matrix.cache_arch }}-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/aobus-completion.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/build.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/checks/fastbuild/check-*
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.receipt.json
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.log
+            ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.bep.json
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
             ${{ runner.temp }}/bazel-r2-stop.json
           if-no-files-found: warn
@@ -733,6 +754,15 @@ jobs:
         shell: pwsh
         run: .\ao.bat check winui --build-only
 
+      - name: Test Windows completion invocation
+        shell: pwsh
+        env:
+          PYTHONPATH: script
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          & $python -S -B -X utf8 test/script/test_ci_parallelism.py GateRoutingTest.test_windows_native_completion_invocation
+
       - name: Set up Windows App Runtime
         id: windows-app-runtime
         shell: pwsh
@@ -845,8 +875,14 @@ jobs:
         shell: pwsh
         env:
           AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          LINT_BASE_SHA: ${{ needs.changes.outputs.lint-base }}
+          CHECK_TREE: D:\aobus-bazel-fastbuild
         run: |
-          .\ao.bat check --ci --path D:\aobus-bazel-fastbuild --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
+          New-Item -ItemType Directory -Force $env:CHECK_TREE | Out-Null
+          $lintArgs = @('--extend')
+          if ($env:LINT_BASE_SHA) { $lintArgs = @('--lint-base', $env:LINT_BASE_SHA) }
+          .\ao.bat check --native-only --desktop-tests --path "$env:CHECK_TREE" --jobs "$env:CMAKE_BUILD_PARALLEL_LEVEL" @lintArgs 2>&1 |
+            Tee-Object -FilePath (Join-Path $env:CHECK_TREE 'completion.log')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Stop Bazel remote cache
@@ -937,8 +973,12 @@ jobs:
         with:
           name: bazel-windows-${{ github.run_attempt }}
           path: |
+            D:\aobus-bazel-fastbuild\completion.log
             D:\aobus-bazel-fastbuild\build.log
             D:\aobus-bazel-fastbuild\checks\fastbuild\check-*
+            D:\aobus-bazel-fastbuild\lint\run-*\*.receipt.json
+            D:\aobus-bazel-fastbuild\lint\run-*\*.log
+            D:\aobus-bazel-fastbuild\lint\run-*\*.bep.json
             D:\aobus-bazel-fastbuild\state\output\execroot\_main\bazel-out\*\testlogs\**
           if-no-files-found: warn
 

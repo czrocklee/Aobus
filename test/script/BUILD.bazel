@@ -88,14 +88,14 @@ _NATIVE_AND_PORTAL = [
 ]
 
 # These modules use fixtures, not host SDKs or launchers.
-_CI_REPOSITORY_UNIT_MODULES = [
+_STANDALONE_REPOSITORY_UNIT_MODULES = [
     "test_bazel_lint_result",
     "test_doc_check_markdown",
     "test_name_audit",
 ]
 
 # Audited category membership; the reasons are the input audit above.
-_UNIT_MODULES = _CI_REPOSITORY_UNIT_MODULES + [
+_UNIT_MODULES = _STANDALONE_REPOSITORY_UNIT_MODULES + [
     "test_appkit_scenarios",
     "test_architecture_audit",
     "test_audit_root_guards",
@@ -168,6 +168,7 @@ _HOST_TOOL_MODULES = [
     "test_gtk_test_services",
     "test_guardrails",
     "test_hygiene",
+    "test_lint_scope",
     "test_nix_portal",
     "test_perf_identity",
     "test_phases",
@@ -331,6 +332,7 @@ _DEPS = {
     "test_guardrails": [_PORTAL],
     "test_hygiene": [_PORTAL],
     "test_jobs": [_FOUNDATIONS],
+    "test_lint_scope": [_PORTAL],
     "test_lint_test": [_PORTAL],
     "test_name_audit": [_PORTAL],
     "test_naming_doc": [_PORTAL],
@@ -377,6 +379,8 @@ _SUPPORT = {
     "test_bazel_winui_deps": ["test_bazel_windows_linkage.py"],
     "test_doc_check": ["doc_check_support.py"],
     "test_doc_check_markdown": ["doc_check_support.py"],
+    "test_git_files": ["git_support.py"],
+    "test_lint_scope": ["git_support.py"],
     "test_lint_test": ["phase_support.py"],
     "test_perf_identity": ["workflow_support.py"],
     "test_perf_reports": ["workflow_support.py"],
@@ -484,6 +488,7 @@ _DOC_WHEEL_MODULES = [
 _UNIT_TIMEOUTS = {
     "test_bazel_check_tools": "moderate",
     "test_git_files": "moderate",
+    "test_lint_scope": "moderate",
     "test_perf_identity": "moderate",
     "test_windows_portal": "long",
     "test_windows_prerequisites": "long",
@@ -720,7 +725,7 @@ test_suite(
     ],
 )
 
-_CI_REPOSITORY_CHECKS = [
+_STANDALONE_REPOSITORY_CHECKS = [
     ":docs",
     ":format_docs",
     ":name_audit",
@@ -739,12 +744,12 @@ _NATIVE_REPOSITORY_CHECKS = [
 
 test_suite(
     name = "repository_checks",
-    tests = _CI_REPOSITORY_CHECKS + _NATIVE_REPOSITORY_CHECKS,
+    tests = _STANDALONE_REPOSITORY_CHECKS + _NATIVE_REPOSITORY_CHECKS,
 )
 
 test_suite(
-    name = "ci_repository_checks",
-    tests = _CI_REPOSITORY_CHECKS + [":" + module for module in _CI_REPOSITORY_UNIT_MODULES] + [
+    name = "standalone_repository_checks",
+    tests = _STANDALONE_REPOSITORY_CHECKS + [":" + module for module in _STANDALONE_REPOSITORY_UNIT_MODULES] + [
         ":test_ci_cache_gates",
         ":test_ci_parallelism",
     ],

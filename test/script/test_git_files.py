@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from git_support import GitCheckoutTestCase
+
 from ao.portal import git_files, setup_actions
 
 
@@ -20,14 +22,6 @@ class GitFilesTest(unittest.TestCase):
         self.addCleanup(environment.stop)
         os.environ.pop("AOBUS_GIT_DIR", None)
         os.environ.pop("AOBUS_GIT_WORK_TREE", None)
-
-    def test_empty_merge_base_reports_a_discovery_error(self):
-        with mock.patch.object(git_files, "_git_lines", side_effect=[["topic"], []]):
-            with mock.patch.object(git_files, "_git_ok", return_value=True):
-                with contextlib.redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit):
-                    git_files.diff_base()
-        self.assertIn("returned no revision", errors.getvalue())
-        self.assertIn("--commit", errors.getvalue())
 
     def test_windows_git_config_is_process_local_and_checkout_scoped(self):
         self.assertEqual(
@@ -287,14 +281,11 @@ class GitFilesTest(unittest.TestCase):
 
     def test_git_discovery_failure_is_not_reported_as_an_empty_scope(self):
         completed = mock.Mock(returncode=128, stdout="", stderr="fatal: dubious ownership")
-        errors = io.StringIO()
-
-        with mock.patch.object(git_files.subprocess, "run", return_value=completed):
-            with contextlib.redirect_stderr(errors):
-                with self.assertRaises(SystemExit):
-                    git_files._git_lines("diff", "--name-only")
-
-        self.assertIn("dubious ownership", errors.getvalue())
+        with (
+            mock.patch.object(git_files.subprocess, "run", return_value=completed),
+            self.assertRaisesRegex(ValueError, "dubious ownership"),
+        ):
+            git_files._git_lines("diff", "--name-only")
 
     def test_worktree_names_handle_binary_mode_only_and_renamed_paths(self):
         records = [
@@ -340,13 +331,14 @@ class GitFilesTest(unittest.TestCase):
         with (
             mock.patch.dict(os.environ, values),
             mock.patch.object(git_files.subprocess, "run", return_value=completed),
+            self.assertRaises(ValueError) as error,
         ):
-            with contextlib.redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit):
-                git_files._git_lines("branch", "--show-current")
-        self.assertIn("not a git repository", errors.getvalue())
-        self.assertIn("ignored AOBUS_GIT_WORK_TREE", errors.getvalue())
-        self.assertIn(repr(other), errors.getvalue())
-        self.assertIn(repr(root), errors.getvalue())
+            git_files._git_lines("branch", "--show-current")
+        message = str(error.exception)
+        self.assertIn("not a git repository", message)
+        self.assertIn("ignored AOBUS_GIT_WORK_TREE", message)
+        self.assertIn(repr(other), message)
+        self.assertIn(repr(root), message)
 
     def test_successful_discovery_ignores_other_root_binding_without_warning(self):
         other = str(Path(tempfile.gettempdir()) / "another-checkout")
@@ -410,11 +402,12 @@ class GitFilesTest(unittest.TestCase):
             ({"AOBUS_GIT_DIR": "relative.git", "AOBUS_GIT_WORK_TREE": root}, "absolute paths"),
             ({"AOBUS_GIT_DIR": private, "AOBUS_GIT_WORK_TREE": "relative-root"}, "absolute paths"),
         ):
-            with self.subTest(values=values), mock.patch.dict(os.environ, values):
-                errors = io.StringIO()
-                with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit):
-                    git_files.git_command("ls-files", source_discovery=True)
-                self.assertIn(expected, errors.getvalue())
+            with (
+                self.subTest(values=values),
+                mock.patch.dict(os.environ, values),
+                self.assertRaisesRegex(git_files.GitBindingError, expected),
+            ):
+                git_files.git_command("ls-files", source_discovery=True)
 
     def test_binding_keeps_platform_git_options_and_does_not_export_standard_selectors(self):
         before = dict(os.environ)
@@ -569,14 +562,10 @@ class GitFilesTest(unittest.TestCase):
                 # never a plain exported tree.
                 with (
                     mock.patch.object(git_files.subprocess, "run", return_value=missing),
-                    mock.patch.dict(
-                        os.environ, {"AOBUS_GIT_DIR": str(root / "metadata"), "AOBUS_GIT_WORK_TREE": str(root)}
-                    ),
-                    contextlib.redirect_stderr(io.StringIO()) as errors,
-                    self.assertRaises(SystemExit),
+                    mock.patch.dict(os.environ, binding),
+                    self.assertRaisesRegex(git_files.GitBindingError, "not a git repository"),
                 ):
                     git_files.prettier_sources(["doc"])
-                self.assertIn("not a git repository", errors.getvalue())
                 # A missing executable cannot honor an explicit selection either.
                 with (
                     mock.patch.object(
@@ -585,11 +574,9 @@ class GitFilesTest(unittest.TestCase):
                         side_effect=FileNotFoundError(2, "No such file or directory", "git"),
                     ),
                     mock.patch.dict(os.environ, binding),
-                    contextlib.redirect_stderr(io.StringIO()) as errors,
-                    self.assertRaises(SystemExit),
+                    self.assertRaisesRegex(git_files.GitBindingError, "No such file or directory"),
                 ):
                     git_files.prettier_sources(["doc"])
-                self.assertIn("No such file or directory", errors.getvalue())
 
     def test_prettier_sources_ignore_a_binding_for_another_checkout(self):
         missing = mock.Mock(
@@ -628,50 +615,12 @@ class GitFilesTest(unittest.TestCase):
                     mock.patch.object(git_files, "PROJECT_ROOT", root),
                     mock.patch.object(git_files.subprocess, "run", side_effect=PermissionError("permission denied")),
                     mock.patch.dict(os.environ, environment),
-                    contextlib.redirect_stderr(io.StringIO()) as errors,
-                    self.assertRaises(SystemExit),
+                    self.assertRaisesRegex(ValueError, "permission denied"),
                 ):
                     git_files.prettier_sources(["doc"])
-                self.assertIn("permission denied", errors.getvalue())
 
 
-class GitWorkflowFixtureTest(unittest.TestCase):
-    def setUp(self):
-        environment = mock.patch.dict(os.environ)
-        environment.start()
-        self.addCleanup(environment.stop)
-        os.environ.pop("AOBUS_GIT_DIR", None)
-        os.environ.pop("AOBUS_GIT_WORK_TREE", None)
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name) / "checkout"
-        self.root.mkdir()
-        self.git("init", "-b", "main")
-
-    def git(self, *arguments):
-        return subprocess.check_output(
-            [
-                "git",
-                "-C",
-                str(self.root),
-                "-c",
-                "user.name=Aobus fixture",
-                "-c",
-                "user.email=fixture@example.invalid",
-                "-c",
-                "commit.gpgsign=false",
-                "-c",
-                "core.hooksPath=unused-fixture-hooks",
-                *arguments,
-            ],
-            stderr=subprocess.STDOUT,
-            text=True,
-        ).strip()
-
-    def commit(self, name):
-        self.git("add", ".")
-        self.git("commit", "-m", name)
-
+class GitWorkflowFixtureTest(GitCheckoutTestCase):
     @unittest.skipIf(os.name == "nt", "native symlink creation needs separate Windows privileges")
     def test_prettier_sources_exclude_ignored_compile_commands_links_in_root_and_nested_folders(self):
         (self.root / ".gitignore").write_text("compile_commands.json\ndoc/plan/\n", encoding="utf-8")
@@ -795,6 +744,31 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             self.assertEqual(git_files.changed_files(), ["topic.cpp"])
             self.assertEqual(git_files.changed_files("main"), ["common.cpp", "topic.cpp"])
 
+    def test_standalone_topic_without_local_main_still_uses_previous_commit(self):
+        (self.root / "base.cpp").touch()
+        self.commit("base")
+        self.git("checkout", "-b", "topic")
+        (self.root / "earlier.cpp").touch()
+        self.commit("earlier topic change")
+        (self.root / "latest.cpp").touch()
+        tip = self.commit("latest topic change")
+        self.git("branch", "-D", "main")
+        self.git("tag", "main", tip)
+        with mock.patch.object(git_files, "PROJECT_ROOT", self.root):
+            self.assertEqual(git_files.changed_files(), ["latest.cpp"])
+
+    def test_topic_without_a_common_ancestor_reports_why_default_scope_is_unavailable(self):
+        (self.root / "source.cpp").touch()
+        self.commit("main history")
+        self.git("checkout", "--orphan", "topic")
+        (self.root / "source.cpp").write_text("topic content\n", encoding="utf-8")
+        self.commit("independent topic history")
+        with mock.patch.object(git_files, "PROJECT_ROOT", self.root):
+            with self.assertRaisesRegex(ValueError, "main and HEAD have no common ancestor"):
+                git_files.diff_base()
+            with self.assertRaisesRegex(ValueError, "no common ancestor.*--commit"):
+                git_files.changed_files()
+
     def test_explicit_hook_setup_supports_linked_worktrees(self):
         (self.root / "README.md").write_text("fixture\n", encoding="utf-8")
         self.commit("base")
@@ -856,7 +830,6 @@ class GitWorkflowFixtureTest(unittest.TestCase):
                 git_files.changed_files(base, suffixes=git_files.PYTHON_SUFFIXES),
                 ["base.py", "binary.py", "staged.py", "topic.py", "untracked.py"],
             )
-            self.assertTrue(git_files._git_ok("rev-parse", "--verify", "HEAD"))
             other = self.root.parent / "other"
             other.mkdir()
             with mock.patch.object(self, "root", other):
@@ -992,11 +965,9 @@ class GitWorkflowFixtureTest(unittest.TestCase):
                 os.environ,
                 {"AOBUS_GIT_DIR": str(self.root.parent / "absent.git"), "AOBUS_GIT_WORK_TREE": str(self.root)},
             ),
+            self.assertRaisesRegex(ValueError, "git branch --show-current failed"),
         ):
-            errors = io.StringIO()
-            with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit):
-                git_files.changed_files()
-            self.assertIn("git branch --show-current failed", errors.getvalue())
+            git_files.changed_files()
 
     def ci_scope(self, base, event="pull_request"):
         bash = shutil.which("bash")
@@ -1060,12 +1031,61 @@ class GitWorkflowFixtureTest(unittest.TestCase):
         result, output = self.ci_scope(self.git("rev-parse", "HEAD"))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output["docs-only"], "false")
-        result, output = self.ci_scope("nonexistent-base")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotEqual(output.get("docs-only"), "true")
+        self.git("-c", "tag.gpgsign=false", "tag", "-a", "base-tag", "-m", "fixture tag", base)
+        for invalid in ("", "HEAD~1", "f" * 40, self.git("rev-parse", "base-tag")):
+            with self.subTest(invalid=invalid):
+                result, output = self.ci_scope(invalid)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(output, {})
         (self.root / "unknown-input").write_text("native gate\n", encoding="utf-8")
         self.commit("unknown input")
         result, output = self.ci_scope(base)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output["docs-only"], "false")
+
+    def test_ci_pr_rejects_a_nonancestor_base_even_if_only_docs_differ(self):
+        readme = self.root / "README.md"
+        readme.write_text("common\n", encoding="utf-8")
+        self.commit("common history")
+        self.git("checkout", "-b", "other")
+        readme.write_text("other branch\n", encoding="utf-8")
+        self.commit("diverge")
+        base = self.git("rev-parse", "HEAD")
+        self.git("checkout", "main")
+
+        result, output = self.ci_scope(base)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(output, {})
+
+        # A forced push can legitimately use a nonancestor as its before SHA.
+        result, output = self.ci_scope(base, "push")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output, {"sha": base, "docs-only": "true"})
+
+    def test_ci_deployment_readme_keeps_the_docs_route_only_when_retained(self):
+        readme = self.root / "app/windows-winui/deployment/README.md"
+        readme.parent.mkdir(parents=True)
+        readme.write_text("deployment instructions\n", encoding="utf-8")
+        self.commit("add deployment readme")
+        original = self.git("rev-parse", "HEAD")
+
+        readme.write_text("updated instructions\n", encoding="utf-8")
+        self.commit("edit deployment readme")
+        edited = self.git("rev-parse", "HEAD")
+        result, output = self.ci_scope(original)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output["docs-only"], "true")
+
+        moved = readme.with_name("Instructions.md")
+        readme.rename(moved)
+        self.commit("move deployment readme to another Markdown path")
+        result, output = self.ci_scope(edited)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output["docs-only"], "false")
+
+        moved.unlink()
+        self.commit("remove deployment readme entirely")
+        result, output = self.ci_scope(edited)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output["docs-only"], "false")
 

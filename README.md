@@ -46,13 +46,13 @@ repository setup enters the pinned Nix environment automatically:
 bazel build //app/tui:aobus-tui
 bazel run //app/tui:aobus-tui
 bazel test //:tests
-./ao check
+./ao check --extend
 ```
 
 See [build and setup](doc/development/build.md) for build trees and tooling, or the native [macOS](doc/development/macos.md) and [Windows](doc/development/windows.md) guides for prerequisites.
 Native macOS and Windows require explicit SDK provisioning before Bazel commands.
-Use `ao.bat` for project-specific commands on Windows. Run `ao check` for the full
-[local completion gate](doc/development/bazel.md#completion-gate).
+Use `ao.bat` for project-specific commands on Windows. Run `ao check --extend`
+for the full [local completion gate](doc/development/bazel.md#completion-gate).
 The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
 is available as `//app/macos-appkit:aobus-appkit` and remains under development.
 

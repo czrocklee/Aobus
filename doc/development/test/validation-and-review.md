@@ -25,7 +25,7 @@ The [ownership audit](../bazel.md#test-ownership) checks that each compatible so
 that registers cases has a declared executable owner reachable from the appropriate
 completion roots. Put `cc_test` owners in the actual completion test selection;
 only building the owner does not exercise its tests. Manually run `cc_binary`
-owners, such as benchmarks, only need to be built. Full local and CI native
+owners, such as benchmarks, only need to be built. Local and CI native
 completion checks public BEP summaries for configured `cc_test` registration
 owners, mapping native context wrappers through the graph. A cached pass is not
 a fresh execution, and a target summary does not prove case-level execution;
@@ -76,34 +76,28 @@ Do not perform a broad test-file split as drive-by cleanup unless it is necessar
 During implementation, debugging, and review-fix rounds, build or test the affected Bazel targets rather than running the completion gate after each turn. Check platform-specific changes early on their native host, such as WinUI on Windows.
 
 Run the applicable checks below before opening a ready-for-review PR, marking a draft ready, or delivering a final local commit. Run full validation earlier on explicit request.
-After review fixes settle, rerun any checks they invalidated before sign-off.
+After review fixes settle, rerun any checks they invalidated before sign-off,
+including full local completion where required.
 Checkpoint commits and backup pushes alone do not require the native matrix. When handing back uncommitted work, report any required checks not run.
 
-| Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Read-only review or diagnosis                                       | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review.                                                                                                                                                                                                                                                                                                                                                                           |
-| Documentation or agent instructions                                 | `./ao check docs` and `./ao check format --docs`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                            |
-| Python portal or automation scripts                                 | `./ao check` on Linux, `ao.bat check` on Windows for affected Windows behavior; these include the tooling targets. Use the [standalone tooling suite](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS runs its SDK and native environment, remote-cache, wheel-lock, and AppKit scenario supervisor modules; use native portal probes and scoped `check lint` for other host-specific behavior.           |
-| C++ implementation, headers, or tests                               | One full native `check`, including its declared whole-graph lint test. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                                      |
-| Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them.                                                                                                                                                                                                                                                                                                                                                   |
-| Catalog-only wording in an existing maintained locale               | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
-| UI, localization, or audio behavior                                 | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation.                                                                                                                                                                                                                                              |
+| Change or task                                                      | Completion evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Read-only review or diagnosis                                       | Source evidence and the relevant existing validator or focused reproducer. No build is required solely to finish a review.                                                                                                                                                                                                                                                                                                                                                                                   |
+| Documentation or agent instructions                                 | `./ao check docs` and `./ao check format --docs`, agreement with the owning code/policy, and representative task routing when skill behavior changes. Changes to skill scripts also take the tooling row.                                                                                                                                                                                                                                                                                                    |
+| Python portal or automation scripts                                 | `./ao check --extend` on Linux, `ao.bat check --extend` on Windows for affected Windows behavior; these include the tooling targets. Use the [standalone tooling suite](test-suite.md#tooling-and-lint-fixtures) while iterating. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS runs its SDK and native environment, remote-cache, wheel-lock, and AppKit scenario supervisor modules; use native portal probes and scoped `check lint` for other host-specific behavior. |
+| C++ implementation, headers, or tests                               | One full native `check --extend`, including its declared whole-graph lint test. Add affected native hosts when their implementation, toolchain, or frontend is involved.                                                                                                                                                                                                                                                                                                                                     |
+| Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them.                                                                                                                                                                                                                                                                                                                                                           |
+| Catalog-only wording in an existing maintained locale               | Build affected frontends to regenerate catalogs, run the catalog suite (`bazel test //test:i18n_test`) and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate.         |
+| UI, localization, or audio behavior                                 | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation.                                                                                                                                                                                                                                                      |
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
 
 Follow the [formatting order](#formatting-before-validation) before validation.
-The full [completion gate](../bazel.md#completion-gate) is `./ao check` (`ao.bat check` on Windows).
-It checks the whole source snapshot; `--fresh` forces new test executions without changing scope.
-
-`check lint` remains a useful standalone semantic check: source audits and
-Python checks for files in scope, plus native clang-tidy coverage for selected
-C++ files and the Linux-owned workflow-lint stage over direct `.github/workflows` YAML
-([workflow lint](../linting.md#github-actions-workflow-lint)). Its C++ stage
-stays diff-scoped; `check` does not invoke it, and the gate's whole-graph lint
-coverage is the declared `//:production_lint` test
-([lint reports](../bazel.md#lint-reports)).
-It never rewrites source. Sanitizer execution remains separate from the normal
-lint configuration; a sanitizer result cannot stand in for native lint.
+The full [completion gate](../bazel.md#completion-gate) is `./ao check --extend`
+(`ao.bat check --extend` on Windows). Neither bare `check` with scoped
+production lint nor standalone [`check lint`](../linting.md#scope-behavior)
+replaces a required full gate. A sanitizer result cannot stand in for native
+lint. See [CI and Release validation](../ci.md) for hosted checks and evidence.
 
 For a C++ memory-safety fix, run [fresh native ASan](concurrency-and-sanitizer.md#sanitizer-findings)
 on the affected tests and supported hosts. For a C++ concurrency-sensitive change,
@@ -135,9 +129,8 @@ subsets. It performs no formatting or global documentation check; use
 Explicit file and directory scopes for `format`, `check format`, `check lint`,
 and `check analyzer` must exist. Relative paths are resolved from the worktree root; a missing path fails even with `--report-only`.
 Existing empty directories and scopes with no applicable files remain valid.
-Use an explicit scope or `--commit <base>` when validating a subset of a larger
-branch. `--all` requests whole-source lint; `check` independently owns the
-repository-wide `guardrails` target and the `//:production_lint` test.
+Use an explicit scope or `--commit <base>` for standalone lint on a subset of a
+larger branch, or `--all` for whole-source standalone lint.
 
 Required `check lint`, the graph's Ruff/mypy targets, and scoped
 formatting corrections needed to complete an authorized edit do not require a
@@ -154,48 +147,6 @@ If the task is explicitly about coverage percentage or missing lines, use `cover
 ### Formatting before validation
 
 For read-only feedback on selected files, use `./ao check format` or `./ao check lint`. Finish edits, apply any needed formatting, and review the formatting diff before completion checks. Keep the rewrite separate from builds and tests. Re-read rewritten files before editing them again; rerun checks whose inputs changed.
-
-### Continuous integration
-
-In [CI](../../../.github/workflows/ci.yml), `Change scope` verifies the event's
-comparison base and classifies the final change. Documentation-only changes
-must touch at least one path, limited to `AGENTS.md`, `CONTRIBUTING.md`,
-`README.md`, or Markdown under `doc/`, `.agents/skills/`, `tool/`, `app/` or `asset/`.
-`doc/plan/` is ignored and outside documentation discovery. Renames count as
-deletion plus addition so moving code into a Markdown path cannot bypass
-native validation. Empty comparisons, other paths and manual runs take the
-full daily route.
-
-- **Documentation-only:** `Repository / check` runs `ao check docs` and
-  `ao check format --docs` using pinned host Python and the
-  [hash-locked parser and formatter](../dependency-governance.md#repository-tooling),
-  without Nix, Bazel or a native SDK. Native jobs are skipped.
-- **Full daily route:** `Repository / check` runs `./ao check repository` on
-  Linux. `Linux / native`, `macOS Intel / check`, `macOS ARM64 / check` and
-  `Windows / check` run fastbuild `ao check --ci` in parallel with it. See
-  [Bazel selections](../bazel.md#completion-gate) for local reproduction and
-  [CI evidence and caches](../bazel.md#ci-product-gates-and-r2-validation) for diagnosis.
-  A manual **CI** run can request live R2 validation with `r2=true`.
-
-The required `Linux / check` reports a joint verdict, not another build. It
-passes only when classification and `Repository / check` succeed and
-`Linux / native` passes on the full route or is skipped on the documentation-only
-route. Native jobs depend on scope, not on the repository result.
-Repository rulesets choose which checks block merging. For a build-system
-migration, require successful results from the full affected native matrix
-regardless of the ruleset.
-
-### Manual Release validation
-
-Once the [Release workflow](../../../.github/workflows/release.yml) is on the
-default branch, select the branch to check in **Actions → Release validation → Run workflow**.
-Each platform uses the full `./ao check --config release`
-(`ao.bat check --config release` on Windows), not the daily fastbuild partition.
-Windows desktop UI Automation remains a daily CI check. For a slow Windows
-run, compare dependency preparation with **Check Release** in the job
-timings: the workflow does not restore caches from earlier runs. On failure,
-download the job's diagnostics from the workflow run. The workflow does not
-sign or publish products, tag commits, or create a release.
 
 ## Common smells to fix while writing tests
 

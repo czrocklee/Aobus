@@ -12,7 +12,7 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 - [Build and run](build.md): native Bazel quick start, project checks, managed trees, locks, and dependency inspection.
 - [macOS](macos.md) and [Windows](windows.md): native bootstrap, toolchains, state, platform commands, and limitations. Use `ao.bat` on Windows.
 - [Optimized builds](optimized-builds.md): Release, IPO/LTO, profiling, and performance investigation.
-- [Bazel build system](bazel.md): pinned native setup, the graph, profiles, lint, complete validation, coverage, caching, and CI contracts.
+- [Bazel build system](bazel.md): pinned native setup, the graph, profiles, lint, completion, coverage, and local caching.
 
 ## Implement a change
 
@@ -32,6 +32,7 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 
 The [testing guide](test.md) routes layer selection, fixtures, assertions, async, concurrency, UIModel/GTK, coverage, and performance tasks.
 [Validation and review](test/validation-and-review.md) chooses completion checks and native hosts from the changed behavior; [test suites](test/test-suite.md) explains native Bazel selection and prerequisites.
+[CI and Release validation](ci.md) explains workflow routing, local reproduction, job evidence, and workflow caches.
 Do not read every testing topic before making an ordinary change.
 
 ## Diagnose or maintain tools

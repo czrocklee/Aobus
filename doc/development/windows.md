@@ -97,8 +97,8 @@ ao.bat check format
 ao.bat check lint
 ao.bat check deps
 
-ao.bat check
-ao.bat check --config release
+ao.bat check --extend
+ao.bat check --extend --config release
 ```
 
 Use
@@ -132,11 +132,9 @@ foreground portal exits. This does not replace build-tree or provisioning locks.
 the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
 otherwise selects Visual Studio's bundled vcpkg.
 
-`ao.bat check` prepares the ready native environment and runs one
-`bazel test //...`, so the graph includes documentation, Windows tooling, native
-tests, the shared and naming audits and the whole-graph lint test
-([completion gate](bazel.md#completion-gate)). Ordinary native Bazel builds/runs
-do not repeat repository-wide source scans.
+`ao.bat check --extend` uses the ready native environment to run the full
+[completion gate](bazel.md#completion-gate). Ordinary native Bazel builds and
+runs do not repeat its repository-wide source scans.
 
 ### Dependency linkage
 
@@ -352,13 +350,13 @@ For offline deployment without SDKs, Python, or network access, see
 building or executing probes. `ao.bat check` builds the application and every
 native probe, stages the probes'
 XBF/PRI resources, then executes the track-item and localization console checks.
-A default check does not launch GUI probes; desktop-enabled CI runs the separate
+A default check does not launch GUI probes; add `--desktop-tests` for the
 [UI Automation naming gate](#ui-automation-naming-gate). The configured graph
 owns the boundary that neither the shipping nor default build transitively
 depends on probes, and the completion selection includes the application and
 every configured probe.
 
-`ao.bat check --config release` validates the managed Release IPO graph — MSVC `/GL` and
+`ao.bat check --extend --config release` validates the managed Release IPO graph — MSVC `/GL` and
 `/LTCG`, with `/GL-` only for the authored `app/windows-winui/MainWindow.xaml.cpp`
 translation unit when the selected MSVC toolset is `14.51.*` — and the same WinUI
 validation in Release.
@@ -614,15 +612,14 @@ runtime and interactive session:
 bazel run //app/windows-winui:ao_winui_automation_probe
 ```
 
-This builds the probe and its resources before launching it. In the wildcard
-check, `ao.bat check --ci` enables the desktop setting and runs
-`//test:winui_uia_test`. Ordinary `ao.bat check` builds the probe without
-running it, and `//:tests` does not select it.
+This builds the probe and its resources before launching it. Use
+`ao.bat check --desktop-tests` to run `//test:winui_uia_test` inside completion.
+Without the desktop option, `ao.bat check` builds the probe without running it,
+and `//:tests` does not select it.
 
 Both run paths require the Windows App Runtime and an authenticated interactive
 console. Outside the active console session, the probe fails with a diagnostic
-rather than skipping. The CI runner must provide that session; the gate does
-not log in for it.
+rather than skipping. The gate does not create a session.
 
 The default English run loads `MainWindow` with a disposable library and
 private settings, without playing audio. It rescans a selected track to
@@ -793,13 +790,11 @@ DLLs and do not need the caller's `PATH`. The UIA test inherits `PATH` for
 PowerShell to check the current user's Windows App Runtime; it also requires
 the interactive console before launching the probe.
 
-`ao.bat check` adds tooling, documentation, the shared and naming audits,
-the native-policy audit, and the whole-graph lint test. Workflow lint and the
-compiler-driver diagnostic run only on Linux. The native backend suite carries
-`manual`, but completion runs it through the non-manual `//:check_tests` suite.
+Workflow lint and the compiler-driver diagnostic run only on Linux. The native
+backend suite carries `manual`, but completion runs it through `//:check_tests`.
 Both Windows cases are hidden `[.manual]`. When neither is selected, Bazel can
-report the target `PASSED`; `ao.bat check` and the daily CI summary report the
-hardware cases as **not run**, based on Catch2's XML. Choose the exact case
+report the target `PASSED`; `ao.bat check` and the [CI summary](ci.md#validation-evidence)
+report the hardware cases as **not run**, based on Catch2's XML. Choose the exact case
 whose prerequisites you prepared; `[.manual]` selects both probes, not just the
 provider example below. Concurrency filters should exclude hidden probes.
 

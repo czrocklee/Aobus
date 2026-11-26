@@ -154,6 +154,8 @@ def feature_options(args: NativeRequest) -> tuple[str, ...]:
     )
     if build_dir.platform_profile().name == "linux" and getattr(args, "compiler", None) is not None:
         options += ("--compiler=" + compiler,)
+    if getattr(args, "desktop_tests", False):
+        options += ("--//bazel:desktop_tests=true",)
     return options
 
 

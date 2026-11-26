@@ -83,21 +83,18 @@ bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertio
 ./ao check lint               # scoped semantic lint
 ./ao check deps
 
-./ao check                    # complete native fastbuild gate
-./ao check --config release   # complete native Release gate
+./ao check --extend                   # complete native fastbuild gate
+./ao check --extend --config release  # complete native Release gate
 ```
 
 For the desktop app, use the [isolated AppKit launch](#bazel-appkit-product).
 
-`./ao check` runs the same wildcard `bazel test //...` graph as every host, so
-it includes live documentation, formatting, source guardrails, the native-policy
-audit and the whole-graph lint test, but it does not run fixture-dependent
+The [completion gate](bazel.md#completion-gate) does not run fixture-dependent
 AppKit GUI scenarios. The macOS tooling selection includes SDK and native
 environment tests, the remote-cache helper, AppKit scenario supervisor tests,
-and generated wheel-lock checks.
-Workflow lint and the
-representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks,
-and lint fixtures; the wildcard graph is broader.
+and generated wheel-lock checks. Workflow lint and the representative compiler
+driver diagnostic are Linux-only. Ordinary `//:tests` also excludes backend
+service checks and lint fixtures.
 `bazel test --config=tsan //:tsan_tests` exercises the compatible core,
 application, and backend suites without lint or GUI smoke. This is not evidence for native GUI
 behavior. Use
@@ -108,7 +105,7 @@ The portal starts with the governed Homebrew Python major/minor;
 `/usr/bin/python3` only reads initial bootstrap JSON fields. Standalone
 `check docs` and Python formatting/lint scopes select the managed environment
 on demand. It matches the Ruff and mypy pins without requiring an exact Python
-patch. Full `check` and `check --ci` use the base interpreter without preparing
+patch. Completion uses the base interpreter without preparing
 that environment; the graph uses its [own tool inputs](dependency-governance.md#python-wheel-sources-and-fetches).
 Markdown/JSON/YAML/CSS-only formatting instead uses the governed Prettier/Node
 bundle without a C++ SDK, managed Python tools, or a system Node installation;
@@ -339,15 +336,14 @@ and `check format`.
 
 Choose completion scope from
 [validation and review](test/validation-and-review.md). A macOS C++ change
-normally runs `./ao check`, which includes the whole-graph lint test and
-documentation. Changes to Release
-configuration, dependencies, or optimizer-sensitive code also run
-`./ao check --config release`. Concurrency and memory work follows
+normally runs `./ao check --extend`. Changes to Release configuration,
+dependencies, or optimizer-sensitive code also run
+`./ao check --extend --config release`.
+Concurrency and memory work follows
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md).
 
-The CI native matrix covers Intel and Apple Silicon. Native AppKit GUI
-behavior still requires the smoke scenarios above; a passing headless gate does
-not prove it.
+The [CI matrix](ci.md#ci-routing) does not cover the AppKit GUI scenarios.
+Check native AppKit GUI behavior with the smoke scenarios above.
 
 Core Audio validation requires a logged-in console session even when the portal
 is invoked over SSH. The portal neither creates a login session nor changes
@@ -367,7 +363,7 @@ inherits `AOBUS_TEST_COREAUDIO_DEVICE_UID` in both runs below. For a fresh full
 Release gate:
 
 ```bash
-AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check --config release --fresh
+AOBUS_TEST_COREAUDIO_DEVICE_UID="$testOutputUid" ./ao check --extend --config release --fresh
 ```
 
 For a focused Release run of the ordinary Core Audio backend cases:

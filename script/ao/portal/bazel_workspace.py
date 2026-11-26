@@ -240,11 +240,12 @@ def prepare_workspace(
     prefix: str | None = None,
     lint_configuration: Path | None = None,
     graph_options: tuple[str, ...] = (),
+    lockfile_readonly: bool = False,
 ) -> Path:
     """Write launch configuration, not a dependency snapshot or freshness stamp."""
     allowed_graph_options = {
         f"--//bazel:{name}={value}" for name in ("gtk_enabled", "system_media_enabled") for value in ("true", "false")
-    } | {"--compiler=gcc", "--compiler=clang"}
+    } | {"--compiler=gcc", "--compiler=clang", "--//bazel:desktop_tests=true"}
     if any(value not in allowed_graph_options for value in graph_options):
         raise native.BazelWorkspaceError("unsupported product graph setting")
     if len({value.partition("=")[0] for value in graph_options}) != len(graph_options):
@@ -312,6 +313,8 @@ def prepare_workspace(
         "build " + json.dumps("--config=" + config, ensure_ascii=False),
         "build " + json.dumps("--symlink_prefix=" + tree.as_posix() + "/bazel-", ensure_ascii=False),
     ]
+    if lockfile_readonly:
+        lines.append("common --lockfile_mode=error")
     if cache := os.environ.get("AOBUS_BAZEL_DISK_CACHE"):
         path = Path(cache)
         if not path.is_absolute() or path.drive.startswith("\\\\") or not cache.isprintable():

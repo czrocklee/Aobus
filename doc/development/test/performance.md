@@ -371,17 +371,11 @@ the first-use cost.
 
 ## Validation
 
-Changes to the portal command require tooling validation through `ao check`
-on Linux/Windows. Use the [standalone tooling runner](test-suite.md#tooling-and-lint-fixtures)
-while iterating.
-
-Changes to benchmark C++ or measured production code follow the normal completion gate:
-
-```bash
-./ao check
-```
-
-That gate compiles `ao_perf_baseline` but does not execute its sampled workloads.
+Use the [standalone tooling runner](test-suite.md#tooling-and-lint-fixtures)
+while iterating on the portal command. Validate command changes with
+`./ao check --extend` on Linux and `ao.bat check --extend` on Windows.
+Changes to benchmark C++ or measured production code follow the
+[normal completion policy](validation-and-review.md#validation).
 
 Cross-platform claims require the equivalent native Windows run.
 The benchmark itself must assert only fixture integrity and observable semantic invariants; elapsed-time regressions remain review decisions rather than flaky Catch2 thresholds.
