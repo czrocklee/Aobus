@@ -104,8 +104,9 @@ namespace ao::rt
     ~Impl() override
     {
       ensureOnExecutor();
-      AO_EXPECTS(
-        !isInsideBoundary(), "PlaybackService cannot be destroyed synchronously from an active publication or command");
+      AO_EXPECTS(!isInsideBoundary(),
+                 "PlaybackService cannot be destroyed synchronously from an active publication or command, "
+                 "or during automatic succession");
       subscriptions.clear();
       deferredControlPtr->owner = nullptr;
       deferredControlPtr.reset();
@@ -640,7 +641,9 @@ namespace ao::rt
     {
       commandDrainScheduled = false;
 
-      if (closed || queuedCommands.empty())
+      // A nested executor turn can reach an already-scheduled drain during a later boundary.
+      // Leave the FIFO intact; the outer boundary schedules the next drain when it exits.
+      if (closed || isInsideBoundary() || queuedCommands.empty())
       {
         return;
       }
@@ -654,7 +657,11 @@ namespace ao::rt
       }
     }
 
-    bool isInsideBoundary() const noexcept { return commitDepth != 0 || publicationDepth != 0; }
+    bool isInsideBoundary() const noexcept
+    {
+      return commitDepth != 0 || publicationDepth != 0 || succession.isAutomaticTransitionActive();
+    }
+
     bool hasQueuedCommandBacklog() const noexcept { return commandDrainScheduled || !queuedCommands.empty(); }
 
     // Adapter wiring ----------------------------------------------------------
@@ -697,6 +704,7 @@ namespace ao::rt
       subscriptions.push_back(transport.onRevealTrackRequested([this](PlaybackRevealTrackRequest const& request)
                                                                { onRevealTrackRequested(request); }));
 
+      subscriptions.push_back(succession.onAutomaticTransitionSettled([this] { scheduleCommandDrain(); }));
       subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
       subscriptions.push_back(succession.onExplicitStartSettled(
         [this]
@@ -983,8 +991,9 @@ namespace ao::rt
     void shutdown() noexcept
     {
       ensureOnExecutor();
-      AO_EXPECTS(
-        !isInsideBoundary(), "PlaybackService cannot shut down synchronously from an active publication or command");
+      AO_EXPECTS(!isInsideBoundary(),
+                 "PlaybackService cannot shut down synchronously from an active publication or command, "
+                 "or during automatic succession");
       closeService();
     }
 
@@ -1074,11 +1083,9 @@ namespace ao::rt
     std::vector<async::Subscription> subscriptions;
     std::shared_ptr<DeferredControl> deferredControlPtr;
 
-    // The commit pump is callback-executor-confined. Either boundary depth
-    // blocks synchronous command execution; the queue plus its scheduled marker
-    // forms one FIFO backlog. An outer commit owns its anchor evidence and
-    // transient events until settlement. Each deferred
-    // marker represents at most one task; shutdown revokes the task's owner link.
+    // Commands, publications and automatic succession transitions hold the same command FIFO.
+    // An outer commit owns its anchor evidence and transient events until settlement. Each
+    // scheduled marker represents at most one deferred task; shutdown revokes its owner link.
     std::deque<QueuedCommand> queuedCommands;
     std::vector<std::chrono::milliseconds> pendingSeekPreviews;
     std::vector<PlaybackRevealTrackRequest> pendingRevealRequests;

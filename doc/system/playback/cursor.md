@@ -254,6 +254,10 @@ An accepted explicit launch begins a fresh streak; a correlated final-setup
 failure counts toward the new streak. Manual Next and Previous reset the streak
 before resolving navigation in an active session.
 
+If a failure notification observer requests Next or clears the sequence, the
+[command boundary](application-commit.md#admission-and-execution) keeps that
+command from taking effect until recovery or the terminal stop settles.
+
 If the streak contains no recoverable `Decode` failure correlated to the
 activated current source, a successful automatic start resets the streak and
 its skip grouping, even when transport announcements are suppressed. A backend
@@ -346,7 +350,7 @@ Observers are observational and do not choose succession policy.
 - [`PlaybackSuccessionFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionFailureTest.cpp)
   protects failure walking, recovery limits, grouped skip reporting, and
   internal observations. The [application commit tests](application-commit.md#test-map)
-  cover public snapshot projection.
+  cover command ordering across recovery and public snapshot projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 
 ## Related documents

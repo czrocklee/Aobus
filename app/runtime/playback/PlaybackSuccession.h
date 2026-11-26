@@ -91,6 +91,9 @@ namespace ao::rt
     PlaybackSuccession(PlaybackSuccession&&) = delete;
     PlaybackSuccession& operator=(PlaybackSuccession&&) = delete;
 
+    // An automatic advance or failure walk still owns the cursor while its reports are delivered.
+    // PlaybackService queues observer commands until the outermost transition settles; direct runtime
+    // callers must likewise defer these mutators rather than clearing or navigating that cursor inline.
     Result<> playFromView(ViewId viewId, TrackId startTrackId);
     // Returns whether navigation accepted a restart, subject transition, or
     // terminal stop that establishes a new playback-clock anchor.
@@ -111,8 +114,11 @@ namespace ao::rt
     async::Subscription onRepeatModeChanged(compat::MoveOnlyFunction<void(RepeatModeChanged const&)> handler);
 
   private:
+    friend class PlaybackService;
     friend class PlaybackSessionPersistence;
 
+    bool isAutomaticTransitionActive() const noexcept;
+    async::Subscription onAutomaticTransitionSettled(compat::MoveOnlyFunction<void()> handler);
     bool hasActivePlaybackSession() const;
     bool tryCapturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
                                            TrackId& currentTrackId,

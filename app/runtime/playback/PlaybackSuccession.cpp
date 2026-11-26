@@ -28,6 +28,8 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -1014,6 +1016,23 @@ namespace ao::rt
       }
     }
 
+    template<typename Operation>
+    auto runAutomaticTransition(Operation operation)
+    {
+      auto const wasActive = std::exchange(automaticTransitionActive, true);
+      auto const finish = gsl_lite::finally(
+        [this, wasActive]
+        {
+          automaticTransitionActive = wasActive;
+
+          if (!wasActive)
+          {
+            automaticTransitionSettledSignal.emit();
+          }
+        });
+      return operation();
+    }
+
     void start()
     {
       transport.bindPlaybackFailureRecovery(
@@ -1021,7 +1040,7 @@ namespace ao::rt
         {
           if (!isClosing())
           {
-            return handlePlaybackFailure(failure);
+            return runAutomaticTransition([&] { return handlePlaybackFailure(failure); });
           }
 
           return PlaybackFailureDisposition::Unhandled;
@@ -1031,7 +1050,7 @@ namespace ao::rt
         {
           if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
           {
-            advanceNatural();
+            runAutomaticTransition([this] { advanceNatural(); });
           }
         });
       nowPlayingSubscription = transport.onNowPlayingChanged(
@@ -1105,6 +1124,7 @@ namespace ao::rt
       sessionPtr.reset();
       changedSignal.disconnectAll();
       explicitStartSettledSignal.disconnectAll();
+      automaticTransitionSettledSignal.disconnectAll();
       shuffleModeChangedSignal.disconnectAll();
       repeatModeChangedSignal.disconnectAll();
       restorableStateChangedSignal.disconnectAll();
@@ -1125,6 +1145,7 @@ namespace ao::rt
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
     async::Signal<PlaybackSuccessionState const&> changedSignal;
     async::Signal<> explicitStartSettledSignal;
+    async::Signal<> automaticTransitionSettledSignal;
     async::Signal<PlaybackSuccession::ShuffleModeChanged const&> shuffleModeChangedSignal;
     async::Signal<PlaybackSuccession::RepeatModeChanged const&> repeatModeChangedSignal;
     async::Signal<> restorableStateChangedSignal;
@@ -1143,6 +1164,7 @@ namespace ao::rt
     DecodeRecovery decodeRecovery = DecodeRecovery::Inactive;
     bool closing = false;
     bool stoppingTransport = false;
+    bool automaticTransitionActive = false;
   };
 
   PlaybackSuccession::Impl* PlaybackSuccession::checkedImpl(std::source_location const location) const
@@ -1351,6 +1373,16 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
     return impl->repeatModeChangedSignal.connect(std::move(handler));
+  }
+
+  bool PlaybackSuccession::isAutomaticTransitionActive() const noexcept
+  {
+    return checkedImpl()->automaticTransitionActive;
+  }
+
+  async::Subscription PlaybackSuccession::onAutomaticTransitionSettled(compat::MoveOnlyFunction<void()> handler)
+  {
+    return checkedImpl()->automaticTransitionSettledSignal.connect(std::move(handler));
   }
 
   bool PlaybackSuccession::hasActivePlaybackSession() const

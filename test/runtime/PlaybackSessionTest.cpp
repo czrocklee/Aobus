@@ -1227,6 +1227,54 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().succession.repeat == RepeatMode::All);
   }
 
+  TEST_CASE("PlaybackSession - a natural finish report rejects synchronous restore", "[concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto captureStatePtr = std::make_shared<RenderCaptureState>();
+    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Last track");
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, createView(*runtimePtr), trackId));
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      {.sourceListId = kAllTracksListId, .currentTrackId = trackId, .positionMs = 250});
+
+    auto optRestoreRes = std::optional<Result<PlaybackSessionRestoreResult>>{};
+    auto const subscription = runtimePtr->notifications().onFeedUpdated(
+      [&](NotificationFeedUpdate const& update)
+      {
+        for (auto const& entry : update.feedPtr->entries)
+        {
+          if (auto const* report = std::get_if<NotificationReport>(&entry.message);
+              entry.id == update.id && update.mutationKind == NotificationFeedMutationKind::Posted &&
+              report != nullptr && report->templateId == NotificationReportTemplate::PlaybackSequenceFinished)
+          {
+            optRestoreRes = runtimePtr->restorePlaybackSession();
+            return;
+          }
+        }
+      });
+
+    // Drive the natural end from audio, not from a public seek with its own command boundary.
+    auto* const target = captureStatePtr->renderTarget;
+    REQUIRE(target != nullptr);
+    auto pcm = std::array<std::byte, 4096>{};
+    REQUIRE(executor->tryDrainUntil([&] { return target->renderPcm(pcm).drained; }));
+    target->handleDrainComplete();
+    REQUIRE(executor->tryDrainUntil([&] { return optRestoreRes.has_value(); }));
+    REQUIRE_FALSE(*optRestoreRes);
+    CHECK(optRestoreRes->error().code == Error::Code::InvalidState);
+    executor->drain();
+    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == trackId);
+    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{250});
+  }
+
   TEST_CASE("PlaybackSession - same-subject restore publishes a changed offset")
   {
     auto tempDir = ao::test::TempDir{};
