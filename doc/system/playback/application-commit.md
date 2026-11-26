@@ -244,7 +244,9 @@ the candidate and emits `Started` and the now-playing observation. `Started`
 means playback was accepted; it does not mean the backend is already rendering. A source
 that is already naturally complete returns `playbackStarted == false`, installs
 the candidate provenance, emits no started/now-playing observation or failure,
-and lets its queued track-ended settlement drive normal succession. If backend
+and lets its queued track-ended settlement drive
+[cursor succession](cursor.md#failure-and-cancellation), including when no
+eligible track remains after clean ends at offset zero. If backend
 activation or final decoder setup fails after Engine accepts the generation,
 the receipt also reports `playbackStarted == false`: transport still installs
 the candidate provenance and settles its cancellation barrier, emits no

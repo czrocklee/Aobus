@@ -27,6 +27,7 @@
 namespace ao::library
 {
   class MusicLibrary;
+  class ReadTransaction;
 }
 
 namespace ao::async
@@ -254,5 +255,8 @@ namespace ao::rt
   // the transport's own track-addressed entry points and by succession, which
   // resolves requests ahead of time to stage them off the executor.
   Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     TrackId trackId);
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     library::ReadTransaction const& transaction,
                                                                      TrackId trackId);
 } // namespace ao::rt

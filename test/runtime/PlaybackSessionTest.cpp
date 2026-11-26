@@ -4,7 +4,9 @@
 #include "lib/audio/NullBackend.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
+#include "runtime/playback/PlaybackCursor.h"
 #include "runtime/playback/PlaybackCursorSession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "runtime/playback/ShuffleHistory.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
@@ -679,6 +681,46 @@ namespace ao::rt::test
       CHECK(res.error().code == Error::Code::FormatRejected);
       CHECK(res.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
     }
+  }
+
+  TEST_CASE("PlaybackCursorSession - shuffle tries the remaining track when its successor already ended empty")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack("A");
+    auto const second = libraryFixture.addTrack("B");
+    auto const third = libraryFixture.addTrack("C");
+    auto const& library = libraryFixture.library();
+    auto changes = makeStateOnlyLibraryChanges(library);
+    auto sources = TrackSourceCache{library, changes};
+    sources.reloadAllTracks();
+    auto views = ViewService{stateOnlyLibraryExecutor(), library, sources, changes};
+    auto const launchSpec = PlaybackLaunchSpec{
+      .sourceListId = kAllTracksListId,
+      .order = {.sortBy = {{.field = TrackSortField::Title, .ascending = true}}},
+    };
+    auto sessionPtr = ao::test::requireValue(PlaybackCursorSession::create(launchSpec,
+                                                                           first,
+                                                                           sources,
+                                                                           views,
+                                                                           RepeatMode::Off,
+                                                                           ShuffleMode::On,
+                                                                           [](std::span<TrackId const> const candidates)
+                                                                           { return candidates.front(); }));
+    auto const endCurrent = [&]
+    {
+      auto const request =
+        ao::test::requireValue(playbackRequestForTrack(library, sessionPtr->cursor().currentTrackId()));
+      return sessionPtr->resolveAfterEmpty(request.input, library);
+    };
+    auto const start = [](TrackId const id)
+    { return PlaybackCursor::CommandResolution{.action = PlaybackCursor::CommandAction::StartTrack, .trackId = id}; };
+
+    REQUIRE(endCurrent() == start(second));
+    REQUIRE(sessionPtr->adoptCurrent(second, std::nullopt, ShuffleHistory::TransitionOrigin::Forward));
+    REQUIRE(sessionPtr->cursor().resolveNext() == start(first));
+    REQUIRE(endCurrent() == start(third));
+    REQUIRE(sessionPtr->adoptCurrent(third, std::nullopt, ShuffleHistory::TransitionOrigin::Forward));
+    CHECK(endCurrent().action == PlaybackCursor::CommandAction::Stop);
   }
 
   TEST_CASE("PlaybackCursorSession - stale lookahead keeps a latched prepared winner resolvable", "[concurrency]")

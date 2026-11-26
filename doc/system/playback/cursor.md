@@ -129,7 +129,8 @@ Policy precedence is:
 4. Shuffle decides forward succession and history-backed previous.
 5. Sequential anchor policy decides the remaining commands.
 
-Natural advance and manual next use the same forward resolution.
+Natural advance and manual next use the same forward resolution, except when
+succession is [walking past tracks that ended before playback started](#failure-and-cancellation).
 When no forward successor exists, either command takes the terminal stop path; `hasNext` remains false before that command.
 Previous is different: when neither restart nor a predecessor exists, it is a no-op and does not stop playback.
 
@@ -273,9 +274,19 @@ A `Decode` failure counts whether or not PCM has rendered. Even with repeat
 off, succession stops before the fourth track if each of the first three plays
 partway and then fails to decode.
 
-A candidate that ends cleanly without starting playback, such as an accepted
-source with no PCM, neither counts as a failure nor ends the streak. When a
-candidate plays and completes naturally, including at a prepared advance,
+A candidate that reaches clean EOF before playback starts neither counts as a
+failure nor breaks the `Decode` streak. When a launch or navigation request at
+offset zero ends this way, succession looks for an eligible track whose current
+playback input has not already ended this way during the walk. Sequential and
+shuffle playback can try another track; Repeat One permits only the current
+track. Relinking that track to another file makes it eligible again; changing
+only its title does not. If no eligible input remains,
+succession stops and reports the sequence finished once, not a failure limit.
+A new explicit play can retry the track. Normal playback ends this no-progress
+walk. Neither a zero elapsed reading, a seek to the endpoint, nor resuming a
+deferred track establishes that it had no PCM.
+
+When a candidate plays and completes naturally, including at a prepared advance,
 succession clears the failure count and grouped skip report before resolving
 the next successor. No minimum elapsed playback time is required. An accepted
 [Final seek to the endpoint while Playing](application-commit.md#quick-mutations-and-external-settlement)
@@ -347,6 +358,10 @@ Observers are observational and do not choose succession policy.
   proves live membership and repeat behavior;
   [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/runtime/PlaybackSuccessionAdvanceTest.cpp)
   proves prepared transitions.
+- [`PlaybackSuccessionEmptyTrackTest.cpp`](../../../test/runtime/PlaybackSuccessionEmptyTrackTest.cpp)
+  checks normal completion, explicit retry, and reaching a playable successor
+  after empty tracks. [`PlaybackEmptyProjectionTest.cpp`](../../../test/runtime/PlaybackEmptyProjectionTest.cpp)
+  covers relinking a visited track and admitting a newly eligible row.
 - [`PlaybackSuccessionFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionFailureTest.cpp)
   protects failure walking, recovery limits, grouped skip reporting, and
   internal observations. The [application commit tests](application-commit.md#test-map)

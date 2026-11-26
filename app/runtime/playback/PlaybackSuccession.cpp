@@ -620,6 +620,11 @@ namespace ao::rt
         return std::unexpected{adoptedRes.error()};
       }
 
+      if (startRes->playbackStarted)
+      {
+        sessionPtr->resetEmptyTraversal();
+      }
+
       if (decodeRecovery != DecodeRecovery::Inactive)
       {
         // Navigation starts at offset zero with synchronous preroll. Its receipt distinguishes a start
@@ -806,6 +811,11 @@ namespace ao::rt
           return true;
         }
 
+        if (sessionPtr)
+        {
+          sessionPtr->resetEmptyTraversal();
+        }
+
         reportSkippedTrack();
         auto const failureCount =
           sessionPtr ? sessionPtr->incrementConsecutiveFailureCount() : kMaxConsecutivePlaybackFailures;
@@ -840,7 +850,7 @@ namespace ao::rt
       return false;
     }
 
-    void advanceNatural()
+    void advanceNatural(std::optional<PlaybackTransport::EmptyPlayback> const& optEmpty)
     {
       if (!sessionPtr)
       {
@@ -862,10 +872,15 @@ namespace ao::rt
         resetFailureState();
       }
 
-      std::ignore = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
-                                        ShuffleHistory::TransitionOrigin::Forward,
-                                        NavigationDirection::Forward,
-                                        true);
+      if (!optEmpty)
+      {
+        sessionPtr->resetEmptyTraversal();
+      }
+
+      auto const next =
+        optEmpty ? sessionPtr->resolveAfterEmpty(optEmpty->input, library) : sessionPtr->cursor().resolveNext();
+      std::ignore =
+        tryHandleNavigation(next, ShuffleHistory::TransitionOrigin::Forward, NavigationDirection::Forward, true);
     }
 
     void handleNowPlayingChanged(PlaybackTransport::NowPlayingChanged const& event)
@@ -897,6 +912,7 @@ namespace ao::rt
       // establishes the winning live context. Prevent that older candidate
       // from committing over the accepted transition.
       cancelPendingStart();
+      sessionPtr->resetEmptyTraversal();
       resetFailureState();
       // A prepared successor starts a new timeline; an explicit resume may reopen at its held offset.
       auto const elapsed = event.optPreparedNextToken ? std::chrono::milliseconds{0} : transport.state().elapsed;
@@ -934,6 +950,8 @@ namespace ao::rt
       {
         return PlaybackFailureDisposition::Unhandled;
       }
+
+      sessionPtr->resetEmptyTraversal();
 
       if (!transport.state().ready || !isRecoverableTrackFailure(failure) ||
           sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Invalidated)
@@ -977,9 +995,14 @@ namespace ao::rt
       }
 
       // A deferred hold has released the decoder. Only an explicit resume can reopen it.
-      if (decodeRecovery != DecodeRecovery::Inactive && transport.hasDeferredResume())
+      if (transport.hasDeferredResume())
       {
-        resetFailureState();
+        sessionPtr->resetEmptyTraversal();
+
+        if (decodeRecovery != DecodeRecovery::Inactive)
+        {
+          resetFailureState();
+        }
       }
 
       // A route reopen or resume can leave play intent active without a running clock.
@@ -1052,7 +1075,7 @@ namespace ao::rt
               transport.state().transport == audio::Transport::Idle &&
               (!optEmpty || optEmpty->trackId == sessionPtr->cursor().currentTrackId()))
           {
-            runAutomaticTransition([this] { advanceNatural(); });
+            runAutomaticTransition([&] { advanceNatural(optEmpty); });
           }
         });
       nowPlayingSubscription = transport.onNowPlayingChanged(
@@ -1079,6 +1102,7 @@ namespace ao::rt
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
             cancelPendingStart();
+            sessionPtr->resetEmptyTraversal();
             synchronizeSessionWithTransport(true);
             tryReprepareNext(true);
           }
@@ -1253,6 +1277,7 @@ namespace ao::rt
       return false;
     }
 
+    impl->sessionPtr->resetEmptyTraversal();
     impl->resetFailureState();
     return impl->tryHandleNavigation(impl->sessionPtr->cursor().resolveNext(),
                                      ShuffleHistory::TransitionOrigin::Forward,
@@ -1271,6 +1296,7 @@ namespace ao::rt
       return false;
     }
 
+    impl->sessionPtr->resetEmptyTraversal();
     impl->resetFailureState();
     auto const shufflePrevious = impl->sessionPtr->cursor().shuffleMode() == ShuffleMode::On &&
                                  !impl->sessionPtr->cursor().isPreviousRestartAvailable();

@@ -125,7 +125,7 @@ namespace ao::rt::test::playback_succession
     // Null and exhausted slots decode normally.
     std::vector<audio::test::StagedFailureGate*> stagedFailureGateSequence{};
     std::filesystem::path lossyFileName{};
-    std::filesystem::path immediateEofFileName{};
+    std::vector<std::filesystem::path> immediateEofFileNames{};
     std::shared_ptr<audio::test::SeekTestGate> seekGatePtr{};
     std::chrono::milliseconds gatedSeekOffset{};
   };

@@ -406,7 +406,7 @@ namespace ao::rt::test
       .stagedFailureFileNames = {"transport-playable-0.flac"},
       .stagedFailureGate = &failureGate,
       .lossyFileName = "transport-playable-0.flac",
-      .immediateEofFileName = "transport-playable-1.flac",
+      .immediateEofFileNames = {"transport-playable-1.flac"},
     }};
     auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
     fixture.buildTwoTrackManualView();

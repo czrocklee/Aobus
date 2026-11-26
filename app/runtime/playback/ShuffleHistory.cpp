@@ -78,12 +78,18 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    auto const selected = _candidateChooser(candidates);
+    auto const selected = chooseCandidate(candidates);
 
     AO_INVARIANT(containsTrack(candidates, selected), "Shuffle candidate chooser returned an ineligible track");
 
     _optForwardCandidate = selected;
     return selected;
+  }
+
+  TrackId ShuffleHistory::chooseCandidate(std::span<TrackId const> const candidates)
+  {
+    AO_EXPECTS(!candidates.empty(), "Shuffle requires an eligible candidate");
+    return _candidateChooser(candidates);
   }
 
   void ShuffleHistory::invalidateForwardCandidate() noexcept

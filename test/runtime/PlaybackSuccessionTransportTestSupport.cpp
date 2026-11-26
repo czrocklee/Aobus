@@ -201,7 +201,11 @@ namespace ao::rt::test::playback_succession
       {
         REQUIRE((config.stagedFailureGate == nullptr || config.stagedFailureGateSequence.empty()));
         REQUIRE_FALSE(config.stagedFailureFileNames.empty());
-        REQUIRE_FALSE(std::ranges::contains(config.stagedFailureFileNames, config.immediateEofFileName));
+
+        for (auto const& path : config.immediateEofFileNames)
+        {
+          REQUIRE_FALSE(std::ranges::contains(config.stagedFailureFileNames, path));
+        }
       }
 
       return [probePtr = std::move(probePtr), config = std::move(config)](
@@ -254,7 +258,7 @@ namespace ao::rt::test::playback_succession
         }
 
         // An empty read script returns EOF on the first read, without any PCM.
-        if (path.filename() != config.immediateEofFileName)
+        if (!std::ranges::contains(config.immediateEofFileNames, path.filename()))
         {
           // One complete second in the selected encoding covers TrackSession's
           // 500 ms preroll using whole frames, even for 24/32-bit output. If that

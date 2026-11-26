@@ -331,7 +331,13 @@ namespace ao::rt
   Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
                                                                      TrackId trackId)
   {
-    auto const transaction = library.readTransaction();
+    return playbackRequestForTrack(library, library.readTransaction(), trackId);
+  }
+
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     library::ReadTransaction const& transaction,
+                                                                     TrackId trackId)
+  {
     auto reader = library.tracks().reader(transaction);
     auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 

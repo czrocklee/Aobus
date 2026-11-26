@@ -56,7 +56,7 @@ namespace ao::rt::test
             .stagedFailureGate = &gate,
             // Lossy B cannot claim the shared read gate as a prepared successor.
             .lossyFileName = "transport-playable-2.flac",
-            .immediateEofFileName = "transport-playable-1.flac",
+            .immediateEofFileNames = {"transport-playable-1.flac"},
           }}
       {
         audio::test::SpyBackend<>& backend = *tracks.transport.spyBackendPtr;
