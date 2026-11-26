@@ -769,7 +769,6 @@ de:table {
     winui_list_status { "Liste: {list}" }
     winui_presentation_failed { "Ansicht fehlgeschlagen: {detail}" }
     winui_column_resize_failed { "Spaltengröße konnte nicht geändert werden: {detail}" }
-    winui_column_settings_failed { "Spalteneinstellungen konnten nicht gespeichert werden: {detail}" }
     winui_column_move_failed { "Spalte konnte nicht verschoben werden: {detail}" }
     winui_column_visibility_failed { "Spaltensichtbarkeit konnte nicht geändert werden: {detail}" }
     winui_column_not_sortable { "Spalte ''{column}'' kann nicht sortiert werden" }

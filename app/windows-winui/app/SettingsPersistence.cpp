@@ -3,13 +3,49 @@
 
 #include <ao/winui/app/SettingsPersistence.h>
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/async/Executor.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 namespace ao::winui
 {
+  WorkspaceSortCheckpoint::WorkspaceSortCheckpoint(async::Executor& executor,
+                                                   rt::WorkspaceService& workspace,
+                                                   rt::ConfigStore& store)
+    : _executor{executor}, _workspace{workspace}, _store{store}
+  {
+  }
+
+  void WorkspaceSortCheckpoint::request()
+  {
+    AO_EXPECTS(_executor.isCurrent() && _callbackGate.isOpen());
+
+    if (_pending)
+    {
+      return;
+    }
+
+    _executor.defer(
+      [this, token = _callbackGate.token()]
+      {
+        if (token.accepts())
+        {
+          _pending = false;
+          _workspace.saveSession(_store);
+        }
+      });
+    _pending = true;
+  }
+
+  void WorkspaceSortCheckpoint::retire() noexcept
+  {
+    AO_EXPECTS(_executor.isCurrent());
+    _callbackGate.retire();
+  }
+
   Result<> persistDesktopSettingsCandidate(rt::WorkspaceService& workspace,
                                            rt::ConfigStore& workspaceStore,
                                            rt::ConfigStore& settingsStore,

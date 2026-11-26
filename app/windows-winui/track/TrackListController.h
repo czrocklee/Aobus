@@ -95,6 +95,8 @@ namespace ao::winui
     void publishSelection(std::span<TrackId const> trackIds);
     std::vector<TrackId> selection() const;
     std::optional<std::size_t> displayIndexOfTrack(TrackId trackId) const noexcept;
+    TrackId trackIdAtDisplayIndex(std::size_t index) const noexcept;
+    bool isCurrentRowSource(winrt::Windows::Foundation::IInspectable const& source) const noexcept;
     Result<> play(TrackId trackId, std::function<Result<>(rt::ViewId, TrackId)> const& playTrack);
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);

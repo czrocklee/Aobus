@@ -135,6 +135,7 @@ No shared frontend lifecycle owner is introduced; GTK and TUI keep explicit comp
 
 WinUI checkpoints workspace state through its desktop-settings composite: the best-effort workspace checkpoint runs first, and the checked desktop-settings save that follows is the composite's only result and alone gates durable library-root admission (see the [Windows frontend](../frontend/windows.md)).
 A failed root commit keeps the earlier workspace checkpoint written, reports the failure through the session's notification and status surfaces, and does not block the successor session.
+A successful WinUI header sort also requests a separate coalesced workspace save. Repeated requests before the deferred callback runs become one save of the live workspace, and that save does not write desktop settings. Session shutdown disarms the callback before the final workspace checkpoint. A refused sort does not request the save.
 Session teardown additionally checkpoints the workspace best effort before the runtime graph shuts down.
 
 ## Failure, execution, and lifetime

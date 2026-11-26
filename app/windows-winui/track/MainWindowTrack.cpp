@@ -240,9 +240,6 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    if (auto savedRes = _session->saveSettings(); !savedRes)
-    {
-      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
-    }
+    _session->requestWorkspaceSortCheckpoint();
   }
 } // namespace winrt::Aobus::implementation

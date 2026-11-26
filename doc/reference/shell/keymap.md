@@ -256,8 +256,8 @@ shortcuts:
 - TUI projection conflicts are decided after neutral parsing because terminal aliases can collapse otherwise distinct chord strings.
 - Windows additionally skips an action it registers no handler for, and any action whose schema entry declares `RequiresAnchor`, since a keystroke has no anchor to present from.
 - Windows translates the letters, digits, `F1` through `F24`, the named navigation and editing keys, and the common punctuation keys. GTK additionally accepts any key GDK names.
-- A punctuation character a key only produces with Shift held carries that Shift on Windows whether or not the chord spelled it. `+` and `=` are one key, so `Ctrl++` installs as Ctrl+Shift and stays distinct from `Ctrl+=`.
-- Windows numbers its punctuation keys by position, and the positions this shell knows are the ones a US layout carries. On a layout that moves them, a chord naming punctuation reaches a different physical key. No shipped binding uses punctuation, so this reaches only a user's own overrides.
+- Windows resolves character keys using the keyboard layout active on the UI thread at accelerator installation. A canonical letter names the key, not an uppercase character: `Ctrl+P` does not request Shift, and `Ctrl+Shift+P` does.
+- Punctuation keeps the Shift needed to type it on that layout. On a US keyboard, for example, `Ctrl++` stays distinct from `Ctrl+=`. A character that the layout cannot produce, or that requires AltGr, is not installed as a shortcut.
 - Two chords that reach the same Windows key can belong to different actions once implicit modifiers are merged. The first action the map declares keeps the key; the second is reported to the log and installs nothing, rather than leaving which one runs to XAML's ordering.
 
 ## Compatibility and versioning

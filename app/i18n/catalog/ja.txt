@@ -769,7 +769,6 @@ ja:table {
     winui_list_status { "リスト: {list}" }
     winui_presentation_failed { "表示に失敗しました: {detail}" }
     winui_column_resize_failed { "列のサイズ変更に失敗しました: {detail}" }
-    winui_column_settings_failed { "列の設定に失敗しました: {detail}" }
     winui_column_move_failed { "列の移動に失敗しました: {detail}" }
     winui_column_visibility_failed { "列の表示設定に失敗しました: {detail}" }
     winui_column_not_sortable { "列 ''{column}'' は並べ替えできません" }

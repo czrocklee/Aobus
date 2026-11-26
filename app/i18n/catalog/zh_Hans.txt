@@ -771,7 +771,6 @@ zh_Hans:table {
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "视图加载失败：{detail}" }
     winui_column_resize_failed { "调整列宽失败：{detail}" }
-    winui_column_settings_failed { "列设置失败：{detail}" }
     winui_column_move_failed { "移动列失败：{detail}" }
     winui_column_visibility_failed { "更改列可见性失败：{detail}" }
     winui_column_not_sortable { "列 ''{column}'' 不支持排序" }

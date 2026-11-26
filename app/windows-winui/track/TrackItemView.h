@@ -17,6 +17,9 @@ namespace ao::winui
 {
   using TrackItemProvider = std::function<winrt::Windows::Foundation::IInspectable(std::size_t)>;
 
+  // The returned view also exposes IVector for indexed ListView access, but
+  // rejects membership and order changes. Its ISelectionInfo is mutable and
+  // tracks selection by index without materializing rows through the provider.
   winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Foundation::IInspectable>
   makeTrackItemView(std::size_t size, TrackItemProvider provider, std::size_t maximumEntries);
 } // namespace ao::winui

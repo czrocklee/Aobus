@@ -95,6 +95,7 @@ namespace ao::winui
     uimodel::KeymapModel const& keymap() const noexcept;
     std::filesystem::path const& stateRoot() const noexcept;
     Result<> saveSettings();
+    void requestWorkspaceSortCheckpoint();
     void setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept;
     /// Apply and save an explicit startup root only after native activation.
     Result<> commitSelectedRoot();

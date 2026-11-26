@@ -167,7 +167,9 @@ namespace ao::winui
   struct RuntimeGraph final
   {
     RuntimeGraph(rt::AppRuntime&& runtimeValue, DispatcherQueueExecutor& dispatcherExecutorValue)
-      : runtime{std::move(runtimeValue)}, dispatcherExecutor{dispatcherExecutorValue}
+      : runtime{std::move(runtimeValue)}
+      , dispatcherExecutor{dispatcherExecutorValue}
+      , workspaceSortCheckpoint{dispatcherExecutor, runtime.workspace(), runtime.workspaceConfigStore()}
     {
     }
 
@@ -192,6 +194,7 @@ namespace ao::winui
 
     rt::AppRuntime runtime;
     DispatcherQueueExecutor& dispatcherExecutor;
+    WorkspaceSortCheckpoint workspaceSortCheckpoint;
     std::optional<InteractiveBorrowers> optInteractiveBorrowers;
     bool stopped = false;
   };
@@ -433,6 +436,7 @@ namespace ao::winui
       // Classify native wake rejection as expected while final runtime
       // publications are still admitted and before cancellation can wake it.
       storage.optRuntimeGraph->dispatcherExecutor.beginClosing();
+      storage.optRuntimeGraph->workspaceSortCheckpoint.retire();
     }
 
     // Admission tokens never protect this object's memory. Retire them before
@@ -528,6 +532,11 @@ namespace ao::winui
     }
 
     return saveSettingsCandidate(_storagePtr->settings);
+  }
+
+  void LibrarySession::requestWorkspaceSortCheckpoint()
+  {
+    _storagePtr->requireRuntimeGraph().workspaceSortCheckpoint.request();
   }
 
   void LibrarySession::setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept

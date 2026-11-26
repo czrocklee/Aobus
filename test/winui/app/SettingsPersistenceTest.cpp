@@ -5,9 +5,12 @@
 
 #include "test/TestFixtureSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -21,7 +24,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
+#include <ios>
+#include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::winui::test
 {
@@ -44,6 +51,13 @@ namespace ao::winui::test
       return *navigateRes;
     }
 
+    rt::TrackPresentationSpec titleSortPresentation(bool ascending)
+    {
+      return {.id = "windows-column-sort",
+              .sortBy = {{.field = rt::TrackSortField::Title, .ascending = ascending}},
+              .visibleFields = {rt::TrackField::Title}};
+    }
+
     void requirePersisted(rt::WorkspaceService& workspace,
                           rt::ConfigStore& workspaceStore,
                           rt::ConfigStore& settingsStore,
@@ -54,6 +68,108 @@ namespace ao::winui::test
       REQUIRE(persistedRes);
     }
   } // namespace
+
+  TEST_CASE("WorkspaceSortCheckpoint - defers and coalesces sort saves independently of desktop preferences")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto const workspacePath = tempDir.path() / "workspace.yaml";
+    auto const desktopPath = tempDir.path() / "windows-settings.yaml";
+    constexpr auto kDesktopDocument = "# User settings\ndesktop:\n  version: 1\n  shellMode: classic\n";
+    bool desktopBlocked = false;
+
+    SECTION("existing desktop preferences")
+    {
+      std::ofstream{desktopPath, std::ios::binary} << kDesktopDocument;
+      REQUIRE(ao::test::readFile(desktopPath) == kDesktopDocument);
+    }
+
+    SECTION("unwritable desktop settings path")
+    {
+      REQUIRE(std::filesystem::create_directory(desktopPath));
+      desktopBlocked = true;
+    }
+
+    auto const firstCheckpointPath = tempDir.path() / "first-checkpoint.yaml";
+    auto const firstPresentation = titleSortPresentation(false);
+    auto const secondPresentation = titleSortPresentation(true);
+    {
+      auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
+      auto& executor = *executorPtr;
+      auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+      auto checkpoint = WorkspaceSortCheckpoint{executor, runtimePtr->workspace(), runtimePtr->workspaceConfigStore()};
+      auto const viewId = navigateToAllTracks(*runtimePtr);
+
+      REQUIRE(runtimePtr->views().setPresentation(viewId, secondPresentation));
+      checkpoint.request();
+      REQUIRE(runtimePtr->views().setPresentation(viewId, firstPresentation));
+      auto const queuedBefore = executor.queuedCount();
+      checkpoint.request();
+
+      CHECK(executor.queuedCount() == queuedBefore);
+      CHECK_FALSE(std::filesystem::exists(workspacePath));
+      executor.runUntilIdle();
+      REQUIRE(std::filesystem::copy_file(workspacePath, firstCheckpointPath));
+      auto const firstSaved = ao::test::readFile(firstCheckpointPath);
+      REQUIRE_FALSE(firstSaved.empty());
+
+      REQUIRE(runtimePtr->views().setPresentation(viewId, secondPresentation));
+      checkpoint.request();
+      CHECK(ao::test::readFile(workspacePath) == firstSaved);
+      executor.runUntilIdle();
+      CHECK(ao::test::readFile(workspacePath) != firstSaved);
+    }
+
+    // Restore each snapshot after releasing the writer; only one runtime owns the library at a time.
+    auto const checkSavedPresentation = [&](
+                                          std::filesystem::path const& path, rt::TrackPresentationSpec const& expected)
+    {
+      INFO(path.filename().string());
+      auto restoredRuntimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto store = rt::ConfigStore{path};
+      REQUIRE(restoredRuntimePtr->workspace().restoreSession(store));
+      auto const viewId = restoredRuntimePtr->workspace().snapshot().activeViewId;
+      REQUIRE(viewId != rt::kInvalidViewId);
+      auto const restored = restoredRuntimePtr->views().trackListState(viewId);
+      CHECK(restored.presentation == expected);
+      CHECK(restored.sortBy == expected.sortBy);
+    };
+    checkSavedPresentation(firstCheckpointPath, firstPresentation);
+    checkSavedPresentation(workspacePath, secondPresentation);
+
+    if (desktopBlocked)
+    {
+      CHECK(std::filesystem::is_directory(desktopPath));
+    }
+    else
+    {
+      CHECK(ao::test::readFile(desktopPath) == kDesktopDocument);
+    }
+  }
+
+  TEST_CASE("WorkspaceSortCheckpoint - retired work does not replace the final workspace checkpoint")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
+    auto& executor = *executorPtr;
+    auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+    auto& workspace = runtimePtr->workspace();
+    auto& store = runtimePtr->workspaceConfigStore();
+    auto checkpoint = WorkspaceSortCheckpoint{executor, workspace, store};
+    auto const viewId = navigateToAllTracks(*runtimePtr);
+    REQUIRE(runtimePtr->views().setPresentation(viewId, titleSortPresentation(true)));
+    checkpoint.request();
+
+    // Mirror session retirement: disarm the queued task, then save while the old workspace is live.
+    checkpoint.retire();
+    workspace.saveSession(store);
+    auto const workspacePath = tempDir.path() / "workspace.yaml";
+    auto const saved = ao::test::readFile(workspacePath);
+    REQUIRE_FALSE(saved.empty());
+
+    REQUIRE(runtimePtr->views().setPresentation(viewId, titleSortPresentation(false)));
+    executor.runUntilIdle();
+    CHECK(ao::test::readFile(workspacePath) == saved);
+  }
 
   TEST_CASE("SettingsPersistence - persists the workspace checkpoint and the desktop candidate")
   {

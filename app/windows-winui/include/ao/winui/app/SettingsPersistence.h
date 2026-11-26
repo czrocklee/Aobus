@@ -4,6 +4,12 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/winui/CallbackAdmissionGate.h>
+
+namespace ao::async
+{
+  class Executor;
+}
 
 namespace ao::rt
 {
@@ -14,6 +20,25 @@ namespace ao::rt
 namespace ao::winui
 {
   struct DesktopSettings;
+
+  /// Dispatcher-confined, best-effort checkpoint for a successful header sort.
+  class WorkspaceSortCheckpoint final
+  {
+  public:
+    WorkspaceSortCheckpoint(async::Executor& executor, rt::WorkspaceService& workspace, rt::ConfigStore& store);
+
+    /// Coalesce requests until the deferred callback captures the live workspace.
+    void request();
+    /// Disarm the deferred callback before the session's final workspace checkpoint.
+    void retire() noexcept;
+
+  private:
+    async::Executor& _executor;
+    rt::WorkspaceService& _workspace;
+    rt::ConfigStore& _store;
+    CallbackAdmissionGate _callbackGate;
+    bool _pending = false;
+  };
 
   /**
    * @brief Persists a desktop-settings candidate through the two-store sequence.

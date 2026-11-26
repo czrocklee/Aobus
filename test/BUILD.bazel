@@ -229,6 +229,34 @@ native_test(
     }),
 )
 
+# Audit selection events from an external client against a single private fixture,
+# including a native range beyond the item-event budget.
+native_test(
+    name = "winui_uia_selection_test",
+    size = "large",
+    timeout = "long",
+    args = [
+        "--selection-events",
+        "$(rlocationpath :winui/probe/WinUiSelectionEvents.ps1)",
+    ],
+    context = ["uia"],
+    data = [
+        "winui/probe/WinUiSelectionEvents.ps1",
+        "//:VERSION.txt",
+    ],
+    env_inherit = ["PATH"],
+    exe = "//app/windows-winui:ao_winui_automation_probe",
+    tags = [
+        "exclusive",
+        "external",
+        "local",
+    ],
+    target_compatible_with = select({
+        "//bazel:desktop_tests_enabled": ["@platforms//os:windows"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
 test_suite(
     name = "native_process_tests",
     tests = [

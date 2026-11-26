@@ -47,14 +47,18 @@ namespace ao::winui::layout
       std::string actionId;
       uimodel::ActionSlot slot = uimodel::ActionSlot::PrimaryClick;
 
-      void operator()(FrameworkElement const& anchor) const
+      void operator()(IInspectable const& sender) const
       {
         if (!uimodel::isGenerationActive(gatePtr))
         {
           return;
         }
 
-        registry->tryInvoke(actionId, {.anchor = anchor, .slot = slot});
+        // Use the control whose handler is running, not a child that raised the routed event.
+        if (auto const anchor = sender.try_as<FrameworkElement>(); anchor)
+        {
+          registry->tryInvoke(actionId, {.anchor = anchor, .slot = slot});
+        }
       }
     };
 
@@ -62,15 +66,14 @@ namespace ao::winui::layout
     {
       if (auto const button = element.try_as<ButtonBase>(); button)
       {
-        button.Click([bound = std::move(bound), element](IInspectable const&, RoutedEventArgs const&)
-                     { bound(element); });
+        button.Click([bound = std::move(bound)](IInspectable const& sender, RoutedEventArgs const&) { bound(sender); });
         return;
       }
 
       element.Tapped(
-        [bound = std::move(bound), element](IInspectable const&, TappedRoutedEventArgs const& args)
+        [bound = std::move(bound)](IInspectable const& sender, TappedRoutedEventArgs const& args)
         {
-          bound(element);
+          bound(sender);
           args.Handled(true);
         });
     }
@@ -78,14 +81,14 @@ namespace ao::winui::layout
     void bindPrimaryLongPress(FrameworkElement const& element, BoundAction bound)
     {
       element.Holding(
-        [bound = std::move(bound), element](IInspectable const&, HoldingRoutedEventArgs const& args)
+        [bound = std::move(bound)](IInspectable const& sender, HoldingRoutedEventArgs const& args)
         {
           if (args.HoldingState() != winrt::Microsoft::UI::Input::HoldingState::Completed)
           {
             return;
           }
 
-          bound(element);
+          bound(sender);
           args.Handled(true);
         });
     }
@@ -93,9 +96,9 @@ namespace ao::winui::layout
     void bindSecondaryClick(FrameworkElement const& element, BoundAction bound)
     {
       element.RightTapped(
-        [bound = std::move(bound), element](IInspectable const&, RightTappedRoutedEventArgs const& args)
+        [bound = std::move(bound)](IInspectable const& sender, RightTappedRoutedEventArgs const& args)
         {
-          bound(element);
+          bound(sender);
           args.Handled(true);
         });
     }

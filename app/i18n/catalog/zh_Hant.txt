@@ -770,7 +770,6 @@ zh_Hant:table {
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "載入檢視失敗：{detail}" }
     winui_column_resize_failed { "調整欄寬失敗：{detail}" }
-    winui_column_settings_failed { "欄設定失敗：{detail}" }
     winui_column_move_failed { "移動欄失敗：{detail}" }
     winui_column_visibility_failed { "更改欄可見性失敗：{detail}" }
     winui_column_not_sortable { "欄 ''{column}'' 不支援排序" }

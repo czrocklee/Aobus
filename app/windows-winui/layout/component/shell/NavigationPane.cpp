@@ -56,6 +56,8 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::HorizontalAlignment;
     using winrt::Microsoft::UI::Xaml::RoutedEventArgs;
+    using winrt::Microsoft::UI::Xaml::Setter;
+    using winrt::Microsoft::UI::Xaml::Style;
     using winrt::Microsoft::UI::Xaml::TextTrimming;
     using winrt::Microsoft::UI::Xaml::Visibility;
     using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
@@ -420,6 +422,9 @@ namespace ao::winui::layout
         Canvas::SetZIndex(splitter, kSplitterZIndex);
         _content.Children().Append(splitter);
         _view.Content(_content);
+        // The stock toggle style is supplied by the NavigationView theme only
+        // once it enters the visual tree. Apply the cap before user input.
+        _loadedRevoker = _view.Loaded(winrt::auto_revoke, [this](auto const&, auto const&) { applyWidth(); });
         applyWidth();
         rebuild();
         applyShellState(ctx.shellState);
@@ -479,7 +484,40 @@ namespace ao::winui::layout
         _splitter.setVisible(state.navigation == Navigation::Expanded);
       }
 
-      void applyWidth() { _view.OpenPaneLength(_width.value()); }
+      void applyWidth()
+      {
+        auto const width = std::clamp(_width.value(), kMinimumNavigationPaneWidth, kMaximumNavigationPaneWidth);
+
+        if (_nativeToggleStyle && _view.OpenPaneLength() == width)
+        {
+          return;
+        }
+
+        _view.OpenPaneLength(width);
+
+        if (!_nativeToggleStyle)
+        {
+          _nativeToggleStyle = _view.PaneToggleButtonStyle();
+
+          if (!_nativeToggleStyle)
+          {
+            return;
+          }
+        }
+
+        // The titled toggle can use a stale open width on the first layout.
+        // Limit its arranged width without replacing the native template or its
+        // Width, so closed/compact/minimal sizing and theme resources stay native.
+        auto style = Style{};
+        style.TargetType(_nativeToggleStyle.TargetType());
+        style.BasedOn(_nativeToggleStyle);
+        auto limit = Setter{};
+        limit.Property(FrameworkElement::MaxWidthProperty());
+        // The template already supplies its own button insets.
+        limit.Value(winrt::box_value(width));
+        style.Setters().Append(limit);
+        _view.PaneToggleButtonStyle(style);
+      }
 
       void updateHistory() { _view.IsBackEnabled(_binding.canGoBack()); }
 
@@ -585,6 +623,7 @@ namespace ao::winui::layout
 
       NavigationView _view{};
       Grid _content{};
+      Style _nativeToggleStyle{nullptr};
       NavigationBinding _binding;
       NavigationWidth _width;
       PaneSplitter _splitter;
@@ -596,6 +635,7 @@ namespace ao::winui::layout
       async::Subscription _shellStateSub;
       async::Subscription _workspaceSub;
       async::Subscription _listTreeSub;
+      FrameworkElement::Loaded_revoker _loadedRevoker{};
       NavigationView::SelectionChanged_revoker _selectionChangedRevoker{};
       NavigationView::BackRequested_revoker _backRequestedRevoker{};
     };

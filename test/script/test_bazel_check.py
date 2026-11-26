@@ -251,7 +251,9 @@ class CheckInvocationTest(unittest.TestCase):
         rc = (self.tree / "configuration" / "aobus.bazelrc").read_text(encoding="utf-8")
         self.assertIn("build --//bazel:desktop_tests=true", rc.splitlines())
         selection = verify.call_args.args[1]
-        self.assertIn("//test:winui_uia_test", selection.required - selection.optional)
+        self.assertLessEqual(
+            {"//test:winui_uia_test", "//test:winui_uia_selection_test"}, selection.required - selection.optional
+        )
 
     def test_clean_failure_stops_before_tests(self):
         self.bazel.return_value = 9
@@ -339,10 +341,13 @@ class RequiredScopeTest(unittest.TestCase):
                 self.assertEqual(label in selection.required, platform == "windows")
                 self.assertEqual(label in selection.optional, platform != "windows")
 
-    def test_windows_native_only_without_desktop_tests_does_not_require_the_interactive_probe(self):
-        uia = "//test:winui_uia_test"
-        selection = completion._selection("windows", completion.Request(native_only=True))
-        self.assertNotIn(uia, selection.required - selection.optional)
+    def test_without_desktop_tests_neither_interactive_probe_is_required(self):
+        probes = {"//test:winui_uia_test", "//test:winui_uia_selection_test"}
+        for platform in ("windows", "linux", "macos"):
+            for native_only in (False, True):
+                with self.subTest(platform=platform, native_only=native_only):
+                    selection = completion._selection(platform, completion.Request(native_only=native_only))
+                    self.assertTrue(probes.isdisjoint(selection.required))
 
     def test_appkit_supervision_requires_evidence_in_both_macos_partitions(self):
         label = "//test/script:test_appkit_scenarios"
@@ -613,6 +618,19 @@ class CompletionEvidenceTest(unittest.TestCase):
             with self.subTest(evidence=evidence), self.assertRaises(bazel_native.BazelWorkspaceError) as caught:
                 self.verify([*events, *evidence, self.finish, self.last])
             self.assertIn(label, str(caught.exception))
+        self.verify([*events, _summary(label), self.finish, self.last])
+
+    def test_windows_desktop_tests_require_a_passing_selection_probe_even_when_the_other_uia_probe_passes(self):
+        label = "//test:winui_uia_selection_test"
+        self.scope = completion._selection("windows", completion.Request(desktop_tests=True))
+        events = [
+            self.expanded_check_suites(),
+            self.policy_result([UNIT_TEST]),
+            _summary(),
+            *(_summary(item) for item in self.scope.required - {label}),
+        ]
+        with self.assertRaisesRegex(bazel_native.BazelWorkspaceError, f"missing required passing checks: {label}"):
+            self.verify([*events, self.finish, self.last])
         self.verify([*events, _summary(label), self.finish, self.last])
 
     def test_a_required_member_must_have_one_unambiguous_pass(self):

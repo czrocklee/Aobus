@@ -64,6 +64,8 @@ WINUI_SOURCES = [
     "layout/component/track/TrackCoverArt.cpp",
     "layout/component/track/TrackDetail.cpp",
     "layout/component/track/TrackComponents.cpp",
+    "layout/component/track/TrackListSelectionEvents.cpp",
+    "layout/component/track/TrackListView.cpp",
     "layout/component/track/TrackTable.cpp",
     "layout/runtime/ActionBinder.cpp",
     "layout/runtime/ComponentRegistry.cpp",
@@ -89,6 +91,8 @@ WINUI_SOURCES = [
     "track/TrackItemView.cpp",
     "track/QuickFilterCompletionAdapter.cpp",
     "track/TrackListController.cpp",
+    "track/TrackListSelection.cpp",
+    "track/TrackSelectionNotifications.cpp",
     "track/TrackPropertiesAdapter.cpp",
     "track/TrackPropertiesCoordinator.cpp",
     "track/TrackPropertiesPresenter.cpp",
@@ -130,6 +134,7 @@ MODEL_SOURCES = [
     "input/KeymapAcceleratorPlan.cpp",
     "library/LibraryTransferAdapter.cpp",
     "track/QuickFilterCompletionAdapter.cpp",
+    "track/TrackSelectionNotifications.cpp",
     "track/TrackRevealAdapter.cpp",
     "track/TrackPropertiesAdapter.cpp",
     "list/ListAuthoringAdapter.cpp",
@@ -683,6 +688,8 @@ winui_probe(
     srcs = [
         "//test:winui/probe/WinUiSilentAudio.cpp",
         "//test:winui/probe/WinUiSilentAudio.h",
+        "//test:winui/probe/WinUiTrackSelectionProbe.cpp",
+        "//test:winui/probe/WinUiTrackSelectionProbe.h",
         "//test:winui/probe/WinUiTrackTableProbe.cpp",
     ],
     deps = [
@@ -712,8 +719,12 @@ winui_probe(
     name = "ao_winui_automation_probe",
     srcs = [
         "//test:winui/probe/WinUiAutomationProbe.cpp",
+        "//test:winui/probe/WinUiSelectionEventClient.cpp",
+        "//test:winui/probe/WinUiSelectionEventClient.h",
         "//test:winui/probe/WinUiSilentAudio.cpp",
         "//test:winui/probe/WinUiSilentAudio.h",
+        "//test:winui/probe/WinUiTrackSelectionProbe.cpp",
+        "//test:winui/probe/WinUiTrackSelectionProbe.h",
     ],
     linkopts = ["comctl32.lib"],
     deps = [
@@ -726,6 +737,7 @@ winui_probe(
         "//lib/utility:unicode_text",
         "//test:media_test_support",
         "@aobus_native_deps//:icu_uc",
+        "@rules_cc//cc/runfiles",
     ],
 )
 

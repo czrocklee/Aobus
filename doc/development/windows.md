@@ -564,6 +564,8 @@ For the [manual desktop probes](#run-manual-winui-probes), use:
 
 ```bat
 bazel run //app/windows-winui:ao_winui_track_table_probe
+bazel run //app/windows-winui:ao_winui_track_table_probe -- --row-identity
+bazel run //app/windows-winui:ao_winui_track_table_probe -- --fragmented-selection 1000
 bazel run //app/windows-winui:ao_winui_activity_status_probe
 bazel run //app/windows-winui:ao_winui_credits_probe
 ```
@@ -586,6 +588,9 @@ The table probe checks localized resize names from the compiled shipping header
 template before and after sort and width changes, but the donor has no library
 session: header click, drag, and context-menu routing are not tested. Column
 changes use the controller API and the body uses representative row templates.
+The separate `--row-identity` run reads 2,051 tracks from a disposable library. It checks that an unheld native row is evicted while a row held outside the strong cache still has the same COM identity on its live source.
+Use `--fragmented-selection N` (1–10,000) to measure restoring alternating offscreen rows on a loaded 50,000-row list. Start with 1,000 before increasing the count: the restore runs synchronously on the UI thread. The probe reports elapsed restore time and row-provider calls, then checks the exact selected ranges. The time does not include subsequent layout or painting and is not a pass/fail threshold.
+
 The column tests save and reload an Album visibility change on a fresh layout,
 then switch the same List to Library and verify its authored header order. They
 also check that changing visibility preserves saved positions and widths.
@@ -593,7 +598,7 @@ The File Path tests check both the reader's path demand for a titled track and
 the projected cell through show/hide transitions.
 The filter cases check that header-only gestures preserve partly or fully hidden
 runtime selection without a new publication and that clearing the filter restores
-the native rows. History replay checks the presentation label before the table
+the native rows. The table probe also queries the list's Selection provider after a sort and for an unrealized selected row; the query must leave the scroll offset unchanged and the row unrealized. History replay checks the presentation label before the table
 controller adopts the replayed view. Transport checks observe a retained icon
 across window-local theme and accent changes, programmatic button states, and
 loss of runtime readiness; a silent provider enables those checks without
@@ -617,9 +622,10 @@ bazel run //app/windows-winui:ao_winui_automation_probe
 ```
 
 This builds the probe and its resources before launching it. Use
-`ao.bat check --desktop-tests` to run `//test:winui_uia_test` inside completion.
-Without the desktop option, `ao.bat check` builds the probe without running it,
-and `//:tests` does not select it.
+`ao.bat check --desktop-tests` to run `//test:winui_uia_test` and
+`//test:winui_uia_selection_test` inside completion. Without the desktop option,
+`ao.bat check` builds the probe without running either test, and `//:tests`
+does not select them.
 
 Both run paths require the Windows App Runtime and an authenticated interactive
 console. Outside the active console session, the probe fails with a diagnostic
@@ -630,6 +636,7 @@ private settings, without playing audio. It rescans a selected track to
 check the summary in the live Modern shell and after retirement. It exercises both shells,
 flat and grouped track rows, a narrowed Classic window, and the volume and
 overflow popups. It also checks the live count and filter validity in New List.
+The Modern track-list check queries the mounted peer's Selection pattern in process. For the OS event and query paths, run `bazel test --//bazel:desktop_tests=true //test:winui_uia_selection_test`. A separate UI Automation client subscribes to the loaded list, drives SelectionItem operations, and checks event types, senders, and the resulting selection. The fixture also makes one bulk range selection while the client is subscribed. A change to `IsSelected` is not a substitute for a SelectionItem event. To check provider identity across reordering in a shipping build, select two nonadjacent tracks, reverse their order, and verify the returned elements and their `SelectionContainer` before clearing.
 
 In Modern, a committed List upsert rebuilds the native `NavigationView` while a
 filtered view is active. The probe checks that the replacement item is selected

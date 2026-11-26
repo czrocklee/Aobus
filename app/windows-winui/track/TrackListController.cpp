@@ -50,6 +50,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -69,23 +70,20 @@ namespace ao::winui
                             rt::TrackListProjection const& inputProjection,
                             i18n::MessageCatalog textCatalog,
                             uimodel::TrackDisplayIndex displayIndex,
-                            std::vector<TrackColumnCellSpec> columns,
-                            std::weak_ptr<void> lifetimePtr)
+                            std::vector<TrackColumnCellSpec> columns)
         : _library{&inputLibrary}
         , _projection{&inputProjection}
         , _textCatalog{std::move(textCatalog)}
         , _displayIndex{std::move(displayIndex)}
         , _columns{std::move(columns)}
-        , _lifetimePtr{std::move(lifetimePtr)}
       {
         auto const* const projection = _projection;
         auto const* const library = _library;
-        auto const bindingPtr = _lifetimePtr;
         auto const reader = detail::TrackTableRowReader{_columns};
         _rows.reset(projection->size(),
-                    [projection, library, bindingPtr, reader](std::size_t const index) -> std::optional<rt::TrackRow>
+                    [projection, library, reader](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
-                      if (bindingPtr.expired() || index >= projection->size())
+                      if (index >= projection->size())
                       {
                         return std::nullopt;
                       }
@@ -94,15 +92,37 @@ namespace ao::winui
                     });
       }
 
-      winrt::Windows::Foundation::IInspectable itemAt(std::size_t const displayIndex)
+      winrt::Aobus::TrackRowItem itemAt(std::size_t const displayIndex)
       {
-        auto const bindingPtr = _lifetimePtr.lock();
-
-        if (!bindingPtr)
+        // The strong LRU may evict a row still held by a container or a UIA data peer.
+        // WinUI identifies data peers by COM identity, not by our track ID.
+        if (auto const found = _liveItems.find(displayIndex); found != _liveItems.end())
         {
-          return nullptr;
+          if (auto live = found->second.get(); live)
+          {
+            return live;
+          }
         }
 
+        if (_liveItems.size() >= _nextSweep)
+        {
+          std::erase_if(_liveItems, [](auto const& entry) { return !entry.second.get(); });
+          _nextSweep = 2 * std::max(_liveItems.size(), uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+        }
+
+        auto item = makeItem(displayIndex);
+
+        if (item)
+        {
+          _liveItems.insert_or_assign(displayIndex, winrt::make_weak(item));
+        }
+
+        return item;
+      }
+
+    private:
+      winrt::Aobus::TrackRowItem makeItem(std::size_t const displayIndex)
+      {
         auto const optItem = _displayIndex.itemAt(displayIndex);
 
         if (!optItem)
@@ -141,14 +161,14 @@ namespace ao::winui
                                                                        _columns);
       }
 
-    private:
+      std::unordered_map<std::size_t, winrt::weak_ref<winrt::Aobus::TrackRowItem>> _liveItems;
+      std::size_t _nextSweep = 2 * uimodel::IndexedTrackRowCache::kDefaultMaximumEntries;
       rt::Library const* _library = nullptr;
       rt::TrackListProjection const* _projection = nullptr;
       i18n::MessageCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
       std::vector<TrackColumnCellSpec> _columns;
       uimodel::IndexedTrackRowCache _rows;
-      std::weak_ptr<void> _lifetimePtr;
     };
 
     // A header gesture can arrive after the stored layout changes but before the headers refresh.
@@ -286,7 +306,6 @@ namespace ao::winui
       return;
     }
 
-    _bindingLifetimePtr = std::make_shared<int>(0);
     _projectionSub = _projectionPtr->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch)
                                                { handleProjectionBatch(batch); });
   }
@@ -320,6 +339,9 @@ namespace ao::winui
       return;
     }
 
+    // The projection can change order or lose groups in place. A retired
+    // materializer must never combine its old display index with the live rows.
+    _bindingLifetimePtr.reset();
     refreshColumns();
     auto displayIndex = uimodel::TrackDisplayIndex{};
 
@@ -330,17 +352,18 @@ namespace ao::winui
 
     _displayIndex = displayIndex;
     auto const displayCount = displayIndex.displayCount();
-    auto materializerPtr = std::make_shared<TrackItemMaterializer>(_library,
-                                                                   *_projectionPtr,
-                                                                   _textCatalog,
-                                                                   std::move(displayIndex),
-                                                                   _columns,
-                                                                   std::weak_ptr<void>{_bindingLifetimePtr});
+    auto materializerPtr = std::make_shared<TrackItemMaterializer>(
+      _library, *_projectionPtr, _textCatalog, std::move(displayIndex), _columns);
     _items = makeTrackItemView(
       displayCount,
-      [materializerPtr = std::move(materializerPtr)](std::size_t const index)
-      { return materializerPtr->itemAt(index); },
+      [weakMaterializerPtr =
+         std::weak_ptr{materializerPtr}](std::size_t const index) -> winrt::Windows::Foundation::IInspectable
+      {
+        auto const liveMaterializerPtr = weakMaterializerPtr.lock();
+        return liveMaterializerPtr ? liveMaterializerPtr->itemAt(index) : nullptr;
+      },
       uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+    _bindingLifetimePtr = std::move(materializerPtr);
 
     _changed.emit();
   }
@@ -591,6 +614,25 @@ namespace ao::winui
 
     auto const optSourceIndex = _projectionPtr->indexOf(trackId);
     return optSourceIndex ? _displayIndex.displayIndexOfSourceRow(*optSourceIndex) : std::nullopt;
+  }
+
+  bool TrackListController::isCurrentRowSource(winrt::Windows::Foundation::IInspectable const& source) const noexcept
+  {
+    // During refresh even the old source still stored in _items has lost its display-index mapping.
+    return _bindingLifetimePtr && _items == source;
+  }
+
+  TrackId TrackListController::trackIdAtDisplayIndex(std::size_t const index) const noexcept
+  {
+    if (!_projectionPtr || _projectionInvalidated)
+    {
+      return kInvalidTrackId;
+    }
+
+    auto const optItem = _displayIndex.itemAt(index);
+    return optItem && optItem->kind == uimodel::TrackDisplayItemKind::TrackRow
+             ? _projectionPtr->trackIdAt(optItem->sourceIndex)
+             : kInvalidTrackId;
   }
 
   Result<> TrackListController::play(TrackId const trackId,
