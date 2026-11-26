@@ -394,8 +394,8 @@ namespace ao::rt
       return CreateTrackFacts{
         .provisionalTrackIds = std::move(ids),
         .uri = target.uri,
-        .title = title,
-        .artist = artist,
+        .title = std::move(title),
+        .artist = std::move(artist),
       };
     }
   } // namespace

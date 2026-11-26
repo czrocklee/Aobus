@@ -2,8 +2,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# Music library management sources. Private headers, including test seams such as
-# PhysicalStoreAccess.h, stay in this target and are not re-exported.
+# Music library management sources. Private headers are not exported by :library.
 cc_library(
     name = "library",
     srcs = glob(["**/*.h"]) + [
@@ -35,6 +34,7 @@ cc_library(
         "TextAdmission.cpp",
         "TrackBuilder.cpp",
         "TrackColdReader.cpp",
+        "TrackPreparation.cpp",
         "TrackRecordValidation.cpp",
         "TrackStore.cpp",
         "TrackView.cpp",
@@ -60,6 +60,21 @@ cc_library(
     ],
 )
 
+# Header needed privately by the PhysicalStoreAccess representation seam;
+# staging factories are not public API.
+cc_library(
+    name = "track_preparation_test_detail",
+    testonly = True,
+    hdrs = [
+        "DictionaryTerms.h",
+        "TrackPreparation.h",
+    ],
+    include_prefix = "lib/library",
+    strip_include_prefix = ".",
+    visibility = ["//visibility:private"],
+    deps = ["//include:library_headers"],
+)
+
 # Test-only include spelling lib/library/..., not a workspace-root include.
 # PhysicalStoreAccess.h quotes WriteTransactionAccess.h; both are in this set.
 cc_library(
@@ -81,5 +96,8 @@ cc_library(
     include_prefix = "lib/library",
     strip_include_prefix = ".",
     visibility = ["//test:__pkg__"],
-    deps = ["//include:library_headers"],
+    deps = [
+        ":track_preparation_test_detail",
+        "//include:library_headers",
+    ],
 )

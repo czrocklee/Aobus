@@ -374,11 +374,10 @@ namespace ao::library::test
         REQUIRE(library.lists().reader(write).get(stagedListId));
 
         auto writer = write.tracks();
-        auto const optView = writer.get(memberId);
-        REQUIRE(optView);
-        auto hot = TrackBuilder::fromHotView(*optView, library.dictionary());
-        hot.metadata().title("Must roll back");
-        REQUIRE(writer.updateHot(memberId, hot));
+        auto optHot = writer.loadForEdit(memberId, TrackWriter::EditTier::Hot);
+        REQUIRE(optHot);
+        optHot->metadata().title("Must roll back");
+        REQUIRE(writer.updateHot(memberId, *optHot));
         return writer.relinkCarrier(kShortUri, destinationUri, FileManifestBuilder::makeEmpty());
       });
     REQUIRE_FALSE(relinkRes);

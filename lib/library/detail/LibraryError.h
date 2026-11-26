@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 
+#include <cstddef>
 #include <exception>
 #include <source_location>
 #include <string>
@@ -12,6 +13,8 @@
 
 namespace ao::library::detail
 {
+  Error oversizedResourceError(std::size_t byteLength, std::source_location loc = std::source_location::current());
+
   // Short-range control-flow exception internal to the library store/serialization
   // layer. Carries a recoverable Error raised with throwLibraryError across a
   // short implementation-only call chain. Catch it only at the nearest

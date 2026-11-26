@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/LibraryCommandsInternal.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
@@ -21,6 +29,20 @@
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    std::vector<std::string> committedTagNames(library::MusicLibrary const& storage, TrackId const id)
+    {
+      auto const transaction = storage.readTransaction();
+      auto const optView = storage.tracks().reader(transaction).get(id, library::TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optView);
+      auto const builder =
+        ao::test::requireValue(library::TrackBuilder::fromCommittedHotView(*optView, storage.dictionary()));
+      auto const& names = builder.tags().names();
+      return {names.begin(), names.end()};
+    }
+  } // namespace
+
   TEST_CASE("LibraryCommands - editTags adds a new tag and publishes a mutation")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -42,13 +64,51 @@ namespace ao::rt::test
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
 
-    // Verify the tag was added by fetching it
-    auto transaction = libraryFixture.library().readTransaction();
-    auto const optTrackView =
-      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optTrackView);
-    auto builder = library::TrackBuilder::fromHotView(*optTrackView, libraryFixture.library().dictionary());
-    CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
+    CHECK(committedTagNames(libraryFixture.library(), trackId) == std::vector<std::string>{"Favorite"});
+  }
+
+  TEST_CASE("LibraryCommands - a tag patch sees edits staged earlier in the same transaction")
+  {
+    auto fixture = MusicLibraryFixture{};
+    auto& storage = fixture.library();
+    auto const targetId = fixture.addTrack(library::test::TrackSpec{.title = "Target", .tags = {"Original"}});
+    auto const otherId = fixture.addTrack("Other track");
+    auto const added = std::array{std::string{"Final"}};
+    auto const removed = std::array{std::string{"Staged"}};
+    auto const& dictionary = storage.dictionary();
+    auto transaction = library::test::writeTransaction(storage);
+
+    auto const replyRes = transaction.apply(
+      [&](library::LibraryWrite& write)
+      {
+        auto writer = write.tracks();
+        auto stageTag = [&writer](TrackId const id, std::string_view const tag)
+        {
+          auto optBuilder = writer.loadForEdit(id, library::TrackWriter::EditTier::Hot);
+          REQUIRE(optBuilder);
+          optBuilder->tags().add(tag);
+          REQUIRE(writer.updateHot(id, *optBuilder));
+        };
+        stageTag(targetId, removed.front());
+        stageTag(otherId, "Unrelated");
+        return ao::rt::detail::applyTagPatchInTransaction(write, std::array{targetId}, added, removed);
+      });
+
+    REQUIRE(replyRes);
+    REQUIRE(replyRes->changes.size() == 1);
+    auto const& change = replyRes->changes.front();
+    CHECK(change.trackId == targetId);
+    CHECK(change.addedTags == std::vector<std::string>{"Final"});
+    CHECK(change.removedTags == std::vector<std::string>{"Staged"});
+    CHECK_FALSE(dictionary.findId("Staged"));
+    CHECK_FALSE(dictionary.findId("Unrelated"));
+    CHECK_FALSE(dictionary.findId("Final"));
+    CHECK(committedTagNames(storage, targetId) == std::vector<std::string>{"Original"});
+    CHECK(committedTagNames(storage, otherId).empty());
+
+    REQUIRE(transaction.commit());
+    CHECK(committedTagNames(storage, targetId) == std::vector<std::string>{"Original", "Final"});
+    CHECK(committedTagNames(storage, otherId) == std::vector<std::string>{"Unrelated"});
   }
 
   TEST_CASE("LibraryCommands - editTags ignores an existing tag")
@@ -126,12 +186,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(publicationCount == 0);
     CHECK(commandsFixture.bind(std::array{trackId}).revision() == revision);
-    auto transaction = storage.library().readTransaction();
-    auto const optTrack =
-      storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optTrack);
-    auto const track = library::TrackBuilder::fromHotView(*optTrack, storage.library().dictionary());
-    CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}) == initiallyPresent);
+    CHECK(std::ranges::contains(committedTagNames(storage.library(), trackId), tag.front()) == initiallyPresent);
   }
 
   TEST_CASE("LibraryCommands - editTags rejects missing tag-add targets")

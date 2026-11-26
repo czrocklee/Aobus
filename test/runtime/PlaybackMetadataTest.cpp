@@ -98,12 +98,10 @@ namespace ao::rt::test
           [&](library::LibraryWrite& write) -> Result<OperationOutcome<bool>>
           {
             auto writer = write.tracks();
-            auto const optView = writer.get(id);
-            REQUIRE(optView);
-            auto builder =
-              library::TrackBuilder::fromCompleteView(*optView, transport.libraryFixture.library().dictionary());
-            update(builder);
-            REQUIRE(writer.update(id, builder));
+            auto optBuilder = writer.loadForEdit(id);
+            REQUIRE(optBuilder);
+            update(*optBuilder);
+            REQUIRE(writer.update(id, *optBuilder));
             return Changed<bool>{
               .value = true,
               .changeSet = reset ? LibraryChangeSet{.libraryReset = true} : LibraryChangeSet{.tracksMutated = {id}}};

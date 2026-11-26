@@ -32,6 +32,7 @@ namespace ao::library::detail
   {
   public:
     static DictionaryStore::Writer& dictionary(WriteTransaction& transaction);
+
     static TrackStore::Writer& trackStoreWriter(WriteTransaction& transaction);
     static ListStore::Writer& listStoreWriter(WriteTransaction& transaction);
     static FileManifestStore::Writer& manifestStoreWriter(WriteTransaction& transaction);

@@ -3,8 +3,11 @@
 
 #include <ao/library/DictionaryStore.h>
 
+#include "DictionaryTerms.h"
 #include "TextAdmission.h"
+#include "WriteTransactionAccess.h"
 #include "detail/LibraryError.h"
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -18,9 +21,7 @@
 #include <cstring>
 #include <expected>
 #include <format>
-#include <functional>
 #include <limits>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -29,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::library
@@ -139,28 +141,26 @@ namespace ao::library
 
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
-    auto const lock = std::shared_lock{_mutex};
-    auto index = id.raw();
-
-    // 0 is null/invalid
-    AO_EXPECTS(index != 0, "Invalid dictionary ID");
-
-    AO_EXPECTS(index <= _publishedSize, "Invalid dictionary ID");
-
-    return _idToStringStorage[index - 1];
+    auto const optText = findText(id);
+    AO_EXPECTS(optText, "Invalid dictionary ID");
+    return *optText;
   }
 
   std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
   {
-    auto const lock = std::shared_lock{_mutex};
-    auto index = id.raw();
+    return findText(id).value_or(defaultValue);
+  }
 
-    if (index == 0 || index > _publishedSize)
+  std::optional<std::string_view> DictionaryStore::findText(DictionaryId id) const
+  {
+    auto const lock = std::shared_lock{_mutex};
+
+    if (id == kInvalidDictionaryId || id.raw() > _publishedSize)
     {
-      return defaultValue;
+      return std::nullopt;
     }
 
-    return _idToStringStorage[index - 1];
+    return _idToStringStorage[id.raw() - 1];
   }
 
   std::optional<DictionaryId> DictionaryStore::findId(std::string_view str) const
@@ -206,12 +206,6 @@ namespace ao::library
 
   struct DictionaryStore::Writer::Impl final
   {
-    struct Delta final
-    {
-      DictionaryId id{};
-      std::string text{};
-    };
-
     Impl(DictionaryStore& owner, lmdb::WriteTransaction& writeTransaction)
       : dictionary{&owner}, transaction{&writeTransaction}
     {
@@ -228,16 +222,29 @@ namespace ao::library
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    Result<DictionaryId> intern(std::string_view value)
+    std::optional<std::string_view> findText(DictionaryId id) const
     {
-      AO_EXPECTS(transaction->isActive(), "Dictionary writer transaction is no longer active");
+      // Successful inserts append one iterator per dense ID in first-use order.
+      if (!delta.empty() && id >= delta.front()->second)
+      {
+        auto const offset = id.raw() - delta.front()->second.raw();
 
-      // The exact fast path avoids Unicode work for repeated values already
-      // admitted by this store. A match is necessarily valid NFC because the
-      // persisted and publication boundaries enforce that invariant.
+        if (offset >= delta.size())
+        {
+          return std::nullopt;
+        }
+
+        return delta[offset]->first;
+      }
+
+      return dictionary->findText(id);
+    }
+
+    std::optional<DictionaryId> findExactId(std::string_view value) const
+    {
       if (auto const optId = dictionary->findId(value); optId)
       {
-        return *optId;
+        return optId;
       }
 
       if (auto const it = overlay.find(value); it != overlay.end())
@@ -245,59 +252,80 @@ namespace ao::library
         return it->second;
       }
 
+      return std::nullopt;
+    }
+
+    Result<DictionaryId> intern(std::string_view value)
+    {
+      AO_EXPECTS(transaction->isActive(), "Dictionary writer transaction is no longer active");
+
+      // The exact fast path avoids Unicode work for repeated values already
+      // admitted by this store. A match is necessarily valid NFC because the
+      // persisted and publication boundaries enforce that invariant.
+      if (auto const optId = findExactId(value); optId)
+      {
+        return *optId;
+      }
+
       auto normalizedRes = detail::normalizeLibraryText(value, "Dictionary text");
 
       if (!normalizedRes)
       {
-        return std::unexpected{normalizedRes.error()};
+        return std::unexpected{std::move(normalizedRes.error())};
       }
 
-      auto normalized = std::move(*normalizedRes);
-
-      if (normalized != value)
+      if (*normalizedRes != value)
       {
-        if (auto const optId = dictionary->findId(normalized); optId)
+        if (auto const optId = findExactId(*normalizedRes); optId)
         {
           return *optId;
         }
-
-        if (auto const it = overlay.find(normalized); it != overlay.end())
-        {
-          return it->second;
-        }
       }
 
+      auto const [it, inserted] = overlay.try_emplace(std::move(*normalizedRes));
+      AO_INVARIANT(inserted);
+      return writeNew(it);
+    }
+
+    // Both ordinary intern and capture handoff supply a newly admitted overlay node.
+    // Only a successful LMDB create consumes its ID and keeps its publication slot.
+    Result<DictionaryId> writeNew(detail::DictionaryEntries::iterator entry)
+    {
       if (nextId == 0)
       {
+        overlay.erase(entry);
         return makeError(Error::Code::ResourceExhausted, "Dictionary ID space exhausted");
       }
 
-      if (!optWriter)
-      {
-        optWriter.emplace(dictionary->_database.writer(*transaction));
-      }
-
       auto const id = DictionaryId{nextId};
-      auto const [overlayIt, inserted] = overlay.emplace(std::move(normalized), id);
-      AO_INVARIANT(inserted);
+      auto const previousSize = delta.size();
+      auto res = Result<>{};
 
       try
       {
-        delta.push_back(Delta{.id = id, .text = overlayIt->first});
+        if (!optWriter)
+        {
+          optWriter.emplace(dictionary->_database.writer(*transaction));
+        }
+
+        delta.push_back(entry);
+        res = optWriter->create(id.raw(), utility::bytes::view(entry->first));
       }
       catch (...)
       {
-        overlay.erase(overlayIt);
+        delta.resize(previousSize);
+        overlay.erase(entry);
         throw;
       }
 
-      if (auto res = optWriter->create(id.raw(), utility::bytes::view(delta.back().text)); !res)
+      if (!res)
       {
         delta.pop_back();
-        overlay.erase(overlayIt);
-        return std::unexpected{res.error()};
+        overlay.erase(entry);
+        return std::unexpected{std::move(res.error())};
       }
 
+      entry->second = id;
       nextId = nextId == std::numeric_limits<std::uint32_t>::max() ? 0 : nextId + 1;
       return id;
     }
@@ -314,24 +342,23 @@ namespace ao::library
       auto const expectedFirstId = static_cast<std::uint32_t>(dictionary->_publishedSize) + 1;
 
       AO_INVARIANT(
-        delta.front().id.raw() == expectedFirstId, "Dictionary publication order changed during a library write");
+        delta.front()->second.raw() == expectedFirstId, "Dictionary publication order changed during a library write");
 
       // Perform every allocation before native commit. Readers filter both
       // indices by _publishedSize, including if preparation throws partway.
       // WriteTransaction rolls that hidden tail back before releasing the gate.
       dictionary->_stringToId.reserve(dictionary->_stringToId.size() + delta.size());
 
-      for (auto& entry : delta)
-      {
-        dictionary->_idToStringStorage.emplace_back(std::move(entry.text));
-      }
-
       for (auto const& entry : delta)
       {
-        auto const [it, inserted] = dictionary->_stringToId.insert(entry.id);
+        auto node = overlay.extract(entry);
+        dictionary->_idToStringStorage.emplace_back(std::move(node.key()));
+        auto const inserted = dictionary->_stringToId.insert(node.mapped()).second;
         AO_INVARIANT(inserted, "Dictionary publication would rebind an existing string");
-        insertedCount++;
+        ++insertedCount;
       }
+
+      delta.clear();
     }
 
     void publish() noexcept
@@ -359,9 +386,13 @@ namespace ao::library
       {
         auto const lock = std::scoped_lock{dictionary->_mutex};
 
-        for (std::size_t index = 0; index < insertedCount; ++index)
+        // Extracted iterators are no longer valid. The indexed tail is exactly the
+        // dense prefix of hidden rows whose reverse-index insertion succeeded.
+        while (insertedCount != 0)
         {
-          dictionary->_stringToId.erase(delta[index].id);
+          auto const id = DictionaryId{static_cast<std::uint32_t>(dictionary->_publishedSize + insertedCount)};
+          dictionary->_stringToId.erase(id);
+          --insertedCount;
         }
 
         while (dictionary->_idToStringStorage.size() > dictionary->_publishedSize)
@@ -375,8 +406,8 @@ namespace ao::library
     DictionaryStore* dictionary;
     lmdb::WriteTransaction* transaction;
     std::optional<lmdb::IntegerKeyDatabase::Writer> optWriter;
-    std::map<std::string, DictionaryId, std::less<>> overlay;
-    std::vector<Delta> delta;
+    detail::DictionaryEntries overlay;
+    std::vector<detail::DictionaryEntries::iterator> delta;
     std::unique_lock<std::mutex> publicationLock;
     std::uint32_t nextId = 1;
     std::size_t insertedCount = 0;
@@ -394,6 +425,11 @@ namespace ao::library
   Result<DictionaryId> DictionaryStore::Writer::intern(std::string_view value)
   {
     return _implPtr->intern(value);
+  }
+
+  std::optional<std::string_view> DictionaryStore::Writer::findText(DictionaryId id) const
+  {
+    return _implPtr->findText(id);
   }
 
   void DictionaryStore::Writer::preparePublication()
@@ -471,3 +507,134 @@ namespace ao::library
     return *_dictionary;
   }
 } // namespace ao::library
+
+namespace ao::library::detail
+{
+  DictionaryTerms::Symbol DictionaryTerms::Capture::rememberSource(std::string_view text, Symbol symbol)
+  {
+    if (!_optFirstSource)
+    {
+      _optFirstSource.emplace(text, symbol);
+    }
+    else
+    {
+      if (!_optOtherSources)
+      {
+        _optOtherSources.emplace();
+      }
+
+      _optOtherSources->emplace(text, symbol);
+    }
+
+    return symbol;
+  }
+
+  DictionaryTerms::Symbol DictionaryTerms::Capture::stage(std::string_view text)
+  {
+    auto const& writer = *WriteTransactionAccess::dictionary(_terms._transaction)._implPtr;
+
+    if (auto const optId = writer.findExactId(text); optId)
+    {
+      return *optId;
+    }
+
+    // Check raw spellings first: admitting an alias must never turn an earlier
+    // failed admission of these exact bytes into a trusted canonical node.
+    if (_optFirstSource && _optFirstSource->first == text)
+    {
+      return _optFirstSource->second;
+    }
+
+    if (_optOtherSources)
+    {
+      if (auto const it = _optOtherSources->find(text); it != _optOtherSources->end())
+      {
+        return it->second;
+      }
+    }
+
+    auto& optPending = _terms._optPending;
+
+    if (optPending)
+    {
+      if (auto const it = optPending->find(text); it != optPending->end())
+      {
+        return &*it;
+      }
+    }
+
+    auto normalizedRes = normalizeLibraryText(text, "Dictionary text");
+
+    if (!normalizedRes)
+    {
+      return rememberSource(text, &_terms._retries.emplace_front(text));
+    }
+
+    bool const changed = *normalizedRes != text;
+
+    if (changed)
+    {
+      if (auto const optId = writer.findExactId(*normalizedRes); optId)
+      {
+        return rememberSource(text, *optId);
+      }
+    }
+
+    if (!optPending)
+    {
+      optPending.emplace();
+    }
+
+    auto* const entry = &*optPending->try_emplace(std::move(*normalizedRes)).first;
+    return changed ? rememberSource(text, entry) : Symbol{entry};
+  }
+
+  DictionaryId DictionaryTerms::resolve(Symbol const& symbol)
+  {
+    if (auto const* id = std::get_if<DictionaryId>(&symbol); id != nullptr)
+    {
+      return *id;
+    }
+
+    auto& writer = WriteTransactionAccess::dictionary(_transaction);
+
+    if (auto const* retry = std::get_if<std::string const*>(&symbol); retry != nullptr)
+    {
+      auto idRes = writer.intern(**retry);
+
+      if (!idRes)
+      {
+        lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
+      }
+
+      return *idRes;
+    }
+
+    auto* const entry = std::get<DictionaryEntries::value_type*>(symbol);
+
+    if (entry->second != kInvalidDictionaryId)
+    {
+      return entry->second;
+    }
+
+    auto& impl = *writer._implPtr;
+
+    if (auto const optId = impl.findExactId(entry->first); optId)
+    {
+      entry->second = *optId;
+      return *optId;
+    }
+
+    AO_INVARIANT(_optPending);
+    auto inserted = impl.overlay.insert(_optPending->extract(entry->first));
+    AO_INVARIANT(inserted.inserted);
+    auto idRes = impl.writeNew(inserted.position);
+
+    if (!idRes)
+    {
+      lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
+    }
+
+    return *idRes;
+  }
+} // namespace ao::library::detail

@@ -197,7 +197,8 @@ namespace ao::library::test
     original.customMetadata().add("key", "value");
     original.property().uri("track.flac");
     auto const [hot, cold] = context.serialize(original);
-    auto reconstructed = TrackBuilder::fromCompleteView(TrackView{hot, cold}, context.dictionary());
+    auto reconstructed =
+      ao::test::requireValue(TrackBuilder::fromCommittedCompleteView(TrackView{hot, cold}, context.dictionary()));
     CHECK(reconstructed.metadata().recordingDate() == date);
     REQUIRE(reconstructed.metadata().credits().size() == entries.size());
 
@@ -212,7 +213,8 @@ namespace ao::library::test
     CHECK(rebuiltHot == hot);
     CHECK(rebuiltCold == cold);
     auto const invalidCold = std::array<std::byte, 1>{};
-    auto hotOnly = TrackBuilder::fromHotView(TrackView{hot, invalidCold}, context.dictionary());
+    auto hotOnly =
+      ao::test::requireValue(TrackBuilder::fromCommittedHotView(TrackView{hot, invalidCold}, context.dictionary()));
     CHECK(hotOnly.metadata().title() == "Title");
     CHECK(hotOnly.metadata().credits().empty());
     CHECK(hotOnly.metadata().recordingDate() == RecordingDate{});
@@ -476,15 +478,14 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto const optView = writer.get(id);
-        REQUIRE(optView);
-        auto builder = TrackBuilder::fromCompleteView(*optView, fixture.library.dictionary());
+        auto optBuilder = writer.loadForEdit(id);
+        REQUIRE(optBuilder);
         auto const entries = std::array{
           CreditView{.name = "Must not intern", .role = "piano"}, CreditView{.name = "Valid", .role = "\xC0\xAF"}};
         auto const cover = std::array{std::byte{1}, std::byte{2}};
-        builder.metadata().title("After").artist("Must not intern artist").credits(entries);
-        builder.coverArt().add(PictureType::FrontCover, cover);
-        auto const res = coldOnly ? writer.updateCold(id, builder) : writer.update(id, builder);
+        optBuilder->metadata().title("After").artist("Must not intern artist").credits(entries);
+        optBuilder->coverArt().add(PictureType::FrontCover, cover);
+        auto const res = coldOnly ? writer.updateCold(id, *optBuilder) : writer.update(id, *optBuilder);
         REQUIRE_FALSE(res);
         CHECK(res.error().code == Error::Code::InvalidInput);
         return {};
@@ -524,11 +525,10 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto const optView = writer.get(id, TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(optView);
-        auto builder = TrackBuilder::fromHotView(*optView, fixture.library.dictionary());
-        builder.metadata().title("After");
-        return writer.updateHot(id, builder);
+        auto optBuilder = writer.loadForEdit(id, TrackWriter::EditTier::Hot);
+        REQUIRE(optBuilder);
+        optBuilder->metadata().title("After");
+        return writer.updateHot(id, *optBuilder);
       }));
     REQUIRE(transaction.commit());
 

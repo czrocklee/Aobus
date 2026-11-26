@@ -276,15 +276,15 @@ The five-offset directory and both fixed headers remain unchanged.
 Compute multiplication, additions, and alignment in a wide checked type before narrowing, including URI and every retained block in the full merged record.
 This layout is not a general compression or performance guarantee; `credits()` is O(1) and `credits(kind)` scans entries up to the end of that kind's run, but timings, heap use, and RSS do not follow from encoded size.
 
-Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
+Builder-based writes pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
 This binds resolved dictionary ids and Resource descriptor creation, from hashed bytes or from a declared descriptor, to the same library and transaction that performs the physical write; caller-supplied existing Resource ids must already exist in that write snapshot.
-The physical `TrackStore::Writer` accepts no caller-supplied record bytes and exposes no mutable LMDB span, and it is unavailable to production callers, so there is one record-writing path rather than a prepared path beside a raw one.
+The physical `TrackStore::Writer` is unavailable to production callers, accepts no caller-supplied record bytes, and exposes no mutable LMDB span.
 Public LMDB create, update, and append operations accept only copied input bytes.
 The Track writer is the only production consumer that reaches the integer writer's private reservation primitives through source-private `lmdb::detail::ReservationWriterAccess`; its synchronous no-throw encoder receives the four-byte-aligned reservation only for that invocation, and the span is never returned to the Store.
-Writes reject the reserved zero `TrackId` as a `CorruptData` fault.
-Complete internal preparation first runs both pure hot and cold validators; single-side logical updates run the validator for that side.
-Private serialization helpers used by representation tests follow the same preflight rules.
+Physical Track updates, including numeric updates, reject the reserved zero `TrackId` as a `CorruptData` fault.
+Complete builder preparation first runs both pure hot and cold validators; single-side builder updates run the validator for that side.
+Private serialization helpers used by representation tests follow the same preflight rules. Tests that split capture from finish using `PhysicalStoreAccess::stage*` must validate their inputs first; the staging helpers do not run the validators.
 Those gates validate scalar UTF-8, canonical Track URI, representable inline post-NFC sizes, and complete encoded record bounds before dictionary interning, Resource creation, or Track mutation begins.
 Already-NFC inline scalar input uses a quick check to avoid a temporary normalized allocation during size preflight.
 Credit preflight independently checks valid kinds, trimmed nonempty names, name/role UTF-8, date validity, counters, and full cold-record bounds, without requiring upstream normalization.
@@ -294,9 +294,15 @@ Failures after interning starts abort the enclosing root write; there is no per-
 Prepared values own every byte their encoder emits, including performance entries and the exact date precision.
 They validate builder input and representability rather than encoded bytes: a prepared Track side is a typed zero-copy snapshot and does not retain a second serialized record.
 That private zero-copy path reserves the hot value, fills every byte, and validates it before its encoder callback returns, then repeats the sequence for the cold value.
-Updates follow the same per-side sequence.
+Builder-based updates follow the same per-side sequence.
 Prepared writes fill and validate transaction-owned storage entirely inside the synchronous encoder invocation.
 A canonical post-fill validation failure violates the encoder's `AO_ENSURES` postcondition and aborts immediately.
+
+`TrackWriter::updateNumbers()` accepts only five unsigned 16-bit fields: Year, track number and total, and disc number and total.
+It reads the needed sides of an already-admitted Track through the active writer and copies each changed side into owned storage with only the requested header words changed.
+It prepares all changed sides before the first reservation can invalidate either view, then copies each into its private reservation in a synchronous callback.
+All other bytes are unchanged, so this path does not repeat the deep reference or prepared-encoder validation; it accepts neither caller-supplied bytes nor edits to other fields or flags.
+The logical `updateNumbers()` returns `NotFound` for a missing Track or ID zero before any write. Unchanged sides are not rewritten.
 
 Create requires both canonical payloads and allocates the identity by appending to `tracks_hot`, then creates the same key in `tracks_cold`.
 After open proves matching key sets, a cold-key conflict after hot allocation is an invariant breach and aborts immediately; supported writers cannot create that state.
@@ -528,9 +534,11 @@ A directly constructed raw view may therefore expose a present all-zero prefix; 
 `PerformanceView::credits()` and `credits(kind)` borrow physical entry spans, sharing the cold record's transaction/buffer lifetime; each entry carries its kind byte.
 The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, cold block ordering, and every credit name id.
 Those linear checks do not add a per-row scan to normal decoded access.
-`TrackBuilder::fromCompleteView()` requires both valid sides.
-It preserves every work/performance field, exact date precision, and canonical credit name/kind/role entry when rebuilding a complete record.
-`fromHotView()` does not fetch cold fields or list entries and the resulting builder may serialize only hot data, preventing absent cold fields from being written back as defaults.
+`TrackBuilder::fromCommittedCompleteView()` requires both valid sides and preserves every work/performance field, exact date precision, and canonical credit name/kind/role entry.
+`TrackBuilder::fromCommittedHotView()` requires only the valid hot side and produces a builder that can write only hot data, so unloaded cold fields cannot be written back as defaults.
+Both return `Result<TrackBuilder>` and require a committed view and its own library coordinator's published dictionary.
+A reference outside the published dictionary prefix returns `InvalidInput`; the check cannot detect a foreign-library id with the same numeric value as a published id.
+The projected builder still borrows text, and its cover Resource ids remain library-local.
 
 A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
 That `ListView` behavior is not the `ListStore` absence contract.

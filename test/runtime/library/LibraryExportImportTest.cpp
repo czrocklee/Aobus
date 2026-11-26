@@ -703,7 +703,7 @@ library:
 
     for (auto const& [id, view] : trackReader)
     {
-      auto builder = TrackBuilder::fromCompleteView(view, ml.dictionary());
+      auto const builder = ao::test::requireValue(TrackBuilder::fromCommittedCompleteView(view, ml.dictionary()));
       CHECK_FALSE(builder.property().uri().contains("./"));
       CHECK_FALSE(builder.property().uri().contains('\\'));
       CHECK_FALSE(builder.property().uri().contains(".."));

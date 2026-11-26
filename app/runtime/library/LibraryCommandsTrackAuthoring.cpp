@@ -3,15 +3,15 @@
 
 #include "runtime/library/LibraryCommandsInternal.h"
 #include "runtime/library/LibraryWriteLane.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/library/Credits.h>
 #include <ao/library/LibraryWrite.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -185,6 +185,12 @@ namespace ao::rt
       changed = true;
     }
 
+    TrackFieldChange numberChange(std::string_view field, std::uint16_t oldValue, std::uint16_t newValue)
+    {
+      return TrackFieldChange{
+        .field = std::string{field}, .oldValue = std::format("{}", oldValue), .newValue = std::format("{}", newValue)};
+    }
+
     template<typename Setter>
     void applyUint16Patch(std::optional<std::uint16_t> const& optValue,
                           std::string_view fieldName,
@@ -198,9 +204,7 @@ namespace ao::rt
         return;
       }
 
-      changes.push_back(TrackFieldChange{.field = std::string{fieldName},
-                                         .oldValue = std::format("{}", current),
-                                         .newValue = std::format("{}", *optValue)});
+      changes.push_back(numberChange(fieldName, current, *optValue));
       setter(*optValue);
       changed = true;
     }
@@ -561,59 +565,89 @@ namespace ao::rt
       return true;
     }
 
-    Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
-                                                                     library::LibraryWrite& transaction,
-                                                                     std::span<TrackId const> trackIds,
-                                                                     MetadataPatch const& patch)
+    struct TrackNumberField final
     {
-      auto normalizedPatchRes = normalizeMetadataPatch(patch);
+      std::string_view name;
+      std::optional<std::uint16_t> MetadataPatch::* metadataMember;
+      std::optional<std::uint16_t> library::TrackNumberPatch::* numberMember;
+    };
 
-      if (!normalizedPatchRes)
+    constexpr auto kTrackNumberFields = std::to_array<TrackNumberField>({
+      {.name = "year", .metadataMember = &MetadataPatch::optYear, .numberMember = &library::TrackNumberPatch::optYear},
+      {.name = "trackNumber",
+       .metadataMember = &MetadataPatch::optTrackNumber,
+       .numberMember = &library::TrackNumberPatch::optTrackNumber},
+      {.name = "trackTotal",
+       .metadataMember = &MetadataPatch::optTrackTotal,
+       .numberMember = &library::TrackNumberPatch::optTrackTotal},
+      {.name = "discNumber",
+       .metadataMember = &MetadataPatch::optDiscNumber,
+       .numberMember = &library::TrackNumberPatch::optDiscNumber},
+      {.name = "discTotal",
+       .metadataMember = &MetadataPatch::optDiscTotal,
+       .numberMember = &library::TrackNumberPatch::optDiscTotal},
+    });
+
+    std::optional<library::TrackNumberPatch> numberOnlyPatch(MetadataPatch const& patch)
+    {
+      auto numbers = library::TrackNumberPatch{};
+      auto supported = MetadataPatch{};
+      bool hasNumbers = false;
+
+      for (auto const& field : kTrackNumberFields)
       {
-        return std::unexpected{normalizedPatchRes.error()};
+        if (auto const& optValue = patch.*field.metadataMember; optValue)
+        {
+          hasNumbers = true;
+          supported.*field.metadataMember = optValue;
+          numbers.*field.numberMember = optValue;
+        }
       }
 
-      auto const& normalizedPatch = *normalizedPatchRes;
-      auto writer = transaction.tracks();
-      auto changes = std::vector<TrackChangeRecord>{};
-      auto seenTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-      seenTrackIds.reserve(trackIds.size());
-
-      for (auto const trackId : trackIds)
+      // Any field not projected above, including a future one, must use the builder path.
+      if (hasNumbers && supported == patch)
       {
-        // Do not reload dictionary IDs staged by an earlier write of this track.
-        if (!seenTrackIds.insert(trackId).second)
-        {
-          continue;
-        }
-
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-        if (!optView)
-        {
-          continue;
-        }
-
-        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
-        auto fieldChanges = std::vector<TrackFieldChange>{};
-        auto const patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
-        auto const wroteRes =
-          writeChangedTrackHalves(writer, trackId, builder, patchRes, "Failed to update track data");
-
-        if (!wroteRes)
-        {
-          return std::unexpected{wroteRes.error()};
-        }
-
-        if (!*wroteRes)
-        {
-          continue;
-        }
-
-        changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
+        return numbers;
       }
 
-      return UpdateTrackMetadataReply{.changes = std::move(changes)};
+      return std::nullopt;
+    }
+
+    Result<> applyTrackNumberPatch(library::TrackWriter& writer,
+                                   TrackId trackId,
+                                   library::TrackNumberPatch const& patch,
+                                   std::vector<TrackChangeRecord>& changes)
+    {
+      auto receiptRes = writer.updateNumbers(trackId, patch);
+
+      if (!receiptRes)
+      {
+        if (receiptRes.error().code == Error::Code::NotFound)
+        {
+          return {};
+        }
+
+        return std::unexpected{receiptRes.error()};
+      }
+
+      auto fields = std::vector<TrackFieldChange>{};
+
+      for (auto const& field : kTrackNumberFields)
+      {
+        if (auto const& optOld = (*receiptRes).*field.numberMember; optOld)
+        {
+          auto const& optNew = patch.*field.numberMember;
+          AO_INVARIANT(optNew, "Track number receipt reported an unrequested field: {}", field.name);
+          fields.push_back(numberChange(field.name, *optOld, *optNew));
+        }
+      }
+
+      if (!fields.empty())
+      {
+        changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fields)});
+      }
+
+      return {};
     }
 
     bool tryApplyTrackTagChanges(library::TrackBuilder& builder,
@@ -647,42 +681,16 @@ namespace ao::rt
       return tagsChanged;
     }
 
-    Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::MusicLibrary& library,
-                                                                         library::LibraryWrite& transaction,
-                                                                         std::span<TrackId const> trackIds,
-                                                                         TrackPropertiesPatch const& patch)
+    Result<UpdateTrackPropertiesReply> applyNormalizedTrackPatch(library::LibraryWrite& transaction,
+                                                                 std::span<TrackId const> trackIds,
+                                                                 MetadataPatch const& normalizedPatch,
+                                                                 std::span<std::string const> normalizedAdd,
+                                                                 std::span<std::string const> normalizedRemove,
+                                                                 char const* action)
     {
-      auto normalizedPatchRes = normalizeMetadataPatch(patch.metadata);
-
-      if (!normalizedPatchRes)
-      {
-        return std::unexpected{normalizedPatchRes.error()};
-      }
-
-      auto normalizedAddRes = detail::normalizeTags(patch.tagsToAdd);
-
-      if (!normalizedAddRes)
-      {
-        return std::unexpected{normalizedAddRes.error()};
-      }
-
-      auto normalizedRemoveRes = detail::normalizeTags(patch.tagsToRemove);
-
-      if (!normalizedRemoveRes)
-      {
-        return std::unexpected{normalizedRemoveRes.error()};
-      }
-
-      if (auto const disjointRes = detail::validateDisjointTags(*normalizedAddRes, *normalizedRemoveRes); !disjointRes)
-      {
-        return std::unexpected{disjointRes.error()};
-      }
-
-      auto const& normalizedPatch = *normalizedPatchRes;
-      auto const& normalizedAdd = *normalizedAddRes;
-      auto const& normalizedRemove = *normalizedRemoveRes;
-
       auto writer = transaction.tracks();
+      auto const optNumbers =
+        normalizedAdd.empty() && normalizedRemove.empty() ? numberOnlyPatch(normalizedPatch) : std::nullopt;
       auto metadataChanges = std::vector<TrackChangeRecord>{};
       auto tagChanges = std::vector<TrackTagsChange>{};
       auto seenTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
@@ -690,20 +698,29 @@ namespace ao::rt
 
       for (auto const trackId : trackIds)
       {
-        // Do not reload dictionary IDs staged by an earlier write of this track.
         if (!seenTrackIds.insert(trackId).second)
         {
           continue;
         }
 
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        if (optNumbers)
+        {
+          if (auto res = applyTrackNumberPatch(writer, trackId, *optNumbers, metadataChanges); !res)
+          {
+            return detail::storageError(action, res.error());
+          }
 
-        if (!optView)
+          continue;
+        }
+
+        auto optBuilder = writer.loadForEdit(trackId);
+
+        if (!optBuilder)
         {
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
+        auto& builder = *optBuilder;
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
 
@@ -717,8 +734,7 @@ namespace ao::rt
           patchRes.changedHot = true;
         }
 
-        auto const wroteRes =
-          writeChangedTrackHalves(writer, trackId, builder, patchRes, "Failed to update track properties");
+        auto const wroteRes = writeChangedTrackHalves(writer, trackId, builder, patchRes, action);
 
         if (!wroteRes)
         {
@@ -750,6 +766,66 @@ namespace ao::rt
         .tags = EditTrackTagsReply{.changes = std::move(tagChanges)},
       };
     }
+
+    Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::LibraryWrite& transaction,
+                                                                     std::span<TrackId const> trackIds,
+                                                                     MetadataPatch const& patch)
+    {
+      auto normalizedPatchRes = normalizeMetadataPatch(patch);
+
+      if (!normalizedPatchRes)
+      {
+        return std::unexpected{normalizedPatchRes.error()};
+      }
+
+      auto replyRes =
+        applyNormalizedTrackPatch(transaction, trackIds, *normalizedPatchRes, {}, {}, "Failed to update track data");
+
+      if (!replyRes)
+      {
+        return std::unexpected{replyRes.error()};
+      }
+
+      return std::move(replyRes->metadata);
+    }
+
+    Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::LibraryWrite& transaction,
+                                                                         std::span<TrackId const> trackIds,
+                                                                         TrackPropertiesPatch const& patch)
+    {
+      auto normalizedPatchRes = normalizeMetadataPatch(patch.metadata);
+
+      if (!normalizedPatchRes)
+      {
+        return std::unexpected{normalizedPatchRes.error()};
+      }
+
+      auto normalizedAddRes = detail::normalizeTags(patch.tagsToAdd);
+
+      if (!normalizedAddRes)
+      {
+        return std::unexpected{normalizedAddRes.error()};
+      }
+
+      auto normalizedRemoveRes = detail::normalizeTags(patch.tagsToRemove);
+
+      if (!normalizedRemoveRes)
+      {
+        return std::unexpected{normalizedRemoveRes.error()};
+      }
+
+      if (auto const disjointRes = detail::validateDisjointTags(*normalizedAddRes, *normalizedRemoveRes); !disjointRes)
+      {
+        return std::unexpected{disjointRes.error()};
+      }
+
+      return applyNormalizedTrackPatch(transaction,
+                                       trackIds,
+                                       *normalizedPatchRes,
+                                       *normalizedAddRes,
+                                       *normalizedRemoveRes,
+                                       "Failed to update track properties");
+    }
   } // namespace
 
   async::Task<Result<UpdateTrackMetadataReply>> LibraryCommands::Impl::previewUpdateMetadataAsync(
@@ -759,8 +835,8 @@ namespace ao::rt
   {
     return detail::applyInteractivePreviewAsync(
       std::move(submission),
-      [this, trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
-      { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
+      [trackIds = std::move(trackIds), patch = std::move(patch)](library::LibraryWrite& transaction)
+      { return applyMetadataPatchInTransaction(transaction, trackIds, patch); });
   }
 
   async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::Impl::applyUpdateMetadataAsync(
@@ -772,10 +848,10 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Update track metadata",
-      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+      [patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
         -> Result<OperationOutcome<UpdateTrackMetadataReply>>
       {
-        auto replyRes = applyMetadataPatchInTransaction(library, transaction, trackIds, patch);
+        auto replyRes = applyMetadataPatchInTransaction(transaction, trackIds, patch);
 
         if (!replyRes)
         {
@@ -806,9 +882,9 @@ namespace ao::rt
   {
     return detail::applyInteractivePreviewAsync(
       std::move(submission),
-      [this, trackIds = std::move(trackIds), tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+      [trackIds = std::move(trackIds), tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
         library::LibraryWrite& transaction)
-      { return detail::applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
+      { return detail::applyTagPatchInTransaction(transaction, trackIds, tagsToAdd, tagsToRemove); });
   }
 
   async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::Impl::applyEditTagsAsync(
@@ -821,11 +897,11 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Edit track tags",
-      [this, tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
+      [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](
         library::LibraryWrite& transaction,
         std::span<TrackId const> trackIds) -> Result<OperationOutcome<EditTrackTagsReply>>
       {
-        auto replyRes = detail::applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove);
+        auto replyRes = detail::applyTagPatchInTransaction(transaction, trackIds, tagsToAdd, tagsToRemove);
 
         if (!replyRes)
         {
@@ -857,10 +933,10 @@ namespace ao::rt
       std::move(submission),
       std::move(targets),
       "Update track properties",
-      [this, patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
+      [patch = std::move(patch)](library::LibraryWrite& transaction, std::span<TrackId const> trackIds)
         -> Result<OperationOutcome<UpdateTrackPropertiesReply>>
       {
-        auto replyRes = applyPropertiesPatchInTransaction(library, transaction, trackIds, patch);
+        auto replyRes = applyPropertiesPatchInTransaction(transaction, trackIds, patch);
 
         if (!replyRes)
         {

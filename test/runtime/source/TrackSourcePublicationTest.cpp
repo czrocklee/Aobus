@@ -15,7 +15,6 @@
 #include <ao/async/Runtime.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/TrackWriter.h>
@@ -92,19 +91,20 @@ namespace ao::rt::test
         [&storage, a, c](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
         {
           auto writer = write.tracks();
-          auto const optView = writer.get(a);
-
-          if (!optView)
           {
-            return std::unexpected{Error{.code = Error::Code::NotFound, .message = "Missing fixture track"}};
-          }
+            auto optBuilder = writer.loadForEdit(a);
 
-          auto builder = library::TrackBuilder::fromCompleteView(*optView, storage.dictionary());
-          builder.property().duration(std::chrono::minutes{1});
+            if (!optBuilder)
+            {
+              return std::unexpected{Error{.code = Error::Code::NotFound, .message = "Missing fixture track"}};
+            }
 
-          if (auto updateRes = writer.update(a, builder); !updateRes)
-          {
-            return std::unexpected{updateRes.error()};
+            optBuilder->property().duration(std::chrono::minutes{1});
+
+            if (auto updateRes = writer.update(a, *optBuilder); !updateRes)
+            {
+              return std::unexpected{updateRes.error()};
+            }
           }
 
           if (auto removeRes = writer.remove(c); !removeRes)

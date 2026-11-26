@@ -5,9 +5,8 @@
 
 #include "CreditAdmission.h"
 #include "TextAdmission.h"
-#include "WriteTransactionAccess.h"
+#include "TrackPreparation.h"
 #include "detail/LibraryError.h"
-#include "lmdb/detail/TransactionFailure.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/Contract.h>
@@ -19,10 +18,8 @@
 #include <ao/library/LibraryUri.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
-#include <ao/library/WriteTransaction.h>
 #include <ao/library/detail/TrackViewRawAccess.h>
 #include <ao/utility/ByteView.h>
 
@@ -34,6 +31,7 @@
 #include <cstring>
 #include <expected>
 #include <format>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <span>
@@ -42,7 +40,6 @@
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace ao::library
@@ -181,6 +178,14 @@ namespace ao::library
 
       std::memcpy(out.data() + offset, &value, sizeof(T));
     }
+
+    template<typename Prepared>
+    std::vector<std::byte> materializePrepared(Prepared const& prepared)
+    {
+      auto bytes = std::vector<std::byte>(prepared.size());
+      prepared.writeTo(bytes);
+      return bytes;
+    }
   } // namespace
 
   //=============================================================================
@@ -192,15 +197,63 @@ namespace ao::library
     return TrackBuilder{};
   }
 
-  TrackBuilder TrackBuilder::fromHotView(TrackView const& view, DictionaryStore const& dictionary)
+  Result<TrackBuilder> TrackBuilder::fromCommittedCompleteView(TrackView const& view, DictionaryStore const& dictionary)
+  {
+    return fromCommittedView(view, dictionary, BaselineKind::Complete);
+  }
+
+  Result<TrackBuilder> TrackBuilder::fromCommittedHotView(TrackView const& view, DictionaryStore const& dictionary)
+  {
+    return fromCommittedView(view, dictionary, BaselineKind::HotOnly);
+  }
+
+  Result<TrackBuilder> TrackBuilder::fromCommittedView(TrackView const& view,
+                                                       DictionaryStore const& dictionary,
+                                                       BaselineKind baseline)
+  {
+    auto const resolve = [&dictionary](DictionaryId id)
+    {
+      auto const optText = dictionary.findText(id);
+
+      if (!optText)
+      {
+        detail::throwLibraryError(
+          Error::Code::InvalidInput, std::format("Track references unpublished dictionary ID {}", id.raw()));
+      }
+
+      return *optText;
+    };
+
+    try
+    {
+      return projectView(view, baseline, resolve);
+    }
+    catch (detail::LibraryException const& error)
+    {
+      return std::unexpected{error.error()};
+    }
+  }
+
+  TrackBuilder TrackBuilder::projectView(TrackView const& view,
+                                         BaselineKind baseline,
+                                         std::function<std::string_view(DictionaryId)> const& resolve)
   {
     AO_EXPECTS(view.isHotValid());
+    AO_EXPECTS(baseline == BaselineKind::HotOnly || view.isColdValid());
 
     auto builder = TrackBuilder{};
-    builder._baselineKind = BaselineKind::HotOnly;
+    builder._baselineKind = baseline;
+    auto const optionalText = [&resolve](DictionaryId id)
+    { return id == kInvalidDictionaryId ? std::string_view{} : resolve(id); };
 
-    auto metadata = view.metadata();
-    builder.metadata().year(metadata.year());
+    auto const metadata = view.metadata();
+    builder.metadata()
+      .year(metadata.year())
+      .artist(optionalText(metadata.artistId()))
+      .album(optionalText(metadata.albumId()))
+      .albumArtist(optionalText(metadata.albumArtistId()))
+      .composer(optionalText(metadata.composerId()))
+      .genre(optionalText(metadata.genreId()));
 
     if (metadata.isTitleExplicitlyCleared())
     {
@@ -211,49 +264,19 @@ namespace ao::library
       builder.metadata().title(metadata.title());
     }
 
-    auto prop = view.property();
+    auto const prop = view.property();
     builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
-
-    if (auto artistId = metadata.artistId(); artistId.raw() > 0)
-    {
-      builder.metadata().artist(dictionary.get(artistId));
-    }
-
-    if (auto albumId = metadata.albumId(); albumId.raw() > 0)
-    {
-      builder.metadata().album(dictionary.get(albumId));
-    }
-
-    if (auto albumArtistId = metadata.albumArtistId(); albumArtistId.raw() > 0)
-    {
-      builder.metadata().albumArtist(dictionary.get(albumArtistId));
-    }
-
-    if (auto composerId = metadata.composerId(); composerId.raw() > 0)
-    {
-      builder.metadata().composer(dictionary.get(composerId));
-    }
-
-    if (auto genreId = metadata.genreId(); genreId.raw() > 0)
-    {
-      builder.metadata().genre(dictionary.get(genreId));
-    }
 
     for (auto const tagId : view.tags())
     {
-      builder.tags().add(dictionary.get(tagId));
+      builder.tags().add(resolve(tagId));
     }
 
-    return builder;
-  }
+    if (baseline == BaselineKind::HotOnly)
+    {
+      return builder;
+    }
 
-  TrackBuilder TrackBuilder::fromCompleteView(TrackView const& view, DictionaryStore const& dictionary)
-  {
-    AO_EXPECTS(view.isHotValid());
-    AO_EXPECTS(view.isColdValid());
-    auto builder = fromHotView(view, dictionary);
-    builder._baselineKind = BaselineKind::Complete;
-    auto prop = view.property();
     builder.property()
       .uri(prop.uri())
       .duration(prop.duration())
@@ -261,7 +284,6 @@ namespace ao::library
       .channels(prop.channels())
       .segment(prop.segment());
 
-    auto metadata = view.metadata();
     builder.metadata()
       .trackNumber(metadata.trackNumber())
       .trackTotal(metadata.trackTotal())
@@ -271,6 +293,8 @@ namespace ao::library
     auto const work = view.work();
     auto const performance = view.performance();
     builder.metadata()
+      .work(optionalText(work.workId()))
+      .movement(optionalText(work.movementId()))
       .movementNumber(work.movementNumber())
       .movementTotal(work.movementTotal())
       .recordingDate(performance.recordingDate());
@@ -282,7 +306,7 @@ namespace ao::library
       for (auto const& entry : performance.credits(kind))
       {
         builder._metadataBuilder._credits.push_back(
-          {.name = dictionary.get(entry.nameId), .kind = kind, .role = dictionary.getOrDefault(entry.roleId)});
+          {.name = resolve(entry.nameId), .kind = kind, .role = optionalText(entry.roleId)});
       }
     }
 
@@ -291,19 +315,9 @@ namespace ao::library
       builder.coverArt().add(cover.type, cover.resourceId);
     }
 
-    if (auto workId = work.workId(); workId.raw() > 0)
-    {
-      builder.metadata().work(dictionary.get(workId));
-    }
-
-    if (auto movementId = work.movementId(); movementId.raw() > 0)
-    {
-      builder.metadata().movement(dictionary.get(movementId));
-    }
-
     for (auto const& [dictionaryId, value] : view.customMetadata())
     {
-      builder.customMetadata().add(dictionary.get(dictionaryId), value);
+      builder.customMetadata().add(resolve(dictionaryId), value);
     }
 
     return builder;
@@ -659,49 +673,6 @@ namespace ao::library
     return bloom;
   }
 
-  DictionaryId TrackBuilder::internDictionaryId(std::string_view const value, WriteTransaction& transaction)
-  {
-    auto idRes = detail::WriteTransactionAccess::dictionary(transaction).intern(value);
-
-    if (!idRes)
-    {
-      lmdb::detail::throwTransactionFailure(std::move(idRes.error()));
-    }
-
-    return *idRes;
-  }
-
-  DictionaryId TrackBuilder::resolveDictionaryId(std::string_view const value, WriteTransaction& transaction)
-  {
-    if (value.empty())
-    {
-      return kInvalidDictionaryId;
-    }
-
-    return internDictionaryId(value, transaction);
-  }
-
-  Result<ResourceId> TrackBuilder::createResource(std::span<std::byte const> const data,
-                                                  WriteTransaction& transaction,
-                                                  ResourceStore const& resources)
-  {
-    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).create(data);
-  }
-
-  Result<ResourceId> TrackBuilder::declareResource(ResourceDescriptor const& descriptor,
-                                                   WriteTransaction& transaction,
-                                                   ResourceStore const& resources)
-  {
-    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).getOrCreate(descriptor);
-  }
-
-  Result<ResourceId> TrackBuilder::observeResource(ObservedResourceDescriptor const& observed,
-                                                   WriteTransaction& transaction,
-                                                   ResourceStore const& resources)
-  {
-    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).getOrCreate(observed);
-  }
-
   Result<> TrackBuilder::validateHotSerializable() const
   {
     try
@@ -884,136 +855,62 @@ namespace ao::library
 
   Result<std::vector<std::byte>> TrackBuilder::serializeHot(WriteTransaction& transaction) const
   {
-    if (auto validationRes = validateHotSerializable(); !validationRes)
+    auto preparedRes = prepareHot(transaction);
+
+    if (!preparedRes)
     {
-      return std::unexpected{validationRes.error()};
+      return std::unexpected{std::move(preparedRes.error())};
     }
 
-    try
-    {
-      auto const prepared = PreparedHot::make(this, transaction);
-      auto result = std::vector<std::byte>(prepared.size());
-
-      prepared.writeTo(result);
-      return result;
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    return materializePrepared(*preparedRes);
   }
 
   Result<std::vector<std::byte>> TrackBuilder::serializeCold(WriteTransaction& transaction,
                                                              ResourceStore const& resources) const
   {
-    if (auto validationRes = validateColdSerializable(); !validationRes)
+    auto preparedRes = prepareCold(transaction, resources);
+
+    if (!preparedRes)
     {
-      return std::unexpected{validationRes.error()};
+      return std::unexpected{std::move(preparedRes.error())};
     }
 
-    try
-    {
-      auto const prepared = PreparedCold::make(this, transaction, resources);
-      auto result = std::vector<std::byte>(prepared.size());
-
-      prepared.writeTo(result);
-      return result;
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    return materializePrepared(*preparedRes);
   }
 
   Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> TrackBuilder::serialize(
     WriteTransaction& transaction,
     ResourceStore const& resources) const
   {
-    if (auto validationRes = validateHotSerializable(); !validationRes)
+    auto preparedRes = prepare(transaction, resources);
+
+    if (!preparedRes)
     {
-      return std::unexpected{validationRes.error()};
+      return std::unexpected{std::move(preparedRes.error())};
     }
 
-    if (auto validationRes = validateColdSerializable(); !validationRes)
-    {
-      return std::unexpected{validationRes.error()};
-    }
-
-    try
-    {
-      auto const hot = PreparedHot::make(this, transaction);
-      auto const cold = PreparedCold::make(this, transaction, resources);
-
-      auto hotBytes = std::vector<std::byte>(hot.size());
-      auto coldBytes = std::vector<std::byte>(cold.size());
-
-      hot.writeTo(hotBytes);
-      cold.writeTo(coldBytes);
-      return std::pair{std::move(hotBytes), std::move(coldBytes)};
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    auto const& [hot, cold] = *preparedRes;
+    return std::pair{materializePrepared(hot), materializePrepared(cold)};
   }
 
   //=============================================================================
   // Prepared structures for zero-copy serialization
   //=============================================================================
 
-  TrackBuilder::PreparedHot TrackBuilder::PreparedHot::make(TrackBuilder const* builder, WriteTransaction& transaction)
+  void TrackBuilder::PreparedHot::setTitle(std::string title, bool explicitClear)
   {
-    auto prepared = PreparedHot{};
-    auto const& metadata = builder->_metadataBuilder;
+    _title = std::move(title);
+    _titleLength = checkedUint16(_title.size(), "Hot title length");
+    AO_INVARIANT(!explicitClear || _titleLength == 0);
+  }
 
-    auto titleRes = detail::normalizeLibraryText(metadata.title(), "Track title");
-
-    if (!titleRes)
-    {
-      detail::throwLibraryError(std::move(titleRes.error()));
-    }
-
-    prepared._title = std::move(*titleRes);
-    prepared._titleLength = checkedUint16(prepared._title.size(), "Hot title length");
-    AO_INVARIANT(!metadata.isTitleExplicitlyCleared() || prepared._titleLength == 0);
-
-    // Resolve tag names to DictionaryIds
-    prepared._tagIds.reserve(builder->_tagsBuilder._tagNames.size());
-    auto seenTagIds = std::unordered_set<DictionaryId>{};
-    seenTagIds.reserve(builder->_tagsBuilder._tagNames.size());
-
-    for (auto const& name : builder->_tagsBuilder._tagNames)
-    {
-      auto const tagId = TrackBuilder::internDictionaryId(name, transaction);
-
-      if (seenTagIds.insert(tagId).second)
-      {
-        prepared._tagIds.push_back(tagId);
-      }
-    }
-
-    // Resolve metadata strings to DictionaryIds for header
-    prepared._artistId = TrackBuilder::resolveDictionaryId(metadata._artist, transaction);
-    prepared._albumId = TrackBuilder::resolveDictionaryId(metadata._album, transaction);
-    prepared._genreId = TrackBuilder::resolveDictionaryId(metadata._genre, transaction);
-    prepared._albumArtistId = TrackBuilder::resolveDictionaryId(metadata._albumArtist, transaction);
-    prepared._composerId = TrackBuilder::resolveDictionaryId(metadata._composer, transaction);
-
-    prepared._bloomFilter = computeBloomFilter(prepared._tagIds);
-
-    auto const tagCount = prepared._tagIds.size();
+  void TrackBuilder::PreparedHot::assignLayout(bool explicitClear)
+  {
+    _bloomFilter = computeBloomFilter(_tagIds);
+    auto const tagCount = _tagIds.size();
     auto const tagBytes = checkedPayloadBytes(tagCount, sizeof(DictionaryId), "Hot tag payload length");
-
-    // Snapshot everything writeTo emits so the prepared value stays valid
-    // and self-consistent even if the builder is mutated or destroyed later.
-    prepared._tagLengthAndFlags = packTrackHotTagLengthAndFlags(tagCount, metadata.isTitleExplicitlyCleared());
-    prepared._sampleRate = builder->_propertyBuilder._sampleRate;
-    prepared._year = builder->_metadataBuilder._year;
-    prepared._bitDepth = builder->_propertyBuilder._bitDepth;
-    prepared._codec = builder->_propertyBuilder._codec;
-
-    prepared._size = align4(sizeof(TrackHotHeader) + tagBytes + prepared._titleLength);
-    return prepared;
+    _tagLengthAndFlags = packTrackHotTagLengthAndFlags(tagCount, explicitClear);
+    _size = align4(sizeof(TrackHotHeader) + tagBytes + _titleLength);
   }
 
   void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const noexcept
@@ -1062,35 +959,17 @@ namespace ao::library
     }
   }
 
-  TrackBuilder::PreparedCold TrackBuilder::PreparedCold::make(TrackBuilder const* builder,
-                                                              WriteTransaction& transaction,
-                                                              ResourceStore const& resources)
+  void TrackBuilder::PreparedCold::appendSegmentBlock(TrackSegment const& segment)
   {
-    auto prepared = PreparedCold{};
-    prepared.resolveMetadataIds(builder, transaction);
-    auto const resolvedPairs = resolveCustomMetadata(builder, transaction);
-    prepared.resolveCoverArt(builder, transaction, resources);
-    prepared.appendCoverArtBlock();
-    prepared.appendWorkBlock(builder->_metadataBuilder);
-    prepared.appendCustomMetadataBlock(resolvedPairs);
-    prepared.appendPerformanceBlock(builder->_metadataBuilder);
-
-    if (auto const optSegment = builder->property().segment(); optSegment)
-    {
-      auto payload = std::vector<std::byte>(sizeof(TrackSegmentBlock));
-      writePod(std::span<std::byte>{payload},
-               0,
-               TrackSegmentBlock{.startFrameLo = static_cast<std::uint32_t>(optSegment->startFrame),
-                                 .startFrameHi = static_cast<std::uint32_t>(optSegment->startFrame >> 32),
-                                 .frameCountLo = static_cast<std::uint32_t>(optSegment->frameCount),
-                                 .frameCountHi = static_cast<std::uint32_t>(optSegment->frameCount >> 32),
-                                 .ordinal = optSegment->ordinal});
-      prepared.appendBlock(TrackColdBlockSlot::Segment, std::move(payload));
-    }
-
-    prepared.assignLayout(builder->_propertyBuilder._uri);
-    prepared.snapshot(builder);
-    return prepared;
+    auto payload = std::vector<std::byte>(sizeof(TrackSegmentBlock));
+    writePod(std::span<std::byte>{payload},
+             0,
+             TrackSegmentBlock{.startFrameLo = static_cast<std::uint32_t>(segment.startFrame),
+                               .startFrameHi = static_cast<std::uint32_t>(segment.startFrame >> 32),
+                               .frameCountLo = static_cast<std::uint32_t>(segment.frameCount),
+                               .frameCountHi = static_cast<std::uint32_t>(segment.frameCount >> 32),
+                               .ordinal = segment.ordinal});
+    appendBlock(TrackColdBlockSlot::Segment, std::move(payload));
   }
 
   TrackBuilder::PreparedCold TrackBuilder::PreparedCold::relink(TrackView const& view, std::string_view uri)
@@ -1135,87 +1014,6 @@ namespace ao::library
     return prepared;
   }
 
-  void TrackBuilder::PreparedCold::resolveMetadataIds(TrackBuilder const* builder, WriteTransaction& transaction)
-  {
-    auto const& metadata = builder->_metadataBuilder;
-    _workId = TrackBuilder::resolveDictionaryId(metadata._work, transaction);
-    _movementId = TrackBuilder::resolveDictionaryId(metadata._movement, transaction);
-    _credits.reserve(metadata._credits.size());
-    detail::forEachCreditInKindOrder(
-      metadata._credits,
-      [&](CreditView const& credit)
-      {
-        auto const trimmed = detail::trimCredit(credit);
-        _credits.push_back({.nameId = TrackBuilder::internDictionaryId(trimmed.name, transaction),
-                            .roleId = TrackBuilder::resolveDictionaryId(trimmed.role, transaction),
-                            .kind = static_cast<std::uint8_t>(credit.kind)});
-      });
-  }
-
-  std::vector<std::pair<DictionaryId, std::string>> TrackBuilder::PreparedCold::resolveCustomMetadata(
-    TrackBuilder const* builder,
-    WriteTransaction& transaction)
-  {
-    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
-    resolvedPairs.reserve(builder->_customMetadataBuilder._customPairs.size());
-
-    for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
-    {
-      auto normalizedValueRes = detail::normalizeLibraryText(value, "Custom metadata value");
-
-      if (!normalizedValueRes)
-      {
-        detail::throwLibraryError(std::move(normalizedValueRes.error()));
-      }
-
-      resolvedPairs.emplace_back(TrackBuilder::internDictionaryId(key, transaction), std::move(*normalizedValueRes));
-    }
-
-    std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string>::first);
-    return resolvedPairs;
-  }
-
-  void TrackBuilder::PreparedCold::resolveCoverArt(TrackBuilder const* builder,
-                                                   WriteTransaction& transaction,
-                                                   ResourceStore const& resources)
-  {
-    _coverArt.reserve(builder->_coverArtBuilder._entries.size());
-
-    for (auto const& pending : builder->_coverArtBuilder._entries)
-    {
-      if (auto const* ptrResourceId = std::get_if<ResourceId>(&pending.source); ptrResourceId != nullptr)
-      {
-        _coverArt.push_back({.resourceId = *ptrResourceId, .type = pending.type});
-        continue;
-      }
-
-      // Which store call runs is what carries the evidence. Observed descriptors
-      // retain the counted evidence of bytes hashed before this transaction.
-      auto resourceRes = Result<ResourceId>{};
-
-      if (auto const* const observed = std::get_if<ObservedResourceDescriptor>(&pending.source); observed != nullptr)
-      {
-        resourceRes = TrackBuilder::observeResource(*observed, transaction, resources);
-      }
-      else if (auto const* const descriptor = std::get_if<ResourceDescriptor>(&pending.source); descriptor != nullptr)
-      {
-        resourceRes = TrackBuilder::declareResource(*descriptor, transaction, resources);
-      }
-      else
-      {
-        resourceRes =
-          TrackBuilder::createResource(std::get<std::span<std::byte const>>(pending.source), transaction, resources);
-      }
-
-      if (!resourceRes)
-      {
-        lmdb::detail::throwTransactionFailure(std::move(resourceRes.error()));
-      }
-
-      _coverArt.push_back({.resourceId = *resourceRes, .type = pending.type});
-    }
-  }
-
   void TrackBuilder::PreparedCold::appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload)
   {
     checkedUint16(payload.size(), "Cold block payload length");
@@ -1244,10 +1042,10 @@ namespace ao::library
     appendBlock(TrackColdBlockSlot::CoverArt, std::move(payload));
   }
 
-  void TrackBuilder::PreparedCold::appendWorkBlock(MetadataBuilder const& metadata)
+  void TrackBuilder::PreparedCold::appendWorkBlock(std::uint16_t movementNumber, std::uint16_t movementTotal)
   {
-    if (_workId == kInvalidDictionaryId && _movementId == kInvalidDictionaryId && metadata._movementNumber == 0 &&
-        metadata._movementTotal == 0)
+    if (_workId == kInvalidDictionaryId && _movementId == kInvalidDictionaryId && movementNumber == 0 &&
+        movementTotal == 0)
     {
       return;
     }
@@ -1257,21 +1055,21 @@ namespace ao::library
              0,
              TrackWorkBlock{.workId = _workId,
                             .movementId = _movementId,
-                            .movementNumber = metadata._movementNumber,
-                            .movementTotal = metadata._movementTotal});
+                            .movementNumber = movementNumber,
+                            .movementTotal = movementTotal});
     appendBlock(TrackColdBlockSlot::Work, std::move(payload));
   }
 
-  void TrackBuilder::PreparedCold::appendPerformanceBlock(MetadataBuilder const& metadata)
+  void TrackBuilder::PreparedCold::appendPerformanceBlock(RecordingDate date)
   {
-    if (!metadata._recordingDate.isPresent() && _credits.empty())
+    if (!date.isPresent() && _credits.empty())
     {
       return;
     }
 
     auto const payloadSize = sizeof(TrackPerformanceBlock) + (_credits.size() * sizeof(TrackCreditEntry));
     auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
-    writePod(std::span<std::byte>{payload}, 0, TrackPerformanceBlock{.recordingDate = metadata._recordingDate});
+    writePod(std::span<std::byte>{payload}, 0, TrackPerformanceBlock{.recordingDate = date});
     auto offset = sizeof(TrackPerformanceBlock);
 
     for (auto const& entry : _credits)
@@ -1466,14 +1264,7 @@ namespace ao::library
       return std::unexpected{validationRes.error()};
     }
 
-    try
-    {
-      return std::pair{PreparedHot::make(this, transaction), PreparedCold::make(this, transaction, resources)};
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    return detail::TrackPreparation::stageValidated(*this, transaction, resources).finish();
   }
 
   Result<TrackBuilder::PreparedHot> TrackBuilder::prepareHot(WriteTransaction& transaction) const
@@ -1483,14 +1274,7 @@ namespace ao::library
       return std::unexpected{validationRes.error()};
     }
 
-    try
-    {
-      return PreparedHot::make(this, transaction);
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    return detail::TrackPreparation::stageHotValidated(*this, transaction).finish();
   }
 
   Result<TrackBuilder::PreparedCold> TrackBuilder::prepareCold(WriteTransaction& transaction,
@@ -1501,13 +1285,6 @@ namespace ao::library
       return std::unexpected{validationRes.error()};
     }
 
-    try
-    {
-      return PreparedCold::make(this, transaction, resources);
-    }
-    catch (detail::LibraryException const& ex)
-    {
-      lmdb::detail::throwTransactionFailure(ex.error());
-    }
+    return detail::TrackPreparation::stageColdValidated(*this, transaction, resources).finish();
   }
 } // namespace ao::library

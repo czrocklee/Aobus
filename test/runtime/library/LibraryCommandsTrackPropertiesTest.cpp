@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -19,13 +20,12 @@
 #include <array>
 #include <cstddef>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryCommands - track Properties commits metadata and tags in one revision")
+  TEST_CASE("LibraryCommands - track Properties reports numeric edits with and without tags")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");
@@ -34,19 +34,29 @@ namespace ao::rt::test
     auto publications = std::vector<LibraryChangeSet>{};
     [[maybe_unused]] auto subscription = changes.onChanged([&publications](LibraryChangeSet const& changeSet) noexcept
                                                            { publications.push_back(changeSet); });
-    auto targets = commandsFixture.bind(std::array{trackId});
+    auto const targets = commandsFixture.bind(std::array{trackId});
     auto const revisionBefore = targets.revision();
+    auto patch = TrackPropertiesPatch{.metadata = MetadataPatch{.optYear = 2024, .optTrackNumber = 1}};
+    auto expectedTags = std::vector<TrackTagsChange>{};
 
-    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(
-      std::move(targets),
-      TrackPropertiesPatch{.metadata = MetadataPatch{.optTitle = "After"}, .tagsToAdd = {"Favorite"}}));
+    SECTION("Numbers alone")
+    {
+    }
+
+    SECTION("Numbers with a tag edit")
+    {
+      patch.tagsToAdd = {"Favorite"};
+      expectedTags.push_back(TrackTagsChange{.trackId = trackId, .addedTags = {"Favorite"}, .removedTags = {}});
+    }
+
+    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(targets, patch));
 
     REQUIRE(res);
     CHECK(res->status == AuthoringStatus::Applied);
-    REQUIRE(res->reply.metadata.changes.size() == 1);
-    CHECK(res->reply.metadata.changes[0].trackId == trackId);
-    REQUIRE(res->reply.tags.changes.size() == 1);
-    CHECK(res->reply.tags.changes[0].trackId == trackId);
+    auto const expectedMetadata =
+      TrackChangeRecord{.trackId = trackId, .fields = {{.field = "year", .oldValue = "2020", .newValue = "2024"}}};
+    CHECK(res->reply.metadata.changes == std::vector{expectedMetadata});
+    CHECK(res->reply.tags.changes == expectedTags);
     REQUIRE(publications.size() == 1);
     CHECK(publications[0].tracksMutated == std::vector<TrackId>{trackId});
     CHECK(publications[0].libraryRevision == revisionBefore + 1);
@@ -56,9 +66,11 @@ namespace ao::rt::test
     auto const optTrack =
       storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrack);
-    auto const track = library::TrackBuilder::fromHotView(*optTrack, storage.library().dictionary());
-    CHECK(track.metadata().title() == "After");
-    CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}));
+    auto const track =
+      ao::test::requireValue(library::TrackBuilder::fromCommittedHotView(*optTrack, storage.library().dictionary()));
+    CHECK(track.metadata().year() == 2024);
+    CHECK(track.metadata().title() == "Before");
+    CHECK(std::ranges::equal(track.tags().names(), patch.tagsToAdd));
   }
 
   TEST_CASE("LibraryCommands - track Properties records an explicit title clear while tags stay unchanged")
@@ -157,12 +169,9 @@ namespace ao::rt::test
     auto const revisionBefore = targets.revision();
     auto invalidTag = std::string(1, static_cast<char>(0xff));
 
-    auto const res = commandsFixture.runTask(
-      commandsFixture.commands().updatePropertiesAsync(std::move(targets),
-                                                       TrackPropertiesPatch{
-                                                         .metadata = MetadataPatch{.optTitle = "Must roll back"},
-                                                         .tagsToAdd = {std::move(invalidTag)},
-                                                       }));
+    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(
+      std::move(targets),
+      TrackPropertiesPatch{.metadata = MetadataPatch{.optYear = 2024}, .tagsToAdd = {std::move(invalidTag)}}));
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::InvalidInput);
@@ -173,7 +182,7 @@ namespace ao::rt::test
     auto const optTrack =
       storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrack);
-    CHECK(optTrack->metadata().title() == "Before");
+    CHECK(optTrack->metadata().year() == 2020);
     CHECK(optTrack->tags().empty());
   }
 

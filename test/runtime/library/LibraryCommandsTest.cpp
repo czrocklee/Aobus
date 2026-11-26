@@ -4,6 +4,8 @@
 #include <ao/rt/library/LibraryCommands.h>
 
 #include "test/TestFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -18,6 +20,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <bitset>
@@ -236,6 +239,70 @@ namespace ao::rt::test
     CHECK(optView->metadata().trackTotal() == 10);
     CHECK(optView->metadata().discNumber() == 1);
     CHECK(optView->metadata().discTotal() == 2);
+  }
+
+  TEST_CASE("LibraryCommands - batch cold-only and mixed metadata edits preserve each track after reopening")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    auto const originals = std::array{
+      library::test::TrackSpec{
+        .title = "A longer curated title",
+        .uri = "album/first.flac",
+        .tags = {"favorite"},
+        .customMetadata = {{"catalog", "An extended catalog note"}},
+      },
+      library::test::TrackSpec{
+        .title = "Two",
+        .artist = "Second artist",
+        .uri = "next.flac",
+        .tags = {"later"},
+        .customMetadata = {{"shelf", "B2"}},
+      },
+    };
+    auto patch = MetadataPatch{.optWork = "New work"};
+    auto ids = std::array<TrackId, originals.size()>{};
+    std::uint64_t expectedRevision = 0;
+
+    {
+      auto storage = library::test::makeTestMusicLibrary(temp.path(), databasePath);
+
+      for (std::size_t index = 0; index < originals.size(); ++index)
+      {
+        ids[index] = library::test::addTrack(storage, originals[index]);
+      }
+
+      if (GENERATE(false, true))
+      {
+        patch.optArtist = "New artist";
+        REQUIRE_FALSE(storage.dictionary().findId(*patch.optArtist));
+      }
+
+      REQUIRE_FALSE(storage.dictionary().findId("New work"));
+      auto changes = makeStateOnlyLibraryChanges(storage);
+      auto commandsFixture = LibraryCommandsFixture{storage, changes};
+      expectedRevision = commandsFixture.bind(ids).revision() + 1;
+      REQUIRE(commandsFixture.updateMetadata(ids, patch));
+    }
+
+    auto const reopened = library::test::makeTestMusicLibrary(temp.path(), databasePath);
+    auto const read = reopened.readTransaction();
+    auto const reader = reopened.tracks().reader(read);
+    CHECK(reopened.libraryRevision(read) == expectedRevision);
+    CHECK(reader.entryCount() == ids.size());
+
+    for (std::size_t index = 0; index < ids.size(); ++index)
+    {
+      auto const optView = reader.get(ids[index], library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      auto const stored = library::test::trackSpecFromView(reopened, *optView);
+      CHECK(stored.artist == patch.optArtist.value_or(originals[index].artist));
+      CHECK(stored.work == "New work");
+      CHECK(stored.title == originals[index].title);
+      CHECK(stored.uri == originals[index].uri);
+      CHECK(stored.tags == originals[index].tags);
+      CHECK(stored.customMetadata == originals[index].customMetadata);
+    }
   }
 
   TEST_CASE("LibraryCommands - updateMetadata applies and removes custom metadata")

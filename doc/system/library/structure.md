@@ -83,13 +83,24 @@ A returned error, a contained native/library mutation failure, or an unexpected 
 There are no nested transactions, item savepoints, or supported continuation after a failed root.
 `apply()` catches the private `lmdb::detail::TransactionFailure`, explicitly aborts and terminalizes the root, then returns its carried error. `commit()` contains mutation faults during dictionary preparation the same way. The carrier alone does not terminalize a native transaction; the root owner does.
 
-Track preparation validates both record sides before its first item-relative dictionary, Resource, Track, or manifest effect.
+For builder-based writes, the Track writer validates all requested record sides, including those of every carrier member, and consumes their borrowed backing bytes before the first dictionary, Resource, Track, or manifest mutation in that call.
+Read-only lookups of existing IDs may occur before all borrowed inputs have been consumed.
+The resolved dictionary and Resource IDs in prepared records are tied to the library and write transaction that prepared them.
 Once preparation or writing has staged an effect, a later failure must reach the root boundary so the whole transaction rolls back.
 Dictionary rows, Resource descriptors, Track records, manifest bindings, List records, the raised id space, and the candidate revision commit atomically when one operation composes them.
 
+To edit a Track in an active write, call `writer.loadForEdit(id)` rather than projecting a writer view against the committed dictionary.
+It resolves tags and other dictionary text staged in the same transaction and returns `std::nullopt` only for a missing Track.
+The default loads the complete Track; use `TrackWriter::EditTier::Hot` for `updateHot()` when no cold fields are needed.
+The [checked view factories](../../reference/library/storage/database.md#view-safety) are for committed views only.
+
+Building from a Track view or setting text or cover bytes does not extend the input's lifetime; supply live inputs at each writer call.
+Consume edit builders and inputs borrowed from the write transaction before any intervening mutation, even through another writer handle, and before the `apply()` callback ends.
+After a mutation, reload the builder or reacquire the mapped input instead of reusing it.
+
 Physical Store writers and mutable LMDB reservations are library implementation details.
-Production callers submit semantic builders to the logical writers rather than serialized records.
-The source-private Track reservation path fills and validates one transaction-owned value synchronously and does not return mutable mapped storage to its caller.
+Production callers do not submit serialized Track records or receive mutable mapped storage.
+For builder-based writes, the encoder fills and validates each reserved value synchronously. For [numeric Track edits](../../reference/library/storage/database.md#track-records), the writer copies each changed side of an already-admitted record, changes only the requested fixed-width header fields, and writes the copy without repeating full record validation.
 
 `LibraryUri` is the shared music-root-relative path value used by storage, scanning, transfer, and file consumers.
 It is canonical and separator-stable but deliberately not Unicode-normalized or case-folded.

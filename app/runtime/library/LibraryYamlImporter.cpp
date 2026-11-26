@@ -2726,7 +2726,14 @@ namespace ao::rt
     {
       if (auto optView = trackReader.get(*optExistingTrackId, library::TrackStore::Reader::LoadMode::Both); optView)
       {
-        optBuilder = library::TrackBuilder::fromCompleteView(*optView, ml.dictionary());
+        auto builderRes = library::TrackBuilder::fromCommittedCompleteView(*optView, ml.dictionary());
+
+        if (!builderRes)
+        {
+          return std::unexpected{std::move(builderRes.error())};
+        }
+
+        optBuilder = std::move(*builderRes);
       }
     }
 

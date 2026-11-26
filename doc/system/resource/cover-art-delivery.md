@@ -285,8 +285,9 @@ These degradation states do not remove or rewrite a track's cover reference.
 
 ## Implementation map
 
-- [`Sha256.cpp`](../../../lib/utility/Sha256.cpp) and [`ResourceLayout.cpp`](../../../lib/library/ResourceLayout.cpp) own the digest facility, the descriptor bytes, and id derivation.
-- [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp), [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp), and [`TrackView.cpp`](../../../lib/library/TrackView.cpp) own creation and primary selection.
+- [`Sha256.cpp`](../../../lib/utility/Sha256.cpp) implements hashing. [`ResourceLayout.h`](../../../include/ao/library/ResourceLayout.h) defines the descriptor layout and initial id derivation; [`ResourceLayout.cpp`](../../../lib/library/ResourceLayout.cpp) parses stored descriptor bytes.
+- [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) hashes bytes on direct creation and probes for an id to create or reuse a descriptor row.
+- [`TrackPreparation.cpp`](../../../lib/library/TrackPreparation.cpp) hashes raw track cover bytes during capture and resolves cover descriptors to Resource ids during ordered preparation. [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp) collects cover entries and serializes their resolved references; [`TrackView.cpp`](../../../lib/library/TrackView.cpp) selects the primary cover.
 - [`LibrarySnapshot.cpp`](../../../app/runtime/library/LibrarySnapshot.cpp) owns synchronous cover identity reads; [`ResourceByteReader.cpp`](../../../app/runtime/resource/ResourceByteReader.cpp) owns the asynchronous entry points, verified two-tier read, and carrier-index slot.
 - [`ResourceCarrierIndex.cpp`](../../../app/runtime/resource/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) owns the derived cover cache.
 - [`ResourceByteMemoryCache`](../../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h) own `AppRuntime`-scoped encoded-byte coalescing, retention, and shared ownership.

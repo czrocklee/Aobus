@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 
 namespace ao::library
 {
@@ -26,4 +27,8 @@ namespace ao::library
                                      TrackId trackId,
                                      TrackBuilder::PreparedHot const& preparedHot,
                                      TrackBuilder::PreparedCold const& preparedCold);
+
+  Result<TrackNumberPatch> updateTrackRecordNumbers(TrackStore::Writer& writer,
+                                                    TrackId trackId,
+                                                    TrackNumberPatch const& patch);
 } // namespace ao::library

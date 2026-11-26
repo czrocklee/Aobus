@@ -242,24 +242,23 @@ namespace ao::library::test
   {
     auto transaction = writeTransaction(library);
     auto mutationRes = transaction.apply(
-      [&library, id, &mutate](LibraryWrite& write) -> Result<>
+      [id, &mutate](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
-        REQUIRE(optView);
+        auto optBuilder = writer.loadForEdit(id);
+        REQUIRE(optBuilder);
 
-        auto const oldUri = std::string{optView->property().uri()};
+        auto const oldUri = std::string{optBuilder->property().uri()};
         auto const optManifest = writer.manifest(oldUri);
         REQUIRE(optManifest);
-        auto builder = TrackBuilder::fromCompleteView(*optView, library.dictionary());
-        mutate(builder);
+        mutate(*optBuilder);
 
-        if (builder.property().uri() == oldUri)
+        if (optBuilder->property().uri() == oldUri)
         {
-          return writer.update(id, builder);
+          return writer.update(id, *optBuilder);
         }
 
-        return writer.relink(id, builder, FileManifestBuilder::fromView(*optManifest));
+        return writer.relink(id, *optBuilder, FileManifestBuilder::fromView(*optManifest));
       });
     REQUIRE(mutationRes);
 

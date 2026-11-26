@@ -96,7 +96,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackPerformanceAuthoring - recording date replaces the stored precision and reports the change")
+  TEST_CASE("TrackPerformanceAuthoring - a numeric edit can also replace and report recording date precision")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -109,19 +109,23 @@ namespace ao::rt::test
 
     auto const res = commandsFixture.runTask(commandsFixture.commands().updateMetadataAsync(
       std::move(targets),
-      MetadataPatch{.optRecordingDate = library::RecordingDate{.year = 1981, .month = 5, .day = 12}}));
+      MetadataPatch{
+        .optTrackNumber = 3, .optRecordingDate = library::RecordingDate{.year = 1981, .month = 5, .day = 12}}));
 
     REQUIRE(res);
     CHECK(res->status == AuthoringStatus::Applied);
     REQUIRE(res->reply.changes.size() == 1);
     auto const& record = res->reply.changes[0];
     CHECK(record.trackId == trackId);
-    REQUIRE(record.fields.size() == 1);
-    CHECK(record.fields[0] ==
-          (TrackFieldChange{.field = "recordingDate", .oldValue = "1981", .newValue = "1981-05-12"}));
+    CHECK(record.fields ==
+          std::vector<TrackFieldChange>{{.field = "trackNumber", .oldValue = "1", .newValue = "3"},
+                                        {.field = "recordingDate", .oldValue = "1981", .newValue = "1981-05-12"}});
     CHECK(publicationCount == 1);
-    CHECK(storedRecordingDate(storage.library(), trackId) ==
-          library::RecordingDate{.year = 1981, .month = 5, .day = 12});
+    auto const transaction = storage.library().readTransaction();
+    auto const optTrack = storage.library().tracks().reader(transaction).get(trackId);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().trackNumber() == 3);
+    CHECK(optTrack->performance().recordingDate() == library::RecordingDate{.year = 1981, .month = 5, .day = 12});
   }
 
   TEST_CASE("TrackPerformanceAuthoring - recording date clear and exact no-op")

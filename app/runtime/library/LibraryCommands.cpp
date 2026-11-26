@@ -17,7 +17,7 @@
 #include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>
@@ -175,8 +175,7 @@ namespace ao::rt
       return script;
     }
 
-    Result<EditTrackTagsReply> applyTagPatchInTransaction(library::MusicLibrary& library,
-                                                          library::LibraryWrite& transaction,
+    Result<EditTrackTagsReply> applyTagPatchInTransaction(library::LibraryWrite& transaction,
                                                           std::span<TrackId const> trackIds,
                                                           std::span<std::string const> tagsToAdd,
                                                           std::span<std::string const> tagsToRemove)
@@ -212,21 +211,19 @@ namespace ao::rt
 
       for (auto const trackId : trackIds)
       {
-        // Do not reload dictionary IDs staged by an earlier write of this track.
         if (!seenTrackIds.insert(trackId).second)
         {
           continue;
         }
 
-        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+        auto optBuilder = writer.loadForEdit(trackId, library::TrackWriter::EditTier::Hot);
 
-        if (!optView)
+        if (!optBuilder)
         {
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromHotView(*optView, library.dictionary());
-        auto& tags = builder.tags();
+        auto& tags = optBuilder->tags();
         bool changed = false;
         auto addedTags = std::vector<std::string>{};
         auto removedTags = std::vector<std::string>{};
@@ -256,7 +253,7 @@ namespace ao::rt
           continue;
         }
 
-        if (auto res = writer.updateHot(trackId, builder); !res)
+        if (auto res = writer.updateHot(trackId, *optBuilder); !res)
         {
           return storageError("Failed to update hot track data", res.error());
         }

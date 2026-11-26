@@ -27,6 +27,7 @@ namespace ao::library
 {
   namespace detail
   {
+    class DictionaryTerms;
     class LibraryIdentity;
   }
 
@@ -120,6 +121,8 @@ namespace ao::library
       bool operator()(std::string_view str, DictionaryId id) const { return (*storage)[id.raw() - 1] == str; }
     };
 
+    std::optional<std::string_view> findText(DictionaryId id) const;
+
     // Requires _mutex. The reverse index may already contain a prepared, hidden tail.
     std::optional<DictionaryId> findPublishedId(std::string_view text) const;
     std::uint64_t bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
@@ -151,6 +154,7 @@ namespace ao::library
     std::uint64_t _generation = 1;
 
     friend class DictionaryReadContext;
+    friend class TrackBuilder;
     friend class WriteTransaction;
     friend class MusicLibrary;
   };
@@ -176,6 +180,7 @@ namespace ao::library
   private:
     Writer(DictionaryStore& dictionary, lmdb::WriteTransaction& transaction);
 
+    std::optional<std::string_view> findText(DictionaryId id) const;
     void preparePublication();
     void publish() noexcept;
     void rollbackPublication() noexcept;
@@ -183,7 +188,9 @@ namespace ao::library
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
 
+    friend class TrackWriter;
     friend class WriteTransaction;
+    friend class detail::DictionaryTerms;
   };
 
   /**

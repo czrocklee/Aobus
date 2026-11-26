@@ -138,6 +138,9 @@ namespace ao::library::test
     auto const res = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *preparedRes);
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::CorruptData);
+    auto const numberRes = updateTrackRecordNumbers(writer, kInvalidTrackId, {.optYear = 2026});
+    REQUIRE_FALSE(numberRes);
+    CHECK(numberRes.error().code == Error::Code::CorruptData);
     REQUIRE(transaction.commit());
   }
 } // namespace ao::library::test

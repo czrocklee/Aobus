@@ -136,7 +136,9 @@ namespace ao::library::test
           auto const view = *writer.get(ids[0]);
           CHECK(view.property().segment() == TrackSegment{.startFrame = 1000, .frameCount = 588, .ordinal = 9});
           CHECK(view.property().duration() == std::chrono::milliseconds{13});
-          auto builder = TrackBuilder::fromCompleteView(view, library.dictionary());
+          auto optBuilder = writer.loadForEdit(ids[0]);
+          REQUIRE(optBuilder);
+          auto& builder = *optBuilder;
           builder.metadata().title("Refreshed");
           builder.property().bitrate(Bitrate{1000}).duration(std::chrono::seconds{123});
           auto const coverBytes = std::array{std::byte{1}, std::byte{2}, std::byte{3}};
@@ -296,7 +298,9 @@ namespace ao::library::test
       [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
-        auto builder = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
+        auto optBuilder = writer.loadForEdit(ids[0]);
+        REQUIRE(optBuilder);
+        auto& builder = *optBuilder;
 
         SECTION("complete update removes segment")
         {
@@ -324,9 +328,10 @@ namespace ao::library::test
 
         SECTION("hot-only update changes rate")
         {
-          builder = TrackBuilder::fromHotView(*writer.get(ids[0]), library.dictionary());
-          builder.property().sampleRate(SampleRate{48000});
-          return writer.updateHot(ids[0], builder);
+          auto optHot = writer.loadForEdit(ids[0], TrackWriter::EditTier::Hot);
+          REQUIRE(optHot);
+          optHot->property().sampleRate(SampleRate{48000});
+          return writer.updateHot(ids[0], *optHot);
         }
 
         SECTION("replace converts segment to whole")
@@ -379,16 +384,19 @@ namespace ao::library::test
         [&](LibraryWrite& write) -> Result<>
         {
           auto writer = write.tracks();
-          auto hot = TrackBuilder::fromHotView(*writer.get(ids[0]), library.dictionary());
-          hot.metadata().title("Hot refresh");
-          REQUIRE(writer.updateHot(ids[0], hot));
-          auto complete = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
-          complete.property().bitrate(Bitrate{2345});
-          REQUIRE(writer.updateCold(ids[0], complete));
+          auto optHot = writer.loadForEdit(ids[0], TrackWriter::EditTier::Hot);
+          REQUIRE(optHot);
+          optHot->metadata().title("Hot refresh");
+          REQUIRE(writer.updateHot(ids[0], *optHot));
+          auto optComplete = writer.loadForEdit(ids[0]);
+          REQUIRE(optComplete);
+          optComplete->property().bitrate(Bitrate{2345});
+          REQUIRE(writer.updateCold(ids[0], *optComplete));
           // Rebuild after each mutation: builders borrow mapped URI/metadata bytes.
-          complete = TrackBuilder::fromCompleteView(*writer.get(ids[0]), library.dictionary());
-          complete.metadata().title("Replacement");
-          REQUIRE(writer.replace(ids[0], complete, FileManifestBuilder::makeEmpty().fileSize(9876)));
+          optComplete = writer.loadForEdit(ids[0]);
+          REQUIRE(optComplete);
+          optComplete->metadata().title("Replacement");
+          REQUIRE(writer.replace(ids[0], *optComplete, FileManifestBuilder::makeEmpty().fileSize(9876)));
           REQUIRE(writer.updateManifest(ids[1], FileManifestBuilder::makeEmpty().status(FileStatus::Missing)));
           return {};
         }));
@@ -594,6 +602,63 @@ namespace ao::library::test
     CHECK_FALSE(library.dictionary().findId("Rejected append artist"));
     auto const resources = library.resources().reader(read);
     CHECK(resources.begin() == resources.end());
+  }
+
+  TEST_CASE("Carrier Track - a rejected later member does not consume append IDs")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const ids = createCarrier(library);
+    auto accepted = std::array{segmentTrack(7, 800, 100), segmentTrack(5, 600, 100)};
+    accepted[0].metadata().artist("Seventh member");
+    accepted[1].metadata().artist("Fifth member");
+    auto rejected = accepted;
+    auto const cover = std::array{std::byte{0x41}, std::byte{0x42}};
+    rejected[0].metadata().artist("Rejected member");
+    rejected[0].coverArt().add(PictureType::FrontCover, std::span<std::byte const>{cover});
+    rejected[1].customMetadata().add("duplicate", "first").add("duplicate", "second");
+
+    auto transaction = writeTransaction(library);
+    auto const appendedRes = transaction.apply(
+      [&](LibraryWrite& write) -> Result<std::vector<TrackId>>
+      {
+        auto writer = write.tracks();
+        auto const rejectedRes = writer.addCarrierMembers("disc.flac", rejected);
+        REQUIRE_FALSE(rejectedRes);
+        CHECK(rejectedRes.error().code == Error::Code::InvalidInput);
+        CHECK(library.tracks().reader(write).entryCount() == 2);
+        {
+          auto const optManifest = writer.manifest("disc.flac");
+          REQUIRE(optManifest);
+          CHECK(std::ranges::equal(optManifest->segmentTrackIds(), std::array{ids[1], ids[0]}));
+        }
+        // Commit the same operation so a partial resolution cannot hide behind rollback.
+        return writer.addCarrierMembers("disc.flac", accepted);
+      });
+    REQUIRE(appendedRes);
+    REQUIRE(*appendedRes == std::vector{TrackId{3}, TrackId{4}});
+    REQUIRE(transaction.commit());
+
+    auto const read = library.readTransaction();
+    auto const reader = library.tracks().reader(read);
+    CHECK(reader.entryCount() == 4);
+    auto const optManifest = library.manifest().reader(read).get("disc.flac");
+    REQUIRE(optManifest);
+    CHECK(std::ranges::equal(
+      optManifest->segmentTrackIds(), std::array{ids[1], (*appendedRes)[1], (*appendedRes)[0], ids[0]}));
+    auto const optSeventh = reader.get((*appendedRes)[0]);
+    auto const optFifth = reader.get((*appendedRes)[1]);
+    REQUIRE(optSeventh);
+    REQUIRE(optFifth);
+    CHECK(optSeventh->property().segment() == TrackSegment{.startFrame = 800, .frameCount = 100, .ordinal = 7});
+    CHECK(optFifth->property().segment() == TrackSegment{.startFrame = 600, .frameCount = 100, .ordinal = 5});
+    CHECK(optSeventh->metadata().artistId() == DictionaryId{1});
+    CHECK(optFifth->metadata().artistId() == DictionaryId{2});
+    auto const& dictionary = library.dictionary();
+    CHECK(dictionary.findId("Seventh member") == DictionaryId{1});
+    CHECK(dictionary.findId("Fifth member") == DictionaryId{2});
+    CHECK(dictionary.size() == 2);
+    CHECK(library.resources().reader(read).maxKey() == kInvalidResourceId);
   }
 
   TEST_CASE("Carrier Track - open rejects malformed persisted carrier structures")

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "WriteTransactionAccess.h"
+#include "lib/library/TrackPreparation.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -25,6 +26,31 @@ namespace ao::library::detail
   {
   public:
     static WriteTransaction& transaction(LibraryWrite& write) { return write.transaction(); }
+
+    // Representation tests may inspect the capture boundary after logical validation.
+    static auto stageHotTrack(TrackBuilder const& builder, WriteTransaction& transaction)
+    {
+      return TrackPreparation::stageHotValidated(builder, transaction);
+    }
+
+    static auto stageColdTrack(TrackBuilder const& builder,
+                               WriteTransaction& transaction,
+                               ResourceStore const& resources)
+    {
+      return TrackPreparation::stageColdValidated(builder, transaction, resources);
+    }
+
+    static auto stageTrack(TrackBuilder const& builder, WriteTransaction& transaction, ResourceStore const& resources)
+    {
+      return TrackPreparation::stageValidated(builder, transaction, resources);
+    }
+
+    static auto stageTrackMembers(std::span<TrackBuilder const> tracks,
+                                  WriteTransaction& transaction,
+                                  ResourceStore const& resources)
+    {
+      return TrackPreparation::stageValidatedMembers(tracks, transaction, resources);
+    }
 
     static auto prepareTrack(TrackBuilder const& builder, WriteTransaction& transaction, ResourceStore const& resources)
     {

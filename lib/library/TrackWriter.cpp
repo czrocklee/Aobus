@@ -4,6 +4,7 @@
 #include <ao/library/TrackWriter.h>
 
 #include "LibraryUriValidation.h"
+#include "TrackPreparation.h"
 #include "TrackWrite.h"
 #include "WriteTransactionAccess.h"
 #include "lmdb/detail/TransactionFailure.h"
@@ -181,6 +182,28 @@ namespace ao::library
     return detail::WriteTransactionAccess::trackStoreWriter(*_transaction).get(id, mode);
   }
 
+  std::optional<TrackBuilder> TrackWriter::loadForEdit(TrackId id, EditTier tier) const
+  {
+    auto const hotOnly = tier == EditTier::Hot;
+    auto const optView = get(id, hotOnly ? TrackStore::Reader::LoadMode::Hot : TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return std::nullopt;
+    }
+
+    auto const& dictionary = detail::WriteTransactionAccess::dictionary(*_transaction);
+    auto const resolve = [&dictionary](DictionaryId reference)
+    {
+      auto const optText = dictionary.findText(reference);
+      AO_INVARIANT(optText, "Admitted Track references missing dictionary ID {}", reference.raw());
+      return *optText;
+    };
+
+    auto const baseline = hotOnly ? TrackBuilder::BaselineKind::HotOnly : TrackBuilder::BaselineKind::Complete;
+    return TrackBuilder::projectView(*optView, baseline, resolve);
+  }
+
   std::optional<FileManifestView> TrackWriter::manifest(std::string_view const uri) const
   {
     requireActiveOperation();
@@ -300,19 +323,8 @@ namespace ao::library
       return std::unexpected{validationRes.error()};
     }
 
-    auto prepared = std::vector<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>>{};
-
-    for (auto const& track : tracks)
-    {
-      auto preparedRes = track.prepare(*_transaction, _transaction->resourceStore());
-
-      if (!preparedRes)
-      {
-        throwAfterMutation(std::move(preparedRes.error()));
-      }
-
-      prepared.push_back(std::move(*preparedRes));
-    }
+    auto const prepared =
+      detail::TrackPreparation::stageValidatedMembers(tracks, *_transaction, _transaction->resourceStore()).finish();
 
     auto ids = std::vector<TrackId>{};
     auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
@@ -409,19 +421,8 @@ namespace ao::library
 
     auto unboundRes = manifestBuilder.validate(uri);
     AO_INVARIANT(unboundRes);
-    auto prepared = std::vector<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>>{};
-
-    for (auto const& track : tracks)
-    {
-      auto preparedRes = track.prepare(*_transaction, _transaction->resourceStore());
-
-      if (!preparedRes)
-      {
-        throwAfterMutation(std::move(preparedRes.error()));
-      }
-
-      prepared.push_back(std::move(*preparedRes));
-    }
+    auto const prepared =
+      detail::TrackPreparation::stageValidatedMembers(tracks, *_transaction, _transaction->resourceStore()).finish();
 
     auto ids = std::vector<TrackId>{};
     auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
@@ -700,6 +701,18 @@ namespace ao::library
     }
 
     return {};
+  }
+
+  Result<TrackNumberPatch> TrackWriter::updateNumbers(TrackId id, TrackNumberPatch const& patch)
+  {
+    requireActiveOperation();
+
+    if (id == kInvalidTrackId)
+    {
+      return makeError(Error::Code::NotFound, "Track 0 does not exist");
+    }
+
+    return updateTrackRecordNumbers(detail::WriteTransactionAccess::trackStoreWriter(*_transaction), id, patch);
   }
 
   Result<> TrackWriter::replace(TrackId const id, TrackBuilder const& track, FileManifestBuilder manifestBuilder)
