@@ -200,11 +200,6 @@ namespace ao::gtk::test
                                  std::string const& deviceName,
                                  audio::ProfileId const& profileId)
     {
-      auto* const selector = window.outputSelector();
-      REQUIRE(selector != nullptr);
-      emitShow(*selector);
-      drainGtkEvents();
-
       auto* const listBox = outputSelectorListBox(window);
       REQUIRE(listBox != nullptr);
 
@@ -361,6 +356,7 @@ namespace ao::gtk::test
 
     auto fixture = GtkRuntimeFixture{};
     rt::test::addReadyAudioProvider(fixture.runtime());
+    drainGtkEvents();
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto window = PreferencesWindow{ao::test::englishMessageCatalog(),
@@ -379,13 +375,11 @@ namespace ao::gtk::test
     window.refreshPreferences(prefs, &fixture.runtime().playback());
     REQUIRE(window.outputSelector() != nullptr);
 
-    emitShow(*window.outputSelector());
-    drainGtkEvents();
-
     auto* const listBox = outputSelectorListBox(window);
     REQUIRE(listBox != nullptr);
     auto* const deviceRow = listBox->get_row_at_index(1);
     REQUIRE(deviceRow != nullptr);
+    REQUIRE_FALSE(optPersisted);
 
     emitRowActivated(*listBox, *deviceRow);
 

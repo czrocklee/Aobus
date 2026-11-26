@@ -132,11 +132,6 @@ namespace ao::gtk::test
     ::g_signal_emit_by_name(popover.gobj(), "closed");
   }
 
-  void emitShow(Gtk::Widget& widget)
-  {
-    ::g_signal_emit_by_name(widget.gobj(), "show");
-  }
-
   void emitRowActivated(Gtk::ListBox& listBox, Gtk::ListBoxRow& row)
   {
     ::g_signal_emit_by_name(listBox.gobj(), "row-activated", row.gobj());
