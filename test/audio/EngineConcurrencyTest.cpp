@@ -270,7 +270,7 @@ namespace ao::audio::test
     CHECK(backendRaw->maxActiveCalls() == 1);
   }
 
-  // Run under TSan (./ao test --tsan): the control thread loops play/seek/stop
+  // Run under TSan (bazel test --config=tsan //test:audio_test): the control thread loops play/seek/stop
   // while a contract-conforming backend joins its render thread before each
   // source reset and a poller reads the same queue through status(). PipeWire
   // closes its own render admission and drains both data- and main-loop work.

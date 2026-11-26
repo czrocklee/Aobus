@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import bazel_native as native
-from ao.portal import bazel_attempt, bazel_workspace
+from ao.portal import bazel_workspace
 
 
 class IsolatedClientEnvironmentTests(unittest.TestCase):
@@ -39,15 +39,29 @@ class IsolatedClientEnvironmentTests(unittest.TestCase):
                 "import json,os; print(json.dumps({k:v for k,v in os.environ.items() "
                 "if k.casefold() == 'bazelrc' or k == 'AOBUS_RC_TEST_SENTINEL'}))"
             )
-            value = f"{valid},{missing}"
-            attempt = bazel_attempt._Check(root / "tree", "debug", "windows", 1)
+            environment = {
+                "AOBUS_STATE_ROOT": str(root / "state"),
+                "BAZELRC": f"{valid},{missing}",
+                "AOBUS_RC_TEST_SENTINEL": "retained",
+            }
+            output = root / "build.log"
             with (
-                mock.patch.dict(os.environ, {"BAZELRC": value, "AOBUS_RC_TEST_SENTINEL": "retained"}),
+                mock.patch.dict(os.environ, environment),
                 mock.patch.object(
                     bazel_workspace, "invocation", return_value=[sys.executable, "-I", "-S", "-B", "-c", child]
                 ) as invocation,
             ):
-                output = attempt.bazel("child", Path(sys.executable), root, "query", [])
+                status = bazel_workspace.execute(
+                    Path(sys.executable),
+                    root,
+                    root,
+                    "build",
+                    "debug",
+                    ["//test:async_test"],
+                    isolate_rc=True,
+                    log=output,
+                )
+                self.assertEqual(status, 0)
             invocation.assert_called_once_with(Path(sys.executable), root, isolate_rc=True)
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {"AOBUS_RC_TEST_SENTINEL": "retained"})
 

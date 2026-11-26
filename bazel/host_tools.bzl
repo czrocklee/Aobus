@@ -23,6 +23,7 @@ def host_tools(data):
         native.exports_files([data["resource_executable"]])
         native.alias(name = "glib_compile_resources", actual = data["resource_executable"])
     native.filegroup(name = "glib_compile_resources_runtime", srcs = data["resource_inputs"])
+    native.filegroup(name = "sanitizer_symbolizer", srcs = data["symbolizer_inputs"])
     native.filegroup(name = "dbus_daemon", srcs = data["dbus_inputs"])
     native.filegroup(name = "pipewire_tools", srcs = data["pipewire_inputs"])
     native.filegroup(name = "xvfb", srcs = data["xvfb_inputs"])

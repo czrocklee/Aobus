@@ -99,14 +99,9 @@ class Request:
     compiler: str | None = None
     gtk: str | bool | None = None
     system_media: str | bool | None = None
-    asan: bool = False
-    tsan: bool = False
 
 
-def add_arguments(
-    parser: argparse.ArgumentParser, *, default_config: str = "fastbuild", allow_sanitizers: bool = False
-) -> None:
-    """Native options; only full completion exposes sanitizer execution switches."""
+def add_arguments(parser: argparse.ArgumentParser, *, default_config: str = "fastbuild") -> None:
     parser.add_argument(
         "--config",
         choices=("fastbuild", "debug", "release", "profile"),
@@ -123,30 +118,8 @@ def add_arguments(
     parser.add_argument("--vcpkg-prefix", help="existing governed native SDK prefix")
     add_remote_cache_argument(parser, "trusted Bazel remote cache URL")
     parser.add_argument("--compiler", choices=("gcc", "clang"), help="Linux target compiler (GCC by default)")
-    if allow_sanitizers:
-        sanitizer = parser.add_mutually_exclusive_group()
-        sanitizer.add_argument("--asan", action="store_true", help="run separate governed AddressSanitizer completion")
-        sanitizer.add_argument("--tsan", action="store_true", help="run separate governed ThreadSanitizer completion")
     parser.add_argument("--gtk", choices=("on", "off"), help="enable or disable the GTK graph feature")
     parser.add_argument("--system-media", choices=("on", "off"), help="enable or disable Linux system-media support")
-
-
-def configuration(args: NativeRequest) -> str:
-    """Resolve config/sanitizers; full completion keeps a separate normal phase."""
-    selected = str(getattr(args, "config", "fastbuild"))
-    asan, tsan = bool(getattr(args, "asan", False)), bool(getattr(args, "tsan", False))
-    if asan and tsan:
-        raise native.BazelWorkspaceError("AddressSanitizer and ThreadSanitizer are mutually exclusive")
-    if asan or tsan:
-        requested = "asan" if asan else "tsan"
-        # The instrumented subset stays dbg-based; the normal completion keeps
-        # the ordinary fastbuild default or an explicitly requested Debug flavor.
-        if selected not in ("fastbuild", "debug", requested):
-            raise native.BazelWorkspaceError("sanitizer switches are incompatible with the release and profile flavors")
-        selected = requested
-    if selected not in CONFIGURATIONS:
-        raise native.BazelWorkspaceError(f"unknown Bazel configuration: {selected}")
-    return selected
 
 
 def feature_enabled(value: object, name: str) -> bool:
@@ -186,7 +159,7 @@ def feature_options(args: NativeRequest) -> tuple[str, ...]:
 
 def validate_request(args: NativeRequest) -> tuple[str, str]:
     """Pure admission before SDK discovery, path selection, locking or queries."""
-    config, host = configuration(args), build_dir.platform_profile().name
+    config, host = args.config, build_dir.platform_profile().name
     bazel_profiles.validate_request(config, host)
     feature_options(args)
     if remote := getattr(args, "remote_cache", None):

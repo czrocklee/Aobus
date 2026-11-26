@@ -52,6 +52,8 @@ class HostToolsFactsTest(unittest.TestCase):
         self.file("python/Lib/site-packages/ambient.py")
         self.extension = self.file("python/lib-dynload/_struct.so")
         self.framework = self.file("python/Python")
+        self.symbolizer = self.file("llvm/bin/llvm-symbolizer")
+        self.symbolizer.chmod(0o755)
         self.version_report = "3.3"
         for patcher in (
             mock.patch.object(native, "PROJECT_ROOT", self.root),
@@ -62,7 +64,14 @@ class HostToolsFactsTest(unittest.TestCase):
             mock.patch.object(tools.sysconfig, "get_path", return_value=str(self.stdlib)),
             mock.patch.object(tools.sysconfig, "get_config_var", side_effect=self.python_config),
             mock.patch.object(subprocess, "run", side_effect=self.execute),
-            mock.patch.dict(os.environ, {"NIX_CFLAGS_SET": "must not leak", "CMAKE_PREFIX_PATH": "must not leak"}),
+            mock.patch.dict(
+                os.environ,
+                {
+                    "AOBUS_LLVM_ROOT": str(self.root / "llvm"),
+                    "NIX_CFLAGS_SET": "must not leak",
+                    "CMAKE_PREFIX_PATH": "must not leak",
+                },
+            ),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -130,7 +139,8 @@ class HostToolsFactsTest(unittest.TestCase):
         self.assertEqual(result["python_action"], base["python_action"])
         self.assertEqual(result["python"], base["python"])
         self.assertEqual(result["python"]["executable"], str(self.python))
-        self.assertEqual(result["test_tools"], {})
+        self.assertEqual(result["test_tools"], {"symbolizer": str(self.symbolizer)})
+        self.assertIn(str(self.symbolizer), result["watch_files"])
         self.assertNotIn(str(redirector), result["watch_files"])
 
     def test_catalog_python_falls_back_to_the_selected_interpreter_without_a_base_redirect(self):

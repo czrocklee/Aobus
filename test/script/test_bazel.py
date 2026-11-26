@@ -890,6 +890,9 @@ class BazelWorkspaceTests(unittest.TestCase):
             path.write_bytes(b"independent tool SDK fixture\n")
         for config in ("debug", "release"):
             (fixtures / config / "pkgconfig").mkdir(exist_ok=True)
+        symbolizer = fixtures / "bin/llvm-symbolizer"
+        symbolizer.touch()
+        symbolizer.chmod(0o755)
         # Keep the resolver's audit hook isolated from the unittest process.
         # Each new consumer has an authored subplan/SDK selection, independent
         # of gperf. Production provider guards are not changed for this fixture.
@@ -946,6 +949,8 @@ class BazelWorkspaceTests(unittest.TestCase):
                 patch.object(dependencies, 'resolve_dependencies', side_effect=catalog) as imports,
                 patch.object(host_tools, '_catalog_sdk', return_value=sdk),
                 patch.object(host_tools, '_python_action_sdk', return_value=python_action),
+                patch.object(host_tools.bazel_compiler_probe, 'nix_symbolizer',
+                             return_value=str(fixtures / 'bin/llvm-symbolizer')),
                 patch.object(host_tools, '_linux_dbus', return_value=dbus),
                 patch.object(host_tools, '_linux_fixture_tools', return_value={
                     'pipewire': str(fixtures / 'bin/pipewire'), 'pw_cli': str(fixtures / 'bin/pw-cli'),
@@ -1032,6 +1037,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             {
                 "dbus_daemon": str(fixtures / "bin/dbus-daemon"),
                 "dbus_daemon_directory": str(fixtures / "bin"),
+                "symbolizer": str(fixtures / "bin/llvm-symbolizer"),
                 "pipewire": str(fixtures / "bin/pipewire"),
                 "wireplumber": str(fixtures / "bin/wireplumber"),
                 "pw_cli": str(fixtures / "bin/pw-cli"),

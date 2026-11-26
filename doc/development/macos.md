@@ -64,7 +64,7 @@ Git hooks are separate optional setup; see the
 
 ## Build, run, and check
 
-Use `./ao <command> --help` for current options. Common tasks are:
+Use `./ao <command> --help` for current options. Choose the command that fits the task:
 
 ```bash
 bazel build //app/cli:aobus //app/tui:aobus-tui //app/macos-appkit:aobus-appkit
@@ -72,16 +72,19 @@ bazel build --config=release //app/macos-appkit:aobus-appkit  # C++ ThinLTO
 bazel build --config=profile //app/tui:aobus-tui  # sampling with frame pointers
 bazel run //app/cli:aobus -- --help
 bazel run //app/tui:aobus-tui
+
 bazel test //:tests           # ordinary default selection
+bazel test --config=asan //test:utility_test  # affected memory-safety tests
+bazel test --config=tsan //test:async_test    # affected concurrency tests
 bazel test //test/lint:lint_test --nocache_test_results  # fresh result assertions
+
+./ao setup prettier           # pinned formatter/Node bundle only
+./ao check format             # scoped read-only formatting
+./ao check lint               # scoped semantic lint
+./ao check deps
+
 ./ao check                    # complete native fastbuild gate
 ./ao check --config release   # complete native Release gate
-./ao check --asan             # supported suites with ASan/UBSan
-./ao check --tsan             # TSan-safe core, application, and backend suites
-./ao check lint               # scoped semantic lint
-./ao check format             # scoped read-only formatting
-./ao setup prettier           # pinned formatter/Node bundle only
-./ao check deps
 ```
 
 For the desktop app, use the [isolated AppKit launch](#bazel-appkit-product).
@@ -95,12 +98,8 @@ and generated wheel-lock checks.
 Workflow lint and the
 representative compiler driver diagnostic are Linux-only. Ordinary `//:tests` excludes GUI smoke, backend service checks,
 and lint fixtures; the wildcard graph is broader.
-`./ao check --tsan` runs the full normal fastbuild completion first — which builds
-the completion products, including the AppKit product bundle (built, never
-run) — then a separate
-managed TSan profile over the graph-owned macOS-compatible scope (core,
-application, and backend) in the same selected tree; the sanitizer
-profile itself does not build GUI smoke. This is not evidence for native GUI
+`bazel test --config=tsan //:tsan_tests` exercises the compatible core,
+application, and backend suites without lint or GUI smoke. This is not evidence for native GUI
 behavior. Use
 an explicitly configured native smoke target with `--config=tsan` when an
 AppKit scenario needs TSan; that raw run and its runtime are caller-owned.
@@ -138,9 +137,7 @@ instead. It is
 never a base and takes precedence over `AOBUS_BUILD_ROOT`. An explicit `-p` or
 `--path` takes precedence over both. An explicitly selected tree is
 mode-neutral: the selected
-profile, not the tree, picks the compilation mode, and the composite sanitizer
-check uses one selected tree for its normal fastbuild completion and the managed
-profile.
+profile, not the tree, picks the compilation mode.
 
 The default `/tmp` location is temporary storage, not a persistence guarantee.
 For a persistent local base, for example, use
@@ -335,9 +332,7 @@ session, and report that interactive evidence apart from smoke results.
 
 For native lifecycle or authoring changes, run applicable scenarios with
 `--config=debug`, `--config=release`, and `--config=tsan`; add `--config=asan`
-for memory-sensitive changes. Put the config before `--`. These raw sanitizer
-runs have caller-owned runtime options and do not count as managed sanitizer-gate
-evidence. Include `app/macos-appkit` and `test/macos-appkit` in scoped `check lint`
+for memory-sensitive changes. Put the config before `--`. These `bazel run` scenarios use caller-owned runtime options; they do not exercise the native test suites. Include `app/macos-appkit` and `test/macos-appkit` in scoped `check lint`
 and `check format`.
 
 ## Validation

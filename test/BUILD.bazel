@@ -3,7 +3,7 @@ load("@rules_python//python:defs.bzl", "py_test")
 load("//bazel:compiler_policy.bzl", "GTK_HEADER_SSE_COPTS", "PIPEWIRE_SPA_COPTS", "UNIX_TEST_COPTS")
 load("//bazel:testing.bzl", "native_test")
 load("//bazel:windows_utf8_manifest.bzl", "windows_utf8_manifest_checks")
-load(":executables.bzl", "cc_binary", "cc_test")
+load(":executables.bzl", "cc_binary", "cc_test", "sanitizer_suppressions")
 load(":input_files.bzl", "test_input_manifest")
 load(":linux_fixture_env_test.bzl", "LINUX", "linux_fixture_env_test")
 load(":windows_native_context_runfiles.bzl", "WINDOWS", "windows_native_context_runfiles_test")
@@ -251,6 +251,28 @@ config_setting(
     name = "macos_asan",
     constraint_values = ["@platforms//os:macos"],
     flag_values = {"//bazel:asan_enabled": "true"},
+)
+
+config_setting(
+    name = "linux_tsan",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {"//bazel:tsan_enabled": "true"},
+)
+
+config_setting(
+    name = "windows_asan",
+    constraint_values = ["@platforms//os:windows"],
+    flag_values = {"//bazel:asan_enabled": "true"},
+)
+
+sanitizer_suppressions(
+    name = "lsan",
+    profile = ":linux_asan",
+)
+
+sanitizer_suppressions(
+    name = "tsan",
+    profile = ":linux_tsan",
 )
 
 cc_binary(
