@@ -703,6 +703,18 @@ namespace ao::library
     return {};
   }
 
+  Result<TrackNumberPatch> TrackWriter::updateNumbers(TrackId id, TrackNumberPatch const& patch)
+  {
+    requireActiveOperation();
+
+    if (id == kInvalidTrackId)
+    {
+      return makeError(Error::Code::NotFound, "Track 0 does not exist");
+    }
+
+    return updateTrackRecordNumbers(detail::WriteTransactionAccess::trackStoreWriter(*_transaction), id, patch);
+  }
+
   Result<> TrackWriter::replace(TrackId const id, TrackBuilder const& track, FileManifestBuilder manifestBuilder)
   {
     requireActiveOperation();

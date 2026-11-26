@@ -7,6 +7,7 @@
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
+#include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
@@ -26,19 +27,24 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/library/detail/TrackViewRawAccess.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -97,6 +103,15 @@ namespace ao::library::test
       auto optBuilder = writer.loadForEdit(id, tier);
       REQUIRE(optBuilder);
       return *std::move(optBuilder);
+    }
+
+    void checkPreviousNumbers(TrackNumberPatch const& actual, TrackNumberPatch const& expected)
+    {
+      CHECK(actual.optYear == expected.optYear);
+      CHECK(actual.optTrackNumber == expected.optTrackNumber);
+      CHECK(actual.optTrackTotal == expected.optTrackTotal);
+      CHECK(actual.optDiscNumber == expected.optDiscNumber);
+      CHECK(actual.optDiscTotal == expected.optDiscTotal);
     }
 
     DictionaryId soleRoleId(TrackView const& view)
@@ -457,6 +472,175 @@ namespace ao::library::test
     REQUIRE(optTrack->tags().count() == 2);
     CHECK(library.dictionary().get(optTrack->tags().id(0)) == "first");
     CHECK(library.dictionary().get(optTrack->tags().id(1)) == "second");
+  }
+
+  TEST_CASE("TrackWriter - mixed number edits preserve every other byte of a staged carrier member")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const db = temp.path() / "db";
+    auto id = kInvalidTrackId;
+    auto roleId = kInvalidDictionaryId;
+    auto expectedHot = std::vector<std::byte>{};
+    auto expectedCold = std::vector<std::byte>{};
+    auto const checkBytes = [&](TrackView const& view)
+    {
+      CHECK(std::ranges::equal(detail::TrackViewRawAccess::hotData(view), expectedHot));
+      CHECK(std::ranges::equal(detail::TrackViewRawAccess::coldData(view), expectedCold));
+    };
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), db);
+      auto transaction = writeTransaction(library);
+      auto const previousRes = transaction.apply(
+        [&](LibraryWrite& write) -> Result<TrackNumberPatch>
+        {
+          auto members = std::array{TrackBuilder::makeEmpty()};
+          auto& track = members.front();
+          auto const credits = std::array{CreditView{.name = "Leader", .kind = CreditKind::Conductor},
+                                          CreditView{.name = "Guest", .role = "Piano"},
+                                          CreditView{.name = "Guest", .role = "Organ"}};
+          track.metadata()
+            .clearTitleExplicitly()
+            .artist("Ensemble")
+            .work("Suite")
+            .recordingDate({.year = 1987, .month = 5})
+            .credits(credits)
+            .year(1992)
+            .trackNumber(4)
+            .discNumber(2)
+            .discTotal(3);
+          track.tags().add("live");
+          track.customMetadata().add("room", "west hall");
+          auto const cover = std::array{std::byte{0x37}, std::byte{0x41}};
+          track.coverArt().add(PictureType::BackCover, cover);
+          track.property()
+            .uri("concert.flac")
+            .sampleRate(SampleRate{44100})
+            .segment(TrackSegment{.startFrame = 588, .frameCount = 588, .ordinal = 2});
+          auto writer = write.tracks();
+          auto const idsRes = writer.createCarrier(members, FileManifestBuilder::makeEmpty(), 1176);
+          REQUIRE(idsRes);
+          REQUIRE(idsRes->size() == 1);
+          id = idsRes->front();
+
+          auto const optBefore = writer.get(id);
+          REQUIRE(optBefore);
+          auto const performers = optBefore->performance().credits(CreditKind::Performer);
+          REQUIRE(performers.size() == 2);
+          roleId = performers.back().roleId;
+          REQUIRE(roleId != kInvalidDictionaryId);
+          CHECK_FALSE(library.dictionary().findId("Organ"));
+          // Snapshot before the first replacement; both mapped sides may move.
+          expectedHot = detail::TrackViewRawAccess::hotData(*optBefore) | std::ranges::to<std::vector<std::byte>>();
+          expectedCold = detail::TrackViewRawAccess::coldData(*optBefore) | std::ranges::to<std::vector<std::byte>>();
+          utility::layout::viewMutable<TrackHotHeader>(expectedHot)->year = 2026;
+          auto* const cold = utility::layout::viewMutable<TrackColdHeader>(expectedCold);
+          cold->trackNumber = 0;
+          cold->trackTotal = 18;
+          cold->discNumber = 1;
+
+          auto const res = write.tracks().updateNumbers(
+            id, {.optYear = 2026, .optTrackNumber = 0, .optTrackTotal = 18, .optDiscNumber = 1, .optDiscTotal = 3});
+          REQUIRE(res);
+          auto const optAfter = writer.get(id);
+          REQUIRE(optAfter);
+          checkBytes(*optAfter);
+          CHECK_FALSE(library.dictionary().findId("Organ"));
+          return res;
+        });
+      REQUIRE(previousRes);
+      checkPreviousNumbers(
+        *previousRes, {.optYear = 1992, .optTrackNumber = 4, .optTrackTotal = 0, .optDiscNumber = 2});
+      REQUIRE(transaction.commit());
+    }
+
+    auto library = makeTestMusicLibrary(temp.path(), db);
+    auto read = library.readTransaction();
+    auto const optReopened = library.tracks().reader(read).get(id);
+    REQUIRE(optReopened);
+    checkBytes(*optReopened);
+    CHECK(library.dictionary().findId("Organ") == roleId);
+    auto const optManifest = library.manifest().reader(read).get("concert.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->totalFrames() == 1176);
+    CHECK(std::ranges::equal(optManifest->segmentTrackIds(), std::array{id}));
+  }
+
+  TEST_CASE("TrackWriter - numeric edits encode the same Track as a complete builder update")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const id = addTrack(library, TrackSpec{.tags = {"live"}, .customMetadata = {{"room", "hall"}}});
+    auto hot = std::vector<std::byte>{};
+    auto cold = std::vector<std::byte>{};
+    {
+      auto transaction = writeTransaction(library);
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+          auto builder = loadForEdit(writer, id);
+          builder.metadata().year(1998).trackNumber(0).trackTotal(12).discNumber(2).discTotal(3);
+          REQUIRE(writer.update(id, builder));
+          auto const optView = writer.get(id);
+          REQUIRE(optView);
+          hot = detail::TrackViewRawAccess::hotData(*optView) | std::ranges::to<std::vector<std::byte>>();
+          cold = detail::TrackViewRawAccess::coldData(*optView) | std::ranges::to<std::vector<std::byte>>();
+          return {};
+        }));
+      // Run the numeric writer against the same original bytes and dictionary IDs.
+      transaction.abort();
+    }
+
+    auto transaction = writeTransaction(library);
+    REQUIRE(transaction.apply(
+      [&](LibraryWrite& write) -> Result<>
+      {
+        auto writer = write.tracks();
+        auto const res = writer.updateNumbers(
+          id, {.optYear = 1998, .optTrackNumber = 0, .optTrackTotal = 12, .optDiscNumber = 2, .optDiscTotal = 3});
+        REQUIRE(res);
+        checkPreviousNumbers(
+          *res, {.optYear = 2020, .optTrackNumber = 1, .optTrackTotal = 0, .optDiscNumber = 1, .optDiscTotal = 0});
+        auto const optView = writer.get(id);
+        REQUIRE(optView);
+        CHECK(std::ranges::equal(detail::TrackViewRawAccess::hotData(*optView), hot));
+        CHECK(std::ranges::equal(detail::TrackViewRawAccess::coldData(*optView), cold));
+        return {};
+      }));
+  }
+
+  TEST_CASE("TrackWriter - number edits distinguish missing targets from unchanged numbers")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const id = addTrack(library, TrackSpec{.discTotal = 2});
+    auto transaction = writeTransaction(library);
+    auto const previousRes = transaction.apply(
+      [&](LibraryWrite& write) -> Result<TrackNumberPatch>
+      {
+        auto writer = write.tracks();
+        auto const patch = TrackNumberPatch{.optDiscTotal = 4};
+        auto const missingRes = writer.updateNumbers(TrackId{1234}, {});
+        REQUIRE_FALSE(missingRes);
+        CHECK(missingRes.error().code == Error::Code::NotFound);
+        auto const zeroRes = writer.updateNumbers(kInvalidTrackId, patch);
+        REQUIRE_FALSE(zeroRes);
+        CHECK(zeroRes.error().code == Error::Code::NotFound);
+
+        checkPreviousNumbers(ao::test::requireValue(writer.updateNumbers(id, {})), {});
+        auto const res = writer.updateNumbers(id, patch);
+        REQUIRE(res);
+        checkPreviousNumbers(ao::test::requireValue(writer.updateNumbers(id, patch)), {});
+        return res;
+      });
+    REQUIRE(previousRes);
+    checkPreviousNumbers(*previousRes, {.optDiscTotal = 2});
+    REQUIRE(transaction.commit());
+    auto const read = library.readTransaction();
+    auto const optView = library.tracks().reader(read).get(id);
+    REQUIRE(optView);
+    CHECK(optView->metadata().discTotal() == 4);
   }
 
   TEST_CASE("TrackWriter - an unpublished credit role survives a same-write duration edit and reopen")

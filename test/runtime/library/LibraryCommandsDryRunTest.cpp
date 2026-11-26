@@ -3,6 +3,7 @@
 
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureDirectory.h"
+#include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -267,6 +268,82 @@ namespace ao::rt::test
       REQUIRE(optView);
       CHECK(optView->metadata().title().empty());
       CHECK(optView->metadata().isTitleExplicitlyCleared());
+    }
+  }
+
+  TEST_CASE("LibraryCommands - numeric metadata preview and commit report only changed fields in target order")
+  {
+    auto fixture = MusicLibraryFixture{};
+    auto& storage = fixture.library();
+    auto const first = fixture.addTrack(library::test::TrackSpec{.title = "First", .trackTotal = 12});
+    auto const second = fixture.addTrack(
+      library::test::TrackSpec{.title = "Second", .year = 2024, .discNumber = 2, .discTotal = 3, .trackNumber = 3});
+    auto const unchanged = fixture.addTrack(library::test::TrackSpec{
+      .title = "Unchanged", .year = 2024, .discNumber = 2, .trackNumber = 3, .trackTotal = 12});
+    auto changes = makeStateOnlyLibraryChanges(storage);
+    auto commandsFixture = LibraryCommandsFixture{storage, changes};
+    auto& commands = commandsFixture.commands();
+    auto publications = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&publications](LibraryChangeSet const& event) noexcept { publications.push_back(event); });
+    auto const selection = std::array{second, unchanged, first};
+    auto const targets = commandsFixture.bind(selection);
+    auto const revision = targets.revision();
+    auto const patch =
+      MetadataPatch{.optYear = 2024, .optTrackNumber = 3, .optTrackTotal = 12, .optDiscNumber = 2, .optDiscTotal = 0};
+    auto const expected = std::vector<TrackChangeRecord>{
+      {.trackId = second,
+       .fields = {{.field = "trackTotal", .oldValue = "0", .newValue = "12"},
+                  {.field = "discTotal", .oldValue = "3", .newValue = "0"}}},
+      {.trackId = first,
+       .fields = {{.field = "year", .oldValue = "2020", .newValue = "2024"},
+                  {.field = "trackNumber", .oldValue = "1", .newValue = "3"},
+                  {.field = "discNumber", .oldValue = "1", .newValue = "2"}}},
+    };
+    auto const readNumbers = [&storage](TrackId id)
+    {
+      auto const transaction = storage.readTransaction();
+      auto const optTrack = storage.tracks().reader(transaction).get(id);
+      REQUIRE(optTrack);
+      auto const metadata = optTrack->metadata();
+      return std::to_array<std::uint16_t>(
+        {metadata.year(), metadata.trackNumber(), metadata.trackTotal(), metadata.discNumber(), metadata.discTotal()});
+    };
+
+    auto const previewRes =
+      commandsFixture.runTask(commands.previewUpdateMetadataAsync({selection.begin(), selection.end()}, patch));
+    REQUIRE(previewRes);
+    CHECK(previewRes->changes == expected);
+    CHECK(publications.empty());
+    CHECK(commandsFixture.bind(selection).revision() == revision);
+    CHECK(readNumbers(first) == std::array<std::uint16_t, 5>{2020, 1, 12, 1, 0});
+    CHECK(readNumbers(second) == std::array<std::uint16_t, 5>{2024, 3, 0, 2, 3});
+
+    auto const commitRes = commandsFixture.runTask(commands.updateMetadataAsync(targets, patch));
+    REQUIRE(commitRes);
+    CHECK(commitRes->status == AuthoringStatus::Applied);
+    CHECK(commitRes->reply.changes == expected);
+    REQUIRE(commitRes->optNextTargets);
+    CHECK(commitRes->optNextTargets->revision() == revision + 1);
+    CHECK(std::ranges::equal(commitRes->optNextTargets->trackIds(), selection));
+
+    auto const staleRes = commandsFixture.runTask(commands.updateMetadataAsync(targets, patch));
+    REQUIRE(staleRes);
+    CHECK(staleRes->status == AuthoringStatus::Stale);
+    CHECK(staleRes->reply.changes.empty());
+
+    auto const repeatRes = commandsFixture.runTask(commands.updateMetadataAsync(*commitRes->optNextTargets, patch));
+    REQUIRE(repeatRes);
+    CHECK(repeatRes->status == AuthoringStatus::NoOp);
+    CHECK(repeatRes->reply.changes.empty());
+    CHECK(commandsFixture.bind(selection).revision() == revision + 1);
+    REQUIRE(publications.size() == 1);
+    CHECK(publications.front().libraryRevision == revision + 1);
+    CHECK(publications.front().tracksMutated == std::vector{second, first});
+
+    for (auto const id : selection)
+    {
+      CHECK(readNumbers(id) == std::array<std::uint16_t, 5>{2024, 3, 12, 2, 0});
     }
   }
 

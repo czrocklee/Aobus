@@ -53,6 +53,8 @@ namespace ao::rt
     std::optional<CreditReplacement> optCredits{};
 
     std::map<std::string, std::optional<std::string>> customUpdates{};
+
+    bool operator==(MetadataPatch const&) const = default;
   };
 
   enum class TrackFieldChangeReason : std::uint8_t

@@ -22,6 +22,16 @@ namespace ao::library
   class FileManifestStore;
   class WriteTransaction;
 
+  /** An absent number is unchanged; a present zero clears it. */
+  struct TrackNumberPatch final
+  {
+    std::optional<std::uint16_t> optYear{};
+    std::optional<std::uint16_t> optTrackNumber{};
+    std::optional<std::uint16_t> optTrackTotal{};
+    std::optional<std::uint16_t> optDiscNumber{};
+    std::optional<std::uint16_t> optDiscTotal{};
+  };
+
   /**
    * Transaction-scoped logical mutation port for Track and manifest state.
    * Every operation belongs inside the owning WriteTransaction::apply() root.
@@ -84,6 +94,11 @@ namespace ao::library
      */
     Result<> updateHot(TrackId id, TrackBuilder const& track);
     Result<> updateCold(TrackId id, TrackBuilder const& track);
+    /**
+     * Returns the previous values of just the fields that changed, or NotFound
+     * for a missing Track. An empty or already satisfied patch writes nothing.
+     */
+    Result<TrackNumberPatch> updateNumbers(TrackId id, TrackNumberPatch const& patch);
     Result<> replace(TrackId id, TrackBuilder const& track, FileManifestBuilder manifest);
     Result<> updateManifest(TrackId id, FileManifestBuilder manifest);
     Result<> relink(TrackId id, TrackBuilder const& track, FileManifestBuilder manifest);
