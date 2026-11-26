@@ -27,6 +27,7 @@ namespace ao::library
 {
   namespace detail
   {
+    class DictionaryTerms;
     class LibraryIdentity;
   }
 
@@ -184,6 +185,7 @@ namespace ao::library
     std::unique_ptr<Impl> _implPtr;
 
     friend class WriteTransaction;
+    friend class detail::DictionaryTerms;
   };
 
   /**

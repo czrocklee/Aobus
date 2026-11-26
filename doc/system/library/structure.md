@@ -83,9 +83,14 @@ A returned error, a contained native/library mutation failure, or an unexpected 
 There are no nested transactions, item savepoints, or supported continuation after a failed root.
 `apply()` catches the private `lmdb::detail::TransactionFailure`, explicitly aborts and terminalizes the root, then returns its carried error. `commit()` contains mutation faults during dictionary preparation the same way. The carrier alone does not terminalize a native transaction; the root owner does.
 
-Track preparation validates both record sides before its first item-relative dictionary, Resource, Track, or manifest effect.
+The Track writer validates all requested record sides, including those of every carrier member, and consumes their borrowed backing bytes before the first dictionary, Resource, Track, or manifest mutation in that call.
+Read-only lookups of existing IDs may occur before all borrowed inputs have been consumed.
+The resolved dictionary and Resource IDs in prepared records are tied to the library and write transaction that prepared them.
 Once preparation or writing has staged an effect, a later failure must reach the root boundary so the whole transaction rolls back.
 Dictionary rows, Resource descriptors, Track records, manifest bindings, List records, the raised id space, and the candidate revision commit atomically when one operation composes them.
+
+Building from a Track view or setting text or cover bytes does not extend the input's lifetime.
+Supply live inputs at each writer call, and reacquire mapped inputs after an earlier write in the same transaction rather than reusing old views.
 
 Physical Store writers and mutable LMDB reservations are library implementation details.
 Production callers submit semantic builders to the logical writers rather than serialized records.

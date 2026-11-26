@@ -31,6 +31,7 @@ namespace ao::library
   namespace detail
   {
     class PhysicalStoreAccess;
+    class TrackPreparation;
   }
 
   class DictionaryStore;
@@ -295,7 +296,10 @@ namespace ao::library
 
     private:
       PreparedHot() = default;
-      static PreparedHot make(TrackBuilder const* builder, WriteTransaction& transaction);
+      void setTitle(std::string title, bool explicitClear);
+      void assignLayout(bool explicitClear);
+
+      friend class detail::TrackPreparation;
 
       std::string _title;
       std::vector<DictionaryId> _tagIds;
@@ -312,13 +316,11 @@ namespace ao::library
       BitDepth _bitDepth{};
       AudioCodec _codec{};
       std::size_t _size = 0;
-
-      friend class TrackBuilder;
     };
 
     /**
      * PreparedCold - prepared cold data for zero-copy write.
-     * Produced by make() (handles embedded cover art, resolves custom keys).
+     * Includes resolved cover art and custom keys.
      *
      * Like PreparedHot, a prepared value is an immutable snapshot that owns
      * every byte writeTo emits - including the URI - with all header fields
@@ -337,19 +339,14 @@ namespace ao::library
 
     private:
       PreparedCold() = default;
-      static PreparedCold make(TrackBuilder const* builder,
-                               WriteTransaction& transaction,
-                               ResourceStore const& resources);
       static PreparedCold relink(TrackView const& view, std::string_view uri);
-      static std::vector<std::pair<DictionaryId, std::string>> resolveCustomMetadata(TrackBuilder const* builder,
-                                                                                     WriteTransaction& transaction);
+      friend class detail::TrackPreparation;
 
-      void resolveMetadataIds(TrackBuilder const* builder, WriteTransaction& transaction);
-      void resolveCoverArt(TrackBuilder const* builder, WriteTransaction& transaction, ResourceStore const& resources);
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
       void appendCoverArtBlock();
-      void appendWorkBlock(MetadataBuilder const& metadata);
-      void appendPerformanceBlock(MetadataBuilder const& metadata);
+      void appendWorkBlock(std::uint16_t movementNumber, std::uint16_t movementTotal);
+      void appendPerformanceBlock(RecordingDate date);
+      void appendSegmentBlock(TrackSegment const& segment);
       void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string>> const& resolvedPairs);
       void assignLayout(std::string_view uri);
       void snapshot(TrackBuilder const* builder);
@@ -378,7 +375,6 @@ namespace ao::library
       Channels _channels{};
       std::size_t _size = 0;
 
-      friend class TrackBuilder;
       friend class TrackWriter;
     };
 
@@ -391,23 +387,6 @@ namespace ao::library
 
     // Private helper methods for serialization
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);
-    static DictionaryId internDictionaryId(std::string_view value, WriteTransaction& transaction);
-    static DictionaryId resolveDictionaryId(std::string_view value, WriteTransaction& transaction);
-    /// Stores content the caller holds: the length written is one the writer
-    /// counted, so it corrects whatever a row held.
-    static Result<ResourceId> createResource(std::span<std::byte const> data,
-                                             WriteTransaction& transaction,
-                                             ResourceStore const& resources);
-    /// Records a descriptor a document declared: creates a missing row and leaves
-    /// an existing length alone, because nothing verified this one.
-    static Result<ResourceId> declareResource(ResourceDescriptor const& descriptor,
-                                              WriteTransaction& transaction,
-                                              ResourceStore const& resources);
-    /// Records a descriptor whose digest and length were computed from observed
-    /// bytes before the write transaction began.
-    static Result<ResourceId> observeResource(ObservedResourceDescriptor const& observed,
-                                              WriteTransaction& transaction,
-                                              ResourceStore const& resources);
     Result<> validateHotSerializable() const;
     Result<> validateColdSerializable() const;
 

@@ -3,6 +3,7 @@
 
 #include <ao/library/ResourceStore.h>
 
+#include "detail/LibraryError.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -16,7 +17,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <format>
 #include <limits>
 #include <optional>
 #include <span>
@@ -113,8 +113,7 @@ namespace ao::library
   {
     if (!canDescribeResourceByteLength(data.size()))
     {
-      return makeError(Error::Code::ValueTooLarge,
-                       std::format("Resource content of {} bytes exceeds the stored length field", data.size()));
+      return std::unexpected{detail::oversizedResourceError(data.size())};
     }
 
     return store(

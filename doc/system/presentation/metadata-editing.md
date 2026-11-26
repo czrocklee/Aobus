@@ -274,8 +274,8 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackAuthoringSessionTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, bound revision, no-op reuse, successful binding advancement, invalidation after another commit, move-only facade semantics, and a pending submission settling after moved and destroyed facades.
 - [`TrackAuthoringSnapshotTest.cpp`](../../../test/runtime/library/TrackAuthoringSnapshotTest.cpp) protects snapshot-owned target validation, ordered duplicates, foreign-storage rejection, retained-old-snapshot rejection, runtime identity, lifecycle, and maintenance gates.
 - [`TrackAuthoringSnapshotSessionTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp) protects same-snapshot owning form preparation, snapshot release, no-op/applied reuse, and stale-draft rejection without rebinding.
-- [`LibraryCommandsTest.cpp`](../../../test/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior.
-- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
+- [`LibraryCommandsTest.cpp`](../../../test/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior, including preservation of untouched fields after reopening for batches that edit only cold metadata or both record sides.
+- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when a later target exceeds the cold-record size limit.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.
 
 ## Related documents
