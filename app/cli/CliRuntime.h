@@ -6,6 +6,7 @@
 #include "Output.h"
 #include <ao/Contract.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/rt/library/LibraryDurability.h>
 
 #include <cstdint>
@@ -67,6 +68,8 @@ namespace ao::cli
     rt::CoreRuntime& core();
     library::MusicLibrary const& musicLibrary();
     rt::Library& library();
+    // On first open, require an initialized library database rather than creating one.
+    rt::Library& existingLibrary();
 
     // Pumps the owner loop; a task submitted after stop is rejected with async::OperationCancelled.
     void runTask(async::Task<void> task);
@@ -90,6 +93,8 @@ namespace ao::cli
     CliIo const& io() const noexcept { return _io; }
 
   private:
+    rt::CoreRuntime& openCore(library::LibrarySchemaPolicy schemaPolicy);
+
     template<typename T>
     static async::Task<void> storeTaskResultAsync(async::Task<T> task, std::shared_ptr<std::optional<T>> optResultPtr)
     {

@@ -3,6 +3,7 @@
 
 #include <ao/rt/library/LibraryJobs.h>
 
+#include "AudioFingerprintVerification.h"
 #include "AudioIdentityBatchWriter.h"
 #include "AudioIdentityIndexer.h"
 #include "LibraryWriteLane.h"
@@ -22,6 +23,7 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/library/AudioFingerprintReport.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -969,6 +971,81 @@ namespace ao::rt
     }
 
     co_return Result<ScanApplyResult>{std::move(coordinatedScanRes->result)};
+  }
+
+  async::Task<Result<AudioFingerprintReport>> LibraryJobs::verifyAudioFingerprintAsync(
+    std::string uri,
+    std::optional<std::string> optConfirmation,
+    std::stop_token const stopToken)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
+    auto conversation = _implPtr->makeProgressConversation();
+    auto optLease = std::optional<LibraryWriteLane::BackgroundTaskLease>{};
+
+    if (optConfirmation)
+    {
+      auto leaseRes =
+        _implPtr->writeLane.beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::AudioFingerprintVerification);
+
+      if (!leaseRes)
+      {
+        _implPtr->notifyProgressFinished(conversation.id);
+        co_return std::unexpected{std::move(leaseRes.error())};
+      }
+
+      optLease.emplace(std::move(*leaseRes));
+    }
+
+    auto submission = _implPtr->writeLane.captureSubmission();
+    auto res = Result<AudioFingerprintReport>{};
+    auto failure = std::exception_ptr{};
+
+    try
+    {
+      conversation.publish(LibraryTaskProgressKind::Fingerprinting, 0.0, uri);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
+      auto inspect =
+        [this, uri = std::move(uri), publish = std::move(conversation.publish)](std::stop_token effectiveStop) mutable
+      {
+        auto progress = [&](double fraction)
+        {
+          if (fraction > 0.0)
+          {
+            publish(LibraryTaskProgressKind::Fingerprinting, fraction, uri);
+          }
+        };
+        return inspectAudioFingerprint(_implPtr->library, uri, effectiveStop, progress);
+      };
+
+      if (optConfirmation)
+      {
+        res = co_await confirmAudioFingerprintAsync(std::move(submission),
+                                                    &*optLease,
+                                                    &_implPtr->library,
+                                                    std::move(*optConfirmation),
+                                                    stopToken,
+                                                    std::move(inspect));
+      }
+      else
+      {
+        res = inspect(stopToken);
+      }
+    }
+    catch (...)
+    {
+      failure = std::current_exception();
+    }
+
+    co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
+    optLease.reset();
+    _implPtr->notifyProgressFinished(conversation.id);
+
+    if (failure)
+    {
+      async::rethrowException(failure);
+    }
+
+    co_return res;
   }
 
   async::Task<Result<AudioIdentityIndexResult>> LibraryJobs::backfillAudioIdentityAsync(

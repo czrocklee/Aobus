@@ -27,6 +27,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/library/AudioFingerprintReport.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
@@ -523,6 +524,22 @@ namespace ao::cli
     std::int32_t failures = 0;
   };
 
+  struct AudioIdentityDto final
+  {
+    std::uint64_t payloadLength = 0;
+    std::string signature{};
+  };
+
+  struct FingerprintVerificationDto final
+  {
+    std::string uri{};
+    std::string status{};
+    std::optional<AudioIdentityDto> optStored{};
+    AudioIdentityDto observed{};
+    std::optional<std::string> optConfirmation{};
+    bool updated = false;
+  };
+
   struct ResourceRecordDto final
   {
     ResourceId id{};
@@ -578,6 +595,25 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::RelinkApplyDto>
     if (memberName == "optTrackIds")
     {
       return "trackIds";
+    }
+
+    return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::FingerprintVerificationDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optStored")
+    {
+      return "stored";
+    }
+
+    if (memberName == "optConfirmation")
+    {
+      return "confirmation";
     }
 
     return memberName;
@@ -1114,18 +1150,8 @@ namespace ao::cli
         os, "fingerprinted {}  skipped {}  failed {}", result.completedCount, result.skippedCount, result.failureCount);
     }
 
-    void fingerprintPending(CliRuntime& cli,
-                            bool pending,
-                            bool verbose,
-                            OutputFormat format,
-                            std::ostream& os,
-                            std::ostream& err)
+    void fingerprintPending(CliRuntime& cli, bool verbose, OutputFormat format, std::ostream& os, std::ostream& err)
     {
-      if (!pending)
-      {
-        throwCommandError(Error::Code::InvalidInput, "lib fingerprint requires --pending");
-      }
-
       // The CLI drives its callback loop until the coordinated maintenance
       // operation reaches a terminal result. Diagnostic callbacks remain
       // worker-produced and indexer-serialized.
@@ -1150,6 +1176,78 @@ namespace ao::cli
       }
 
       printFingerprintReport(*res, format, os);
+    }
+
+    std::string_view fingerprintStatusName(rt::AudioFingerprintStatus status)
+    {
+      switch (status)
+      {
+        case rt::AudioFingerprintStatus::Match: return "match";
+        case rt::AudioFingerprintStatus::Mismatch: return "mismatch";
+        case rt::AudioFingerprintStatus::Pending: return "pending";
+      }
+
+      return "unknown";
+    }
+
+    AudioIdentityDto toAudioIdentityDto(library::AudioIdentity const& identity)
+    {
+      return AudioIdentityDto{
+        .payloadLength = identity.payloadLength, .signature = utility::hash128Hex(identity.signature)};
+    }
+
+    void printFingerprintVerification(rt::AudioFingerprintReport const& report, OutputFormat format, std::ostream& os)
+    {
+      auto const dto = FingerprintVerificationDto{.uri = report.uri,
+                                                  .status = std::string{fingerprintStatusName(report.status)},
+                                                  .optStored = report.optStored.transform(toAudioIdentityDto),
+                                                  .observed = toAudioIdentityDto(report.observed),
+                                                  .optConfirmation = report.optConfirmation,
+                                                  .updated = report.updated};
+
+      if (format != OutputFormat::Plain)
+      {
+        emitDocument(os, format, dto);
+        return;
+      }
+
+      std::println(os, "{} {}{}", dto.status, dto.uri, dto.updated ? " (updated)" : "");
+
+      if (dto.optStored)
+      {
+        std::println(os, "stored: {} ({} bytes)", dto.optStored->signature, dto.optStored->payloadLength);
+      }
+
+      std::println(os, "observed: {} ({} bytes)", dto.observed.signature, dto.observed.payloadLength);
+
+      if (dto.optConfirmation)
+      {
+        std::println(os, "confirmation: {}", *dto.optConfirmation);
+      }
+    }
+
+    void verifyFingerprint(CliRuntime& cli, std::string uri, std::optional<std::string> optConfirmation)
+    {
+      if (uri.empty())
+      {
+        throwCommandError(Error::Code::InvalidInput, "--verify requires a non-empty URI");
+      }
+
+      if (optConfirmation && optConfirmation->empty())
+      {
+        throwCommandError(Error::Code::InvalidInput, "--confirm requires a non-empty token");
+      }
+
+      auto const res = cli.runTask(
+        cli.existingLibrary().jobs().verifyAudioFingerprintAsync(std::move(uri), std::move(optConfirmation)));
+
+      if (!res)
+      {
+        auto const& error = res.error();
+        throwCommandError(error, "fingerprint verification failed: {}", error.message);
+      }
+
+      printFingerprintVerification(*res, cli.options().format, cli.io().out);
     }
 
     std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary const& ml)
@@ -1614,19 +1712,49 @@ namespace ao::cli
         relinkLibrary(cli, optFrom, optTo, isDryRun(relinkDryRun), cli.options().format, cli.io().out);
       });
 
-    auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Fingerprint pending manifest audio identities");
+    auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Backfill or verify manifest audio identity");
     auto* fingerprintPendingFlag =
       addBooleanFlag(*fingerprintCmd, "--pending", "fingerprint manifest rows with pending audio identity");
-    auto* fingerprintVerbose = addBooleanFlag(*fingerprintCmd, "--verbose", "print fingerprint progress to stderr");
+    auto* fingerprintVerbose =
+      addBooleanFlag(*fingerprintCmd, "--verbose", "print --pending fingerprint progress to stderr");
+    auto* fingerprintVerify =
+      fingerprintCmd->add_option("--verify", "verify one manifest audio identity by root-relative URI")
+        ->type_name("URI");
+    auto* fingerprintConfirm =
+      fingerprintCmd->add_option("--confirm", "adopt the observed identity using a token from --verify")
+        ->type_name("TOKEN");
     fingerprintCmd->callback(
-      [&cli, fingerprintPendingFlag, fingerprintVerbose]
+      [&cli, fingerprintPendingFlag, fingerprintVerbose, fingerprintVerify, fingerprintConfirm]
       {
-        fingerprintPending(cli,
-                           fingerprintPendingFlag->count() > 0,
-                           fingerprintVerbose->count() > 0,
-                           cli.options().format,
-                           cli.io().out,
-                           cli.io().err);
+        auto const pending = fingerprintPendingFlag->count() != 0;
+        auto const verify = fingerprintVerify->count() != 0;
+        auto const verbose = fingerprintVerbose->count() != 0;
+        auto const confirm = fingerprintConfirm->count() != 0;
+
+        if (pending == verify)
+        {
+          throwCommandError(
+            Error::Code::InvalidInput, "lib fingerprint requires --pending or --verify <uri>, not both");
+        }
+
+        if (pending)
+        {
+          if (confirm)
+          {
+            throwCommandError(Error::Code::InvalidInput, "--confirm requires --verify");
+          }
+
+          fingerprintPending(cli, verbose, cli.options().format, cli.io().out, cli.io().err);
+          return;
+        }
+
+        if (verbose)
+        {
+          throwCommandError(Error::Code::InvalidInput, "--verbose requires --pending");
+        }
+
+        auto optConfirmation = confirm ? std::optional{fingerprintConfirm->as<std::string>()} : std::nullopt;
+        verifyFingerprint(cli, fingerprintVerify->as<std::string>(), std::move(optConfirmation));
       });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");

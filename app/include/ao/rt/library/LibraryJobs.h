@@ -7,6 +7,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/rt/library/AudioFingerprintReport.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
@@ -16,7 +17,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stop_token>
+#include <string>
 
 namespace ao::library
 {
@@ -60,6 +63,12 @@ namespace ao::rt
                                                             std::stop_token stopToken = {},
                                                             ScanProgressCallback progressCallback = {},
                                                             ScanFailureCallback failureCallback = {});
+    // Inspect only this manifest URI. A confirmation from an actionable preview authorizes
+    // adoption only if the reviewed audio and its library binding are still current.
+    async::Task<Result<AudioFingerprintReport>> verifyAudioFingerprintAsync(
+      std::string uri,
+      std::optional<std::string> optConfirmation = std::nullopt,
+      std::stop_token stopToken = {});
     async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync(
       std::stop_token stopToken = {},
       AudioIdentityIndexProgressCallback progressCallback = {},

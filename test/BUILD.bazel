@@ -1195,6 +1195,7 @@ cc_library(
 cc_test(
     name = "cli_test",
     srcs = [
+        "cli/AudioFingerprintCommandTest.cpp",
         "cli/CliRuntimeTest.cpp",
         "cli/CliSmokeTest.cpp",
         "cli/CommandErrorTest.cpp",
@@ -1218,6 +1219,7 @@ cc_test(
     ],
     deps = [
         ":cli_test_support",
+        ":media_test_support",
         "//app/runtime:test_headers",
         "//include:app_version_header",
         "@aobus_test_deps//:catch2",

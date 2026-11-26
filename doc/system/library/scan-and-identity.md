@@ -6,7 +6,7 @@ id: library.scan-identity
 
 ## Scope
 
-This specification defines `LibraryScan`, scan plans, plan application, filename spelling reconciliation, encoded-audio identity, automatic move relinking, and pending-identity backfill.
+This specification defines `LibraryScan`, scan plans, plan application, filename spelling reconciliation, encoded-audio identity, automatic move relinking, pending-identity backfill, and targeted audio verification.
 It owns filesystem-to-library reconciliation behavior rather than the physical manifest record.
 
 Supported containers, imported tags, and encoded payload ranges belong to the [supported audio files reference](../../reference/media/audio-file.md).
@@ -16,7 +16,7 @@ Manifest keys and fields belong to the [library database reference](../../refere
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../overview.md).
-The runtime surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryJobs.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
+The runtime surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryJobs.h`; planning, reconciliation, and identity operations live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
 `app/include/ao/uimodel/library/task/LibraryScanOutcome.h` exposes the frontend-shared `runLibraryScanAsync` operation and final outcome. Its private implementation owns build/classify/apply orchestration, including the eager versus fast-bootstrap identity strategy.
 `LibraryScan` is read-only plan construction.
 Live committing application is a runtime-private coordinator operation.
@@ -312,6 +312,25 @@ Backfill changes only manifest identity; each effective batch publishes its comm
 A carrier is one pending row, so backfill hashes that file once and writes that one row.
 It never adds recording dates or credits, nor infers either value from a matching hash or another Track.
 
+## Targeted audio verification
+
+`LibraryJobs::verifyAudioFingerprintAsync` normalizes a music-root-relative URI, looks up its existing manifest row, and reads that file's encoded audio without walking the library or applying a scan plan.
+It requires an available row with a recorded modification time and a supported regular file that resolves under the root. The resolved path must stay the same and the size and modification time must match the row before and after hashing. A carrier's exact frame count and sample rate must match the library.
+It compares the observed payload length and signature with the stored pair, or reports that the identity is pending.
+Inspection does not change library content, even if the identity differs. A match offers no confirmation token.
+
+A confirmation token binds the preview to the persisted library id, committed revision, normalized URI, previous manifest row, and observed audio identity.
+Any intervening library write that advances the revision invalidates the confirmation.
+Confirmation re-inspects and hashes the file in the active background lane turn to narrow the gap before adoption. Interactive authoring can return `Busy` while the lane is occupied, including during hashing.
+No LMDB write transaction is open during hashing; the subsequent transaction checks the live database evidence.
+A stale confirmation changes nothing; request a fresh preview to review current evidence. If the file already matches, confirmation fails because there is nothing to adopt.
+Leave the file in place and finish external writes before starting: path and stat checks do not lock media or make filesystem changes atomic with the database commit.
+Cancellation is cooperative while hashing and before mutation. A confirmation already queued behind another command checks cancellation when it gets its lane turn.
+
+A successful adoption writes only the manifest's audio identity and publishes the new revision without a Track or List change. It does not update file facts, change Track metadata or CUE layout, or write to the audio file.
+Whole-file verification does not compare stored technical properties with the media. If a replacement leaves the size and modification time unchanged, properties such as duration or sample rate can remain stale even after adoption.
+A scan at the same URI that still classifies the file as `Unchanged` does not refresh them.
+
 ## Signature behavior
 
 Identity hashing uses `utility::Xxh3Accumulator128` and is invariant to hashing chunk boundaries.
@@ -352,6 +371,7 @@ Created segment Tracks publish like other created Tracks. A scan deletes no Trac
 - [`AudioIdentity.h`](../../../include/ao/library/AudioIdentity.h) owns identity calculation.
 - [`FileTimestamp.h`](../../../include/ao/FileTimestamp.h) owns the portable modification-time instant, and [`FileTimeConversion.h`](../../../include/ao/library/FileTimeConversion.h) owns the native filesystem-clock conversion and last-write-time read.
 - [`AudioIdentityIndexer.cpp`](../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.
+- [`AudioFingerprintVerification.cpp`](../../../app/runtime/library/AudioFingerprintVerification.cpp) owns targeted inspection, token binding, and transaction-scoped adoption.
 
 ## Test map
 
@@ -365,6 +385,8 @@ Created segment Tracks publish like other created Tracks. A scan deletes no Trac
 - [`TrackBuilderSnapshotTest.cpp`](../../../test/runtime/library/TrackBuilderSnapshotTest.cpp) proves raw credit-text ownership through source expiry and move, validation/canonicalization at reconstructed-builder admission, and conversion of scan cover bytes to counted observed descriptors before mutation.
 - [`LibraryScanWorkflowTest.cpp`](../../../test/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
 - [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
+- [`AudioFingerprintVerificationTest.cpp`](../../../test/runtime/library/AudioFingerprintVerificationTest.cpp) covers targeted adoption, manifest-only publication, and refusal of stale or incompatible evidence.
+- [`AudioFingerprintVerificationConcurrencyTest.cpp`](../../../test/runtime/library/AudioFingerprintVerificationConcurrencyTest.cpp) covers confirmation exclusion during backfill and queued confirmation revalidation.
 - [`AudioIdentityTest.cpp`](../../../test/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
 
 ## Related documents

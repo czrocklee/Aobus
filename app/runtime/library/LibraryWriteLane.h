@@ -108,6 +108,7 @@ namespace ao::rt
       Import,
       ScanApply,
       AudioIdentityBackfill,
+      AudioFingerprintVerification,
     };
 
     class Submission final

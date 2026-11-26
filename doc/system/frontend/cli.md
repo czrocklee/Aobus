@@ -87,6 +87,11 @@ Per-item fingerprint failures are diagnostic rows in a report-and-continue run, 
 Successful structured output contains completed, skipped, and per-item-failure counts only.
 Cancellation propagates through the task cancellation channel and emits no successful partial-count document; already published batches remain durable and a later invocation resumes pending rows.
 
+For both preview and confirmation, `lib fingerprint --verify <uri>` uses the [existing-schema storage policy](../../reference/library/storage/database.md#environment) rather than initializing a missing library.
+A preview reports whether the encoded audio matches the stored fingerprint for one manifest URI, not a scan-plan classification, and does not change library content. A mismatch or pending identity is a successful preview, not a domain error.
+The CLI passes `--confirm <token>` to the runtime to adopt the observed identity. It never adopts automatically. A stale or inapplicable token is a domain failure with no success payload.
+The [targeted audio verification contract](../library/scan-and-identity.md#targeted-audio-verification) defines token validity and write scope.
+
 ### Scan and verify
 
 Scan builds a runtime `ScanPlan`, emits the summary and any dry-run items, then applies unless dry-run.
@@ -96,7 +101,7 @@ Per-item apply failures are diagnostic rows and fail the command with exit `1`, 
 Ordinary stale items are skipped, not failed. A later scan reclassifies a skipped new-file item and need not import it.
 A notice, such as a CUE sheet beside a whole-file import, is not a failure: scan writes it to stderr as a `warning:` line, counts it under `warnings`, and still exits `0`.
 
-Verify builds but does not apply a scan plan.
+`lib verify` builds but does not apply a scan plan. It is not a full encoded-audio check.
 Changed, missing-segment, moved, spelling-change, and notice rows are reported; missing or error rows make verification fail.
 Explicit relink selects unresolved audio-identity pairs, not spelling changes recognized by the scan.
 

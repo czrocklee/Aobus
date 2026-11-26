@@ -63,7 +63,7 @@ Exactly one top-level command is required.
 | `lib stats`                | none                                                                                          |
 | `lib verify`               | none                                                                                          |
 | `lib relink`               | `[--from <old-uri> --to <new-uri>] [--dry-run]`                                               |
-| `lib fingerprint`          | `--pending [--verbose]`                                                                       |
+| `lib fingerprint`          | `--pending [--verbose]` or `--verify <uri> [--confirm <token>]`                               |
 | `lib export`               | `(<output>                                                                                    | -o, --output-file <file>) [-m, --mode delta                                                        | metadata                                                                     | full | list-only]`; default mode is `full` |
 | `lib import`               | `(<input>                                                                                     | -i, --input <file>) [-m, --mode restore                                                            | merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
 | `lib dump`                 | `[--dict] [--manifest] [--meta] [--resources] [--raw]`                                        |
@@ -73,7 +73,9 @@ Exactly one top-level command is required.
 Presence flags such as `--dry-run`, `--descendants`, `--clear-credits`, and `--confirm-destructive-restore` take no value.
 An attached `=true` means the same as the bare flag; every other attached value, including `=false`, is rejected with CLI11 argument-mismatch status `114` before the command runs.
 `--from` and `--to` must be supplied together.
-`--pending` is required by `lib fingerprint`.
+`lib fingerprint` requires exactly one of `--pending` and `--verify <uri>`.
+`--verbose` is for `--pending` only; `--confirm` is for `--verify` only.
+The URI is a nonempty music-root-relative manifest path, not an absolute disk path or a Track id. The confirmation token must not be empty.
 `--raw` dump modes support only plain output.
 `--output` is reserved by the global format option, so file-destination options are `-o, --output-file`.
 An explicitly empty `--filter` expression is rejected instead of silently selecting every track.
@@ -175,7 +177,8 @@ Mutation/administrative shapes:
 | `lib verify`                     | `ok, issues[{type,uri,message?}]`                                                                                                                                                                    |
 | `lib relink` list                | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength,trackIds?}]`                                                                                                                |
 | `lib relink` apply               | `dryRun, oldUri, newUri, trackId, trackIds?`                                                                                                                                                         |
-| `lib fingerprint`                | `completed, skipped, failures`                                                                                                                                                                       |
+| `lib fingerprint --pending`      | `completed, skipped, failures`                                                                                                                                                                       |
+| `lib fingerprint --verify`       | `uri, status, stored?, observed, confirmation?, updated`                                                                                                                                             |
 | `lib import`                     | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored, invalidFiltersKept`       |
 | `lib export`                     | `action, path, mode`                                                                                                                                                                                 |
 | `lib resource list`              | `resources[{id,size}]`, where `size` is the descriptor's described length                                                                                                                            |
@@ -192,6 +195,10 @@ A carrier row adds those keys: member ids in stored order, the member count, and
 Header `trackId` remains zero.
 Non-raw plain dump still prints `Track ID:` for every row, including zero for a carrier, and adds `Track IDs:`, `Segment Count:`, and `Total Frames:` only for a carrier.
 `--raw` remains a hex dump of the stored value and does not add those labels.
+
+For `lib fingerprint --verify`, `uri` is normalized and `status` is the comparison before any update: `match`, `mismatch`, or `pending`.
+`stored` is omitted for `pending`. Both identity objects contain `payloadLength` in bytes and `signature` as 32 lowercase hexadecimal digits in canonical byte order.
+`confirmation` is emitted only in a preview that can adopt an identity. `updated` is `true` only after a confirmed write.
 
 For `list delete --descendants`, `deletedLists` is a root-first sequence of `{listId, name, forgottenPositionCount, tagImpact?}` entries.
 `forgottenPositionCount` has the same meaning as in ordinary deletion.
@@ -235,7 +242,10 @@ The plain `Relinked N files` line (`Relinked 1 file` for one file) includes both
 Any apply failure also fails the command with `scan apply failed: ...` on stderr and exit `1`, for plain and structured output alike.
 Warnings alone leave the exit status `0`.
 
-Fingerprint summary is `fingerprinted N  skipped N  failed N`.
+Pending fingerprint summary is `fingerprinted N  skipped N  failed N`.
+Targeted fingerprint verification prints the status and URI, then the stored identity when present and the observed identity.
+An actionable preview prints `confirmation: <token>`; a confirmed write appends ` (updated)` to the status line instead of emitting a token.
+
 Tag list is descending frequency then name.
 `tag show` returns the intersection across all supplied or filter-matched tracks.
 
@@ -280,6 +290,9 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
 - `lib verify` reports Changed, MissingSegments, Moved, SpellingChanged, Missing, Error, Notice, and any item with an accompanying diagnostic. It fails only for Missing or Error; a warning is listed but does not fail verification.
+- `lib fingerprint --verify` checks one file's encoded audio without a library-wide scan. It requires an existing library and does not initialize a missing one. A preview does not change library content and exits `0` even for `mismatch` or `pending`.
+  A stale or inapplicable confirmation is a domain failure (exit `1`, no success report). This includes confirming an already matching file, which has nothing to adopt.
+  See [targeted audio verification](../../system/library/scan-and-identity.md#targeted-audio-verification) for the adoption rules.
 - `lib relink` lists unresolved files and their matching audio-identity candidates. Neither a `spelling-changed` item nor an already matched `moved` item is a manual relink candidate; use `scan` to apply it.
 - A committed `lib relink` writes each warning on its moved item, such as a carrier moved without its sheet, to stderr as `warning: {uri}: {message}` and exits `0`.
 - `lib resource list` reports each descriptor without reading content; `lib dump --resources` additionally prints each digest.
