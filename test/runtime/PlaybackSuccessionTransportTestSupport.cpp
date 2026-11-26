@@ -77,10 +77,10 @@ namespace ao::rt::test::playback_succession
     }
   }
 
-  void DecoderActivationProbe::notifyOutputDecoderConstruction(std::filesystem::path const& path)
+  std::size_t DecoderActivationProbe::notifyOutputDecoderConstruction(std::filesystem::path const& path)
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
-    ++_implPtr->counts.outputDecoderConstructions[path];
+    return ++_implPtr->counts.outputDecoderConstructions[path];
   }
 
   std::size_t DecoderActivationProbe::count(std::filesystem::path const& path) const
@@ -196,6 +196,14 @@ namespace ao::rt::test::playback_succession
     audio::DecoderFactoryFn makeActivationProbedDecoderFactory(std::shared_ptr<DecoderActivationProbe> probePtr,
                                                                PlaybackSuccessionTransportFixtureConfig config)
     {
+      // Validate on the test thread, before any decoder worker owns the script.
+      if (config.stagedFailureGate != nullptr || !config.stagedFailureGateSequence.empty())
+      {
+        REQUIRE((config.stagedFailureGate == nullptr || config.stagedFailureGateSequence.empty()));
+        REQUIRE_FALSE(config.stagedFailureFileNames.empty());
+        REQUIRE_FALSE(std::ranges::contains(config.stagedFailureFileNames, config.immediateEofFileName));
+      }
+
       return [probePtr = std::move(probePtr), config = std::move(config)](
                std::filesystem::path const& path,
                std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
@@ -226,22 +234,38 @@ namespace ao::rt::test::playback_succession
           .codec = isLossy ? AudioCodec::Mp3 : AudioCodec::Flac,
         });
 
+        audio::test::StagedFailureGate* failureGate = nullptr;
+
         if (optOutputEncoding)
         {
-          probePtr->notifyOutputDecoderConstruction(path);
+          auto const outputOpen = probePtr->notifyOutputDecoderConstruction(path);
+
+          if (std::ranges::contains(config.stagedFailureFileNames, path.filename()))
+          {
+            if (config.stagedFailureGateSequence.empty())
+            {
+              failureGate = config.stagedFailureGate;
+            }
+            else if (outputOpen <= config.stagedFailureGateSequence.size())
+            {
+              failureGate = config.stagedFailureGateSequence[outputOpen - 1];
+            }
+          }
         }
 
-        auto* const failureGate =
-          optOutputEncoding && path.filename() == config.stagedFailureFileName ? config.stagedFailureGate : nullptr;
-        // One complete second in the selected encoding covers TrackSession's
-        // 500 ms preroll using whole frames, even for 24/32-bit output. If that
-        // policy grows past this block, the bounded activation gate fails setup.
-        auto const firstBlockBytes = audio::bytesPerSecond(outputFormat);
-        decoderPtr->setReadScript(
-          {{.data = std::vector<std::byte>(firstBlockBytes, std::byte{0}), .endOfStream = false},
-           {.endOfStream = failureGate == nullptr,
-            .res = failureGate != nullptr ? Result<>{makeError(Error::Code::IoError, "gated staged decode failure")}
-                                          : Result<>{}}});
+        // An empty read script returns EOF on the first read, without any PCM.
+        if (path.filename() != config.immediateEofFileName)
+        {
+          // One complete second in the selected encoding covers TrackSession's
+          // 500 ms preroll using whole frames, even for 24/32-bit output. If that
+          // policy grows past this block, the bounded activation gate fails setup.
+          auto const firstBlockBytes = audio::bytesPerSecond(outputFormat);
+          decoderPtr->setReadScript(
+            {{.data = std::vector<std::byte>(firstBlockBytes, std::byte{0}), .endOfStream = false},
+             {.endOfStream = failureGate == nullptr,
+              .res = failureGate != nullptr ? Result<>{makeError(Error::Code::IoError, "gated staged decode failure")}
+                                            : Result<>{}}});
+        }
 
         if (blocks)
         {

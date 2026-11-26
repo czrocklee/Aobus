@@ -62,7 +62,7 @@ namespace ao::rt::test::playback_succession
 
     void registerPath(std::filesystem::path const& path);
     void notify(std::filesystem::path const& path);
-    void notifyOutputDecoderConstruction(std::filesystem::path const& path);
+    std::size_t notifyOutputDecoderConstruction(std::filesystem::path const& path);
     std::size_t count(std::filesystem::path const& path) const;
     Snapshot snapshot() const;
 
@@ -119,9 +119,13 @@ namespace ao::rt::test::playback_succession
     bool failBlockedPreparation = false;
     bool blockEveryLookahead = false;
     std::vector<std::filesystem::path> finalOpenFailureFileNames{};
-    std::filesystem::path stagedFailureFileName{};
+    std::vector<std::filesystem::path> stagedFailureFileNames{};
     audio::test::StagedFailureGate* stagedFailureGate = nullptr;
+    // One slot per output open of a matched file, in construction (not worker arrival) order.
+    // Null and exhausted slots decode normally.
+    std::vector<audio::test::StagedFailureGate*> stagedFailureGateSequence{};
     std::filesystem::path lossyFileName{};
+    std::filesystem::path immediateEofFileName{};
     std::shared_ptr<audio::test::SeekTestGate> seekGatePtr{};
     std::chrono::milliseconds gatedSeekOffset{};
   };

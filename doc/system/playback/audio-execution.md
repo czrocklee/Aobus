@@ -351,7 +351,10 @@ Failure of this optimistic final-decoder step discards only the prepared source 
 Commit revalidates the token, accepts a new playback generation, retires the old render target, and opens the backend from the inspected `SignalFormat`.
 When the returned `clientFormat` exactly matches the optimistic prepared mode, commit activates that source without repeating preparation. Otherwise commit discards it and synchronously opens and prepares a fresh source in the returned `SampleEncoding`.
 Ordinarily preparation applies the initial offset and prerolls the selected decoder. For an extended initial seek it records the offset instead, without prerolling from zero or starting a worker for an uncommitted candidate.
-Activation installs the Engine callbacks before the decode thread begins its pending seek or steady-state decode. A committed source awaiting an extended seek is an accepted active start, not proof that native rendering has begun; the backend remains stopped pending readiness.
+Activation installs the Engine callbacks before the decode thread begins its
+pending seek or steady-state decode. A committed source awaiting an extended
+seek receives `playbackStarted == true` while the backend is still stopped
+pending readiness. The receipt is not proof that PCM has rendered.
 
 For `startFromView`, Player captures a move-only preparation value from Engine and runs inspection on the async worker pool.
 The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional final-decoder open and source preparation.
@@ -388,6 +391,8 @@ without a playback-failure notification.
 A pre-commit `Conflict` or `InvalidState` does not advance the generation and therefore preserves the active session and prepared-request registry.
 
 The source never prerolls the unpositioned decoder and then seeks it, so an error from a discarded pre-seek read cannot invalidate a healthy candidate. An extended initial seek can fail after activation instead of during final setup; Engine then reports the current source's `Decode` failure, not a synchronous `TrackOpen` rejection.
+The [playback cursor](cursor.md#failure-and-cancellation) owns how these
+outcomes affect succession's recovery budget and grouped skip reports.
 
 ### Identity and callback fences
 
@@ -467,10 +472,6 @@ an empty lossless encoding set, including zero source precision, is an explicit
 Deterministic source refusal precedes that backend's own close/native configuration where possible. Engine already closes
 its old stream before invoking open, so these guards do not retain or resurrect
 Engine's previous playback.
-
-[Application succession](cursor.md#failure-and-cancellation) stops after three consecutive unplayable candidates.
-An accepted automatic start attempt resets the streak only if playback actually starts, not merely because the backend opened or Engine accepted the attempt.
-An accepted explicit launch starts a fresh streak even if final setup fails; manual Next and Previous reset the streak before resolving navigation in an active session.
 
 The `clientFormat` must preserve the source precision whether or not endpoint evidence exists.
 When a `ConfirmedEndpoint` is present, its rate, channels, sample domain, and effective precision must agree with the configured client mode and preserve the source as well.

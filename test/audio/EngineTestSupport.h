@@ -123,6 +123,7 @@ namespace ao::audio::test
     std::atomic<Outcome> _outcome{Outcome::Pending};
   };
 
+  // Reusable for successive reads, not overlapping readers: a permit has no decoder identity.
   class StagedFailureGate final
   {
   public:
@@ -132,8 +133,10 @@ namespace ao::audio::test
     void release();
 
   private:
-    std::binary_semaphore _readEntered{0};
-    std::binary_semaphore _failureRelease{0};
+    // A surprise second entry must not overflow a binary signal before the owner observes the first.
+    std::counting_semaphore<> _readEntered{0};
+    // On unwind the guard can release again before the reader consumes a normal release.
+    std::counting_semaphore<> _failureRelease{0};
   };
 
   class [[nodiscard]] StagedFailureReleaseGuard final

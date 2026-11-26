@@ -247,12 +247,50 @@ Lookahead cancellation, supersession, and `Conflict` completion clear only match
 Acceptance and completion carry a weak reference to the pending lookahead object and may mutate succession only while that exact object remains current.
 
 Three consecutive unplayable candidates terminate transport and succession.
-A successful start resets the failure streak.
-During automatic recovery, an accepted candidate whose final decoder setup fails retains its current-track identity and cancellation proof, but does not reset that streak before the correlated failure arrives.
-An accepted explicit user start begins a fresh streak once for that action; a correlated final-setup failure then counts toward the new streak.
-Successful automatic starts reset it even when transport announcements are suppressed; an accepted natural end without starting playback is not itself a failure.
-A failure after source invalidation, or any non-recoverable device or route failure, stops without a recovery walk.
-Prepared-successor failure is accepted only for a token owned by the current session, removes that commitment, and re-prepares from current live policy when possible.
+The terminal report counts all three failures. The grouped skip report includes
+all three if the third candidate's start request is rejected, but only the first
+two if the third failure arrives after acceptance as `TrackOpen` or `Decode`.
+An accepted explicit launch begins a fresh streak; a correlated final-setup
+failure counts toward the new streak. Manual Next and Previous reset the streak
+before resolving navigation in an active session.
+
+If the streak contains no recoverable `Decode` failure correlated to the
+activated current source, a successful automatic start resets the streak and
+its skip grouping, even when transport announcements are suppressed. A backend
+open or start acceptance alone does not reset the streak. During automatic
+recovery, an accepted candidate whose final decoder setup fails retains its
+current-track identity and cancellation proof. The correlated `TrackOpen`
+failure counts toward that streak.
+
+Once such a `Decode` failure enters the streak, automatic recovery starts
+preserve the failure count and grouped skip report whether they start the same
+track or a different one. Intervening open failures count toward the same limit.
+A `Decode` failure counts whether or not PCM has rendered. Even with repeat
+off, succession stops before the fourth track if each of the first three plays
+partway and then fails to decode.
+
+A candidate that ends cleanly without starting playback, such as an accepted
+source with no PCM, neither counts as a failure nor ends the streak. When a
+candidate plays and completes naturally, including at a prepared advance,
+succession clears the failure count and grouped skip report before resolving
+the next successor. No minimum elapsed playback time is required. An accepted
+[Final seek to the endpoint while Playing](application-commit.md#quick-mutations-and-external-settlement)
+follows this same natural-end path; a preview or rejected stale seek does not.
+
+A [pending output request](application-commit.md#snapshot-borrowing-and-output-intent)
+that interrupts the current track, or a Final seek to its endpoint while Paused,
+releases the decoder and holds the track for explicit resume. This ends the
+`Decode` streak even if the track was already Paused when the output was
+selected. A later reopen does not inherit the streak, even if final setup fails.
+A device-list change alone does not establish a hold. Seeking within the open
+track, pausing and resuming it, or switching to an available output without
+interrupting the occurrence does not by itself reset the streak.
+
+A failure after source invalidation, or any non-recoverable device or route
+failure, stops without a recovery walk. Prepared-successor failure is accepted
+only for a token owned by the current session. It removes that commitment and
+re-prepares from current live policy when possible, without counting toward the
+current-source recovery limit or skip report.
 
 Stopping, explicit session replacement, and cancellation barriers retire prepared correlations according to their proof generation.
 Queued callbacks from a replaced session cannot become explicit succession transitions.
@@ -299,7 +337,16 @@ Observers are observational and do not choose succession policy.
 - [`PlaybackTransportTokenTest.cpp`](../../../test/runtime/PlaybackTransportTokenTest.cpp) protects the runtime-private synchronous token seam, while the `duplicate-prepared-next` runtime fatal-probe scenario under [`test/fatal/`](../../../test/fatal) — executed by the application suite's probe child — proves uncleared replacement aborts as a caller precondition.
 - [`PlaybackRestartDeadlineTest.cpp`](../../../test/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, replacement and owner-destruction cancellation after callback queueing, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
 - [`PlaybackSessionTest.cpp`](../../../test/runtime/PlaybackSessionTest.cpp) proves persisted session behavior and that a contextual invalid stored source expression rejects cursor construction before playback.
-- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/runtime/PlaybackSuccessionLaunchTest.cpp) proves launch atomicity and detached view context; [`PlaybackSuccessionProjectionTest.cpp`](../../../test/runtime/PlaybackSuccessionProjectionTest.cpp) proves live membership and repeat behavior; [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/runtime/PlaybackSuccessionAdvanceTest.cpp) proves prepared transitions; [`PlaybackSuccessionFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionFailureTest.cpp) proves failure walking and internal observations; [`PlaybackServiceTest.cpp`](../../../test/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
+- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/runtime/PlaybackSuccessionLaunchTest.cpp)
+  proves launch atomicity and detached view context;
+  [`PlaybackSuccessionProjectionTest.cpp`](../../../test/runtime/PlaybackSuccessionProjectionTest.cpp)
+  proves live membership and repeat behavior;
+  [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/runtime/PlaybackSuccessionAdvanceTest.cpp)
+  proves prepared transitions.
+- [`PlaybackSuccessionFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionFailureTest.cpp)
+  protects failure walking, recovery limits, grouped skip reporting, and
+  internal observations. The [application commit tests](application-commit.md#test-map)
+  cover public snapshot projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 
 ## Related documents

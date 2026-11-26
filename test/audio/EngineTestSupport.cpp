@@ -6,6 +6,7 @@
 #include "ScriptedDecoderSession.h"
 #include "lib/audio/detail/DecoderOutput.h"
 #include <ao/AudioCodec.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -296,7 +297,17 @@ namespace ao::audio::test
 
   void StagedFailureGate::waitForRelease()
   {
-    _failureRelease.acquire();
+    // Outlast the owner's 10 s waits so ordinary failures unwind the guard first.
+    // A stuck owner cannot release a reader it is joining. Never turn that timeout into a scripted Decode.
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+
+    while (!_failureRelease.try_acquire_until(deadline))
+    {
+      if (std::chrono::steady_clock::now() >= deadline)
+      {
+        AO_FATAL("Staged decoder test timed out waiting for the read to be released");
+      }
+    }
   }
 
   void StagedFailureGate::release()
