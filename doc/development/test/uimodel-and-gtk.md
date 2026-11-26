@@ -21,7 +21,7 @@ GTK adapter semantics          -> drive a service or view model, then assert
                                   sensitivity, CSS class, model contents, or
                                   draft data
 Interactive / dialog behavior  -> show/present only when lifecycle is required,
-                                  drain idle/timeouts with drainGtkEvents, and
+                                  use drainGtkEvents for pending work, and
                                   assert the result
 Full-window smoke              -> constructs, binds, shows/hides under Xvfb;
                                   one section max, never chase coverage here
@@ -221,6 +221,19 @@ Do not use `show()` or `present()` just to prove gtkmm behavior such as
 `get_visible()`, default size, non-zero allocation, or construction survival. If
 a test can assert the same semantic result without realizing a widget, prefer the
 direct API path.
+
+### Popover first layout
+
+Finding a popover in the widget tree proves it is attached, not that it is open:
+a `Gtk::MenuButton` can keep a closed popover attached. `drainGtkEvents()`
+dispatches pending work; it does not wait for a frame.
+
+To prove a popover stays usable on first presentation, use the real presentation
+path and pump events with a deadline until the popover's own first native
+surface layout or `closed`. A parent-window layout or a fixed delay is not a
+substitute. After layout dispatch finishes, require that the same popover is
+still open (mapped), then assert the expected contents or action. An early close
+or timeout fails this test.
 
 ## Geometry tests
 

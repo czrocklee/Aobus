@@ -102,14 +102,8 @@ namespace ao::gtk
         }
       });
 
-    signal_show().connect(
-      [this]
-      {
-        if (!_retired)
-        {
-          _outputDeviceViewModel.refresh();
-        }
-      });
+    // Populate the rows before GTK measures the popup for its first native layout.
+    _outputDeviceViewModel.refresh();
   }
 
   OutputDevicePopover::~OutputDevicePopover() = default;

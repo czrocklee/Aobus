@@ -96,8 +96,14 @@ Closing, replacing, cancelling, and destroying a transient must all converge on 
 Prefer attachment-session-owned transient widgets that unparent when closed.
 A long-lived controller should retain business state and commands rather than a widget parented to a shorter-lived row, cell, page, or view generation.
 
+When a popover's contents determine its size, render the initial contents from current state before first presentation.
+A show or map handler alone can be too late: GTK can size the popup before the contents are ready, then close it if that allocation is smaller than the minimum it needs at the first native layout.
+The contents must reflect current state each time the popover opens and follow live model updates while it is open.
+See [popover first layout](test/uimodel-and-gtk.md#popover-first-layout) for how to verify presentation.
+
 Use `PopoverAttachment` for simple controller-owned, one-shot popovers.
-It unparents on close and defers final destruction until the current GTK dispatch stack returns.
+A popover can emit `closed` while its anchor is still mapped; anchor unmap is a separate reason to retire the attachment.
+The helper unparents on either event and defers final destruction until the current GTK dispatch stack returns.
 Keep stable member popovers and multi-stage popovers in their owning controller rather than forcing them through this helper.
 
 Before replacing an owned popover or menu, pop it down and unparent the old instance.

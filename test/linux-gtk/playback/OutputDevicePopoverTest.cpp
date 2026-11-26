@@ -11,15 +11,18 @@
 #include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtk/gtk.h>
@@ -120,7 +123,6 @@ namespace ao::gtk::test
     button.set_popover(selector);
     host.mount(button);
     host.present();
-    emitShow(selector);
     auto* const listBox = listBoxFor(selector);
     REQUIRE(listBox != nullptr);
     auto& sharedRow = requireRowByLabel(*listBox, "Built-in Audio");
@@ -136,20 +138,26 @@ namespace ao::gtk::test
     playback.commands().setOutputDevice(
       audio::BackendId{"pipewire"}, audio::DeviceId{"node:device1"}, audio::kProfileExclusive);
     drainGtkEvents();
-    emitShow(selector);
 
-    REQUIRE(sharedRow.get_child() != nullptr);
-    CHECK(sharedRow.get_child()->has_css_class("ao-output-device-selected-row"));
-    emitRowActivated(*listBox, sharedRow);
+    auto& retained = requireRowByLabel(*listBox, "Built-in Audio");
+    REQUIRE(retained.get_child() != nullptr);
+    CHECK(retained.get_child()->has_css_class("ao-output-device-selected-row"));
+    emitRowActivated(*listBox, retained);
     CHECK(playback.snapshot().transport.output.selectedDevice.profileId == audio::kProfileExclusive);
     REQUIRE(selections.empty());
 
-    // A retired selector may outlive its former service until final GTK
-    // destruction. Neither retained event may dereference that service.
+    // Presenting or activating a retained selector must not consult its former service.
     fixturePtr.reset();
-    emitShow(selector);
-    emitRowActivated(*listBox, sharedRow);
-    REQUIRE(toggle.activate());
+    button.popup();
+    REQUIRE(tryPumpGtkEventsUntil([&] { return selector.get_mapped(); }));
+    emitRowActivated(*listBox, requireRowByLabel(*listBox, "Built-in Audio"));
+    auto& retainedSwitch = requireRoutingPolicySwitch(selector);
+    REQUIRE_FALSE(retainedSwitch.get_state());
+    // Reset the canceled thumb, then deliver a fresh native request without waiting for an animation.
+    retainedSwitch.set_active(false);
+    REQUIRE_FALSE(retainedSwitch.get_active());
+    retainedSwitch.set_active(true);
+    CHECK(retainedSwitch.get_active());
     drainGtkEvents();
     CHECK(selections.empty());
   }
@@ -170,12 +178,6 @@ namespace ao::gtk::test
       ao::test::englishMessageCatalog(),
       uimodel::OutputDeviceIntent::recordedBy([&](auto const& selection) { selections.push_back(selection); }),
       Gtk::PositionType::BOTTOM};
-    auto host = GtkWindowFixture{};
-    auto button = Gtk::MenuButton{};
-    button.set_popover(selector);
-    host.mount(button);
-    host.present();
-    emitShow(selector);
     auto* const list = listBoxFor(selector);
     REQUIRE(list != nullptr);
     auto* const advisory = list->get_row_at_index(0);
@@ -184,6 +186,7 @@ namespace ao::gtk::test
     REQUIRE(label != nullptr);
     CHECK(label->get_text() == "Requested output unavailable");
     CHECK_FALSE(advisory->get_activatable());
+    REQUIRE(selections.empty());
     emitRowActivated(*list, *advisory);
     CHECK(selections.empty());
     REQUIRE(playback.snapshot().transport.output.optPendingOutputSelection);
@@ -213,9 +216,6 @@ namespace ao::gtk::test
     button.set_popover(selector);
     host.mount(button);
     host.present();
-
-    emitShow(selector);
-    drainGtkEvents();
 
     auto* const listBox = listBoxFor(selector);
     REQUIRE(listBox != nullptr);
@@ -272,7 +272,8 @@ namespace ao::gtk::test
     button.set_popover(selector);
     host.mount(button);
     host.present();
-    emitShow(selector);
+    button.popup();
+    REQUIRE(tryPumpGtkEventsUntil([&] { return selector.get_mapped(); }));
     auto* const list = listBoxFor(selector);
     REQUIRE(list != nullptr);
     auto& off = requireRoutingPolicySwitch(selector);
@@ -291,12 +292,13 @@ namespace ao::gtk::test
     drainGtkEvents();
     REQUIRE(selections.empty());
 
-    REQUIRE(off.activate());
+    auto& current = requireRoutingPolicySwitch(selector);
+    REQUIRE(current.get_mapped());
+    REQUIRE(current.activate());
     REQUIRE(tryPumpGtkEventsUntil([&] { return !selections.empty(); }));
     REQUIRE(selections == std::vector{allowed});
     CHECK(playback.snapshot().transport.output.selectedDevice == allowed);
 
-    emitShow(selector);
     drainGtkEvents();
     CHECK(selections == std::vector{allowed});
     auto& on = requireRoutingPolicySwitch(selector);
@@ -325,6 +327,7 @@ namespace ao::gtk::test
     auto const narrow = measureWidget(*allowedRow, Gtk::Orientation::VERTICAL, 240);
     CHECK(narrow.minimum > normal.minimum);
 
+    REQUIRE(on.get_mapped());
     REQUIRE(on.activate());
     REQUIRE(tryPumpGtkEventsUntil([&] { return selections.size() >= 2; }));
     CHECK(selections == (std::vector{allowed, fixed}));
@@ -335,14 +338,22 @@ namespace ao::gtk::test
   TEST_CASE("OutputDevicePopover - queued routing actions respect the current request and latest input")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& playback = fixture.runtime().playback();
-    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
-    drainGtkEvents();
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+    auto const retireWork = utility::ScopedRegistration{[&]
+                                                        {
+                                                          runtimePtr->shutdown();
+                                                          executor->runUntilIdle();
+                                                        }};
+    auto& playback = runtimePtr->playback();
+    rt::test::addReadyAudioProvider(*runtimePtr, rt::test::makePipeWireOutputStatus());
+    executor->runUntilIdle();
     auto const fixed = playback.snapshot().transport.output.selectedDevice;
     REQUIRE(fixed.routingPolicy == audio::OutputRoutingPolicy::Fixed);
 
-    auto const configPath = fixture.tempDir().path() / "output-picker.yaml";
+    auto const configPath = tempDir.path() / "output-picker.yaml";
     auto const storePtr = std::make_shared<AppConfigStore>(configPath);
     auto const recorder = preferredOutputDeviceRecorder(storePtr);
     recorder.record(fixed);
@@ -368,33 +379,49 @@ namespace ao::gtk::test
     button.set_popover(selector);
     host.mount(button);
     host.present();
-    emitShow(selector);
     auto& oldToggle = requireRoutingPolicySwitch(selector);
     auto const heldNativePtr = std::unique_ptr<GObject, decltype(&::g_object_unref)>{
       G_OBJECT(g_object_ref(oldToggle.gobj())), &::g_object_unref};
 
-    // A refresh replaces the native row without changing its expected selection.
-    // A held switch must no longer be able to grant consent even in that case.
-    emitShow(selector);
-    ::gtk_switch_set_active(GTK_SWITCH(heldNativePtr.get()), TRUE);
-    drainGtkEvents();
-    REQUIRE(selections.empty());
+    auto const discoverOtherOutput = [&] -> Gtk::Switch&
+    {
+      rt::test::addReadyAudioProvider(*runtimePtr);
+      // Publish the inventory without delivering the switch's GTK idle handoff.
+      executor->runUntilIdle();
+      REQUIRE(findLabelByText(selector, "Test Device") != nullptr);
+      REQUIRE_FALSE(playback.snapshot().transport.output.optPendingOutputSelection);
+      REQUIRE(playback.snapshot().transport.output.selectedDevice == fixed);
+      auto& replacement = requireRoutingPolicySwitch(selector);
+      REQUIRE(replacement.gobj() != GTK_SWITCH(heldNativePtr.get()));
+      return replacement;
+    };
+    auto const settleAction = [&]
+    {
+      drainGtkEvents();
+      executor->runUntilIdle();
+    };
 
-    auto& current = requireRoutingPolicySwitch(selector);
-    REQUIRE_FALSE(current.get_active());
-    current.set_active(true); // Deliver native state-set now, without pumping the idle handoff.
-    REQUIRE(selections.empty());
+    SECTION("A held switch cannot grant consent after its row is replaced for the same request")
+    {
+      discoverOtherOutput();
+      ::gtk_switch_set_active(GTK_SWITCH(heldNativePtr.get()), TRUE);
+      settleAction();
+      CHECK(selections.empty());
+      CHECK_FALSE(requireRoutingPolicySwitch(selector).get_active());
+      CHECK(savedPreference() == fixed);
+    }
 
     SECTION("A rebuilt switch for the same request retains the queued action")
     {
-      emitShow(selector);
-      auto& rebuilt = requireRoutingPolicySwitch(selector);
+      oldToggle.set_active(true); // Deliver state-set without pumping the idle handoff.
+      REQUIRE(selections.empty());
+      auto& rebuilt = discoverOtherOutput();
       CHECK(rebuilt.get_active());
       CHECK_FALSE(rebuilt.get_state());
 
       SECTION("The action completes once")
       {
-        drainGtkEvents();
+        settleAction();
         auto allowed = fixed;
         allowed.routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute;
         CHECK(selections == std::vector{allowed});
@@ -408,7 +435,7 @@ namespace ao::gtk::test
       SECTION("Returning the thumb to the committed value cancels the action")
       {
         rebuilt.set_active(false);
-        drainGtkEvents();
+        settleAction();
         CHECK(selections.empty());
         CHECK(savedPreference() == fixed);
         CHECK(playback.snapshot().transport.output.selectedDevice == fixed);
@@ -420,18 +447,22 @@ namespace ao::gtk::test
 
     SECTION("A different requested output replaces the row before idle")
     {
+      oldToggle.set_active(true);
+      REQUIRE(selections.empty());
       auto const replacementRequest = audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire,
                                                                    .deviceId = audio::DeviceId{"node:other-dac"},
                                                                    .profileId = audio::kProfileExclusive};
       playback.commands().setOutputDevice(replacementRequest);
+      executor->runUntilIdle();
       REQUIRE(playback.snapshot().transport.output.optPendingOutputSelection == replacementRequest);
       auto& replacement = requireRoutingPolicySwitch(selector);
+      REQUIRE(replacement.gobj() != GTK_SWITCH(heldNativePtr.get()));
       REQUIRE_FALSE(replacement.get_active());
       REQUIRE_FALSE(replacement.get_state());
 
       SECTION("Without fresh input, the obsolete action cannot change consent")
       {
-        drainGtkEvents();
+        settleAction();
         CHECK(selections.empty());
         CHECK(savedPreference() == fixed);
         CHECK(playback.snapshot().transport.output.optPendingOutputSelection == replacementRequest);
@@ -444,7 +475,7 @@ namespace ao::gtk::test
       {
         replacement.set_active(true);
         REQUIRE(selections.empty());
-        drainGtkEvents();
+        settleAction();
         auto allowed = replacementRequest;
         allowed.routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute;
         CHECK(selections == std::vector{allowed});
@@ -470,6 +501,7 @@ namespace ao::gtk::test
       rt::test::addReadyAudioProvider(fixture.runtime());
       drainGtkEvents();
       REQUIRE(playback.snapshot().transport.output.selectedDevice.backendId == audio::BackendId{"test_backend"});
+      CHECK(findLabelByText(selector, "Test Device") != nullptr);
     }
 
     SECTION("PipeWire System Default")
@@ -484,12 +516,6 @@ namespace ao::gtk::test
       REQUIRE(playback.snapshot().transport.output.selectedDevice == systemDefault);
     }
 
-    auto host = GtkWindowFixture{};
-    auto button = Gtk::MenuButton{};
-    button.set_popover(selector);
-    host.mount(button);
-    host.present();
-    emitShow(selector);
     CHECK(findWidget<Gtk::Switch>(selector) == nullptr);
 
     if (playback.snapshot().transport.output.selectedDevice.deviceId.empty())

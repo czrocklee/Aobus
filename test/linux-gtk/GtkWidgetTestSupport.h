@@ -61,7 +61,6 @@ namespace ao::gtk::test
   void emitClicked(Gtk::Button& button);
   void emitActivate(Gtk::Entry& entry);
   void emitClosed(Gtk::Popover& popover);
-  void emitShow(Gtk::Widget& widget);
   void emitRowActivated(Gtk::ListBox& listBox, Gtk::ListBoxRow& row);
 
   template<typename T>

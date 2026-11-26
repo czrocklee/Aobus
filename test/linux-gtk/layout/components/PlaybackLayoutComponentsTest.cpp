@@ -315,8 +315,6 @@ namespace ao::gtk::layout::test
     ao::gtk::test::drainGtkEvents();
     auto* const popover = ao::gtk::test::findWidget<OutputDevicePopover>(*button);
     REQUIRE(popover != nullptr);
-    ao::gtk::test::emitShow(*popover);
-    ao::gtk::test::drainGtkEvents();
     auto* const listBox = ao::gtk::test::findWidget<Gtk::ListBox>(*popover);
     REQUIRE(listBox != nullptr);
     auto* const exclusiveBadge = ao::gtk::test::findLabelByText(*listBox, "[E]");
@@ -324,6 +322,7 @@ namespace ao::gtk::layout::test
     auto* const exclusiveRow =
       dynamic_cast<Gtk::ListBoxRow*>(exclusiveBadge->get_ancestor(Gtk::ListBoxRow::get_base_type()));
     REQUIRE(exclusiveRow != nullptr);
+    REQUIRE_FALSE(optRequested);
 
     ao::gtk::test::emitRowActivated(*listBox, *exclusiveRow);
 

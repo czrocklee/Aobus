@@ -53,6 +53,7 @@
 #include <gtkmm/paned.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -215,11 +216,28 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     controller.activateAction("playback.showOutputDeviceSelector");
-    drainGtkEvents();
+    auto* const openedPopover = findWidget<OutputDevicePopover>(window);
+    REQUIRE(openedPopover != nullptr);
+    auto const surfacePtr = openedPopover->get_surface();
+    REQUIRE(surfacePtr);
+
+    bool layoutDispatched = false;
+    auto const layoutConnection = sigc::scoped_connection{
+      surfacePtr->signal_layout().connect([&layoutDispatched](auto, auto) { layoutDispatched = true; })};
+
+    if (openedPopover->get_width() > 0 && openedPopover->get_height() > 0)
+    {
+      // Presentation may have allocated synchronously. Observe a native layout rather than waiting for a past signal.
+      surfacePtr->request_layout();
+    }
+
+    REQUIRE(
+      tryPumpGtkEventsUntil([&] { return layoutDispatched || findWidget<OutputDevicePopover>(window) == nullptr; }));
+
     auto* const popover = findWidget<OutputDevicePopover>(window);
     REQUIRE(popover != nullptr);
-    emitShow(*popover);
-    drainGtkEvents();
+    REQUIRE(popover->get_surface() == surfacePtr);
+    REQUIRE(popover->get_mapped());
     auto* const listBox = findWidget<Gtk::ListBox>(*popover);
     REQUIRE(listBox != nullptr);
     auto* const exclusiveBadge = findLabelByText(*listBox, "[E]");
