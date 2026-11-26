@@ -416,7 +416,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         report_path = self.root / "nix-report.json"
         report = {
             "schemaVersion": 1,
-            "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+            "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
             "dependencies": {
                 "icu": self.nix_entry(icu, "78.3", {"out": icu, "dev": dev}),
                 "catch2": self.nix_entry(catch, "3.16.0", {"out": catch}),
@@ -706,7 +706,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             report,
             {
                 "schemaVersion": 1,
-                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                 "dependencies": {"gperf": self.nix_entry(root, "3.3", {"out": root})},
             },
         )
@@ -755,7 +755,7 @@ class BazelWorkspaceTests(unittest.TestCase):
             report,
             {
                 "schemaVersion": 1,
-                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                 "dependencies": {
                     "pipewire": self.nix_entry(pipewire, "1.2.3", {"out": pipewire, "bin": split}),
                     "wireplumber": self.nix_entry(wireplumber, "4.5.6", {"out": wireplumber}),
@@ -780,7 +780,7 @@ class BazelWorkspaceTests(unittest.TestCase):
         ):
             selected = host_tools._linux_fixture_tools(files, directories)
         self.assertEqual(selected, {name: str(path) for name, path in tools.items()})
-        self.assertLessEqual({report, native.PROJECT_ROOT / "nixpkgs.json", target, *tools.values()}, files)
+        self.assertLessEqual({report, native.PROJECT_ROOT / "config/nixpkgs.json", target, *tools.values()}, files)
         self.assertEqual(directories, {path.parent for path in tools.values()})
         self.assertIn(tools["pipewire"].with_name("pw-cli"), probes)
 

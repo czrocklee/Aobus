@@ -1,7 +1,7 @@
 """Shared native analysis scope, source ownership and verified SDK descriptors.
 
 Bazel owns compile commands, header inputs and generated artifacts. This module
-never configures a product, reads a CMake cache or invents a compile database.
+classifies source paths and selects ready SDK tools.
 """
 
 import os

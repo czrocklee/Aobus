@@ -186,6 +186,20 @@ class GateRoutingTest(unittest.TestCase):
             "${{ github.event_name == 'pull_request' && steps.scope.outputs.sha || '' }}",
         )
 
+    def test_checker_report_probe_is_required_only_for_affected_linux_and_windows_runs(self):
+        self.assertEqual(_field(_job("changes"), 6, "checker-reports"), "${{ steps.scope.outputs.checker-reports }}")
+        name = "Test native checker reports"
+        self.assertNotIn(f"- name: {name}", _job("macos"))
+        for job in ("linux", "windows"):
+            with self.subTest(job=job):
+                native = _job(job)
+                step = _step(native, name)
+                self.assertEqual(_condition(step, 8), "needs.changes.outputs.checker-reports == 'true'")
+                self.assertIn(_field(step, 8, "continue-on-error"), ("", "false"))
+                self.assertLess(native.index("- name: Check Bazel completion"), native.index(f"- name: {name}"))
+                self.assertLess(native.index(f"- name: {name}"), native.index("- name: Stop Bazel remote cache"))
+                self.assertIn("test/lint/check_checker_reports.py", _field(step, 8, "run"))
+
     def test_windows_native_completion_binds_verified_lint_base(self):
         step = _windows_completion_step()
         self.assertEqual(_field(step, 8, "shell"), "pwsh")
@@ -236,7 +250,7 @@ class GateRoutingTest(unittest.TestCase):
                         **os.environ,
                         **env,
                         "CHECK_TREE": str(tree),
-                        "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                        "AOBUS_CI_JOBS": "4",
                         "FAKE_AO_EXIT": str(status),
                     },
                     capture_output=True,
@@ -306,7 +320,7 @@ class GateRoutingTest(unittest.TestCase):
                         {
                             **env,
                             "RUNNER_TEMP": str(runner_temp),
-                            "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                            "AOBUS_CI_JOBS": "4",
                             "FAKE_AO_EXIT": str(status),
                         },
                         cwd=root,
@@ -369,7 +383,8 @@ class LinuxVerdictTest(unittest.TestCase):
         )
         bazel = stub(
             "bazel",
-            '[[ " $* " == *" build "* && " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
+            '[[ " $* " == *" build "* && " $* " == *" --jobs=4 "* ]] || exit 2\n'
+            '[[ " $* " == *" --disk_cache=$AOBUS_BAZEL_DISK_CACHE "* ]] || exit 2\n'
             "[[ -z ${AOBUS_BAZEL_CONFIGURATION+x} && -z ${AOBUS_BAZEL_REMOTE_CACHE+x} ]] || exit 3\n"
             "[[ -z ${NIX_BUILD_SHELL+x} ]] || exit 4\n"
             ': > "$0.ran"\n'
@@ -386,7 +401,7 @@ class LinuxVerdictTest(unittest.TestCase):
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "AOBUS_BAZEL_DISK_CACHE": str(root / "cache"),
                 "AOBUS_STATE_ROOT": str(root / "state"),
-                "CMAKE_BUILD_PARALLEL_LEVEL": "4",
+                "AOBUS_CI_JOBS": "4",
                 "AOBUS_BAZEL_CONFIGURATION": "must-not-inherit",
                 "AOBUS_BAZEL_REMOTE_CACHE": "must-not-inherit",
             },

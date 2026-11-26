@@ -14,13 +14,10 @@ See [validation and review](test/validation-and-review.md) to choose checks and
 The public portal has four commands: `setup` explicitly prepares components,
 `format` rewrites source, `check` validates, and `measure` collects coverage,
 performance, or concept metrics. There are no
-ordinary lifecycle aliases or `ao bazel` command tree. Nix/vcpkg remain the
-dependency version and
-installation authorities; Bazel consumes their artifacts without configuring
-an Aobus CMake graph or parsing installed CMake exports — vcpkg package
-builds may still use CMake internally, and the repository retains the
-CMake-language provider assets those ports need. BCR supplies build rules, not
-application dependencies.
+ordinary lifecycle aliases or `ao bazel` command tree. Nix and vcpkg own
+dependency versions and installation. Bazel consumes their installed artifacts
+without parsing CMake exports. vcpkg may use CMake internally to build packages.
+BCR supplies build rules, not application dependencies.
 
 [Standalone lint](linting.md#bazel-backed-reports) and [completion](#completion-gate)
 use the same cacheable [Bazel lint reports](#lint-reports) and STRICT/RELAXED policy.
@@ -50,10 +47,10 @@ bazel test //:tests
 ./ao check contracts --config release --path /tmp/build/aobus-native-sdk --jobs 2
 ```
 
-On native macOS and Windows, `./ao setup deps` installs the shared vcpkg manifest
-into the selected tree's `vcpkg_installed`
-with the pinned vcpkg and the governed triplets, overlays and binary cache,
-without a CMake configure, so unchanged package ABIs restore from that cache.
+On native macOS and Windows, `./ao setup deps` uses `config/vcpkg/` as the
+manifest root and installs into the selected tree's `vcpkg_installed`,
+using the pinned vcpkg and the governed triplets, overlays and binary cache.
+Unchanged package ABIs can restore from that cache.
 On Windows, `ao.bat setup llvm-sdk` is the second explicit provisioning
 spelling: it calls the same native LLVM SDK installer as `./ao setup deps`. Ordinary
 ready-only build, lint and format commands never install an SDK.
@@ -802,9 +799,9 @@ header evidence remain guards. Installed identity does not certify original
 registry/build provenance.
 
 Version claims in this projection have distinct owners. The shared
-`dependency-contract.json` and the resolver inputs (`nixpkgs.json`,
-`vcpkg-configuration.json`, `vcpkg.json`) remain the only version-selection
-authorities; Bazel adds no installer pin, and
+`config/dependency-contract.json` and the resolver inputs (`config/nixpkgs.json`,
+`config/vcpkg/vcpkg-configuration.json`, `config/vcpkg/vcpkg.json`) remain the
+only version-selection authorities; Bazel adds no installer pin, and
 [config/bazel/dependencies.json](../../config/bazel/dependencies.json) holds no
 accepted-version table. [Dependency governance](dependency-governance.md) owns
 what a version change requires. Installed Nix reports and triplet-filtered
@@ -1559,9 +1556,11 @@ sibling report and does not make sibling mains selected. For example, the
 header-scoped utility command above gates the selected header, unlike the
 broader target-only command. An ordinary compiler error in a delivered but
 unselected sibling report is not a selected-main result; failure of a required
-Bazel build instead makes the attempt incomplete. Compatibility uses the
-top-level target configuration, not an exec-configuration row for the same
-owner built as a tool.
+Bazel build instead makes the attempt incomplete. Query maps paths to compile
+owners, and `cquery` checks those roots in the top-level target configuration. Scoped reports likewise use that configuration,
+except for the tagged native SDK checker: lint and analyzer reports for its files
+follow the exact verified tool's exec edges, including the Windows opt edge.
+Ordinary products in the same request remain in the caller's configuration.
 Automatic discovery without `--target` queries the whole project graph.
 For a supported direct main path, the portal requests its reports in
 all actual native contexts plus the owner inventory, not owner sibling reports
@@ -1653,23 +1652,24 @@ path that no admitted configuration selects — for example, only under an
 off-by-default feature flag — fails rather than silently passing; deferral
 stays reserved for recognized foreign-native-platform paths.
 
-The graph lints each owner's top-level target configuration, including authored
-tool source, without separately covering exec-configuration compilations of the
-same source. Full coverage is not full fresh execution: matching reports are
-reused and cached warnings still fail. Cold caches pay the complete analysis
+The graph follows the completion roots and their actual dependency edges,
+including configured exec tools. It does not promise coverage of every
+configuration variant. Full coverage is not full fresh execution: matching
+reports are reused and cached warnings still fail. Cold caches pay the complete analysis
 cost; conservative declared input closures can invalidate more reports than the
 actual include relationships alone would require.
 
-The report aspect is nonpropagating; its required provider-only aspect follows
-dependencies solely to map virtual include headers. It captures actual native
-argv and declared inputs, adds reports for paired headers analyzed as main
+The scoped report aspect follows the checker verification edges; its required
+provider-only aspect follows dependencies to map virtual include headers. It
+captures actual native argv and declared inputs, adds reports for paired headers analyzed as main
 files, and retains
 AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
-fixed production aspect and that pass's exact consumer parameter. Before using
-reports from a pass, including for donor discovery, the portal requires every
+fixed production aspect and that pass's exact consumer parameter. For the
+verification root, the BEP carries its current verified native tool path and
+selected groups. Before using reports from a pass, including for donor discovery, the portal requires every
 owner's outputs to come from the same local execution root. It does not scan
 stale output directories or join `aquery` data. The native lint stage returns
 0 for a clean selection, 1 for warnings, and 2 for selected compiler errors,
@@ -1928,18 +1928,17 @@ Both comparisons use the paths Git reports and ignore Git replacement refs.
 Neither verifies the entire worktree byte for byte; edits Git treats as unchanged
 can be absent from the lint scope.
 
-A bounded comparison selects reports for applicable changed inputs, or skips
-production lint if there are none. Scoped header reports do not check every
-dependent. Semantic BUILD changes,
-generation or lint-policy changes, deleted native sources, and other
-unbounded inputs select the full native lint graph. A modified BUILD file
-adds no lint inputs if its supported token stream is unchanged after
-ignoring comments and insignificant whitespace. The current graph alone
-cannot recover consumers removed by a semantic edit. The portal also selects
-the full graph if it cannot verify the comparison (including when history
-is unavailable) or an explicitly based comparison has no changed paths. A malformed [Git binding](build.md#shared-source-git-discovery),
-or one that cannot open this checkout, is a configuration error: the portal
-stops before starting Bazel.
+A verified comparison selects only added or modified native sources, headers,
+and include fragments eligible for production lint. Renames select the surviving
+path; deletions add no reports. A change only to BUILD files, scripts, or
+configuration therefore skips production lint, not the build or its other checks.
+Scoped lint does not check unchanged dependents for findings introduced by new
+build flags, generated code, or lint rules. Use `--extend` for that coverage;
+[CI on `main`](ci.md#reproduce-the-native-jobs) checks the whole platform graph.
+
+If the comparison cannot be verified, completion uses full lint. A malformed
+[Git binding](build.md#shared-source-git-discovery), or one that cannot open
+this checkout, is a configuration error: the portal stops before starting Bazel.
 
 Scope selection changes only production lint, not formatting, audits, lint
 fixtures, product builds, or other tests. For a bounded, nonempty lint scope,
@@ -2158,8 +2157,8 @@ The `test_audit` and `name_audit` targets run the same Catch2 naming/tag and
 class/file naming audits their standalone commands expose, and `workflows` runs
 the pinned actionlint over direct `.github/workflows` YAML on Linux. The
 application version is owned by the
-plaintext root [VERSION.txt](../../VERSION.txt) file: the build reads those bytes
-directly and never parses CMake syntax.
+plaintext root [VERSION.txt](../../VERSION.txt) file, which the build reads
+directly.
 The `.txt` suffix avoids shadowing the standard C++
 `<version>` header on case-insensitive filesystems.
 
@@ -2191,8 +2190,8 @@ tooling venv or its site packages.
 This is a native SDK boundary, not a relocatable/hermetic Python toolchain.
 Switching to a repository-local executable requires separate native validation
 of DLL and standard-library lookup, particularly on Windows.
-The application version header expands its template from the project's
-version declaration without a CMake configure.
+Bazel expands the application version header template from the project's
+version declaration.
 
 [Audio fixtures](../../test/data/audio/BUILD.bazel) are checked-in files;
 generation scripts are not run. The shared helper uses official rules_cc runfiles

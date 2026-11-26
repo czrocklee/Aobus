@@ -41,7 +41,7 @@ class GtkSdkPolicyTest(unittest.TestCase):
                 report,
                 {
                     "schemaVersion": 1,
-                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"],
+                    "nixpkgsRevision": native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"],
                 },
             )
 
@@ -337,7 +337,7 @@ class GResourceSdkTest(unittest.TestCase):
             self.runtime.append(path)
         self.aliases = {Path("/nix/store/fixture-glib-dev"): self.dev, Path("/nix/store/fixture-glib-out"): self.out}
         self.report_path = self.root / "report.json"
-        self.pin = native.read_json(native.PROJECT_ROOT / "nixpkgs.json")["rev"]
+        self.pin = native.read_json(native.PROJECT_ROOT / "config/nixpkgs.json")["rev"]
         self.report = {
             "schemaVersion": 1,
             "nixpkgsRevision": self.pin,
@@ -398,7 +398,7 @@ class GResourceSdkTest(unittest.TestCase):
         self.assertEqual(identity["version"], "2.99.1")
         self.assertEqual(identity["deriver"], "/nix/store/fixture-glib.drv")
         self.assertEqual(set(identity["outputs"]), {str(self.dev), str(self.out)})
-        self.assertEqual(evidence, [self.report_path, native.PROJECT_ROOT / "nixpkgs.json"])
+        self.assertEqual(evidence, [self.report_path, native.PROJECT_ROOT / "config/nixpkgs.json"])
 
     def test_a_second_tool_or_missing_adjacent_runtime_never_uses_path_fallback(self):
         second = self.out / "bin/glib-compile-resources"

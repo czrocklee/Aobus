@@ -33,7 +33,7 @@ class ForbiddenScanTest(unittest.TestCase):
         self.assertEqual({Path(f.path).name for f in result.errors}, {"Boundary.mm", "Fragment.def"})
         self.assertFalse(guardrails.scan_forbidden([ignored], forbidden="forbidden").ok)
 
-    def test_inventory_preserves_native_cmake_glob_case_rules(self):
+    def test_inventory_matches_suffixes_case_insensitively_on_windows_and_macos(self):
         self.put("Upper.CPP", "forbidden")
         for platform, expected in (("linux", []), ("win32", ["Upper.CPP"]), ("darwin", ["Upper.CPP"])):
             with self.subTest(platform=platform), patch.object(guardrails.sys, "platform", platform):
@@ -350,7 +350,7 @@ class CompletionAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(guardrails.AuditInputError, "unknown or disabled"):
             guardrails.run_audits(self.root, ["ao_not_a_real_check"])
 
-    def test_cli_runs_without_cmake_and_replaces_its_machine_readable_receipt(self):
+    def test_cli_writes_its_machine_readable_receipt_without_external_tools(self):
         result = subprocess.run(
             [
                 sys.executable,

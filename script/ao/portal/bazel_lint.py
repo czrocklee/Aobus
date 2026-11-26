@@ -2,8 +2,8 @@
 
 The portal owns scope selection, owner discovery, configured compatibility,
 the report build and the public failure gate.  Bazel owns the actual native
-compile contexts and report actions; this module never prepares CMake or runs
-clang-tidy itself.  ``run`` keeps the caller's file scope; the complete graph
+compile contexts and report actions; this module doesn't run clang-tidy itself.
+``run`` keeps the caller's file scope; the complete graph
 gate is the declared Bazel test, not a portal route.
 """
 
@@ -28,7 +28,16 @@ from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
-from ao.policy.tidy_policy import common_prefix, component_parts, consumer_rank, find_stale_nolint_suppressions
+from ao.policy.tidy_policy import (
+    FRAGMENT_SUFFIXES,
+    HEADER_SUFFIXES,
+    LINT_SUFFIXES,
+    TRANSLATION_UNIT_SUFFIXES,
+    common_prefix,
+    component_parts,
+    consumer_rank,
+    find_stale_nolint_suppressions,
+)
 from ao.portal import bazel_workflows, bazel_workspace, build_dir, tidy_engine
 
 if TYPE_CHECKING:
@@ -44,14 +53,10 @@ _ANALYZER_CONFIG = "fastbuild"
 _OUTPUT_GROUP = "aobus_lint"
 _QUERY_EXPRESSION = 'kind("rule", //...)'
 _QUERY_ATTRIBUTES = frozenset(
-    {"srcs", "hdrs", "textual_hdrs", "additional_compiler_inputs", "deps", "implementation_deps", "actual"}
+    {"srcs", "hdrs", "textual_hdrs", "additional_compiler_inputs", "deps", "implementation_deps", "actual", "tags"}
 )
 _CQUERY_EXPRESSION = 'str(target.label) + "|" + str("IncompatiblePlatformProvider" in providers(target))'
 
-_SOURCE_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
-_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
-_INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
-LINT_SUFFIXES = tuple(sorted(_SOURCE_SUFFIXES | _HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES))
 _COMPILE_OWNER_KINDS = frozenset({"cc_library", "cc_binary", "cc_test", "objc_library"})
 _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
 _FEATURE_PATH_PREFIXES = {
@@ -87,6 +92,13 @@ class QueryGraph:
         self._headers: dict[str, tuple[str, ...]] = {}
         self._closures: dict[str, frozenset[str]] = {}
         self._declarers: dict[str, frozenset[str]] | None = None
+
+    def checker_owner(self, owners: Sequence[str]) -> str | None:
+        """The native SDK checker is linted as built for execution, not as a product."""
+        matches = [owner for owner in owners if "aobus-lint-sdk-host" in _attribute_labels(self.rules[owner], "tags")]
+        if len(matches) > 1:
+            raise ValueError(f"expected one native lint SDK checker, found {matches}")
+        return next(iter(matches), None)
 
     def source_owners(self, path: str) -> tuple[str, ...]:
         """Return every compile owner whose actual ``srcs`` contain ``path``."""
@@ -298,11 +310,11 @@ def _canonical_owner(query_label: str) -> str:
 
 
 def _is_source(path: str) -> bool:
-    return PurePosixPath(path).suffix.lower() in _SOURCE_SUFFIXES
+    return PurePosixPath(path).suffix.lower() in TRANSLATION_UNIT_SUFFIXES
 
 
 def _is_header(path: str) -> bool:
-    return PurePosixPath(path).suffix.lower() in _HEADER_SUFFIXES
+    return PurePosixPath(path).suffix.lower() in HEADER_SUFFIXES
 
 
 def _component(path: str) -> tuple[str, ...] | None:
@@ -915,6 +927,7 @@ def _report_pass(
     profile: str,
     config: str,
     owners: Sequence[str],
+    checker_owner: str | None,
     consumers: Mapping[str, tuple[str, str]],
     jobs: int,
     remote_cache: str | None,
@@ -926,8 +939,9 @@ def _report_pass(
     aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile)
     bep = run_dir / f"{name}.bep.json"
     log = run_dir / f"{name}.log"
+    roots = [bazel_lint_reports.CHECKER_VERIFICATION if owner == checker_owner else owner for owner in owners]
     build_targets = [
-        *owners,
+        *roots,
         f"--aspects={aspect}",
         "--config=aobus_lint_consumers",
         f"--output_groups={_OUTPUT_GROUP}" if output_groups == (_OUTPUT_GROUP,) else "--config=aobus_lint_scope",
@@ -980,6 +994,7 @@ def _report_pass(
     return bep, bazel_lint_reports.read_reports(
         bep,
         [_canonical_owner(owner) for owner in owners],
+        checker_owner=checker_owner,
         consumers=parameters,
         profile=profile,
         output_groups=output_groups,
@@ -1162,6 +1177,7 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
                 profile="lint",
                 config=config,
                 owners=owners,
+                checker_owner=graph.checker_owner(owners),
                 consumers=consumers,
                 jobs=jobs,
                 remote_cache=remote_cache,
@@ -1170,7 +1186,7 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
 
         # Fragments never have a direct companion. For ordinary headers let the
         # configured index decide; the loading query alone cannot prove pairing.
-        needs_donor = any(PurePosixPath(path).suffix.lower() in _INCLUDE_FRAGMENT_SUFFIXES for path in selected)
+        needs_donor = any(PurePosixPath(path).suffix.lower() in FRAGMENT_SUFFIXES for path in selected)
         initial_groups = discovery_groups if needs_donor else direct_groups
         bep, inventories = report_pass("build", compatible, {}, initial_groups)
         consumers: dict[str, tuple[str, str]] = {}
@@ -1336,6 +1352,7 @@ def _run_analyzer(args: AnalyzerRequest, files: Sequence[str], *, explicit_files
                 profile="analyzer",
                 config=_ANALYZER_CONFIG,
                 owners=owners,
+                checker_owner=graph.checker_owner(owners),
                 consumers=consumers,
                 jobs=jobs,
                 remote_cache=None,

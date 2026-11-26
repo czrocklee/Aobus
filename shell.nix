@@ -1,5 +1,5 @@
 let
-  pin = builtins.fromJSON (builtins.readFile ./nixpkgs.json);
+  pin = builtins.fromJSON (builtins.readFile ./config/nixpkgs.json);
   pkgs = import (builtins.fetchTarball {
     url = "https://github.com/${pin.owner}/${pin.repo}/archive/${pin.rev}.tar.gz";
     sha256 = pin.sha256;
@@ -14,7 +14,7 @@ let
   # without duplicating the stdenv compiler and linker flags.
   portalInputs = [
     ./shell.nix
-    ./nixpkgs.json
+    ./config/nixpkgs.json
     ./script/ao/toolchain.json
     ./script/ao/bazel-toolchain.json
     ./script/ao/buildifier.json
@@ -397,10 +397,9 @@ pkgs.mkShell {
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${aobus-gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set header-only dependency include paths
-    export CMAKE_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include:$CMAKE_INCLUDE_PATH"
     export CPLUS_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include/stb:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
 
-    echo "Using nixpkgs pinned (see nixpkgs.json)" >&2
+    echo "Using nixpkgs pinned (see config/nixpkgs.json)" >&2
     echo "Bazel owns native product compilation; Linux defaults to pinned GCC (--compiler=clang selects Clang)" >&2
   '';
 }

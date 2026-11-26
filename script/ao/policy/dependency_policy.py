@@ -14,7 +14,8 @@ from typing import Any
 
 from ao.core.paths import PROJECT_ROOT
 
-CONTRACT_FILE = PROJECT_ROOT / "dependency-contract.json"
+CONTRACT_PATH = "config/dependency-contract.json"
+CONTRACT_FILE = PROJECT_ROOT / CONTRACT_PATH
 SUPPORTED_PLATFORMS = frozenset({"linux", "macos", "windows"})
 # Native resolver ownership. Linux retains the pinned Nix package set; macOS
 # and Windows share the governed vcpkg manifest and registry snapshots.

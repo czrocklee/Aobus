@@ -13,6 +13,7 @@ from ao.policy import dependency_policy
 from ao.portal import bazel_environment
 
 POLICY = native.PROJECT_ROOT / "config/bazel/dependencies.json"
+VCPKG_DIRECTORY = Path("config/vcpkg")
 
 
 def load_policy() -> dict[str, Any]:
@@ -26,18 +27,21 @@ def nix_root(path: Path) -> Path:
     return Path(*resolved.parts[:4])
 
 
-def nix_report() -> tuple[dict[str, Any], Path, str]:
-    """Load the pinned shell's dependency report, its path and the nixpkgs.json revision it came from."""
+def nix_report() -> tuple[dict[str, Any], list[Path], str]:
+    """Return the admitted report, the files that establish its identity, and its revision."""
     path = Path(os.environ.get("AOBUS_NIX_DEPENDENCY_REPORT", ""))
     if not path.is_file():
         raise native.BazelWorkspaceError(
-            "the pinned Nix dependency report (AOBUS_NIX_DEPENDENCY_REPORT) is missing; enter the shell through ./ao"
+            "missing Nix dependency report (AOBUS_NIX_DEPENDENCY_REPORT); enter the pinned shell through ./ao"
         )
     report = native.read_json(path)
-    revision = bazel_environment.pinned_nix_revision(report, native.read_json(native.PROJECT_ROOT / "nixpkgs.json"))
+    pin_path = native.PROJECT_ROOT / "config/nixpkgs.json"
+    revision = bazel_environment.pinned_nix_revision(report, native.read_json(pin_path))
     if revision is None:
-        raise native.BazelWorkspaceError("Nix dependency report does not match nixpkgs.json; re-enter through ./ao")
-    return report, path, revision
+        raise native.BazelWorkspaceError(
+            f"Nix dependency report does not match {pin_path}; re-enter the pinned shell through ./ao"
+        )
+    return report, [path, pin_path], revision
 
 
 def nix_dependency(report: dict[str, Any], source: str) -> tuple[Path, str, str, list[Path]]:
@@ -65,7 +69,7 @@ def package_groups(policy: dict[str, Any], *, host: str | None = None) -> dict[s
 def linux_provider(
     policy: dict[str, Any], *, identity_path: Path
 ) -> tuple[dict[str, Any], dict[str, str], dict[str, list[Path]]]:
-    report, report_path, revision = nix_report()
+    report, (report_path, pin_path), revision = nix_report()
     packages = [package for group in package_groups(policy, host="linux").values() for package in group]
     versions, expected_roots, derivers = {}, {}, {}
     outputs: dict[str, list[Path]] = {}
@@ -130,7 +134,7 @@ def linux_provider(
             },
         },
     )
-    evidence_paths = [report_path, identity_path, native.PROJECT_ROOT / "nixpkgs.json"]
+    evidence_paths = [report_path, identity_path, pin_path]
     return (
         {
             "provider": {"name": "nix", "version": revision, "evidence": native.evidence(evidence_paths)},
@@ -226,7 +230,8 @@ def native_provider(
     packages = dependency_policy.parse_vcpkg_status(selected)
     policy = load_policy() if policy is None else policy
     groups = package_groups(policy, host=host)
-    manifest = native.read_json(native.PROJECT_ROOT / "vcpkg.json")
+    manifest_path = native.PROJECT_ROOT / VCPKG_DIRECTORY / "vcpkg.json"
+    manifest = native.read_json(manifest_path)
     requests = [*manifest["dependencies"], *manifest["features"]["tests"]["dependencies"]]
     boost_ports = {request if isinstance(request, str) else request["name"] for request in requests}
     boost_ports = {name for name in boost_ports if name.startswith("boost-")}
@@ -274,7 +279,7 @@ def native_provider(
         actual = set(installed.features)
         if not required.issubset(actual) or (request.get("default-features") is False and actual != required):
             raise native.BazelWorkspaceError(
-                f"{request['name']} features {sorted(actual)} do not match vcpkg.json request {sorted(required)}"
+                f"{request['name']} features {sorted(actual)} do not match {manifest_path} request {sorted(required)}"
             )
     native.write_json(
         identity_path,
@@ -293,8 +298,8 @@ def native_provider(
     identity_files = [
         status,
         identity_path,
-        native.PROJECT_ROOT / "vcpkg.json",
-        native.PROJECT_ROOT / "vcpkg-configuration.json",
+        manifest_path,
+        manifest_path.with_name("vcpkg-configuration.json"),
     ]
     if host == "windows":
         host_prefix = prefix.parent / "x64-windows"

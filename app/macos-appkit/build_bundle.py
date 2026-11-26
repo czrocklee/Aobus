@@ -20,9 +20,8 @@ _UNRESOLVED = re.compile(r"\$\{[^}]*\}|@[A-Za-z0-9_]+@")
 def bundle_localizations(inventory: Path) -> list[str]:
     """Derive the declared bundle localizations from the sole catalog inventory.
 
-    Root projects to English, regional underscores follow the CMake hyphen tag
-    rule, pseudo localization stays excluded, English stays first, and the
-    remaining tags keep stable sorted order.
+    The root catalog maps to English, underscores become hyphens, and
+    pseudo-localization is excluded. English comes first, then sorted tags.
     """
     tags: set[str] = set()
     for entry in inventory.read_text(encoding="utf-8").splitlines():
@@ -161,10 +160,10 @@ def run(options: argparse.Namespace) -> None:
     if options.display_name is not None:
         overrides["CFBundleName"] = options.display_name
     substitutions = {
-        "MACOSX_BUNDLE_EXECUTABLE_NAME": options.executable_name,
+        "AOBUS_APPKIT_BUNDLE_EXECUTABLE": options.executable_name,
         "AOBUS_APPKIT_BUNDLE_LOCALIZATIONS": "".join(f"<string>{tag}</string>" for tag in localizations),
-        "PROJECT_VERSION": options.version,
-        "CMAKE_OSX_DEPLOYMENT_TARGET": deployment,
+        "AOBUS_VERSION": options.version,
+        "AOBUS_MACOS_DEPLOYMENT_TARGET": deployment,
     }
     plist_text = override_plist_fields(expand_plist(options.plist, substitutions), overrides)
     validate_plist(

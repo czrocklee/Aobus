@@ -1,4 +1,4 @@
-"""Cache the real native lint fixture suite without preparing CMake or Bazel."""
+"""Produce cacheable native fixture results using Bazel's declared lint tools."""
 
 from __future__ import annotations
 

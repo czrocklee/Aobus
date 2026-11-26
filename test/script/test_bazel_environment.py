@@ -43,7 +43,7 @@ class EnvironmentDiscoveryTests(unittest.TestCase):
         self.mac_policy = json.loads((ROOT / "script/ao/macos-toolchain.json").read_text(encoding="utf-8"))
         self.source_file("script/ao/toolchain.json", json.dumps(self.policy))
         self.source_file("script/ao/macos-toolchain.json", json.dumps(self.mac_policy))
-        self.source_file("nixpkgs.json", json.dumps({"rev": "accepted-revision"}))
+        self.source_file("config/nixpkgs.json", json.dumps({"rev": "accepted-revision"}))
         for script in ("windows-build-env.bat", "windows-vsenv.bat", "macos-vcpkg-bootstrap.sh"):
             self.source_file("script/ao/" + script)
         self.environment = {"PATH": "/no/ambient/tools", "AOBUS_NIX_DEPENDENCY_REPORT": str(self.report)}

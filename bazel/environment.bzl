@@ -148,7 +148,7 @@ def _environment_impl(ctx):
         if not nix:
             fail("Native Linux Bazel requires Nix installed and nix-shell on PATH")
         ctx.watch(nix)
-        for name in ["shell.nix", "nixpkgs.json", "script/ao/toolchain.json", "script/ao/bazel-toolchain.json"]:
+        for name in ["shell.nix", "config/nixpkgs.json", "script/ao/toolchain.json", "script/ao/bazel-toolchain.json"]:
             ctx.watch(root.get_child(name))
         arguments.extend(["--test-launcher", str(ctx.path("check-tool-test-launcher.json"))])
         interpreter = _quote(python) if python else '"$AO_NIX_PORTAL_PYTHON"'
@@ -165,7 +165,7 @@ def _environment_impl(ctx):
         ctx.watch(bootstrap)
         ctx.watch(root.get_child("script/ao/macos-toolchain.json"))
         for triplet in ["x64-aobus-osx", "arm64-aobus-osx"]:
-            ctx.watch(root.get_child("cmake/vcpkg-triplets/" + triplet + ".cmake"))
+            ctx.watch(root.get_child("config/vcpkg/triplets/" + triplet + ".cmake"))
 
         # SDK installation stays explicit. Only the existing compatibility shim
         # is materialized here, within this repository rather than shared state.

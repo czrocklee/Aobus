@@ -3,6 +3,7 @@
 import contextlib
 import io
 import os
+import subprocess
 import unittest
 from unittest import mock
 
@@ -22,32 +23,48 @@ class LintScopeTest(GitCheckoutTestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="\n")
 
-    def advance_mtime(self, name: str, seconds: int = 5) -> None:
+    def advance_mtime(self, name: str) -> None:
         path = self.root / name
         st = path.stat()
-        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + seconds * 1_000_000_000))
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
 
     def commit_files(self, contents: dict[str, str]) -> str:
         for name, content in contents.items():
             self.write_file(name, content)
         return self.commit("update inputs")
 
-    def test_pr_lint_uses_both_committed_endpoints_and_separates_fixture_and_production_inputs(self):
-        base = self.commit_files({"README.md": "base"})
+    def assert_scope(self, base: str, expected: tuple[str, ...] | None) -> None:
+        for comparison in (None, base):
+            with self.subTest(comparison=comparison):
+                self.assertEqual(lint_scope.plan(comparison).files, expected)
+
+    def test_verified_comparisons_select_changed_native_files_but_not_lint_fixtures(self):
+        base = self.commit_files({"lib/Unchanged.cpp": "// base\n"})
+        self.git("checkout", "-b", "topic")
+        self.commit_files({"lib/Input.cc": "// input\n", "include/Api.hxx": "// declaration\n"})
         self.commit_files(
             {
-                "doc/guide.md": "doc",
-                "test/script/test_tools.py": "",
-                "script/ao/command/measure.py": "",
-                "test/lint/fixture/case.cpp": "",
+                "app/macos-appkit/Window.mm": "// implementation\n",
+                "include/Detail.def": "// fragment\n",
+                "shared/Native.hpp": "// header outside the traditional source roots\n",
+                "test/uimodel/WindowTest.cpp": "// test\n",
+                "tool/lint/AobusLintModule.cpp": "// checker module\n",
+                "test/lint/fixture/case.cpp": "// negative fixture\n",
+                "test/lint/Infrastructure.h": "// fixture infrastructure\n",
+                "lib/Legacy.C": "// no report for this extension in the Bazel lint aspect\n",
             }
         )
-        self.assertEqual(lint_scope.plan(base).files, ())
-        self.commit_files({"lib/a.cc": "", "include/a.hxx": ""})
-        self.commit_files({"app/b.mm": "", "include/detail.def": "", "test/t.cpp": ""})
-        self.assertEqual(
-            lint_scope.plan(base).files,
-            ("app/b.mm", "include/a.hxx", "include/detail.def", "lib/a.cc", "test/t.cpp"),
+        self.assert_scope(
+            base,
+            (
+                "app/macos-appkit/Window.mm",
+                "include/Api.hxx",
+                "include/Detail.def",
+                "lib/Input.cc",
+                "shared/Native.hpp",
+                "test/uimodel/WindowTest.cpp",
+                "tool/lint/AobusLintModule.cpp",
+            ),
         )
 
     @unittest.skipIf(os.name == "nt", "Windows forbids newlines in filenames")
@@ -56,12 +73,11 @@ class LintScopeTest(GitCheckoutTestCase):
         self.commit_files({"lib/one\ntwo space.cpp": ""})
         self.assertEqual(lint_scope.plan(base).files, ("lib/one\ntwo space.cpp",))
 
-    def test_pr_lint_empty_comparison_does_not_establish_a_narrow_scope(self):
-        base = self.commit_files({"README.md": "base"})
-        self.assertIsNone(lint_scope.plan(base).files)
+    def test_verified_empty_comparison_skips_production_lint(self):
+        base = self.commit_files({"lib/Input.cpp": "// unchanged\n"})
+        self.assertEqual(lint_scope.plan(base).files, ())
         self.git("commit", "--allow-empty", "-m", "unchanged tree")
-        self.assertIsNone(lint_scope.plan(base).files)
-        self.assertEqual(lint_scope.plan(None).files, ())
+        self.assert_scope(base, ())
 
     def test_pr_lint_requires_the_base_commit_to_reach_the_checked_out_merge(self):
         self.commit_files({"README.md": "base"})
@@ -83,7 +99,7 @@ class LintScopeTest(GitCheckoutTestCase):
             with self.subTest(invalid=invalid):
                 self.assertIsNone(lint_scope.plan(invalid).files)
 
-        untracked = self.root / "new.hpp"
+        untracked = self.root / "BUILD.bazel"
         untracked.touch()
         self.assertIsNone(lint_scope.plan(base).files)
         untracked.unlink()
@@ -136,94 +152,58 @@ class LintScopeTest(GitCheckoutTestCase):
         self.commit_files({"lib/input.cpp": ""})
         self.git("sparse-checkout", "set", "--cone", "lib")
         self.assertFalse((self.root / "test/linux-gtk/HiddenTest.cpp").exists())
-        for comparison in (base, None):
-            with self.subTest(comparison=comparison):
-                self.assertIsNone(lint_scope.plan(comparison).files)
+        self.assert_scope(base, None)
 
-    def test_lint_treats_ignored_glob_inputs_as_dirty_but_not_bytecode_or_root_cache(self):
-        base = self.commit_files({".gitignore": "build-*/\n__pycache__/\n/.cache/\n", "README.md": "base"})
-        self.commit_files({"lib/input.cpp": ""})
-        self.write_file("test/script/__pycache__/test_lint_scope.cpython-314.pyc", "")
-        self.write_file(".cache/checkout/lib/Other.cpp", "")
-        for comparison in (base, None):
-            with self.subTest(comparison=comparison):
-                self.assertEqual(lint_scope.plan(comparison).files, ("lib/input.cpp",))
-        self.write_file("test/linux-gtk/build-preview/ExtraTest.cpp", "")
-        for comparison in (base, None):
-            with self.subTest(comparison=comparison):
-                self.assertIsNone(lint_scope.plan(comparison).files)
+    def test_ignored_files_and_local_untracked_controls_do_not_expand_scope(self):
+        base = self.commit_files({".gitignore": "build-*/\n", "README.md": "base\n"})
+        self.commit_files({"lib/Input.cpp": "// changed\n"})
+        self.write_file("lib/build-preview/Generated.cpp", "// ignored native source\n")
+        self.write_file("lib/build-preview/BUILD.bazel", "# ignored control\n")
+        self.assert_scope(base, ("lib/Input.cpp",))
 
-    def test_pr_lint_cannot_bound_unknown_inputs_or_controls_even_mixed_with_native_edits(self):
-        base = self.commit_files({"lib/product.cpp": "base"})
-        for name in (
-            "new-component/unknown.dat",
-            "tool/lint/Check.cpp",
-            "tool/catalog/build_catalog.py",
-            "lib/utility/Path.cpp",
-            "app/i18n/catalog/root.txt",
-            "script/ao/graph/bazel_graph_lint.py",
-            "script/ao/policy/tidy_config.py",
-            "script/ao/toolchain.json",
-            "script/ao/portal/lint_scope.py",
-            ".bazelrc",
-            "bazel/lint/lint.bzl",
-            ".github/workflows/ci.yml",
-        ):
-            with self.subTest(name=name):
-                head = self.commit_files({name: "changed", "lib/product.cpp": name})
-                self.assertIsNone(lint_scope.plan(base).files)
-                base = head
+        self.write_file("lib/BUILD.bazel", "# untracked package\n")
+        self.assertEqual(lint_scope.plan(None).files, ("lib/Input.cpp",))
 
-    def test_pr_lint_classifies_deleted_side_of_renames(self):
-        base = self.commit_files({"lib/old.cpp": "source", "app/BUILD": "# build"})
-        (self.root / "doc").mkdir()
-        (self.root / "lib/old.cpp").rename(self.root / "doc/new.md")
-        head = self.commit("move out of production")
-        self.assertIsNone(lint_scope.plan(base).files)
-        (self.root / "app/BUILD").rename(self.root / "app/BUILD.bazel")
-        self.commit("rename package control")
-        self.assertIsNone(lint_scope.plan(head).files)
-
-    def test_pr_lint_build_trivia_preserves_strings_and_logical_statement_boundaries(self):
-        name = "lib/BUILD.bazel"
-        base = self.commit_files({name: 'custom(name="a # b", deps=select({":x": [":b"]}))\n'})
-        formatted = (
-            '# explain\ncustom(\n    name = "a # b", # not part of the name\n    deps = select({":x": [":b"]})\n)\n'
+    def test_verified_scope_ignores_controls_with_or_without_added_source(self):
+        alias = 'alias(name="check", actual="//lib:default")\n'
+        base = self.commit_files({"BUILD.bazel": alias, "lib/Unchanged.cpp": "// unchanged\n"})
+        controls = self.commit_files(
+            {
+                "BUILD.bazel": alias.replace(":default", ":native"),
+                ".bazelrc": "build --keep_going\n",
+                ".github/workflows/ci.yml": "name: check\n",
+                "app/i18n/catalog/root.txt": "root { greeting { hello } }\n",
+                "script/ao/policy/tidy_config.py": "CHECKS = 'changed'\n",
+                "tool/catalog/build_catalog.py": "# catalog build tool\n",
+                "new-component/unknown.dat": "new inputs\n",
+            }
         )
-        head = self.commit_files({name: formatted})
-        self.assertEqual(lint_scope.plan(base).files, ())
-        self.commit_files({name: formatted.replace("a # b", "a # c"), "app/cli/Other.cpp": ""})
-        self.assertIsNone(lint_scope.plan(head).files)
-        base = self.commit_files({name: "x = f\n(y)\n"})
-        self.commit_files({name: "x = f(y)\n"})
-        self.assertIsNone(lint_scope.plan(base).files)
+        self.assert_scope(base, ())
 
-    def test_pr_lint_global_control_and_new_package_boundary_require_the_full_graph(self):
-        alias = 'alias(name="check", actual="//lib:one")'
-        base = self.commit_files({"BUILD.bazel": alias, "tool/lint/BUILD": alias, "lib/pkg/Sub.cpp": ""})
-        head = self.commit_files({"BUILD.bazel": alias + " # explanation", "tool/lint/BUILD": "# note\n" + alias})
-        self.assertEqual(lint_scope.plan(base).files, ())
-        head = self.commit_files({"BUILD.bazel": alias.replace(":one", ":two")})
-        self.assertIsNone(lint_scope.plan(base).files)
-        self.commit_files({"lib/pkg/BUILD.bazel": "# new boundary"})
-        self.assertIsNone(lint_scope.plan(head).files)
+        self.commit_files(
+            {
+                "lib/BUILD.bazel": 'cc_library(name="new", srcs=["New.cpp"])\n',
+                "lib/New.cpp": "// new implementation\n",
+            }
+        )
+        self.assert_scope(controls, ("lib/New.cpp",))
 
-    def test_winui_xaml_header_changes_require_full_lint_but_cpp_changes_stay_scoped(self):
-        header = "app/windows-winui/MainWindow.xaml.h"
-        source = "app/windows-winui/MainWindow.xaml.cpp"
-        base = self.commit_files({header: "old declaration", source: "old implementation"})
-        self.git("checkout", "-b", "topic")
-        self.write_file(source, "new implementation")
-        self.assertEqual(lint_scope.plan(None).files, (source,))
-        implementation = self.commit("edit XAML implementation")
-        self.assertEqual(lint_scope.plan(base).files, (source,))
+    def test_verified_deletions_do_not_select_missing_files_or_the_full_graph(self):
+        base = self.commit_files({"lib/Deleted.cpp": "// removed\n", "lib/BUILD.bazel": "# removed package\n"})
+        self.git("rm", "lib/Deleted.cpp", "lib/BUILD.bazel")
+        self.commit("delete native input and package")
+        self.assert_scope(base, ())
 
-        self.write_file(header, "new declaration")
-        with self.subTest(mode="local"):
-            self.assertIsNone(lint_scope.plan(None).files)
-        self.commit("edit XAML header")
-        with self.subTest(mode="explicit"):
-            self.assertIsNone(lint_scope.plan(implementation).files)
+    def test_verified_comparisons_include_existing_xaml_and_catalog_tool_headers(self):
+        headers = (
+            "app/i18n/MessageIds.h",
+            "app/windows-winui/MainWindow.xaml.h",
+            "include/ao/Contract.h",
+            "include/ao/utility/Path.h",
+        )
+        base = self.commit_files(dict.fromkeys(headers, "// old declaration\n"))
+        self.commit_files(dict.fromkeys(headers, "// new declaration\n"))
+        self.assert_scope(base, headers)
 
     def test_local_lint_uses_previous_commit_on_main(self):
         self.commit_files({"README.md": "initial commit"})
@@ -281,11 +261,11 @@ class LintScopeTest(GitCheckoutTestCase):
                 self.assertNotRegex(plan.reason, r"Command \[|returned non-zero|--no-replace-objects|fatal:|--commit")
 
     def test_local_lint_combines_topic_commit_and_dirty_paths_without_main_only_changes(self):
-        self.commit_files({"include/Unstaged.hpp": "base"})
+        self.commit_files({"include/Unstaged.hpp": "base", "lib/MainOnly.cpp": "common ancestor"})
         self.git("checkout", "-b", "topic")
         self.commit_files({"lib/Committed.cpp": "topic commit"})
         self.git("checkout", "main")
-        self.commit_files({"MODULE.bazel": "main changed a global input"})
+        self.commit_files({"lib/MainOnly.cpp": "main-only edit"})
         self.git("checkout", "topic")
         self.write_file("include/Unstaged.hpp", "working tree")
         self.write_file("lib/Staged.cpp", "new source")
@@ -317,98 +297,139 @@ class LintScopeTest(GitCheckoutTestCase):
 
         self.assertEqual(lint_scope.plan(None).files, ("lib/Input.cpp",))
 
-    def test_local_lint_distinguishes_stat_only_changes_from_real_worktree_inputs(self):
-        control, native = "MODULE.bazel", "lib/Unchanged.cpp"
-        base = self.commit_files({".gitattributes": "* text=auto eol=lf\n", control: "abcd\n", native: "// base\n"})
+    def test_local_lint_drops_a_touch_but_keeps_a_same_size_edit(self):
+        name = "lib/Input.cpp"
+        original = "// original\n"
+        base = self.commit_files({".gitattributes": "*.cpp text eol=lf\n", name: original})
         self.git("checkout", "-b", "topic")
         self.commit_files({"lib/Topic.cpp": "// topic\n"})
-        for name in (control, native):
-            self.advance_mtime(name)
+        self.advance_mtime(name)
 
         index = self.root / ".git" / "index"
         before = index.read_bytes(), index.stat().st_mtime_ns
-        for comparison in (None, base):
-            self.assertEqual(lint_scope.plan(comparison).files, ("lib/Topic.cpp",))
+        self.assert_scope(base, ("lib/Topic.cpp",))
         self.assertEqual((index.read_bytes(), index.stat().st_mtime_ns), before)
 
-        # Both edits can yield the same all-zero worktree OID as a touch.
-        self.write_file(control, "abce\n")
-        self.advance_mtime(control, 10)
-        self.assertIsNone(lint_scope.plan(None).files)
-        self.git("add", control)
-        self.write_file(control, "abcd\n")
-        self.advance_mtime(control, 15)
+        # A touch and a same-size edit can both yield an all-zero worktree OID.
+        self.write_file(name, original.replace("original", "modified"))
+        self.advance_mtime(name)
+        self.assertEqual(lint_scope.plan(None).files, (name, "lib/Topic.cpp"))
+
+        self.git("add", name)
+        self.write_file(name, original)
+        self.advance_mtime(name)
         self.assertEqual(lint_scope.plan(None).files, ("lib/Topic.cpp",))
         self.assertIsNone(lint_scope.plan(base).files)  # explicit comparison still requires a clean index
 
-    def test_local_lint_compares_bytes_after_checkout_eol_conversion(self):
-        name = "launch.bat"
-        self.commit_files({".gitattributes": "*.bat text eol=crlf\n", name: "@echo off\n"})
+    def test_local_lint_compares_native_bytes_after_checkout_eol_conversion(self):
+        name = "lib/Input.cpp"
+        self.commit_files({".gitattributes": "*.cpp text eol=crlf\n", name: "// original\n"})
         self.git("checkout", "-b", "topic")
-        self.commit_files({"lib/Topic.cpp": "// topic\n"})
         path = self.root / name
         path.unlink()
         self.git("checkout-index", "--", name)
-        self.assertEqual(path.read_bytes(), b"@echo off\r\n")
+        self.assertEqual(path.read_bytes(), b"// original\r\n")
         self.advance_mtime(name)
-        self.assertEqual(lint_scope.plan(None).files, ("lib/Topic.cpp",))
-        path.write_bytes(b"@echo off\n")  # equals the stored blob, not the expected checkout bytes
-        # On Windows, a rewrite in the index's timestamp tick can be invisible to Git itself.
-        self.advance_mtime(name, 10)
-        self.assertIsNone(lint_scope.plan(None).files)
-
-    def test_local_lint_keeps_uncertain_inputs_with_a_custom_filter(self):
-        self.commit_files({".gitattributes": "MODULE.bazel filter=unspecified\n", "MODULE.bazel": "# base\n"})
-        self.git("checkout", "-b", "topic")
-        self.advance_mtime("MODULE.bazel")
-        self.assertIsNone(lint_scope.plan(None).files)
-
-    @unittest.skipIf(os.name == "nt", "Windows discovery deliberately ignores executable-bit changes")
-    def test_local_lint_keeps_mode_only_control_change(self):
-        self.commit_files({"MODULE.bazel": "# control\n"})
-        self.git("checkout", "-b", "topic")
-        self.git("config", "core.filemode", "true")
-        (self.root / "MODULE.bazel").chmod(0o755)
-        self.assertIsNone(lint_scope.plan(None).files)
-
-    def test_local_lint_uses_working_tree_for_build_trivia_even_with_staged_semantic_edit(self):
-        name = "lib/BUILD.bazel"
-        alias = 'alias(name="foo", actual=":bar")\n'
-        self.commit_files({name: alias})
-        self.git("checkout", "-b", "topic")
-        self.write_file(name, alias.replace(":bar", ":baz"))
-        self.git("add", name)
-        self.assertIsNone(lint_scope.plan(None).files)
-        self.write_file(name, "# note\n" + alias)
         self.assertEqual(lint_scope.plan(None).files, ())
 
-    def test_local_lint_checks_deleted_side_of_staged_and_unstaged_renames(self):
-        self.commit_files({"lib/old.cpp": "source"})
+        path.write_bytes(b"// original\n")  # equals the stored blob, not the expected checkout bytes
+        # On Windows, a rewrite in the index's timestamp tick can be invisible to Git itself.
+        self.advance_mtime(name)
+        self.assertEqual(lint_scope.plan(None).files, (name,))
+
+    def test_local_lint_keeps_uncertain_native_inputs_with_a_custom_filter(self):
+        name = "lib/Input.cpp"
+        self.commit_files({".gitattributes": "*.cpp filter=unspecified\n", name: "// original\n"})
         self.git("checkout", "-b", "topic")
-        (self.root / "doc").mkdir()
-        (self.root / "lib/old.cpp").rename(self.root / "doc/new.md")
-        self.assertIsNone(lint_scope.plan(None).files)
+        self.advance_mtime(name)
+        self.assertEqual(lint_scope.plan(None).files, (name,))
+
+    @unittest.skipIf(os.name == "nt", "Windows discovery deliberately ignores executable-bit changes")
+    def test_local_lint_keeps_mode_only_native_change(self):
+        name = "lib/Input.cpp"
+        self.commit_files({name: "// original\n"})
+        self.git("checkout", "-b", "topic")
+        self.git("config", "core.filemode", "true")
+        (self.root / name).chmod(0o755)
+        self.assertEqual(lint_scope.plan(None).files, (name,))
+
+    def test_renames_select_only_surviving_eligible_destinations(self):
+        base = self.commit_files(
+            {"lib/Retired.cpp": "// retired\n", "lib/Old.cpp": "// renamed\n", "doc/sample.md": "// promoted\n"}
+        )
+        self.git("checkout", "-b", "topic")
+        (self.root / "lib/Retired.cpp").rename(self.root / "doc/retired.md")
+        (self.root / "lib/Old.cpp").rename(self.root / "lib/New.cpp")
+        (self.root / "doc/sample.md").rename(self.root / "lib/Promoted.h")
+        expected = ("lib/New.cpp", "lib/Promoted.h")
+        self.assertEqual(lint_scope.plan(None).files, expected)
         self.git("add", "--all")
-        self.assertIsNone(lint_scope.plan(None).files)
+        self.assertEqual(lint_scope.plan(None).files, expected)
+        self.commit("rename native and non-native paths")
+        self.assert_scope(base, expected)
 
     @unittest.skipIf(os.name == "nt", "native symlink creation needs separate Windows privileges")
-    def test_local_lint_rejects_tracked_type_changes_and_untracked_links(self):
-        self.commit_files({"README.md": "text", "doc/guide.md": "target"})
+    def test_only_regular_sides_of_native_symlink_transitions_are_selected(self):
+        base = self.commit_files({"README.md": "link target\n", "lib/ToLink.cpp": "// original\n"})
+        (self.root / "lib/ToRegular.hpp").symlink_to("../README.md")
+        links = self.commit("add native-named symlink")
+        self.assert_scope(base, ())
         self.git("checkout", "-b", "topic")
-        linked = self.root / "doc/linked.md"
-        linked.symlink_to("guide.md")
-        self.assertIsNone(lint_scope.plan(None).files)
-        linked.unlink()
-        readme = self.root / "README.md"
-        readme.unlink()
-        readme.symlink_to("doc/guide.md")
-        self.assertIsNone(lint_scope.plan(None).files)
 
-    def test_local_lint_falls_back_when_index_flags_hide_graph_changes(self):
-        self.commit_files({"BUILD.bazel": "# empty graph"})
+        untracked = self.root / "lib/Untracked.cpp"
+        untracked.symlink_to("../README.md")
+        self.assertEqual(lint_scope.plan(None).files, ())
+        untracked.unlink()
+
+        to_link = self.root / "lib/ToLink.cpp"
+        to_link.unlink()
+        to_link.symlink_to("../README.md")
+        to_regular = "lib/ToRegular.hpp"
+        (self.root / to_regular).unlink()
+        self.write_file(to_regular, "// declaration\n")
+        self.assertEqual(lint_scope.plan(None).files, (to_regular,))
+        self.commit("swap native regular and symlink modes")
+        self.assert_scope(links, (to_regular,))
+
+    def test_verified_scope_skips_gitlinks_and_symlinks_materialized_as_text(self):
+        base = self.commit_files({"README.md": "link target\n"})
+        self.git("config", "core.symlinks", "false")
+        symlink = "lib/Link.cpp"
+        payload = self.git("hash-object", "-w", "README.md")
+        self.git("update-index", "--add", "--cacheinfo", f"120000,{payload},{symlink}")
+        self.git("checkout-index", "--", symlink)
+        self.assertTrue((self.root / symlink).is_file())
+        self.assertFalse((self.root / symlink).is_symlink())
+
+        submodule = "lib/Nested.cpp"
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{base},{submodule}")
+        (self.root / submodule).mkdir()
+        self.write_file("lib/Input.cpp", "// native source\n")
+        self.git("add", "lib/Input.cpp")
+        self.git("commit", "-m", "record non-regular Git modes alongside a source")
+        self.assert_scope(base, ("lib/Input.cpp",))
+
+    def test_lint_falls_back_when_index_flags_can_hide_changes(self):
+        name = "lib/Input.cpp"
+        base = self.commit_files({name: "// original\n"})
+        self.commit_files({"include/Api.h": "// declaration\n"})
+        for flag in ("assume-unchanged", "skip-worktree"):
+            with self.subTest(flag=flag):
+                self.git("update-index", f"--{flag}", name)
+                self.assert_scope(base, None)
+                self.git("update-index", f"--no-{flag}", name)
+
+    def test_local_lint_falls_back_for_an_unmerged_index_even_on_a_control_path(self):
+        name = "BUILD.bazel"
+        self.commit_files({name: "# base\n"})
         self.git("checkout", "-b", "topic")
-        self.git("update-index", "--assume-unchanged", "BUILD.bazel")
-        self.write_file("BUILD.bazel", 'alias(name="new", actual="//lib:target")')
+        self.commit_files({name: "# topic\n", "lib/Input.cpp": "// new source\n"})
+        self.git("checkout", "main")
+        self.commit_files({name: "# main\n"})
+        self.git("checkout", "topic")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.git("merge", "--no-edit", "main")
+        self.assertTrue(self.git("ls-files", "--unmerged", "--", name))
         self.assertIsNone(lint_scope.plan(None).files)
 
 

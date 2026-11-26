@@ -195,7 +195,7 @@ aobus_macos_sha256() {
 
 aobus_macos_check_triplet_deployment() {
     local project_root="$1"
-    local triplet_directory="$project_root/cmake/vcpkg-triplets"
+    local triplet_directory="$project_root/config/vcpkg/triplets"
     if ! "$AOBUS_PYTHON" -I -c '
 import re
 import sys

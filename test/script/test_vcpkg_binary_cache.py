@@ -191,6 +191,24 @@ class NativeWorkflowStorageTest(unittest.TestCase):
 
 @unittest.skipIf(os.name == "nt", "The CI key step runs in Bash; exercise it on a POSIX tooling host.")
 class WindowsWorkflowCacheTest(unittest.TestCase):
+    def _mock_manifest_hashes(self, key_step: str) -> dict[str, str]:
+        # Stub the hosted hashFiles result, not the workflow's call. The legacy
+        # response requires the ordered selectors from 19e9b3864, relocated.
+        manifest = ("'config/vcpkg/vcpkg.json'", "'config/vcpkg/vcpkg-configuration.json'")
+        responses = {
+            (*manifest, "'config/vcpkg/ports/**'"): "current",
+            (*manifest, "'config/vcpkg/triplets/**'"): "legacy",
+        }
+        hashes = {}
+        for name in ("MANIFEST", "V2_MANIFEST"):
+            call = re.search(rf"^          {name}: " r"\$\{\{\s*hashFiles\(([^)]*)\)\s*\}\}$", key_step, re.MULTILINE)
+            if call is None:
+                self.fail(f"Missing hashFiles call for {name}")
+            selectors = tuple(selector.strip() for selector in call[1].split(","))
+            self.assertIn(selectors, responses, f"Unexpected hashFiles selectors for {name}")
+            hashes[name] = responses[selectors]
+        return hashes
+
     def _restore_plan(self) -> list[str]:
         workflow = (Path(vcpkg_binary_cache.__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text(
             encoding="utf-8"
@@ -206,7 +224,7 @@ class WindowsWorkflowCacheTest(unittest.TestCase):
                     **os.environ,
                     "ARCH": "X64",
                     "IMAGE": "image-a",
-                    "MANIFEST": "current",
+                    **self._mock_manifest_hashes(key_step),
                     "GITHUB_OUTPUT": str(output),
                 },
                 capture_output=True,
@@ -260,7 +278,7 @@ class WindowsWorkflowCacheTest(unittest.TestCase):
 
     def test_same_image_legacy_entries_seed_migration_before_foreign_image_fallbacks(self):
         foreign = "vcpkg-files-v3-windows-X64-image-b-current-abis"
-        v2 = "vcpkg-files-v2-windows-X64-current-image-a-abis"
+        v2 = "vcpkg-files-v2-windows-X64-legacy-image-a-abis"
         v1 = "vcpkg-files-v1-X64-image-a-old"
         plan = self._restore_plan()
 

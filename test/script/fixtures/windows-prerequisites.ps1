@@ -48,10 +48,11 @@ if ($scenario.kind -eq 'stage') {
     $runtimeInput = Join-Path $WorkDirectory 'runtime [fixture].exe'
     [IO.File]::WriteAllText($vcInput, 'synthetic VC installer')
     [IO.File]::WriteAllText($runtimeInput, 'synthetic runtime installer')
-    $contract = Get-Content -LiteralPath (Join-Path $repo 'dependency-contract.json') -Raw | ConvertFrom-Json
+    $contract = Get-Content -LiteralPath (Join-Path $repo 'config\dependency-contract.json') -Raw | ConvertFrom-Json
     $contract.dependencies.'windows-app-sdk'.runtime.sha256 = (Get-FileHash -LiteralPath $runtimeInput -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($scenario.stage.badRuntimeHash) { $contract.dependencies.'windows-app-sdk'.runtime.sha256 = '0' * 64 }
-    $contract | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $mirror 'dependency-contract.json') -Encoding Ascii
+    [IO.Directory]::CreateDirectory((Join-Path $mirror 'config')) | Out-Null
+    $contract | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $mirror 'config\dependency-contract.json') -Encoding Ascii
     $destination = Join-Path $WorkDirectory 'Prerequisites [output]'
     if ($scenario.stage.destinationExists) {
         [IO.Directory]::CreateDirectory($destination) | Out-Null

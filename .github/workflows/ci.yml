@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       docs-only: ${{ steps.scope.outputs.docs-only }}
+      checker-reports: ${{ steps.scope.outputs.checker-reports }}
       lint-base: ${{ github.event_name == 'pull_request' && steps.scope.outputs.sha || '' }}
     steps:
       - name: Check out repository
@@ -153,11 +154,11 @@ jobs:
             ${{ env.AOBUS_BAZEL_DISK_CACHE }}/cas
           key: >-
             bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
-              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix', 'MODULE.bazel')
             }}-${{ github.sha }}
           restore-keys: >-
             bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
-              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix', 'MODULE.bazel')
             }}-
 
       # Mark restored entries after restore, outside the archived directory.
@@ -208,8 +209,18 @@ jobs:
         run: |
           lint_args=(--extend)
           if [[ -n "$LINT_BASE_SHA" ]]; then lint_args=(--lint-base "$LINT_BASE_SHA"); fi
-          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" "${lint_args[@]}" \
+          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$AOBUS_CI_JOBS" "${lint_args[@]}" \
             2>&1 | tee "$RUNNER_TEMP/aobus-completion.log"
+
+      - name: Test native checker reports
+        if: ${{ needs.changes.outputs.checker-reports == 'true' }}
+        shell: bash
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+        run: |
+          # Expand runner paths inside the pinned Python environment.
+          # shellcheck disable=SC2016
+          script/ao/pinned-nix-shell.sh ./shell.nix --run 'PYTHONPATH=script "$AO_NIX_PORTAL_PYTHON" -S -B -X utf8 test/lint/check_checker_reports.py "$RUNNER_TEMP/aobus-bazel-fastbuild"'
 
       # Drain acknowledged uploads before stopping the owned proxy. A requested
       # manual cache must also finish its drain successfully.
@@ -238,7 +249,7 @@ jobs:
           PYTHONPATH=script "$python" test/lint/check_scoped_reports.py "$bare/scoped-lint.bep.json" \
             "$bazel" --nosystem_rc --nohome_rc --server_javabase="$server_javabase" \
             --output_user_root="$AOBUS_STATE_ROOT/bazel" --output_base="$bare/state/output" \
-            build --jobs="$CMAKE_BUILD_PARALLEL_LEVEL" --lockfile_mode=error \
+            build --jobs="$AOBUS_CI_JOBS" --lockfile_mode=error \
             --symlink_prefix="$bare/bazel-" --disk_cache="$AOBUS_BAZEL_DISK_CACHE" 2>&1 | tee "$bare/scoped-lint.log"
 
       - name: Summarize native validation
@@ -315,6 +326,7 @@ jobs:
             ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.log
             ${{ runner.temp }}/aobus-bazel-fastbuild/lint/run-*/*.bep.json
             ${{ runner.temp }}/aobus-bazel-fastbuild/state/output/execroot/_main/bazel-out/*/testlogs/**
+            ${{ runner.temp }}/aobus-bazel-fastbuild/checker-reports.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.bep.json
             ${{ runner.temp }}/aobus-bare/scoped-lint.log
             ${{ runner.temp }}/bazel-r2-stop.json
@@ -468,7 +480,7 @@ jobs:
           LLVM: ${{ steps.macos-toolchain.outputs.llvm }}
           SDK: ${{ steps.macos-toolchain.outputs.sdk }}
           IMAGE: ${{ steps.macos-toolchain.outputs.image }}
-          MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+          MANIFEST: ${{ hashFiles('config/vcpkg/vcpkg.json', 'config/vcpkg/vcpkg-configuration.json', 'config/vcpkg/ports/**', 'config/vcpkg/triplets/**') }}
         run: |
           base="vcpkg-files-v2-macos-$ARCH-$LLVM-$SDK-$MANIFEST-"
           {
@@ -591,7 +603,7 @@ jobs:
         run: |
           lint_args=(--extend)
           if [[ -n "$LINT_BASE_SHA" ]]; then lint_args=(--lint-base "$LINT_BASE_SHA"); fi
-          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL" "${lint_args[@]}" \
+          ./ao check --native-only --path "$RUNNER_TEMP/aobus-bazel-fastbuild" --jobs "$AOBUS_CI_JOBS" "${lint_args[@]}" \
             2>&1 | tee "$RUNNER_TEMP/aobus-completion.log"
 
       - name: Stop Bazel remote cache
@@ -681,21 +693,23 @@ jobs:
           }
           "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
 
-      # Prefer the runner image's package ABIs before manifest-only changes;
-      # retain the ordered same-image and legacy archive fallbacks.
+      # Prefer the same runner image across manifest changes. vcpkg still
+      # selects packages by ABI when restoring from broader archive fallbacks.
       - name: Resolve vcpkg binary cache key
         id: vcpkg-key
         shell: bash
         env:
           ARCH: ${{ runner.arch }}
           IMAGE: ${{ steps.windows-image.outputs.version }}
-          MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+          MANIFEST: ${{ hashFiles('config/vcpkg/vcpkg.json', 'config/vcpkg/vcpkg-configuration.json', 'config/vcpkg/ports/**') }}
+          # Preserve v2's manifest, configuration, and triplets selector order after relocation.
+          V2_MANIFEST: ${{ hashFiles('config/vcpkg/vcpkg.json', 'config/vcpkg/vcpkg-configuration.json', 'config/vcpkg/triplets/**') }}
         run: |
           base="vcpkg-files-v3-windows-$ARCH-$IMAGE-"
           {
             printf 'base=%s\n' "$base"
             printf 'prefix=%s\n' "$base$MANIFEST-"
-            printf 'legacy-prefix=%s\n' "vcpkg-files-v2-windows-$ARCH-$MANIFEST-$IMAGE-"
+            printf 'legacy-prefix=%s\n' "vcpkg-files-v2-windows-$ARCH-$V2_MANIFEST-$IMAGE-"
           } >> "$GITHUB_OUTPUT"
 
       - name: Restore vcpkg binary cache
@@ -734,7 +748,7 @@ jobs:
                 'script/ao/portal/prettier.py',
                 'script/ao/windows-requirements.txt',
                 'script/ao/docs-requirements.txt',
-                'dependency-contract.json',
+                'config/dependency-contract.json',
                 'app/windows-winui/packages.config',
                 'app/windows-winui/NuGet.Config'
               )
@@ -881,8 +895,20 @@ jobs:
           New-Item -ItemType Directory -Force $env:CHECK_TREE | Out-Null
           $lintArgs = @('--extend')
           if ($env:LINT_BASE_SHA) { $lintArgs = @('--lint-base', $env:LINT_BASE_SHA) }
-          .\ao.bat check --native-only --desktop-tests --path "$env:CHECK_TREE" --jobs "$env:CMAKE_BUILD_PARALLEL_LEVEL" @lintArgs 2>&1 |
+          .\ao.bat check --native-only --desktop-tests --path "$env:CHECK_TREE" --jobs "$env:AOBUS_CI_JOBS" @lintArgs 2>&1 |
             Tee-Object -FilePath (Join-Path $env:CHECK_TREE 'completion.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test native checker reports
+        if: ${{ needs.changes.outputs.checker-reports == 'true' }}
+        shell: pwsh
+        env:
+          AOBUS_BAZEL_REMOTE_CACHE: ${{ steps.bazel-remote.outputs.url }}
+          PYTHONPATH: script
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          & $python -S -B -X utf8 test/lint/check_checker_reports.py D:\aobus-bazel-fastbuild
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Stop Bazel remote cache
@@ -979,6 +1005,7 @@ jobs:
             D:\aobus-bazel-fastbuild\lint\run-*\*.receipt.json
             D:\aobus-bazel-fastbuild\lint\run-*\*.log
             D:\aobus-bazel-fastbuild\lint\run-*\*.bep.json
+            D:\aobus-bazel-fastbuild\checker-reports.bep.json
             D:\aobus-bazel-fastbuild\state\output\execroot\_main\bazel-out\*\testlogs\**
           if-no-files-found: warn
 

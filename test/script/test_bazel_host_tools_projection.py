@@ -1,6 +1,5 @@
 """Consumer contracts for native host-tool facts and their fixed Starlark projection."""
 
-import copy
 import json
 import os
 import subprocess
@@ -11,7 +10,6 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import bazel_native as native
-from ao.policy import dependency_policy
 from ao.portal import bazel_host_tools as tools
 
 
@@ -26,8 +24,8 @@ class HostToolsFactsTest(unittest.TestCase):
         self.gperf = self.file("installed/arm64-aobus-osx/tools/gperf/gperf")
         self.genrb = self.file("installed/arm64-aobus-osx/tools/icu/bin/genrb")
         self.file("installed/arm64-aobus-osx/tools/icu/bin/pkgdata")
-        self.file("vcpkg.json", '{"dependencies": [{"name": "gperf", "host": true}]}')
-        self.file("vcpkg-configuration.json", "{}")
+        self.file("config/vcpkg/vcpkg.json", '{"dependencies": [{"name": "gperf", "host": true}]}')
+        self.file("config/vcpkg/vcpkg-configuration.json", "{}")
         self.file(
             "installed/vcpkg/status",
             "Package: gperf\nVersion: 3.3\nArchitecture: arm64-aobus-osx\nStatus: install ok installed\n\n"
@@ -43,10 +41,7 @@ class HostToolsFactsTest(unittest.TestCase):
         # admitted as the version.
         self.file("VERSION", "9.9.9\n")
         self.file("CMakeLists.txt", "project(aobus VERSION 9.9.9)\n")
-        contract = copy.deepcopy(dependency_policy.load_contract())
-        contract["dependencies"]["icu"]["policy"] = {"kind": "exact", "version": "78.3"}
-        contract["exceptions"] = [entry for entry in contract["exceptions"] if entry["dependency"] != "icu"]
-        self.file("dependency-contract.json", json.dumps(contract))
+        self.write_contract("78.3")
         self.python = self.file("python/bin/selected-python")
         self.stdlib = self.file("python/Lib/json/__init__.py").parents[1]
         self.file("python/Lib/site-packages/ambient.py")
@@ -57,7 +52,6 @@ class HostToolsFactsTest(unittest.TestCase):
         self.version_report = "3.3"
         for patcher in (
             mock.patch.object(native, "PROJECT_ROOT", self.root),
-            mock.patch.object(dependency_policy, "load_contract", return_value=contract),
             mock.patch.object(sys, "executable", str(self.python)),
             mock.patch.object(sys, "_base_executable", str(self.python), create=True),
             mock.patch.object(sys, "base_prefix", str(self.root / "python")),
@@ -82,6 +76,15 @@ class HostToolsFactsTest(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
+    def write_contract(self, version):
+        icu = {
+            "platforms": ["macos"],
+            "policy": {"kind": "exact", "version": version},
+            "vcpkg": {"strategy": "baseline", "ports": ["icu"]},
+        }
+        contract = {"leadResolver": "nix", "dependencies": {"icu": icu}, "exceptions": []}
+        self.file("config/dependency-contract.json", json.dumps(contract))
+
     def python_config(self, name):
         return {"DESTSHARED": str(self.extension.parent), "PYTHONFRAMEWORK": "Python"}.get(name)
 
@@ -102,7 +105,13 @@ class HostToolsFactsTest(unittest.TestCase):
     def test_native_sdk_returns_data_and_selected_runtime_inventory_without_program_generation(self):
         result = self.resolve(source=str(self.root))
         self.assertEqual(result["app_version"], "1.2.3")
-        self.assertIn(str(self.root / "VERSION.txt"), result["watch_files"])
+        for path in (
+            "VERSION.txt",
+            "config/dependency-contract.json",
+            "config/vcpkg/vcpkg.json",
+            "config/vcpkg/vcpkg-configuration.json",
+        ):
+            self.assertIn(str(self.root / path), result["watch_files"])
         self.assertNotIn(str(self.root / "VERSION"), result["watch_files"])
         self.assertNotIn(str(self.root / "CMakeLists.txt"), result["watch_files"])
         self.assertEqual(result["test_tools"]["source_root"], str(self.root))
@@ -158,6 +167,11 @@ class HostToolsFactsTest(unittest.TestCase):
         with mock.patch.object(sys, "_base_executable", str(self.root / "venv/bin/missing-python")):
             with self.assertRaisesRegex(native.BazelWorkspaceError, "base executable"):
                 self.resolve()
+
+    def test_icu_admission_reads_the_watched_contract(self):
+        self.write_contract("78.2")
+        with self.assertRaisesRegex(native.BazelWorkspaceError, r"ICU 78\.3 does not satisfy"):
+            self.resolve()
 
     def test_gperf_version_query_rejects_a_different_provider_version(self):
         self.version_report = "3.4"

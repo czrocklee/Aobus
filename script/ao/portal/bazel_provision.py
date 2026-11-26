@@ -56,6 +56,7 @@ def install_vcpkg(tree: Path) -> Path:
     """Install the manifest into the tree with vcpkg's manifest-mode arguments."""
     vcpkg = _vcpkg()
     target, host = providers.vcpkg_triplets()
+    manifest_root = PROJECT_ROOT / providers.VCPKG_DIRECTORY
     argv = [
         str(vcpkg),
         "install",
@@ -64,13 +65,13 @@ def install_vcpkg(tree: Path) -> Path:
         "--vcpkg-root",
         str(vcpkg.parent),
         "--x-wait-for-lock",
-        f"--x-manifest-root={PROJECT_ROOT}",
+        f"--x-manifest-root={manifest_root}",
         f"--x-install-root={tree / 'vcpkg_installed'}",
         f"--host-triplet={host}",
-        f"--overlay-ports={PROJECT_ROOT / 'cmake/vcpkg-ports'}",
+        f"--overlay-ports={manifest_root / 'ports'}",
     ]
     if native.native_platform() == "macos":
-        argv.append(f"--overlay-triplets={PROJECT_ROOT / 'cmake/vcpkg-triplets'}")
+        argv.append(f"--overlay-triplets={manifest_root / 'triplets'}")
     _run_logged(argv, tree / "vcpkg-install.log")
     return providers.vcpkg_prefix(None, tree)
 

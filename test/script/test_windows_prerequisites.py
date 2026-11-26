@@ -26,7 +26,7 @@ from pathlib import Path
 REPOSITORY = Path(__file__).resolve().parents[2]
 HELPER = REPOSITORY / "app" / "windows-winui" / "deployment" / "Install-Prerequisites.ps1"
 STAGER = REPOSITORY / "script" / "windows" / "stage-prerequisites.ps1"
-CONTRACT = REPOSITORY / "dependency-contract.json"
+CONTRACT = REPOSITORY / "config/dependency-contract.json"
 LAUNCHER = REPOSITORY / "app" / "windows-winui" / "deployment" / "Prerequisites.cmd"
 DRIVER = Path(__file__).resolve().parent / "fixtures" / "windows-prerequisites.ps1"
 DEPLOYMENT_README = HELPER.parent / "README.md"

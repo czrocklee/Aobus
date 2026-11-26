@@ -51,9 +51,11 @@ omits runner-specific build paths, job counts, and cache options.
 | Push to `main` or manual **CI** dispatch | `./ao check --native-only --extend`        | `ao.bat check --native-only --desktop-tests --extend`        |
 
 Each native job logs the production lint scope and the reason for its
-selection. The PR comparison changes only production lint; in particular,
-Buildifier formatting and semantic lint still run. See the [completion gate](bazel.md#completion-gate)
-for fallback rules and suite selections. Windows desktop tests require an
+selection. PRs gate production clang-tidy on changed native files, not on
+unchanged consumers of a BUILD, toolchain, or lint-rule change. Buildifier
+formatting and semantic lint, native builds and tests remain required. Native
+pushes to `main` use `--extend` to catch findings in unchanged files. See the
+[completion gate](bazel.md#completion-gate) for fallback rules and suite selections. Windows desktop tests require an
 [interactive console and runtime](windows.md#ui-automation-naming-gate);
 macOS Core Audio tests require a [logged-in console user](macos.md#validation).
 
@@ -84,6 +86,14 @@ checks that bare Bazel can bootstrap and produce a usable paired-header report
 without a portal launch rc or R2. It can reuse the disk cache. It does not
 run a bare `TestRunner`; to verify that boundary, run
 `bazel test --nocache_test_results //:tests` with the native prerequisites.
+
+On changes to checker forwarding, its probe, or its CI route, Linux and Windows
+also run the [mixed checker report probe](../../test/lint/check_checker_reports.py).
+To reproduce it after native completion, set `PYTHONPATH=script` and run
+`python test/lint/check_checker_reports.py <prepared-tree>` from the checkout
+with the pinned host Python (inside the pinned Nix shell on Linux). It compares
+the delivered Debug request with the native compiler arguments and objects for
+the verified tool and the product source. It does not run whole-graph lint.
 
 Use the **Check Bazel completion** step's exit status for the completion
 verdict. A passing Bazel test graph or report build does not prove scoped

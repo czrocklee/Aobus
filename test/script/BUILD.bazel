@@ -391,9 +391,9 @@ _SUPPORT = {
 # dependency/vcpkg contract files recur together.
 _CONTRACT_DATA = [
     "//:config/bazel/dependencies.json",
-    "//:dependency-contract.json",
-    "//:vcpkg-configuration.json",
-    "//:vcpkg.json",
+    "//:config/dependency-contract.json",
+    "//:config/vcpkg/vcpkg-configuration.json",
+    "//:config/vcpkg/vcpkg.json",
 ]
 
 _REPO_DATA = {
@@ -410,23 +410,23 @@ _REPO_DATA = {
     }),
     "test_bazel_frontend_deps": [
         "//:VERSION.txt",
-        "//:cmake/vcpkg-ports/stb/vcpkg.json",
         "//:config/bazel/dependencies.json",
-        "//:dependency-contract.json",
-        "//:nixpkgs.json",
+        "//:config/dependency-contract.json",
+        "//:config/vcpkg/ports/stb/vcpkg.json",
+        "//:config/nixpkgs.json",
     ],
     "test_bazel_gtk_deps": [
         "//:config/bazel/dependencies.json",
-        "//:dependency-contract.json",
-        "//:nixpkgs.json",
+        "//:config/dependency-contract.json",
+        "//:config/nixpkgs.json",
     ],
     "test_bazel_windows_linkage": _CONTRACT_DATA,
     "test_bazel_windows_manifest": ["//bazel:verify_windows_utf8_manifest.ps1"],
     "test_bazel_winui_deps": _CONTRACT_DATA,
     "test_ci_cache_gates": ["//:.github/workflows/ci.yml"],
     "test_dependency_policy": [
-        "//:dependency-contract.json",
-        "//:vcpkg.json",
+        "//:config/dependency-contract.json",
+        "//:config/vcpkg/vcpkg.json",
     ],
     "test_nix_output_metadata": ["//:shell.nix"],
     "test_python_wheel_lock": [

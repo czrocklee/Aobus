@@ -294,7 +294,7 @@ lint_sdk_repository = repository_rule(
             default = [
                 Label("//bazel:compiler_policy.bzl"),
                 Label("//bazel:msvc_policy.bzl"),
-                Label("//:nixpkgs.json"),
+                Label("//:config/nixpkgs.json"),
                 Label("//:shell.nix"),
             ],
             allow_files = True,

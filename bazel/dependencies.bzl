@@ -135,7 +135,7 @@ _governed_repository = repository_rule(
         "resolver": attr.label(default = Label("//:script/ao/portal/bazel_resolver.py"), allow_single_file = True),
         "policy": attr.label_list(allow_files = True, default = [
             _DEPENDENCY_POLICY,
-            Label("//:dependency-contract.json"),
+            Label("//:config/dependency-contract.json"),
         ]),
     },
     configure = True,

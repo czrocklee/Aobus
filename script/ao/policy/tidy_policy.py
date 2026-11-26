@@ -18,6 +18,12 @@ from types import MappingProxyType
 
 from ao.policy.tidy_config import mode_disabled_checks
 
+# File types supported by the Bazel lint aspect and the native ownership audit.
+TRANSLATION_UNIT_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".mm")
+HEADER_SUFFIXES = (".h", ".hh", ".hpp", ".hxx")
+FRAGMENT_SUFFIXES = (".def",)
+LINT_SUFFIXES = (*TRANSLATION_UNIT_SUFFIXES, *HEADER_SUFFIXES, *FRAGMENT_SUFFIXES)
+
 STRICT_HEADER_FOLDERS = ("lib", "app", "include", "tool")
 RELAXED_HEADER_FOLDERS = ("test", "include")
 

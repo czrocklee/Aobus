@@ -771,7 +771,7 @@ def run(source_root: Path, output_dir: Path, platform: str, *, gtk: bool | None 
     """Run the complete enabled inventory and replace its per-run JSON receipt.
 
     The receipt is output_dir/guardrails.json (schema_version 1); no build tree,
-    CMake subprocess, repository Git state, or external dependencies are needed.
+    repository Git state, or external dependencies are needed.
     Invalid selection/root input fails closed; findings and input failures are
     recorded alike. Output-directory I/O errors propagate to the caller.
     """

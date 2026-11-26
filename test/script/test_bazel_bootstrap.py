@@ -94,7 +94,7 @@ class MacosNativeEnvironmentAdmissionTests(unittest.TestCase):
         shutil.copy2(ROOT / "script/ao/macos-toolchain.json", lock_file)
         lock = json.loads(lock_file.read_text(encoding="utf-8"))
         for name, targets in deployments.items():
-            triplet = project / "cmake/vcpkg-triplets" / name
+            triplet = project / "config/vcpkg/triplets" / name
             triplet.parent.mkdir(parents=True, exist_ok=True)
             architecture = "x86_64" if name.startswith("x64") else "arm64"
             target_architecture = "x64" if architecture == "x86_64" else "arm64"
@@ -222,7 +222,7 @@ printf 'path=%s\\n' "$PATH"
         ):
             with self.subTest(override=override):
                 project, lock = self._fixture(self._admitted_deployments())
-                triplet = project / "cmake/vcpkg-triplets/x64-aobus-osx.cmake"
+                triplet = project / "config/vcpkg/triplets/x64-aobus-osx.cmake"
                 with triplet.open("a", encoding="utf-8") as output:
                     output.write(override)
                 harness, llvm = self._harness(project)
