@@ -135,7 +135,13 @@ namespace ao::utility
     public:
       Result<std::filesystem::path> normalizeTargetPath(std::filesystem::path const& targetPath) const
       {
-        return targetPath;
+        if (auto const name = targetPath.filename(); name.empty() || name == "." || name == "..")
+        {
+          return makeError(Error::Code::IoError, "Atomic file target must name a file");
+        }
+
+        // Don't turn a usable relative path into a possibly unrepresentable absolute one.
+        return targetPath.has_parent_path() ? targetPath : "." / targetPath;
       }
 
       Result<> createParentDirectories(std::filesystem::path const& parentPath) const

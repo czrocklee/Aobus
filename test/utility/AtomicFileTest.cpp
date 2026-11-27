@@ -8,10 +8,12 @@
 #include "test/TestFixtureSupport.h"
 #include <ao/Error.h>
 
-#ifdef _WIN32
 #include <catch2/catch_message.hpp>
-#endif
 #include <catch2/catch_test_macros.hpp>
+#ifndef _WIN32
+#include <catch2/generators/catch_generators.hpp>
+#endif
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <cstddef>
@@ -23,7 +25,17 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <tuple>
+#endif
 #ifdef _WIN32
 #include <thread>
 #include <vector>
@@ -327,6 +339,131 @@ namespace ao::utility::test
     auto const payload = std::string{"left\0right", 10};
     REQUIRE(writeAtomically(targetPath, payload));
     CHECK(ao::test::readFile(targetPath) == payload);
+  }
+
+  TEST_CASE("AtomicFile - a bare filename is replaced in the current directory")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const previous = std::filesystem::current_path();
+    auto const expectedPath = tempDir.path() / "state.yaml";
+    auto restoreError = std::error_code{};
+    {
+      auto const restoreDirectory = gsl_lite::finally([&] { std::filesystem::current_path(previous, restoreError); });
+      std::filesystem::current_path(tempDir.path());
+      REQUIRE(writeAtomically("state.yaml", "before"));
+      REQUIRE(ao::test::readFile(expectedPath) == "before");
+      REQUIRE(publishAtomically("state.yaml", "after"));
+      CHECK(ao::test::readFile(expectedPath) == "after");
+    }
+    REQUIRE_FALSE(restoreError);
+
+    for (auto const& entry : std::filesystem::directory_iterator{tempDir.path()})
+    {
+      CHECK(entry.path() == expectedPath);
+    }
+  }
+
+#ifdef __linux__
+  TEST_CASE("AtomicFile - replaces a bare filename when the current directory exceeds PATH_MAX")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const component = std::string(128, 'd');
+    auto const previous = ::open(".", O_PATH | O_DIRECTORY | O_CLOEXEC);
+    REQUIRE(previous >= 0);
+    auto const closePrevious = gsl_lite::finally([previous] { std::ignore = ::close(previous); });
+
+    bool restored = false;
+    auto cleanupError = std::error_code{};
+    {
+      auto const restoreDirectory = gsl_lite::finally([&] { restored = ::fchdir(previous) == 0; });
+      REQUIRE(::chdir(tempDir.path().c_str()) == 0);
+
+      std::size_t depth = 0;
+      // Remove from the bottom up so cleanup never needs the long absolute path.
+      auto const cleanup = gsl_lite::finally(
+        [&]
+        {
+          for (; depth > 0 && !cleanupError; --depth)
+          {
+            if (::chdir("..") != 0)
+            {
+              cleanupError.assign(errno, std::generic_category());
+              return;
+            }
+
+            std::ignore = std::filesystem::remove_all(component, cleanupError);
+          }
+        });
+
+      auto absoluteCwd = tempDir.path();
+
+      while (absoluteCwd.native().size() <= PATH_MAX)
+      {
+        REQUIRE(::mkdir(component.c_str(), S_IRWXU) == 0);
+        REQUIRE(::chdir(component.c_str()) == 0);
+        ++depth;
+        absoluteCwd /= component;
+      }
+
+      auto const accessResult = ::access(absoluteCwd.c_str(), F_OK);
+      auto const accessError = errno;
+      REQUIRE(accessResult == -1);
+      REQUIRE(accessError == ENAMETOOLONG);
+
+      REQUIRE(writeAtomically("state.yaml", "durable contents\n"));
+      REQUIRE(ao::test::readFile("state.yaml") == "durable contents\n");
+      REQUIRE(publishAtomically("state.yaml", "published contents\n"));
+      CHECK(ao::test::readFile("state.yaml") == "published contents\n");
+    }
+    REQUIRE(restored);
+    CHECK_FALSE(cleanupError);
+  }
+#endif
+
+#ifndef _WIN32
+  TEST_CASE("AtomicFile - rejects POSIX targets that do not name a file without leaving artifacts")
+  {
+    auto const [operation, replace] =
+      GENERATE(std::pair{"writeAtomically", &writeAtomically}, std::pair{"publishAtomically", &publishAtomically});
+    auto const* const target = GENERATE("", ".", "..", "new-parent/", "new-parent/.", "new-parent/..");
+    CAPTURE(operation, target);
+
+    auto const tempDir = ao::test::TempDir{};
+    // Keep both the current directory and its parent inside the fixture for the dot-dot case.
+    auto const cwd = tempDir.path() / "cwd";
+    REQUIRE(std::filesystem::create_directory(cwd));
+
+    auto const previous = std::filesystem::current_path();
+    auto restoreError = std::error_code{};
+    auto const res = [&]
+    {
+      auto const restoreDirectory = gsl_lite::finally([&] { std::filesystem::current_path(previous, restoreError); });
+      std::filesystem::current_path(cwd);
+      return replace(std::filesystem::path{target}, "content");
+    }();
+    REQUIRE_FALSE(restoreError);
+
+    CHECK(std::filesystem::is_empty(cwd));
+
+    for (auto const& entry : std::filesystem::directory_iterator{tempDir.path()})
+    {
+      CHECK(entry.path() == cwd);
+    }
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+  }
+#endif
+
+  TEST_CASE("AtomicFile - rejects an embedded null in the target before preparing its parent")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const invalidName = std::filesystem::path{std::string{"a\0b", 3}};
+    auto const target = tempDir.path() / "parent" / invalidName;
+    auto const res = publishAtomically(target, "content");
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+    CHECK(std::filesystem::is_empty(tempDir.path()));
   }
 
   TEST_CASE("AtomicFile - overwrites existing file")

@@ -97,8 +97,8 @@ Both operations perform these steps:
 7. Replace the target through one platform call and commit the temporary owner. Windows requests write-through only for `writeAtomically`.
 8. For `writeAtomically`, perform the platform's post-replacement best effort; `publishAtomically` returns after replacement.
 
-An empty input installs a zero-length target.
-Embedded null bytes are ordinary bytes because both implementations use the explicit `string_view` size.
+A bare filename targets the current directory. On POSIX, callers using relative paths must keep the process working directory stable until the operation returns: temporary creation, replacement, cleanup, and the parent-directory barrier all resolve relative to it. An embedded null in the target path is rejected before preparing its parent.
+An empty payload installs a zero-length target. Embedded null bytes in the payload are ordinary bytes because both implementations use the explicit `string_view` size.
 An absent target is created on success, an existing regular file is replaced, and a directory target returns `IoError` when the platform rejects replacement.
 
 The public API has no permission selector.
@@ -164,7 +164,7 @@ Runtime and frontend stores must assign one semantic writer per managed target.
 
 | Failure point                                                                            | Result                              | Existing target before replacement                  |
 | ---------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
-| Windows target normalization                                                             | `IoError`.                          | Unchanged.                                          |
+| Target path validation or resolution                                                     | `IoError`.                          | Unchanged.                                          |
 | Parent-directory creation                                                                | `IoError`.                          | Unchanged; some new ancestors may remain.           |
 | Private security preparation, unique temporary creation, or collision exhaustion         | `IoError`.                          | Unchanged.                                          |
 | POSIX permission application                                                             | `IoError`; RAII cleanup attempted.  | Unchanged.                                          |
@@ -211,8 +211,8 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 ## Test map
 
 - [`AtomicFileTest.cpp`](../../../test/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target, and visibility-only publication is locked to skip both barriers.
-- Real-filesystem sections protect creation, overwrite, empty and embedded-null payloads, POSIX mode `0600`, unwritable-parent failure, directory-target rejection, and successful temporary cleanup.
-- Native Windows sections protect the exact protected DACL, extended-length paths, distinct temporary names under concurrent different-target writes, final contents, and cleanup.
+- Real-filesystem cases protect creation, overwrite (including bare filenames), empty and embedded-null payloads, POSIX mode `0600` and the protected Windows DACL, unwritable-parent failure where the process cannot bypass permissions, and directory-target rejection with cleanup.
+- Windows-only cases protect extended-length paths, complete final contents for concurrent different-target writes, and absence of leftover temporary artifacts after those successful writes.
 - [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) proves that malformed YAML returns `FormatRejected`, preserves seeded objects, and cannot be overwritten by an ordinary group save.
 - [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects frontend managed-state integration.
 

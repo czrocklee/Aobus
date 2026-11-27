@@ -9,7 +9,6 @@
 #include <expected>
 #include <filesystem>
 #include <string_view>
-#include <utility>
 
 namespace ao::utility::detail
 {
@@ -32,6 +31,12 @@ namespace ao::utility::detail
                                 std::string_view data,
                                 AtomicReplacementMode const mode)
   {
+    // Native path APIs are null-terminated even when filesystem::path isn't.
+    if (targetPath.native().contains(std::filesystem::path::value_type{}))
+    {
+      return makeError(Error::Code::IoError, "Atomic file target contains an embedded null");
+    }
+
     auto normalizedTargetRes = operations.normalizeTargetPath(targetPath);
 
     if (!normalizedTargetRes)
@@ -54,7 +59,7 @@ namespace ao::utility::detail
       return std::unexpected{temporaryFileRes.error()};
     }
 
-    auto temporaryFile = std::move(*temporaryFileRes);
+    auto& temporaryFile = *temporaryFileRes;
 
     if (auto const res = temporaryFile.writeAll(data); !res)
     {

@@ -345,6 +345,7 @@ cc_test(
         "//lib/utility:test_headers",
         "//lib/utility:unicode_text",
         "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:gsl_lite",
         "@aobus_native_deps//:icu_uc",
         "@aobus_test_deps//:catch2",
     ],
