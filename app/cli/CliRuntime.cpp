@@ -10,6 +10,7 @@
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryDurability.h>
@@ -166,6 +167,11 @@ namespace ao::cli
 
   rt::CoreRuntime& CliRuntime::core()
   {
+    return openCore(library::LibrarySchemaPolicy::InitializeIfEmpty);
+  }
+
+  rt::CoreRuntime& CliRuntime::openCore(library::LibrarySchemaPolicy const schemaPolicy)
+  {
     if (!_storagePtr->optRuntime)
     {
       if (_options.root.empty())
@@ -201,7 +207,11 @@ namespace ao::cli
                                                 rt::LibraryPaths{_options.root}.databasePath(),
                                                 cacheDirectory,
                                                 _musicLibraryPinnedMapBytes,
-                                                _musicLibraryDurability);
+                                                _musicLibraryDurability,
+                                                nullptr,
+                                                nullptr,
+                                                nullptr,
+                                                schemaPolicy);
 
       if (!runtimeRes)
       {
@@ -223,6 +233,11 @@ namespace ao::cli
   rt::Library& CliRuntime::library()
   {
     return core().library();
+  }
+
+  rt::Library& CliRuntime::existingLibrary()
+  {
+    return openCore(library::LibrarySchemaPolicy::RequireExisting).library();
   }
 
   void CliRuntime::runTask(async::Task<void> task)

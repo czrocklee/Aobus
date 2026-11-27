@@ -68,6 +68,7 @@ cc_library(
         "completion/CompletionVocabulary.cpp",
         "completion/MetadataValueCompleter.cpp",
         "completion/QueryExpressionCompleter.cpp",
+        "library/AudioFingerprintVerification.cpp",
         "library/AudioIdentityBatchWriter.cpp",
         "library/AudioIdentityIndexer.cpp",
         "library/CueBinding.cpp",

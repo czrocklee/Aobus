@@ -24,7 +24,9 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 Application composition keeps only one live environment for a database path in each process, as required by LMDB; `MusicLibrary` has no canonical-path registry or duplicate-open admission mechanism.
 Independent processes may open the same environment under LMDB's normal locking rules.
-Before the environment opens, every opener, reader and writer alike, takes a shared lock on `<database-path>/.aobus-open.lock` without waiting and holds it until the environment closes.
+With `RequireExisting`, an initial check rejects a missing or zero-length `data.mdb` with `NotFound` without creating a directory, data file, or lock files.
+If the data file is nonempty, open uses the normal locks and rechecks the data file before opening LMDB. Lock files can be created or updated even if admission fails.
+Before the environment opens, readers and writers take a shared lock on `<database-path>/.aobus-open.lock` without waiting and hold it until the environment closes.
 While another holder has that lock exclusively, open returns `ResourceBusy` without opening the environment.
 Open creates the lock file when it is missing, so where the process cannot create a file in the database directory, a missing lock file makes open return `IoError`.
 Upgrade and rollback do not exist yet; [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) requires them to hold it exclusively, so that neither runs while any process has the library open.
@@ -54,13 +56,14 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
-It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-1 schema only when that catalog is empty.
+`MusicLibrary::open` is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created.
+An empty catalog initializes the exact version-1 schema by default. With `RequireExisting`, an empty catalog returns `NotFound` without initializing the schema, even when `data.mdb` is nonempty.
 LMDB 1.0 keys each named database's catalog entry by its name followed by a terminating NUL byte, so admission compares those exact keys and treats a row keyed by the bare name as an ordinary main-database record.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
-A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
+A nonempty catalog must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
 After the version gate accepts version 1, open requires exactly the seven named databases below, their exact key flags, the required header and id space records with at most the optional revision record beside them, and every local and cross-Store invariant described below before exposing any store.
 
 The database is a native-format store rather than an interchange format.
@@ -616,7 +619,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, the newer-version and version-0 open errors, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, same-library plus cross-process writer-session exclusion, and same-process plus cross-process open-lock exclusion.
+- [`MusicLibraryTest.cpp`](../../../../test/library/MusicLibraryTest.cpp) covers existing-schema rejection without creating storage or initializing an empty catalog, exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, the newer-version and version-0 open errors, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, same-library plus cross-process writer-session exclusion, and same-process plus cross-process open-lock exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
 - [`LibraryFormatFixtureTest.cpp`](../../../../test/runtime/library/LibraryFormatFixtureTest.cpp) opens a library created on each of Linux x86-64, Windows x64, and macOS arm64, checks its page size, that its Track and manifest trees have a branch level, and that a List record overflows, compares its full export with the [`v1.yaml`](../../../../test/data/library/v1.yaml) it was restored from, and writes a Track and a List to it. Each fixture holds a CUE carrier and has deleted its highest Track and List after the restore, so the write checks that neither id is reused.
   It also restores `v1.yaml` into an empty library with none of its audio files and checks that the full export reproduces the document byte for byte, and it checks at compile time that the library and YAML versions each differ from their last released version by at most one.

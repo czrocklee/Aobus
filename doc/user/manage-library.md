@@ -65,7 +65,29 @@ If a case-only rename reports `Scan spelling lookup reached a reparse point`, Wi
 
 If a case-only rename qualifies for fingerprint matching but the audio fingerprint is pending, check whether the old spelling still opens the intended file.
 If it does, run `aobus -C /music lib fingerprint --pending`, then preview the scan again. Look for `moved` from the old name to the new one before applying.
-Fingerprinting only processes available entries whose file size and modification time still match the library. Waiting will not fill the fingerprint for a missing entry or a file whose size or modification time has changed.
+Pending backfill only processes available entries whose file size and modification time still match the library. Waiting will not fill the fingerprint for a missing entry or a file whose size or modification time has changed.
+
+### Check the audio in one file from the CLI
+
+Check for an audio change that left the file size and modification time unchanged, or fill in a fingerprint for one pending file.
+In both cases, the file must still be at its original path, with the size and modification time stored in the library. If the file is missing or either value changed, preview a scan instead.
+If you plan to rename the file and keep its Track ID and edits, verify and confirm any update **before the rename**. Finish writing the file first and leave it in place until verification and any confirmation are complete.
+
+Use the path stored in the library, relative to the music root. Scan the root first if you have not imported it. If another Aobus instance has the library open for writing, close it first: even a CLI preview needs the writer lease.
+
+```bash
+aobus -C /music lib fingerprint --verify 'Album/Track.flac'
+```
+
+The command reports `match`, `mismatch`, or `pending` without changing the library. `pending` means no fingerprint is stored yet; it does not mean the file differs.
+The check compares encoded audio, not tags, and does not scan other files.
+
+If the report offers a confirmation token and you intend to record the observed audio identity, run the same command with `--confirm` followed by that token. If the confirmation is stale, run a fresh preview and review it again.
+A successful write says `(updated)` and keeps your track edits, but records only the fingerprint.
+For a track that uses the whole file, audio properties such as duration or sample rate can still be out of date. Scanning again at the same path with the same size and modification time does not refresh them.
+If you rename the file afterward, preview a scan and look for `moved` from the original path to the new one.
+
+Use `lib verify` for a library-wide scan report without applying it, or `lib fingerprint --pending` to fill eligible pending fingerprints in bulk. Neither replaces this targeted check for an existing fingerprint.
 
 ### Filter and save a List on the desktop
 

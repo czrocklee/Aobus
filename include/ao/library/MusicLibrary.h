@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 
@@ -64,6 +65,8 @@ namespace ao::library
        * fixtures, clear it.
        */
       bool flushCommits = true;
+
+      LibrarySchemaPolicy schemaPolicy = LibrarySchemaPolicy::InitializeIfEmpty;
     };
 
     /**
