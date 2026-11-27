@@ -9,7 +9,7 @@
 #include "CommandRegistrations.h"
 #include "Output.h"
 #include "ScanOutput.h"
-#include <ao/rt/library/Library.h>
+#include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -324,7 +324,7 @@ namespace ao::cli
       };
     }
 
-    if (auto const applyRes = cli.runTask(cli.library().jobs().applyScanPlanAsync(
+    if (auto const applyRes = cli.runTask(cli.core().libraryJobs().applyScanPlanAsync(
           std::move(plan),
           options,
           {},

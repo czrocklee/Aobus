@@ -119,8 +119,8 @@ namespace ao::gtk::test
       auto selectionPtr = Gtk::SingleSelection::create(modelPtr);
       columnView.set_model(selectionPtr);
 
-      auto const beginEditSession = [&fixture](Glib::RefPtr<TrackRowObject> const& rowPtr)
-      { return uimodel::TrackAuthoringSession::begin(fixture.runtime().library(), std::array{rowPtr->trackId()}); };
+      auto const beginEditSession = [editing = fixture.editing()](Glib::RefPtr<TrackRowObject> const& rowPtr)
+      { return uimodel::TrackAuthoringSession::begin(editing, std::array{rowPtr->trackId()}); };
       struct CommitObservation final
       {
         TrackId rowId{kInvalidTrackId};
@@ -243,8 +243,8 @@ namespace ao::gtk::test
               replacementRequested = tryEmitFocusEnter(*entry);
             }
           });
-        REQUIRE(runGtkTask(fixture.runtime(),
-                           fixture.runtime().library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+        REQUIRE(runGtkTask(
+          fixture.runtime(), fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
 
         // Replace the invalidated session before its deferred teardown runs.
         // Clearing the old session must disconnect that exact idle callback.
@@ -459,8 +459,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const firstId = addRuntimeTrack(runtime, {.title = "Shared Title"});
-    auto const secondId = addRuntimeTrack(runtime, {.title = "Replacement Title"});
+    auto const firstId = addRuntimeTrack(fixture.owner(), {.title = "Shared Title"});
+    auto const secondId = addRuntimeTrack(fixture.owner(), {.title = "Replacement Title"});
     auto const optFirstUri = runtime.library().snapshot().trackUri(firstId);
     auto const optSecondUri = runtime.library().snapshot().trackUri(secondId);
     REQUIRE(optFirstUri);
@@ -510,7 +510,8 @@ namespace ao::gtk::test
 
     std::filesystem::rename(firstPath, movedPath);
     std::filesystem::create_symlink(movedPath, firstPath);
-    updateRuntimeTrack(runtime, firstId, [](library::test::TrackSpec& spec) { spec.title = "Edited Shared Title"; });
+    updateRuntimeTrack(
+      fixture.owner(), firstId, [](library::test::TrackSpec& spec) { spec.title = "Edited Shared Title"; });
     REQUIRE(tryPumpGtkEventsUntil(
       [&]
       {
@@ -526,7 +527,7 @@ namespace ao::gtk::test
         return findLabelByText(pathView, secondPath.string()) != nullptr &&
                firstRowPtr->signalFilePathChanged().empty();
       }));
-    updateRuntimeTrack(runtime, firstId, [](library::test::TrackSpec& spec) { spec.title = "Title Only"; });
+    updateRuntimeTrack(fixture.owner(), firstId, [](library::test::TrackSpec& spec) { spec.title = "Title Only"; });
     CHECK(findLabelByText(titleView, "Title Only") != nullptr);
     CHECK(firstRowPtr->fieldText(rt::TrackField::FilePath).empty());
     CHECK(findLabelByText(pathView, secondPath.string()) != nullptr);

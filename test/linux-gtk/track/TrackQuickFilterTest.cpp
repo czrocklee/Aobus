@@ -220,7 +220,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
     REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
     drainGtkEvents();
 

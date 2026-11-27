@@ -82,22 +82,23 @@ namespace ao::gtk::test
       drainGtkEvents();
     }
 
-    void startPlayback(rt::AppRuntime& runtime)
+    void startPlayback(rt::AppRuntimeOwner& owner)
     {
       auto const trackId = addRuntimeTrack(
-        runtime,
+        owner,
         library::test::TrackSpec{.title = "Tick Test",
                                  .artist = "Artist",
                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
                                  .duration = std::chrono::seconds{5}});
-      startPlayback(runtime, trackId);
+      startPlayback(owner.runtime(), trackId);
     }
 
-    void preparePausedLoopingPlayback(rt::AppRuntime& runtime)
+    void preparePausedLoopingPlayback(rt::AppRuntimeOwner& owner)
     {
+      auto& runtime = owner.runtime();
       rt::test::addReadyAudioProvider(runtime);
       drainGtkEvents();
-      startPlayback(runtime);
+      startPlayback(owner);
       runtime.playback().commands().setRepeatMode(rt::RepeatMode::All);
       runtime.playback().commands().pause();
     }
@@ -343,7 +344,7 @@ namespace ao::gtk::test
     auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
     CHECK_FALSE(timeLabel.isTickActive());
 
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
     CHECK_FALSE(timeLabel.isTickActive());
 
     auto windowFixture = GtkWindowFixture{};
@@ -373,7 +374,7 @@ namespace ao::gtk::test
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     CHECK_FALSE(seekControl.isTickActive());
 
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
     CHECK_FALSE(seekControl.isTickActive());
 
     auto windowFixture = GtkWindowFixture{};
@@ -404,7 +405,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
 
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.duration > std::chrono::milliseconds{0});
@@ -439,9 +440,9 @@ namespace ao::gtk::test
         {.sampleRate = kSampleRate, .audioData = std::vector<std::uint8_t>(std::size_t{kSampleRate} * 2U / 10U, 0)}),
       ".wav"};
     auto const unknownTrackId = addRuntimeTrack(
-      runtime, library::test::TrackSpec{.title = "Unknown Duration", .uri = unknownMedia.path.string()});
+      env.owner(), library::test::TrackSpec{.title = "Unknown Duration", .uri = unknownMedia.path.string()});
     auto const shortTrackId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Short Track", .uri = shortMedia.path.string()});
+      addRuntimeTrack(env.owner(), library::test::TrackSpec{.title = "Short Track", .uri = shortMedia.path.string()});
     startPlayback(runtime, unknownTrackId);
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.occurrenceId.value != 0);
@@ -475,7 +476,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
 
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.duration > std::chrono::milliseconds{0});
@@ -501,7 +502,7 @@ namespace ao::gtk::test
     auto& playback = env.runtime().playback();
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
     playback.commands().pause();
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
@@ -527,7 +528,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
-    preparePausedLoopingPlayback(env.runtime());
+    preparePausedLoopingPlayback(env.owner());
     playback.commands().seek(std::chrono::milliseconds{0});
     auto const before = playback.snapshot().transport;
     auto const firstPosition = before.duration / 4;
@@ -585,7 +586,7 @@ namespace ao::gtk::test
 
     auto const media = ao::test::TempFile{seekPcmWave(21), ".wav"};
     auto const trackId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Seek Keys", .uri = media.path.string()});
+      addRuntimeTrack(env.owner(), library::test::TrackSpec{.title = "Seek Keys", .uri = media.path.string()});
     startPlayback(runtime, trackId);
     playback.commands().pause();
     playback.commands().seek(std::chrono::seconds{12});
@@ -674,7 +675,7 @@ namespace ao::gtk::test
 
     auto const media = ao::test::TempFile{seekPcmWave(45), ".wav"};
     auto const trackId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Delayed Seek Keys", .uri = media.path.string()});
+      addRuntimeTrack(env.owner(), library::test::TrackSpec{.title = "Delayed Seek Keys", .uri = media.path.string()});
     startPlayback(runtime, trackId);
 
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
@@ -797,7 +798,7 @@ namespace ao::gtk::test
     auto& playback = env.runtime().playback();
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
     playback.commands().pause();
     auto const before = playback.snapshot().transport;
     auto const requestedElapsed = before.duration / 4;
@@ -835,7 +836,7 @@ namespace ao::gtk::test
     auto& playback = env.runtime().playback();
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
-    startPlayback(env.runtime());
+    startPlayback(env.owner());
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -867,7 +868,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
-    preparePausedLoopingPlayback(env.runtime());
+    preparePausedLoopingPlayback(env.owner());
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -1016,7 +1017,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     auto const firstMedia = ao::test::TempFile{seekPcmWave(12), ".wav"};
     auto const firstId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "First", .uri = firstMedia.path.string()});
+      addRuntimeTrack(env.owner(), library::test::TrackSpec{.title = "First", .uri = firstMedia.path.string()});
     auto optReplacementMedia = std::optional<ao::test::TempFile>{};
     auto replacementId = firstId;
 
@@ -1024,7 +1025,7 @@ namespace ao::gtk::test
     {
       optReplacementMedia.emplace(seekPcmWave(16), ".wav");
       replacementId = addRuntimeTrack(
-        runtime, library::test::TrackSpec{.title = "Replacement", .uri = optReplacementMedia->path.string()});
+        env.owner(), library::test::TrackSpec{.title = "Replacement", .uri = optReplacementMedia->path.string()});
     }
 
     startPlayback(runtime, firstId);
@@ -1169,7 +1170,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
-    preparePausedLoopingPlayback(env.runtime());
+    preparePausedLoopingPlayback(env.owner());
     auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);

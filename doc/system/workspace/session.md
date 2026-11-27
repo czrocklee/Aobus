@@ -159,7 +159,7 @@ Its lower `ConfigStore` operation is fail closed, but a failed checkpoint does n
 
 ## Persistence and versioning
 
-The session uses the literal `workspace` group in the store owned by `AppRuntime`.
+The session uses the literal `workspace` group in the store owned by `AppRuntimeOwner`.
 GTK uses a per-library workspace location; TUI uses its selected configuration path.
 Exact locations belong to the [managed file locations reference](../../reference/persistence/location.md).
 

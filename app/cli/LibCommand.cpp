@@ -29,7 +29,6 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/AudioFingerprintReport.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTransfer.h>
@@ -253,7 +252,7 @@ namespace ao::cli
 
       auto const exportPath = utility::pathFromUtf8(path);
 
-      if (auto const res = cli.runTask(cli.library().jobs().exportLibraryAsync(exportPath, mode)); !res)
+      if (auto const res = cli.runTask(cli.core().libraryJobs().exportLibraryAsync(exportPath, mode)); !res)
       {
         auto const& error = res.error();
         throwCommandError(error, "export failed: {}", error.message);
@@ -292,7 +291,7 @@ namespace ao::cli
           Error::Code::InvalidInput, "restore requires --confirm-destructive-restore after reviewing --dry-run output");
       }
 
-      auto planRes = cli.runTask(cli.library().jobs().prepareLibraryImportAsync(utility::pathFromUtf8(path), mode));
+      auto planRes = cli.runTask(cli.core().libraryJobs().prepareLibraryImportAsync(utility::pathFromUtf8(path), mode));
 
       if (!planRes)
       {
@@ -306,7 +305,7 @@ namespace ao::cli
         return;
       }
 
-      auto const res = cli.runTask(cli.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto const res = cli.runTask(cli.core().libraryJobs().applyLibraryImportPlanAsync(std::move(*planRes)));
 
       if (!res)
       {
@@ -1065,7 +1064,7 @@ namespace ao::cli
         }
       }
 
-      if (auto const res = cli.runTask(applyRelinkPlanAsync(&cli.library().jobs(), std::move(relinkPlan))); !res)
+      if (auto const res = cli.runTask(applyRelinkPlanAsync(&cli.core().libraryJobs(), std::move(relinkPlan))); !res)
       {
         auto const& error = res.error();
         throwCommandError(error, "relink failed: {}", error.message);
@@ -1155,7 +1154,7 @@ namespace ao::cli
       // The CLI drives its callback loop until the coordinated maintenance
       // operation reaches a terminal result. Diagnostic callbacks remain
       // worker-produced and indexer-serialized.
-      auto res = cli.runTask(cli.library().jobs().backfillAudioIdentityAsync(
+      auto res = cli.runTask(cli.core().libraryJobs().backfillAudioIdentityAsync(
         {},
         verbose ? rt::AudioIdentityIndexProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
                                                          {
@@ -1238,8 +1237,8 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "--confirm requires a non-empty token");
       }
 
-      auto const res = cli.runTask(
-        cli.existingLibrary().jobs().verifyAudioFingerprintAsync(std::move(uri), std::move(optConfirmation)));
+      auto const res =
+        cli.runTask(cli.existingLibraryJobs().verifyAudioFingerprintAsync(std::move(uri), std::move(optConfirmation)));
 
       if (!res)
       {

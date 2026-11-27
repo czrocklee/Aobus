@@ -89,7 +89,7 @@ An invalid id, an absent descriptor, or a walk that no source could satisfy retu
 A stale reference that no source can satisfy is never rewritten by a read.
 
 `ResourceByteMemoryCache` is constructed with one asynchronous reader and one callback runtime for its whole life.
-`AppRuntime` owns one cache value and binds its miss path to the private interactive reader in the owned `CoreRuntime`; the same `(async::Runtime&, ReadBytes)` constructor accepts a controlled reader in focused tests.
+`AppRuntimeOwner` owns one cache value and binds its miss path to the private interactive reader in the owned `CoreRuntime`; the same `(async::Runtime&, ReadBytes)` constructor accepts a controlled reader in focused tests.
 Interactive consumers borrow that value through `AppRuntime::resourceBytes()`.
 An invalid id rejects a request without invoking its callback.
 On a cache miss, equal ids share one source read and each active interest receives completion on the constructor-selected callback executor.
@@ -175,7 +175,7 @@ The widget controller cancels its old interest on every full-size or thumbnail l
 ### WinUI
 
 WinUI hides artwork and its placeholder when a group or Inspector slot has no entity. Now Playing follows the playback snapshot, including a track held after restore; with no track, it shows `equalizer`. An invalid resource id shows the slot's [no-cover placeholder](#placeholder-presentation). A valid id hides the placeholder before the cache lookup or asynchronous read.
-An `AppRuntime`-owned `ResourceByteMemoryCache` coalesces equal resource requests and shares retained encoded bytes among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the cache.
+The session's `ResourceByteMemoryCache` coalesces equal resource requests and shares retained encoded bytes among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the cache.
 A current cached or loaded payload is copied into owning native memory on a worker; the callback executor wraps that memory as a random-access stream and replaces the image through the native XAML decoder without another application payload copy.
 Absent, over-budget, or undecodable valid resources leave both the decoded image and placeholder hidden.
 Selection replacement, reset, and teardown reject stale completion through generation and task lifetime.
@@ -236,7 +236,8 @@ Deleting the cache directory changes no library fact, and can change only what i
 GTK decode catches `Glib::Error` and publishes an empty result.
 WinUI native decode catches `hresult_error`, logs the adapter diagnostic, and retains the empty valid-resource state.
 An unexpected non-cancellation failure in GTK, runtime resource-byte, or MPRIS shared loading is reported once, completes the flight with the owner's empty result, and leaves the key eligible for retry.
-GTK image-loader, MPRIS cache, and runtime byte-cache destruction cancel their lifetime scopes before clearing shared request flights; runtime byte-cache destruction also clears retained bytes before releasing the constructor-selected reader and callback runtime.
+GTK image-loader, MPRIS cache, and runtime byte-cache destruction cancel their lifetime scopes before clearing shared request flights.
+The runtime byte cache also clears retained bytes before releasing its share of the reader callable; it borrows the callback runtime.
 TUI destruction cancels its settle and transform tasks and its byte interest.
 Every owner access follows a cancellation-checked callback-executor transition.
 Individual GTK, runtime resource-byte, and MPRIS interests may be cancelled without discarding successful shared cache work.

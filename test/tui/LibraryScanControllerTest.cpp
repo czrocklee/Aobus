@@ -15,7 +15,6 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
@@ -63,13 +62,14 @@ namespace ao::tui::test
       ao::test::TempDir tempDir{};
       std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr = std::make_unique<rt::test::ControlledSleeper>();
       rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr{
+      std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr{
         rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor), nullptr, sleeperPtr.get())};
+      rt::AppRuntime& runtime = runtimeOwnerPtr->runtime();
 
       LibraryScanController makeController(LibraryScanController::ScanTask scan) const
       {
         return LibraryScanController{
-          runtimePtr->async(), runtimePtr->notifications(), ao::test::englishMessageCatalog(), std::move(scan)};
+          runtime.async(), runtime.notifications(), ao::test::englishMessageCatalog(), std::move(scan)};
       }
     };
   } // namespace
@@ -90,7 +90,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
     CHECK(controller.phase() == LibraryScanController::Phase::Idle);
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
+    CHECK(lastMessage(fixture.runtime.notifications()) ==
           uimodel::formatLibraryScanMessage(
             ao::test::englishMessageCatalog(),
             {.verdict = uimodel::LibraryScanVerdict::Complete, .summary = {.newCount = 2}}));
@@ -99,7 +99,7 @@ namespace ao::tui::test
   TEST_CASE("LibraryScanController - start while running posts a transient already-running notice", "[concurrency]")
   {
     auto fixture = ScanFixture{};
-    auto* const runtime = &fixture.runtimePtr->async();
+    auto* const runtime = &fixture.runtime.async();
     auto controller = fixture.makeController([runtime](std::stop_token const stopToken)
                                              { return waitThenOutcomeAsync(runtime, {}, stopToken); });
 
@@ -108,8 +108,8 @@ namespace ao::tui::test
     CHECK(controller.phase() == LibraryScanController::Phase::Running);
 
     controller.start();
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) == "A library scan is already running");
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(lastMessage(fixture.runtime.notifications()) == "A library scan is already running");
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
 
     controller.retire();
@@ -121,7 +121,7 @@ namespace ao::tui::test
   TEST_CASE("LibraryScanController - start while cancelling posts a cancellation-in-progress notice", "[concurrency]")
   {
     auto fixture = ScanFixture{};
-    auto* const runtime = &fixture.runtimePtr->async();
+    auto* const runtime = &fixture.runtime.async();
     auto controller = fixture.makeController([runtime](std::stop_token const stopToken)
                                              { return waitThenOutcomeAsync(runtime, {}, stopToken); });
 
@@ -131,7 +131,7 @@ namespace ao::tui::test
     CHECK(controller.phase() == LibraryScanController::Phase::Cancelling);
 
     controller.start();
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) == "Scan cancellation is already in progress");
+    CHECK(lastMessage(fixture.runtime.notifications()) == "Scan cancellation is already in progress");
 
     REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
@@ -140,7 +140,7 @@ namespace ao::tui::test
   TEST_CASE("LibraryScanController - cancellation is silent and returns to Idle", "[concurrency]")
   {
     auto fixture = ScanFixture{};
-    auto* const runtime = &fixture.runtimePtr->async();
+    auto* const runtime = &fixture.runtime.async();
     auto controller = fixture.makeController(
       [runtime](std::stop_token const stopToken)
       { return waitThenOutcomeAsync(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
@@ -151,7 +151,7 @@ namespace ao::tui::test
     REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("LibraryScanController - a real outcome that wins the cancel race is still presented", "[concurrency]")
@@ -165,7 +165,7 @@ namespace ao::tui::test
     controller.cancel();
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
-    CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
+    CHECK(lastMessage(fixture.runtime.notifications()) ==
           uimodel::formatLibraryScanMessage(
             ao::test::englishMessageCatalog(), {.verdict = uimodel::LibraryScanVerdict::Failed}));
   }
@@ -173,7 +173,7 @@ namespace ao::tui::test
   TEST_CASE("LibraryScanController - retire suppresses late presentation", "[concurrency]")
   {
     auto fixture = ScanFixture{};
-    auto* const runtime = &fixture.runtimePtr->async();
+    auto* const runtime = &fixture.runtime.async();
     auto controller = fixture.makeController(
       [runtime](std::stop_token const stopToken)
       { return waitThenOutcomeAsync(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
@@ -185,7 +185,7 @@ namespace ao::tui::test
     fixture.executor->drain();
 
     CHECK(controller.phase() == LibraryScanController::Phase::Retired);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("LibraryScanController - cancel and start are no-ops after retire", "[concurrency]")
@@ -200,21 +200,22 @@ namespace ao::tui::test
     fixture.executor->drain();
 
     CHECK(controller.phase() == LibraryScanController::Phase::Retired);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("LibraryScanController - production scan applies eagerly and leaves no identity backfill")
   {
     auto fixture = ScanFixture{};
     std::filesystem::copy_file(
-      audio::test::requireAudioFixture("basic_metadata.flac"), fixture.runtimePtr->musicRoot() / "song.flac");
-    auto& jobs = fixture.runtimePtr->library().jobs();
-    auto& notifications = fixture.runtimePtr->notifications();
+      audio::test::requireAudioFixture("basic_metadata.flac"), fixture.runtime.musicRoot() / "song.flac");
+    auto& jobs = fixture.runtimeOwnerPtr->libraryJobs();
+    auto const& progress = fixture.runtime.jobProgress();
+    auto& notifications = fixture.runtime.notifications();
     auto const& catalog = ao::test::englishMessageCatalog();
-    auto activity = uimodel::ActivityStatusViewModel{notifications, catalog, {}, {.libraryJobs = &jobs}};
-    auto controller = LibraryScanController{fixture.runtimePtr->async(), jobs, notifications, catalog};
+    auto activity = uimodel::ActivityStatusViewModel{notifications, catalog, {}, {.libraryJobs = &progress}};
+    auto controller = LibraryScanController{fixture.runtime.async(), jobs, notifications, catalog};
     std::int32_t finishedCount = 0;
-    auto progressFinishedSub = jobs.onProgressFinished([&finishedCount](auto const&) { ++finishedCount; });
+    auto progressFinishedSub = progress.onProgressFinished([&finishedCount](auto const&) { ++finishedCount; });
 
     controller.start();
     // No planning progress can arrive until the callback executor is driven.
@@ -234,7 +235,7 @@ namespace ao::tui::test
     CHECK(lastMessage(notifications) ==
           uimodel::formatLibraryScanMessage(catalog, {.verdict = uimodel::LibraryScanVerdict::UpToDate}));
 
-    auto const backfillRes = rt::test::runRuntimeTask(*fixture.runtimePtr, jobs.backfillAudioIdentityAsync());
+    auto const backfillRes = rt::test::runRuntimeTask(fixture.runtime, jobs.backfillAudioIdentityAsync());
     REQUIRE(backfillRes);
     CHECK(backfillRes->completedCount == 0);
     CHECK(backfillRes->skippedCount == 0);

@@ -247,30 +247,29 @@ namespace ao::rt::test
     installCacheEntry(tempDir.path() / "cache", expected);
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto owner = ao::test::requireValue(AppRuntimeOwner::open(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = paths.databasePath(),
       .cacheDirectory = tempDir.path() / "cache",
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
-    })));
+    }));
     auto received = std::vector<std::byte>{};
     bool callbackOnExecutor = false;
-    auto request = runtimePtr->resourceBytes().request(resourceId,
-                                                       [&](ResourceBytes bytes)
-                                                       {
-                                                         received.assign(bytes.view().begin(), bytes.view().end());
-                                                         callbackOnExecutor = executor->isCurrent();
-                                                       });
+    auto request = owner.runtime().resourceBytes().request(resourceId,
+                                                           [&](ResourceBytes bytes)
+                                                           {
+                                                             received.assign(bytes.view().begin(), bytes.view().end());
+                                                             callbackOnExecutor = executor->isCurrent();
+                                                           });
 
     REQUIRE(request);
     REQUIRE(executor->tryDrainUntil([&] { return received.size() == expected.size(); }));
     CHECK(received == std::vector<std::byte>(expected.begin(), expected.end()));
     CHECK(callbackOnExecutor);
 
-    runtimePtr->async().requestStop();
-    runtimePtr->async().join();
+    owner.shutdown();
   }
 
   TEST_CASE("ResourceByteMemoryCache - equal requests share one read and cache immutable bytes", "[concurrency]")

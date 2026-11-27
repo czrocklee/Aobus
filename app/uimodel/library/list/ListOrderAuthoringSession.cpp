@@ -18,6 +18,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
@@ -38,14 +39,14 @@ namespace ao::uimodel
 {
   struct ListOrderAuthoringSession::State final
   {
-    State(rt::Library& libraryValue,
+    State(LibraryEditing const editingValue,
           rt::ViewService& viewsValue,
           rt::ViewId const viewIdValue,
           rt::BoundListOrder orderValue,
           ListOrderCapabilityState capabilitiesValue,
           std::shared_ptr<rt::TrackListProjection const> projectionValuePtr,
           i18n::MessageCatalog textCatalogValue)
-      : library{libraryValue}
+      : editing{editingValue}
       , views{viewsValue}
       , viewId{viewIdValue}
       , order{std::move(orderValue)}
@@ -53,7 +54,7 @@ namespace ao::uimodel
       , projectionPtr{std::move(projectionValuePtr)}
       , textCatalog{std::move(textCatalogValue)}
     {
-      availabilitySubscription = library.onAuthoringAvailabilityChanged(
+      availabilitySubscription = editing.library().onAuthoringAvailabilityChanged(
         [this](rt::LibraryAuthoringAvailability const& availability)
         {
           if (availability.state == rt::LibraryAuthoringState::Maintenance)
@@ -136,7 +137,7 @@ namespace ao::uimodel
     {
       auto const pending = std::exchange(invalidationPending, false);
 
-      if (operationInvalidates || pending || !order.matches(library.authoringAvailability()))
+      if (operationInvalidates || pending || !order.matches(editing.library().authoringAvailability()))
       {
         invalidate();
       }
@@ -223,7 +224,7 @@ namespace ao::uimodel
         std::move(statePtr),
         [selectedTrackIds = std::move(selectedTrackIds), optBeforeTrackId](State& state) mutable
         {
-          return state.library.commands().moveListOrderAsync(
+          return state.editing._commands.get().moveListOrderAsync(
             state.order, std::move(selectedTrackIds), optBeforeTrackId);
         });
     }
@@ -310,7 +311,7 @@ namespace ao::uimodel
                                                 : std::optional<TrackId>{remaining[insertionIndex]};
     }
 
-    rt::Library& library;
+    LibraryEditing editing;
     rt::ViewService& views;
     rt::ViewId viewId = rt::kInvalidViewId;
     rt::BoundListOrder order;
@@ -329,7 +330,7 @@ namespace ao::uimodel
     mutable async::Signal<> invalidated;
   };
 
-  Result<ListOrderAuthoringSession> ListOrderAuthoringSession::begin(rt::Library& library,
+  Result<ListOrderAuthoringSession> ListOrderAuthoringSession::begin(LibraryEditing const editing,
                                                                      rt::ViewService& views,
                                                                      rt::ViewId const viewId,
                                                                      i18n::MessageCatalog const& textCatalog)
@@ -348,6 +349,7 @@ namespace ao::uimodel
       return std::unexpected{sourceStateRes.error()};
     }
 
+    auto const& library = editing.library();
     auto capabilities =
       describeViewListOrderCapabilities(textCatalog, *stateRes, *sourceStateRes, library.authoringAvailability());
 
@@ -388,7 +390,7 @@ namespace ao::uimodel
     }
 
     return ListOrderAuthoringSession{std::make_shared<State>(
-      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes), textCatalog)};
+      editing, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes), textCatalog)};
   }
 
   ListOrderAuthoringSession::ListOrderAuthoringSession(std::shared_ptr<State> statePtr)
@@ -492,7 +494,7 @@ namespace ao::uimodel
     }
 
     return State::submitAsync<rt::AuthoringResult<rt::ResetListOrderReply>>(
-      _statePtr, [](State& state) { return state.library.commands().resetListOrderAsync(state.order); });
+      _statePtr, [](State& state) { return state.editing._commands.get().resetListOrderAsync(state.order); });
   }
 
   async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>>
@@ -506,6 +508,6 @@ namespace ao::uimodel
     }
 
     return State::submitAsync<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>(
-      _statePtr, [](State& state) { return state.library.commands().forgetHiddenListOrderAsync(state.order); });
+      _statePtr, [](State& state) { return state.editing._commands.get().forgetHiddenListOrderAsync(state.order); });
   }
 } // namespace ao::uimodel

@@ -254,7 +254,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const trackId = addRuntimeTrack(runtime, {.title = "Track with relocated media"});
+    auto const trackId = addRuntimeTrack(fixture.owner(), {.title = "Track with relocated media"});
     auto const optUri = runtime.library().snapshot().trackUri(trackId);
     REQUIRE(optUri);
     auto const path = runtime.musicRoot() / *optUri;
@@ -275,7 +275,7 @@ namespace ao::gtk::test
     CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
     CHECK(cache.rowLoadCount() == 1);
 
-    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "Media restored"; });
+    updateRuntimeTrack(fixture.owner(), trackId, [](library::test::TrackSpec& spec) { spec.title = "Media restored"; });
 
     REQUIRE(cache.trackRow(trackId, TrackRowPathDemand::Required) == rowPtr);
     CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == path.string());
@@ -289,7 +289,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-    auto const trackId = addRuntimeTrack(runtime, {.title = "Original title", .year = 2020});
+    auto const trackId = addRuntimeTrack(fixture.owner(), {.title = "Original title", .year = 2020});
     auto const rowPtr = cache.trackRow(trackId);
     REQUIRE(rowPtr);
 
@@ -297,7 +297,7 @@ namespace ao::gtk::test
     {
       REQUIRE(rowPtr->fieldText(rt::TrackField::Title) == "Original title");
       REQUIRE(rowPtr->fieldText(rt::TrackField::Year) == "2020");
-      updateRuntimeTrack(runtime,
+      updateRuntimeTrack(fixture.owner(),
                          trackId,
                          [](library::test::TrackSpec& spec)
                          {
@@ -316,7 +316,7 @@ namespace ao::gtk::test
     SECTION("Deleting a track drops its cache entry despite an external row reference")
     {
       REQUIRE(cache.cachedRowCount() == 1);
-      REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteTrackAsync(trackId)));
+      REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().deleteTrackAsync(trackId)));
       drainGtkEvents();
 
       CHECK(cache.cachedRowCount() == 0);

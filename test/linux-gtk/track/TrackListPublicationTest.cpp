@@ -67,12 +67,13 @@ namespace ao::gtk::test
       return modelPtr;
     }
 
-    void editTitle(rt::AppRuntime& runtime, std::span<TrackId const> trackIds, std::string_view title)
+    void editTitle(rt::AppRuntimeOwner& owner, std::span<TrackId const> trackIds, std::string_view title)
     {
+      auto& runtime = owner.runtime();
       auto const targets = ao::test::requireValue(runtime.library().bindTrackTargets(trackIds));
       auto const editRes = runGtkTask(
         runtime,
-        runtime.library().commands().updateMetadataAsync(targets, rt::MetadataPatch{.optTitle = std::string{title}}));
+        owner.libraryCommands().updateMetadataAsync(targets, rt::MetadataPatch{.optTitle = std::string{title}}));
       REQUIRE(editRes);
       REQUIRE(editRes->status == rt::AuthoringStatus::Applied);
     }
@@ -135,12 +136,12 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const editedId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Bravo", .artist = "Aimer", .album = "Mixtape"});
-    auto const observedId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Charlie", .artist = "AIMER", .album = "Mixtape"});
-    auto const unobservedId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Delta", .artist = "AIMER", .album = "Mixtape"});
+    auto const editedId = addRuntimeTrack(
+      fixture.owner(), library::test::TrackSpec{.title = "Bravo", .artist = "Aimer", .album = "Mixtape"});
+    auto const observedId = addRuntimeTrack(
+      fixture.owner(), library::test::TrackSpec{.title = "Charlie", .artist = "AIMER", .album = "Mixtape"});
+    auto const unobservedId = addRuntimeTrack(
+      fixture.owner(), library::test::TrackSpec{.title = "Delta", .artist = "AIMER", .album = "Mixtape"});
 
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto const modelPtr =
@@ -185,7 +186,7 @@ namespace ao::gtk::test
     auto const rowLoadsBefore = rowCache.rowLoadCount();
 
     // Moving the first row changes the heading's artist spelling, not just the track order.
-    editTitle(runtime, std::array{editedId}, "Yankee");
+    editTitle(fixture.owner(), std::array{editedId}, "Yankee");
 
     REQUIRE(projectionBatches.size() == 1);
     REQUIRE(projectionBatches.front().deltas.size() == 1);
@@ -224,10 +225,12 @@ namespace ao::gtk::test
     CAPTURE(twoRanges);
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const firstId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Outside One", .artist = "Aimer"});
+    auto const firstId =
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Outside One", .artist = "Aimer"});
     auto const anchorId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Match Anchor", .artist = "Celine"});
-    auto const lastId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Outside Two", .artist = "Daho"});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Match Anchor", .artist = "Celine"});
+    auto const lastId =
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Outside Two", .artist = "Daho"});
     auto const editedIds = std::array{firstId, lastId};
 
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
@@ -278,7 +281,7 @@ namespace ao::gtk::test
     auto const projectionSub =
       projection.subscribe([&batches](rt::TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
     batches.clear();
-    editTitle(runtime, std::span{editedIds}.first(twoRanges ? 2 : 1), "Match New");
+    editTitle(fixture.owner(), std::span{editedIds}.first(twoRanges ? 2 : 1), "Match New");
 
     REQUIRE(batches.size() == 1);
     auto const& deltas = batches.front().deltas;
@@ -312,7 +315,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Before"});
+    auto const trackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Before"});
 
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto const modelPtr = openTrackList(runtime, rowCache, {.target = rt::GlobalViewKind::AllTracks});
@@ -336,7 +339,7 @@ namespace ao::gtk::test
                                                                  { sawReset = sawReset || change.libraryReset; });
 
     // List-only Restore publishes a real library reset without replacing the track identities.
-    auto& jobs = runtime.library().jobs();
+    auto& jobs = fixture.owner().libraryJobs();
     auto plan =
       ao::test::requireValue(runGtkTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Restore)));
     auto const report = ao::test::requireValue(runGtkTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(plan))));
@@ -345,7 +348,7 @@ namespace ao::gtk::test
     REQUIRE(itemAt(*modelPtr, 0) == itemPtr);
 
     // The binding gets no new metadata lookup just because the model announced a reset.
-    editTitle(runtime, std::array{trackId}, "After");
+    editTitle(fixture.owner(), std::array{trackId}, "After");
     CHECK(boundTitle == "After");
   }
 } // namespace ao::gtk::test

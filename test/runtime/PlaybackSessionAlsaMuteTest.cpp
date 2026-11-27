@@ -108,54 +108,56 @@ namespace ao::rt::test
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore);
+    auto& runtime = ownerPtr->runtime();
     auto mixerStatePtr = std::make_shared<audio::backend::detail::test::FakeMixerState>();
     mixerStatePtr->optHardwareMuted = true;
     mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {80L}});
-    runtimePtr->addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
+    runtime.addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
     executor->drain();
 
     auto const uri =
-      audio::test::installAudioFixture(runtimePtr->musicRoot(), "basic_metadata.flac", "alsa-mute-session.flac");
-    auto const trackId = addRuntimeTrack(*runtimePtr,
+      audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "alsa-mute-session.flac");
+    auto const trackId = addRuntimeTrack(*ownerPtr,
                                          library::test::TrackSpec{
                                            .title = "External mute",
                                            .uri = uri,
                                            .duration = std::chrono::seconds{10},
                                          },
                                          [&] { executor->drain(); });
-    runtimePtr->sources().reloadAllTracks();
-    auto const viewRes = runtimePtr->workspace().navigate(NavigationRequest{
+    runtime.sources().reloadAllTracks();
+    auto const viewRes = runtime.workspace().navigate(NavigationRequest{
       .target = FilteredListTarget{.listId = kAllTracksListId, .filterExpression = {}},
     });
     REQUIRE(viewRes);
-    REQUIRE(executor->tryDrainUntil([&] { return runtimePtr->playback().snapshot().transport.ready; }));
+    REQUIRE(executor->tryDrainUntil([&] { return runtime.playback().snapshot().transport.ready; }));
     REQUIRE(admitPlaybackAndWait(
       *executor,
-      [&] { return runtimePtr->playback().commands().startFromView(*viewRes, trackId); },
-      [&] { return runtimePtr->playback().snapshot().transport.positionRevision; }));
+      [&] { return runtime.playback().commands().startFromView(*viewRes, trackId); },
+      [&] { return runtime.playback().snapshot().transport.positionRevision; }));
 
-    CHECK_FALSE(runtimePtr->playback().snapshot().transport.volume.muted);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    CHECK_FALSE(runtime.playback().snapshot().transport.volume.muted);
+    REQUIRE(runtime.savePlaybackSession());
     CHECK_FALSE(loadStoredSession(playbackSessionStore).muted);
 
-    runtimePtr->playback().commands().stop();
-    runtimePtr.reset();
+    runtime.playback().commands().stop();
+    ownerPtr.reset();
     mixerStatePtr->optHardwareMuted = false;
     auto restoredExecutorPtr = std::make_unique<QueuedExecutor>();
     auto* const restoredExecutor = restoredExecutorPtr.get();
-    auto restoredRuntimePtr = makeRuntime(tempDir, std::move(restoredExecutorPtr), &playbackSessionStore);
-    restoredRuntimePtr->addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr, true));
+    auto restoredOwnerPtr = makeRuntime(tempDir, std::move(restoredExecutorPtr), &playbackSessionStore);
+    auto& restoredRuntime = restoredOwnerPtr->runtime();
+    restoredRuntime.addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr, true));
     restoredExecutor->drain();
-    REQUIRE(restoredRuntimePtr->playback().snapshot().transport.volume.muted);
+    REQUIRE(restoredRuntime.playback().snapshot().transport.volume.muted);
     CHECK(mixerStatePtr->writeCount == 0U);
 
-    auto const restoredRes = restoredRuntimePtr->restorePlaybackSession();
+    auto const restoredRes = restoredRuntime.restorePlaybackSession();
     restoredExecutor->drain();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    CHECK_FALSE(restoredRuntimePtr->playback().snapshot().transport.volume.muted);
+    CHECK_FALSE(restoredRuntime.playback().snapshot().transport.volume.muted);
     // The preinitialized fake mixer receives restore's explicit volume request, not a mute-switch write.
     CHECK(mixerStatePtr->writeCount == 1U);
   }
@@ -168,59 +170,60 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
     auto mixerStatePtr = std::make_shared<audio::backend::detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back(
       {.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 100L}, .rawLevels = {100L}});
-    runtimePtr->addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
+    runtime.addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
     executor->drain();
 
     auto const uri =
-      audio::test::installAudioFixture(runtimePtr->musicRoot(), "basic_metadata.flac", "alsa-volume-session.flac");
-    auto const trackId = addRuntimeTrack(*runtimePtr,
+      audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "alsa-volume-session.flac");
+    auto const trackId = addRuntimeTrack(*ownerPtr,
                                          library::test::TrackSpec{
                                            .title = "Hardware volume intent",
                                            .uri = uri,
                                            .duration = std::chrono::seconds{10},
                                          },
                                          [&] { executor->drain(); });
-    runtimePtr->sources().reloadAllTracks();
-    auto const viewRes = runtimePtr->workspace().navigate(NavigationRequest{
+    runtime.sources().reloadAllTracks();
+    auto const viewRes = runtime.workspace().navigate(NavigationRequest{
       .target = FilteredListTarget{.listId = kAllTracksListId, .filterExpression = {}},
     });
     REQUIRE(viewRes);
-    REQUIRE(executor->tryDrainUntil([&] { return runtimePtr->playback().snapshot().transport.ready; }));
+    REQUIRE(executor->tryDrainUntil([&] { return runtime.playback().snapshot().transport.ready; }));
     REQUIRE(admitPlaybackAndWait(
       *executor,
-      [&] { return runtimePtr->playback().commands().startFromView(*viewRes, trackId); },
-      [&] { return runtimePtr->playback().snapshot().transport.positionRevision; }));
-    runtimePtr->playback().commands().pause();
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{450});
-    runtimePtr->playback().commands().setVolume(0.25F);
-    runtimePtr->playback().commands().setMuted(true);
+      [&] { return runtime.playback().commands().startFromView(*viewRes, trackId); },
+      [&] { return runtime.playback().snapshot().transport.positionRevision; }));
+    runtime.playback().commands().pause();
+    runtime.playback().commands().seek(std::chrono::milliseconds{450});
+    runtime.playback().commands().setVolume(0.25F);
+    runtime.playback().commands().setMuted(true);
     executor->drain();
-    REQUIRE(runtimePtr->playback().snapshot().transport.volume.level == 0.25F);
-    REQUIRE(runtimePtr->playback().snapshot().transport.volume.hardwareAssisted);
+    REQUIRE(runtime.playback().snapshot().transport.volume.level == 0.25F);
+    REQUIRE(runtime.playback().snapshot().transport.volume.hardwareAssisted);
     REQUIRE(mixerStatePtr->writeCount == 1U);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
     auto const expected = loadStoredSession(playbackSessionStore);
     REQUIRE(expected.currentTrackId == trackId);
     REQUIRE(expected.positionMs == 450U);
     REQUIRE(expected.volume == 0.25F);
     REQUIRE(expected.muted);
-    runtimePtr->startPlaybackSessionPersistence();
+    runtime.startPlaybackSessionPersistence();
 
-    runtimePtr->playback().commands().stop();
+    runtime.playback().commands().stop();
     executor->drain();
 
     // The pre-stop restorable transport cache must not hide a wrong public output snapshot.
-    auto const stoppedVolume = runtimePtr->playback().snapshot().transport.volume;
+    auto const stoppedVolume = runtime.playback().snapshot().transport.volume;
     CHECK(stoppedVolume.level == 0.25F);
     CHECK(stoppedVolume.muted);
     CHECK_FALSE(stoppedVolume.available);
     CHECK_FALSE(stoppedVolume.hardwareAssisted);
     CHECK(loadStoredSession(playbackSessionStore) == expected);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
     auto checkpointStore = ConfigStore{configPath};
     CHECK(loadStoredSession(checkpointStore) == expected);
     CHECK(mixerStatePtr->hardwareElements.front().rawLevels == std::vector<long>{25L});
@@ -231,28 +234,29 @@ namespace ao::rt::test
     sentinel.volume = 0.75F;
     sentinel.muted = false;
     REQUIRE(playbackSessionStore.save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
-    runtimePtr->shutdown();
+    ownerPtr->shutdown();
     auto shutdownStore = ConfigStore{configPath};
     CHECK(loadStoredSession(shutdownStore) == expected);
     CHECK(mixerStatePtr->writeCount == 1U);
-    runtimePtr.reset();
+    ownerPtr.reset();
 
     auto restoredExecutorPtr = std::make_unique<QueuedExecutor>();
     auto* const restoredExecutor = restoredExecutorPtr.get();
-    auto restoredRuntimePtr = makeRuntime(tempDir, std::move(restoredExecutorPtr), &shutdownStore, &sleeper);
-    restoredRuntimePtr->addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
+    auto restoredOwnerPtr = makeRuntime(tempDir, std::move(restoredExecutorPtr), &shutdownStore, &sleeper);
+    auto& restoredRuntime = restoredOwnerPtr->runtime();
+    restoredRuntime.addAudioProvider(std::make_unique<AlsaMuteProvider>(mixerStatePtr));
     restoredExecutor->drain();
-    auto const restoredRes = restoredRuntimePtr->restorePlaybackSession();
+    auto const restoredRes = restoredRuntime.restorePlaybackSession();
     restoredExecutor->drain();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    CHECK(restoredRuntimePtr->playback().snapshot().transport.volume.level == 0.25F);
-    CHECK(restoredRuntimePtr->playback().snapshot().transport.volume.muted);
+    CHECK(restoredRuntime.playback().snapshot().transport.volume.level == 0.25F);
+    CHECK(restoredRuntime.playback().snapshot().transport.volume.muted);
     CHECK(mixerStatePtr->hardwareElements.front().rawLevels == std::vector<long>{25L});
     CHECK((mixerStatePtr->writtenLevels == std::vector<long>{25L, 25L}));
     CHECK(mixerStatePtr->writeCount == 2U);
-    REQUIRE(restoredRuntimePtr->savePlaybackSession());
+    REQUIRE(restoredRuntime.savePlaybackSession());
     auto restoredStore = ConfigStore{configPath};
     CHECK(loadStoredSession(restoredStore) == expected);
   }

@@ -26,10 +26,10 @@
 #include <ao/Error.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -64,10 +64,10 @@ namespace ao::tui::test
 
   EventControllerFixture::EventControllerFixture(bool const useControlledSleeper)
     : sleeperPtr{useControlledSleeper ? std::make_unique<rt::test::ControlledSleeper>() : nullptr}
-    , runtimePtr{rt::test::makeRuntime(tempDir,
-                                       makeQueuedExecutor(executor),
-                                       nullptr,
-                                       sleeperPtr == nullptr ? nullptr : sleeperPtr.get())}
+    , runtimeOwnerPtr{rt::test::makeRuntime(tempDir,
+                                            makeQueuedExecutor(executor),
+                                            nullptr,
+                                            sleeperPtr == nullptr ? nullptr : sleeperPtr.get())}
   {
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     addTrack(library::test::TrackSpec{.title = "First", .uri = fixturePath});
@@ -76,9 +76,9 @@ namespace ao::tui::test
 
   LibraryController EventControllerFixture::makeLibrary()
   {
-    return LibraryController{runtimePtr->library(),
-                             runtimePtr->views(),
-                             runtimePtr->workspace(),
+    return LibraryController{runtime.library(),
+                             runtime.views(),
+                             runtime.workspace(),
                              ao::test::englishMessageCatalog(),
                              listPresentations,
                              trackColumnLayouts};
@@ -89,42 +89,39 @@ namespace ao::tui::test
                                                      InputCompletionCallback commandCompletion,
                                                      InputCompletionCallback filterCompletion)
   {
+    auto const editing = uimodel::LibraryEditing{runtimeOwnerPtr->libraryCommands()};
+
     if (libraryScanPtr == nullptr)
     {
-      libraryScanPtr = std::make_unique<LibraryScanController>(runtimePtr->async(),
-                                                               runtimePtr->library().jobs(),
-                                                               runtimePtr->notifications(),
-                                                               ao::test::englishMessageCatalog());
+      libraryScanPtr = std::make_unique<LibraryScanController>(
+        runtime.async(), runtimeOwnerPtr->libraryJobs(), runtime.notifications(), ao::test::englishMessageCatalog());
     }
 
     if (listOrderPtr == nullptr)
     {
-      listOrderPtr = std::make_unique<ListOrderController>(runtimePtr->async(),
-                                                           runtimePtr->library(),
-                                                           runtimePtr->views(),
-                                                           runtimePtr->notifications(),
-                                                           ao::test::englishMessageCatalog());
+      listOrderPtr = std::make_unique<ListOrderController>(
+        runtime.async(), editing, runtime.views(), runtime.notifications(), ao::test::englishMessageCatalog());
     }
 
     if (trackEditPtr == nullptr)
     {
-      trackEditPtr = std::make_unique<TrackEditController>(runtimePtr->async(),
-                                                           runtimePtr->library(),
-                                                           runtimePtr->notifications(),
+      trackEditPtr = std::make_unique<TrackEditController>(runtime.async(),
+                                                           editing,
+                                                           runtime.notifications(),
                                                            ao::test::englishMessageCatalog(),
                                                            TrackEditController::Outputs{},
-                                                           runtimePtr->completion(),
-                                                           runtimePtr->textOrderingPolicy());
+                                                           runtime.completion(),
+                                                           runtime.textOrderingPolicy());
     }
 
     if (listAuthoringPtr == nullptr)
     {
-      listAuthoringPtr = std::make_unique<ListAuthoringController>(runtimePtr->async(),
-                                                                   runtimePtr->library(),
-                                                                   runtimePtr->views(),
-                                                                   runtimePtr->sources(),
-                                                                   runtimePtr->completion(),
-                                                                   runtimePtr->notifications(),
+      listAuthoringPtr = std::make_unique<ListAuthoringController>(runtime.async(),
+                                                                   editing,
+                                                                   runtime.views(),
+                                                                   runtime.sources(),
+                                                                   runtime.completion(),
+                                                                   runtime.notifications(),
                                                                    ao::test::englishMessageCatalog(),
                                                                    ListAuthoringController::Outputs{});
     }
@@ -159,8 +156,8 @@ namespace ao::tui::test
     hitRegions.trackTableRevision = library.trackRowsRevision();
     return EventController{shell,
                            library,
-                           runtimePtr->async(),
-                           runtimePtr->playback(),
+                           runtime.async(),
+                           runtime.playback(),
                            keymapPlan,
                            EventControllerBindings{
                              .outputDevices = outputDevices,
@@ -168,7 +165,7 @@ namespace ao::tui::test
                              .trackColumnLayouts = trackColumnLayouts,
                              .trackColumnResizePreview = trackColumnResizePreview,
                              .activityStatusViewModel = activityStatusViewModel,
-                             .notifications = runtimePtr->notifications(),
+                             .notifications = runtime.notifications(),
                              .libraryScan = *libraryScanPtr,
                              .listOrder = *listOrderPtr,
                              .trackEdit = *trackEditPtr,
@@ -185,34 +182,32 @@ namespace ao::tui::test
 
   TrackId EventControllerFixture::addTrack(library::test::TrackSpec const& spec) const
   {
-    return rt::test::addRuntimeTrack(*runtimePtr, spec, [this] { executor->drain(); });
+    return rt::test::addRuntimeTrack(*runtimeOwnerPtr, spec, [this] { executor->drain(); });
   }
 
   ListId EventControllerFixture::addList(std::string name) const
   {
     return ao::test::requireValue(rt::test::runRuntimeTask(
-      *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = std::move(name)})));
+      runtime, runtimeOwnerPtr->libraryCommands().createListAsync(rt::ListDraft{.name = std::move(name)})));
   }
 
   void EventControllerFixture::addReadyAudioProvider() const
   {
-    rt::test::addReadyAudioProvider(*runtimePtr);
+    rt::test::addReadyAudioProvider(runtime);
     executor->drain();
   }
 
   void EventControllerFixture::addReadyAudioProvider(audio::BackendProvider::Status status) const
   {
-    rt::test::addReadyAudioProvider(*runtimePtr, std::move(status));
+    rt::test::addReadyAudioProvider(runtime, std::move(status));
     executor->drain();
   }
 
   bool EventControllerFixture::tryWaitForPlayback(TrackId const trackId)
   {
     auto const settled = rt::test::tryWaitForPlaybackSettlement(
-      *executor,
-      observedPositionRevision,
-      [this] { return runtimePtr->playback().snapshot().transport.positionRevision; });
-    observedPositionRevision = runtimePtr->playback().snapshot().transport.positionRevision;
-    return settled && runtimePtr->playback().snapshot().transport.nowPlaying.trackId == trackId;
+      *executor, observedPositionRevision, [this] { return runtime.playback().snapshot().transport.positionRevision; });
+    observedPositionRevision = runtime.playback().snapshot().transport.positionRevision;
+    return settled && runtime.playback().snapshot().transport.nowPlaying.trackId == trackId;
   }
 } // namespace ao::tui::test

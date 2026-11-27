@@ -1,25 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../components/ContainerTestHelpers.h"
-#include "app/ShellLayoutCollaborators.h"
+#include "app/linux-gtk/layout/component/ComponentRegistrations.h"
 #include "app/linux-gtk/layout/document/LayoutDialect.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/MessageCatalogTestSupport.h"
-#include "test/TestFixtureSupport.h"
 #include "test/linux-gtk/GtkLayoutTestSupport.h"
-#include "test/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutValidation.h>
-#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -28,27 +24,17 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
-#include <memory>
 #include <utility>
 
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
-  using ao::gtk::test::makeRuntime;
 
   TEST_CASE("absoluteCanvas - builds positioned child containers")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
-
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(
-      registry,
-      *runtimePtr,
-      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
-                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    registerContainerComponents(registry, ao::test::englishMessageCatalog());
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{registry.schema()};
@@ -125,16 +111,8 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
-
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(
-      registry,
-      *runtimePtr,
-      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
-                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    registerContainerComponents(registry, ao::test::englishMessageCatalog());
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{registry.schema()};

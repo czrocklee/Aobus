@@ -71,6 +71,7 @@
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
@@ -754,7 +755,7 @@ namespace
       auto workspaceStorePtr = std::make_unique<ao::rt::ConfigStore>(
         ao::rt::LibraryPaths{_optTempRoot->root()}.databasePath() / "workspace.yaml");
 
-      auto runtimeRes = ao::rt::AppRuntime::create(ao::rt::AppRuntimeDependencies{
+      auto runtimeRes = ao::rt::AppRuntimeOwner::open(ao::rt::AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = _optTempRoot->root(),
         .databasePath = ao::rt::LibraryPaths{_optTempRoot->root()}.databasePath(),
@@ -767,17 +768,18 @@ namespace
         return;
       }
 
-      _runtimePtr = std::make_unique<ao::rt::AppRuntime>(std::move(*runtimeRes));
+      _runtimeOwnerPtr = std::make_unique<ao::rt::AppRuntimeOwner>(std::move(*runtimeRes));
+      _runtime = &_runtimeOwnerPtr->runtime();
       // Publish the borrow only after the runtime owns the executor in final storage.
       _executor = runtimeExecutor;
-      _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
+      _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtime->library().changes());
       _presentationCatalogPtr =
-        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *controllerCatalogRes);
+        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtime->workspace(), *controllerCatalogRes);
       _listPresentationsPtr =
-        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
-      _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
-                                                                       _runtimePtr->workspace(),
-                                                                       _runtimePtr->library(),
+        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtime->library().changes());
+      _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtime->views(),
+                                                                       _runtime->workspace(),
+                                                                       _runtime->library(),
                                                                        *_columnLayoutsPtr,
                                                                        *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
@@ -785,7 +787,7 @@ namespace
       if (_identityOnly)
       {
         if (auto const songsRes =
-              _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Songs, {.recordHistory = false});
+              _runtime->workspace().setActivePresentation(BuiltinPreset::Songs, {.recordHistory = false});
             !songsRes)
         {
           failSetup(songsRes.error().message);
@@ -796,9 +798,8 @@ namespace
         return;
       }
 
-      _selectionSub =
-        _runtimePtr->views().onSelectionChanged([this](ao::rt::ViewService::SelectionChanged const& change)
-                                                { _selectionPublications.push_back(change.selection); });
+      _selectionSub = _runtime->views().onSelectionChanged([this](ao::rt::ViewService::SelectionChanged const& change)
+                                                           { _selectionPublications.push_back(change.selection); });
 
       _schemaPtr = std::make_unique<ao::uimodel::LayoutSchema>(ao::winui::layoutSchema());
       _registryPtr = std::make_unique<ao::winui::layout::ComponentRegistry>(*_schemaPtr, _actions);
@@ -1268,7 +1269,7 @@ namespace
     bool tryVerifyRetiredRowSource()
     {
       _report.beginScenario("an in-place reorder retires uncached reads from the previous row source");
-      auto& views = _runtimePtr->views();
+      auto& views = _runtime->views();
       auto const viewId = _trackListPtr->viewId();
       auto const projectionRes = views.findTrackListProjection(viewId);
       auto const previousItems = _trackListPtr->items();
@@ -1312,7 +1313,7 @@ namespace
       }
 
       auto const restoredRes =
-        _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
+        _runtime->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
 
       if (!restoredRes)
       {
@@ -1325,7 +1326,7 @@ namespace
 
     bool isControllerPresetActive(ao::rt::TrackPresetId const& presetId) const
     {
-      auto const* presentation = _runtimePtr->views().findTrackListPresentation(_trackListPtr->viewId());
+      auto const* presentation = _runtime->views().findTrackListPresentation(_trackListPtr->viewId());
       return presentation != nullptr && presentation->isPreset(presetId);
     }
 
@@ -1335,7 +1336,7 @@ namespace
     {
       auto expected = ao::rt::builtinTrackPresentationPreset(preset).spec;
       expected.optColumnSort = optSort;
-      auto const* presentation = _runtimePtr->views().findTrackListPresentation(_trackListPtr->viewId());
+      auto const* presentation = _runtime->views().findTrackListPresentation(_trackListPtr->viewId());
       _report.check(presentation != nullptr && *presentation == expected,
                     "the expected preset and its exact optional header sort are active");
       checkPresentationButton(label);
@@ -1510,7 +1511,7 @@ namespace
       checkUnselectedTopTrack(_seededTrackIds.front(), L"Probe Title 00");
       clearSelectionPublications();
       // Fixture durations increase with seed index; the old first row moves to the very end.
-      if (auto const sortRes = _runtimePtr->views().setColumnSort(
+      if (auto const sortRes = _runtime->views().setColumnSort(
             _trackListPtr->viewId(), {.column = ao::rt::TrackField::Duration, .ascending = false});
           !sortRes)
       {
@@ -1579,7 +1580,7 @@ namespace
       }
 
       if (auto const artistsRes =
-            _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Artists, {.recordHistory = false});
+            _runtime->workspace().setActivePresentation(BuiltinPreset::Artists, {.recordHistory = false});
           !artistsRes)
       {
         failSetup(artistsRes.error().message);
@@ -1593,7 +1594,7 @@ namespace
     {
       // Use the production serializer and discard live state before adopting the readback.
       auto store = ao::rt::ConfigStore{_optTempRoot->root() / std::string{name}};
-      auto const schema = ao::uimodel::TrackColumnLayoutYamlSchema{_runtimePtr->library().snapshot().libraryId()};
+      auto const schema = ao::uimodel::TrackColumnLayoutYamlSchema{_runtime->library().snapshot().libraryId()};
       auto const saved = _columnLayoutsPtr->snapshot();
       auto loaded = ao::uimodel::TrackColumnLayouts::Snapshot{};
       using ao::uimodel::kTrackColumnLayoutsConfigGroup;
@@ -1640,7 +1641,7 @@ namespace
       _columnLayoutsPtr->restore({}, {});
 
       if (auto const albumsRes =
-            _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
+            _runtime->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
           !albumsRes)
       {
         failSetup(albumsRes.error().message);
@@ -1686,7 +1687,7 @@ namespace
     {
       _report.beginScenario("File Path visibility changes reproject cells from the same track id");
       {
-        auto const snapshot = _runtimePtr->library().snapshot();
+        auto const snapshot = _runtime->library().snapshot();
         auto const track = _seededTrackIds.front();
         using ao::rt::TrackField;
         using ao::winui::TrackColumnCellSpec;
@@ -1706,7 +1707,7 @@ namespace
 
     void changeColumnTestPreset(BuiltinPreset const preset, Step const next)
     {
-      if (auto const res = _runtimePtr->workspace().setActivePresentation(preset, {.recordHistory = false}); !res)
+      if (auto const res = _runtime->workspace().setActivePresentation(preset, {.recordHistory = false}); !res)
       {
         failSetup(res.error().message);
         return;
@@ -2132,7 +2133,7 @@ namespace
       // Filtering does not discard stable Runtime ids. Select tracks from two
       // albums so native restoration can exercise both partial and empty matches.
       _secondTrack = _seededTrackIds[kTracksPerAlbum + 3];
-      auto const selectedRes = _runtimePtr->views().setSelection(_trackListPtr->viewId(), {_secondTrack, _firstTrack});
+      auto const selectedRes = _runtime->views().setSelection(_trackListPtr->viewId(), {_secondTrack, _firstTrack});
 
       if (!selectedRes)
       {
@@ -2141,7 +2142,7 @@ namespace
       }
 
       clearSelectionPublications();
-      auto const filterRes = _runtimePtr->views().setFilter(_trackListPtr->viewId(), "$album = \"Probe Album B\"");
+      auto const filterRes = _runtime->views().setFilter(_trackListPtr->viewId(), "$album = \"Probe Album B\"");
 
       if (!filterRes)
       {
@@ -2175,7 +2176,7 @@ namespace
         _trackListPtr->selection() == std::vector{_secondTrack, _firstTrack} && _selectionPublications.empty(),
         "hidden A remains runtime-selected in its original order without header-gesture publication");
       verifyAutomationSelection({_secondTrack});
-      auto const filterRes = _runtimePtr->views().setFilter(_trackListPtr->viewId(), "$album = \"Probe Album C\"");
+      auto const filterRes = _runtime->views().setFilter(_trackListPtr->viewId(), "$album = \"Probe Album C\"");
 
       if (!filterRes)
       {
@@ -2207,7 +2208,7 @@ namespace
         _trackListPtr->selection() == std::vector{_secondTrack, _firstTrack} && _selectionPublications.empty(),
         "both hidden runtime ids retain their order without any selection publication");
       verifyAutomationSelection({});
-      auto const filterRes = _runtimePtr->views().setFilter(_trackListPtr->viewId(), "");
+      auto const filterRes = _runtime->views().setFilter(_trackListPtr->viewId(), "");
 
       if (!filterRes)
       {
@@ -2502,11 +2503,10 @@ namespace
 
       _revealTrackId = TrackId{lastRow.TrackId()};
       auto const viewId = _trackListPtr->viewId();
-      auto& workspace = _runtimePtr->workspace();
+      auto& workspace = _runtime->workspace();
       // Both projection replacements and the temporary empty source view's
       // focus are still queued when Reveal consumes the live All Tracks view.
-      if (!_runtimePtr->views().setFilter(viewId, "$title ~ \"Missing\"") ||
-          !_runtimePtr->views().setFilter(viewId, ""))
+      if (!_runtime->views().setFilter(viewId, "$title ~ \"Missing\"") || !_runtime->views().setFilter(viewId, ""))
       {
         failSetup("could not queue the filtered and restored projections");
         return;
@@ -2680,15 +2680,14 @@ namespace
       }
 
       _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_optTempRoot->root() / "probe-theme.yaml");
-      _playbackActionsPtr =
-        std::make_unique<ao::uimodel::PlaybackActions>(_runtimePtr->playback(), [] { return false; });
+      _playbackActionsPtr = std::make_unique<ao::uimodel::PlaybackActions>(_runtime->playback(), [] { return false; });
 
       ao::winui::layout::registerTrackComponents(*_registryPtr,
-                                                 _runtimePtr->async(),
-                                                 _runtimePtr->views(),
-                                                 _runtimePtr->workspace(),
-                                                 _runtimePtr->completion(),
-                                                 _runtimePtr->resourceBytes(),
+                                                 _runtime->async(),
+                                                 _runtime->views(),
+                                                 _runtime->workspace(),
+                                                 _runtime->completion(),
+                                                 _runtime->resourceBytes(),
                                                  *_themeCoordinatorPtr,
                                                  *_trackListPtr,
                                                  *_presentationCatalogPtr,
@@ -2698,10 +2697,10 @@ namespace
                                                  [this](std::string message)
                                                  { _statusMessages.push_back(std::move(message)); });
       ao::winui::layout::registerPlaybackComponents(*_registryPtr,
-                                                    _runtimePtr->async(),
-                                                    _runtimePtr->playback(),
+                                                    _runtime->async(),
+                                                    _runtime->playback(),
                                                     *_playbackActionsPtr,
-                                                    _runtimePtr->resourceBytes(),
+                                                    _runtime->resourceBytes(),
                                                     *_themeCoordinatorPtr,
                                                     std::move(*playbackCatalogRes),
                                                     _shellStateChanged,
@@ -2733,8 +2732,7 @@ namespace
     void a15SelectSongsStep()
     {
       _report.beginScenario("column overrides leave the preset label intact");
-      auto const songsRes =
-        _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Songs, {.recordHistory = false});
+      auto const songsRes = _runtime->workspace().setActivePresentation(BuiltinPreset::Songs, {.recordHistory = false});
 
       if (!songsRes)
       {
@@ -2815,7 +2813,7 @@ namespace
         .sortBy = {{.field = ao::rt::TrackSortField::Title, .ascending = true}},
         .visibleFields = {ao::rt::TrackField::Title, ao::rt::TrackField::Artist},
       };
-      auto const unknownRes = _runtimePtr->workspace().setActivePresentation(unknownSpec, {.recordHistory = false});
+      auto const unknownRes = _runtime->workspace().setActivePresentation(unknownSpec, {.recordHistory = false});
 
       if (!unknownRes)
       {
@@ -2834,7 +2832,7 @@ namespace
                     "applying the unknown-id presentation changed no per-list presentation preference");
 
       auto const namedRes =
-        _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
+        _runtime->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
 
       if (!namedRes)
       {
@@ -2843,9 +2841,9 @@ namespace
       }
 
       _presentationOriginalViewId = _trackListPtr->viewId();
-      auto const originalStateRes = _runtimePtr->views().findTrackListState(_presentationOriginalViewId);
+      auto const originalStateRes = _runtime->views().findTrackListState(_presentationOriginalViewId);
 
-      if (!originalStateRes || !originalStateRes->filterExpression.empty() || _runtimePtr->workspace().canGoBack())
+      if (!originalStateRes || !originalStateRes->filterExpression.empty() || _runtime->workspace().canGoBack())
       {
         failSetup("the presentation replay requires the original unfiltered view at the history head");
         return;
@@ -2858,7 +2856,7 @@ namespace
       _presentationReplaySpec = replayPreset;
       _presentationReplaySpec.optColumnSort =
         ao::rt::TrackColumnSort{.column = ao::rt::TrackField::DisplayTrackNumber, .ascending = false};
-      auto const replayViewRes = _runtimePtr->workspace().navigate({
+      auto const replayViewRes = _runtime->workspace().navigate({
         .target =
           ao::rt::FilteredListTarget{
             .listId = originalStateRes->listId,
@@ -2879,7 +2877,7 @@ namespace
       }
 
       _presentationReplayViewId = *replayViewRes;
-      auto const resetRes = _runtimePtr->workspace().setActivePresentation(replayPreset, {.recordHistory = false});
+      auto const resetRes = _runtime->workspace().setActivePresentation(replayPreset, {.recordHistory = false});
 
       if (!resetRes)
       {
@@ -2887,7 +2885,7 @@ namespace
         return;
       }
 
-      auto const originalViewRes = _runtimePtr->workspace().navigate({.target = originalStateRes->listId});
+      auto const originalViewRes = _runtime->workspace().navigate({.target = originalStateRes->listId});
 
       if (!originalViewRes || *originalViewRes != _presentationOriginalViewId)
       {
@@ -2910,7 +2908,7 @@ namespace
                       "the active list retains no saved presentation preference");
 
         _report.beginScenario("presentation history renders the committed view before controller adoption");
-        auto const replayStateRes = _runtimePtr->views().findTrackListState(_presentationReplayViewId);
+        auto const replayStateRes = _runtime->views().findTrackListState(_presentationReplayViewId);
 
         if (!replayStateRes || !replayStateRes->presentation.isPreset(BuiltinPreset::Artists) ||
             replayStateRes->presentation.optColumnSort || replayStateRes->optFilterError ||
@@ -2920,7 +2918,7 @@ namespace
           return;
         }
 
-        _report.check(_runtimePtr->workspace().snapshot().activeViewId == _presentationOriginalViewId &&
+        _report.check(_runtime->workspace().snapshot().activeViewId == _presentationOriginalViewId &&
                         _trackListPtr->viewId() == _presentationOriginalViewId,
                       "workspace and controller both observe the original view before Back");
 
@@ -2928,7 +2926,7 @@ namespace
         // chrome in the same presentation callback turn, not after the queued
         // WorkspaceChanged lets the controller catch up. Assertions stay in a
         // probe step outside Signal's fatal-owning delivery boundary.
-        _presentationReplaySub = _runtimePtr->views().onPresentationChanged(
+        _presentationReplaySub = _runtime->views().onPresentationChanged(
           [this](ao::rt::ViewService::PresentationChanged const& change)
           {
             if (_finishing)
@@ -2945,7 +2943,7 @@ namespace
             _presentationReplayObservations.push_back({
               .notifiedViewId = change.viewId,
               .presentation = change.presentation,
-              .workspaceViewId = _runtimePtr->workspace().snapshot().activeViewId,
+              .workspaceViewId = _runtime->workspace().snapshot().activeViewId,
               .controllerViewId = _trackListPtr->viewId(),
               .controllerUsesAlbums = isControllerPresetActive(BuiltinPreset::Albums),
               .label = label,
@@ -2955,7 +2953,7 @@ namespace
             });
           });
 
-        if (auto const backRes = _runtimePtr->workspace().goBack(); !backRes)
+        if (auto const backRes = _runtime->workspace().goBack(); !backRes)
         {
           failSetup(std::format("presentation history replay failed: {}", backRes.error().message));
           return;
@@ -2992,8 +2990,8 @@ namespace
           _report.check(observation.isEnabled, "the history view's presentation button remains enabled");
         }
 
-        auto const* presentation = _runtimePtr->views().findTrackListPresentation(_trackListPtr->viewId());
-        _report.check(_runtimePtr->workspace().snapshot().activeViewId == _presentationReplayViewId &&
+        auto const* presentation = _runtime->views().findTrackListPresentation(_trackListPtr->viewId());
+        _report.check(_runtime->workspace().snapshot().activeViewId == _presentationReplayViewId &&
                         _trackListPtr->viewId() == _presentationReplayViewId && presentation != nullptr &&
                         *presentation == _presentationReplaySpec,
                       "the controller later adopts the history view with its exact preset and override");
@@ -3003,16 +3001,14 @@ namespace
         // The replay is at the first introduced history point (B). One more
         // Back returns to the original history head; focusing A alone would
         // leave Back enabled in the later navigation geometry scenarios.
-        auto const cleanupBackRes = _runtimePtr->workspace().goBack();
-
-        if (!cleanupBackRes)
+        if (auto const cleanupBackRes = _runtime->workspace().goBack(); !cleanupBackRes)
         {
           failSetup(std::format("restoring the original history head failed: {}", cleanupBackRes.error().message));
           return;
         }
 
-        if (_runtimePtr->workspace().canGoBack() ||
-            _runtimePtr->workspace().snapshot().activeViewId != _presentationOriginalViewId)
+        if (_runtime->workspace().canGoBack() ||
+            _runtime->workspace().snapshot().activeViewId != _presentationOriginalViewId)
         {
           failSetup("one cleanup Back did not restore the original view at the history head");
           return;
@@ -3020,7 +3016,7 @@ namespace
 
         // Set up the named baseline for the next scenario without recording history.
         auto const albumsRes =
-          _runtimePtr->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
+          _runtime->workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
 
         if (!albumsRes)
         {
@@ -3028,7 +3024,7 @@ namespace
           return;
         }
 
-        auto const closedRes = _runtimePtr->workspace().closeView(_presentationReplayViewId);
+        auto const closedRes = _runtime->workspace().closeView(_presentationReplayViewId);
 
         if (!closedRes)
         {
@@ -3041,18 +3037,18 @@ namespace
         return;
       }
 
-      _report.check(!_runtimePtr->workspace().canGoBack(),
+      _report.check(!_runtime->workspace().canGoBack(),
                     "Back remains unavailable before transport and navigation geometry scenarios");
-      _report.check(_runtimePtr->workspace().snapshot().activeViewId == _presentationOriginalViewId &&
+      _report.check(_runtime->workspace().snapshot().activeViewId == _presentationOriginalViewId &&
                       _trackListPtr->viewId() == _presentationOriginalViewId &&
                       isControllerPresetActive(BuiltinPreset::Albums),
                     "the original named view is restored before transport and navigation scenarios");
       checkPresentationButton("Albums");
-      _report.check(!_runtimePtr->views().findTrackListState(_presentationReplayViewId),
+      _report.check(!_runtime->views().findTrackListState(_presentationReplayViewId),
                     "the temporary presentation-history view is closed");
       _report.check(_listPresentationsPtr->snapshot() == _presentationsBefore,
                     "the history replay changed no per-list presentation preference");
-      ao::winui::test::addSilentAudioOutput(*_runtimePtr);
+      ao::winui::test::addSilentAudioOutput(*_runtime);
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9TransportStep);
     }
 
@@ -3060,7 +3056,7 @@ namespace
     {
       _report.beginScenario("repeat transport presentation through the registered component");
 
-      auto& commands = _runtimePtr->playback().commands();
+      auto& commands = _runtime->playback().commands();
       auto const repeatExpectedEnabled = _playbackActionsPtr->isEnabled(ao::uimodel::PlaybackCommand::CycleRepeat);
       _report.check(repeatExpectedEnabled, "the silent provider establishes genuine runtime transport readiness");
 
@@ -3131,7 +3127,7 @@ namespace
       _liveButtonIdentity = _transportButton.as<Item>();
       _liveRepeatGlyphValue = repeatAll.symbolValue;
       _liveRepeatOneGlyphValue = repeatOne.symbolValue;
-      _runtimePtr->playback().commands().setRepeatMode(ao::rt::RepeatMode::Off);
+      _runtime->playback().commands().setRepeatMode(ao::rt::RepeatMode::Off);
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9LiveClearedStep);
     }
 
@@ -3167,7 +3163,7 @@ namespace
         std::format(
           "the live cleared tooltip '{}' and automation name '{}' share their full text", tooltip, automationName));
 
-      _runtimePtr->playback().commands().setRepeatMode(ao::rt::RepeatMode::One);
+      _runtime->playback().commands().setRepeatMode(ao::rt::RepeatMode::One);
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9LiveRepeatOneStep);
     }
 
@@ -3310,9 +3306,9 @@ namespace
     {
       _report.check(_root.ActualTheme() == ElementTheme::Dark, "the retained root returns to Dark");
       checkLoadedTransportColor();
-      _runtimePtr->playback().commands().setOutputDevice(ao::winui::test::silentAudioDevice().backendId,
-                                                         ao::audio::DeviceId{"unavailable-probe-device"},
-                                                         ao::audio::ProfileId{ao::audio::kProfileShared});
+      _runtime->playback().commands().setOutputDevice(ao::winui::test::silentAudioDevice().backendId,
+                                                      ao::audio::DeviceId{"unavailable-probe-device"},
+                                                      ao::audio::ProfileId{ao::audio::kProfileShared});
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9UnavailableFrameStep);
     }
 
@@ -3413,9 +3409,9 @@ namespace
       ao::winui::layout::registerNavigationPaneComponent(
         *_registryPtr,
         *_trackListPtr,
-        _runtimePtr->workspace(),
+        _runtime->workspace(),
         [this, projectionCatalog]
-        { return ao::uimodel::buildListTreeProjection(projectionCatalog, _runtimePtr->library().snapshot().lists()); },
+        { return ao::uimodel::buildListTreeProjection(projectionCatalog, _runtime->library().snapshot().lists()); },
         {},
         {},
         {},
@@ -3703,9 +3699,10 @@ namespace
       }
 
       ao::winui::layout::registerStatusComponents(*_registryPtr,
-                                                  _runtimePtr->views(),
-                                                  _runtimePtr->notifications(),
-                                                  _runtimePtr->library(),
+                                                  _runtime->views(),
+                                                  _runtime->notifications(),
+                                                  _runtime->jobProgress(),
+                                                  _runtime->library().changes(),
                                                   *_trackListPtr,
                                                   *catalogRes,
                                                   _shellStateChanged,
@@ -3724,11 +3721,11 @@ namespace
       _listCoordinatorPtr =
         std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
           .xamlRoot = [this] { return _root.XamlRoot(); },
-          .asyncRuntime = _runtimePtr->async(),
-          .library = _runtimePtr->library(),
-          .views = _runtimePtr->views(),
-          .sources = _runtimePtr->sources(),
-          .notifications = _runtimePtr->notifications(),
+          .asyncRuntime = _runtime->async(),
+          .editing = ao::uimodel::LibraryEditing{_runtimeOwnerPtr->libraryCommands()},
+          .views = _runtime->views(),
+          .sources = _runtime->sources(),
+          .notifications = _runtime->notifications(),
           .trackList = *_trackListPtr,
           .presentationCatalog = *_presentationCatalogPtr,
           .listPresentations = *_listPresentationsPtr,
@@ -3744,7 +3741,7 @@ namespace
             }
           },
         });
-      _listFeedSub = _runtimePtr->notifications().onFeedUpdated(
+      _listFeedSub = _runtime->notifications().onFeedUpdated(
         [this](ao::rt::NotificationFeedUpdate const& update)
         {
           if (update.mutationKind != ao::rt::NotificationFeedMutationKind::Posted)
@@ -3841,7 +3838,7 @@ namespace
 
     bool trySelectMembershipTrack(TrackId const trackId)
     {
-      auto const selectionRes = _runtimePtr->views().setSelection(_trackListPtr->viewId(), {trackId});
+      auto const selectionRes = _runtime->views().setSelection(_trackListPtr->viewId(), {trackId});
 
       if (!selectionRes)
       {
@@ -3853,7 +3850,7 @@ namespace
 
     bool hasMembershipTag(TrackId const trackId) const
     {
-      auto const tags = _runtimePtr->library().snapshot().selectionTags(std::array{trackId});
+      auto const tags = _runtime->library().snapshot().selectionTags(std::array{trackId});
       return std::ranges::contains(tags, "membershipprobe");
     }
 
@@ -3898,7 +3895,7 @@ namespace
         "Error: list not found: 9999", ao::rt::NotificationSeverity::Error, ao::rt::NotificationLifetime::history());
       _report.beginScenario("order results and rejected relative moves in a filtered Manual Order view");
       auto const& manual = ao::rt::builtinTrackPresentationPreset(BuiltinPreset::ListOrder);
-      auto const viewRes = _runtimePtr->workspace().navigate({
+      auto const viewRes = _runtime->workspace().navigate({
         .target = ao::rt::FilteredListTarget{.listId = _membershipListId, .filterExpression = "#membershipprobe"},
         .optPresentation = ao::rt::NavigationPresentation{.spec = manual.spec},
       });
@@ -3923,7 +3920,7 @@ namespace
       checkListFeedback("Reset Manual Order and forgot 1 saved position.",
                         ao::rt::NotificationSeverity::Info,
                         ao::rt::NotificationLifetime::transient());
-      _report.check(_runtimePtr->library().snapshot().listOrderTrackIds(_membershipListId).empty(),
+      _report.check(_runtime->library().snapshot().listOrderTrackIds(_membershipListId).empty(),
                     "Reset removed the saved position");
 
       if (trySelectMembershipTrack(_firstTrack))
@@ -3960,7 +3957,7 @@ namespace
       _report.beginScenario("an edit that cannot open reports the missing List but not into a retired window");
       expectListFeedback(nullptr);
       {
-        auto const retirement = _runtimePtr->notifications().onFeedUpdated(
+        auto const retirement = _runtime->notifications().onFeedUpdated(
           [this](ao::rt::NotificationFeedUpdate const& update)
           {
             if (update.mutationKind == ao::rt::NotificationFeedMutationKind::Posted)
@@ -4087,7 +4084,7 @@ namespace
                                                       .optBasePresetId = ao::rt::TrackPresetId{BuiltinPreset::Albums},
                                                       .spec = spec});
       auto const appliedRes =
-        _runtimePtr->workspace().setActivePresentation(kTrackNumberAliasesPresetId, {.recordHistory = false});
+        _runtime->workspace().setActivePresentation(kTrackNumberAliasesPresetId, {.recordHistory = false});
 
       if (_presentationCatalogPtr->specForId(kTrackNumberAliasesPresetId) != spec || !appliedRes ||
           !_trackListPtr->toggleSort(TrackField::DisplayTrackNumber))
@@ -4110,7 +4107,7 @@ namespace
       }
 
       optExpected->optColumnSort = optSort;
-      auto const* presentation = _runtimePtr->views().findTrackListPresentation(_trackListPtr->viewId());
+      auto const* presentation = _runtime->views().findTrackListPresentation(_trackListPtr->viewId());
       _report.check(presentation != nullptr && *presentation == *optExpected,
                     "the authored presentation retains the exact optional sort");
     }
@@ -4162,14 +4159,14 @@ namespace
       // before the posted workspace observers can adopt B.
       auto const mountedViewId = _trackListPtr->viewId();
       _executor->defer(
-        [this, mountedViewId, openViewsBefore = _runtimePtr->workspace().snapshot().openViews]
+        [this, mountedViewId, openViewsBefore = _runtime->workspace().snapshot().openViews]
         {
           if (_finishing)
           {
             return;
           }
 
-          auto& workspace = _runtimePtr->workspace();
+          auto& workspace = _runtime->workspace();
           auto const temporaryViewId = workspace.snapshot().activeViewId;
           auto const hasTemporaryFocus = temporaryViewId != mountedViewId && temporaryViewId != ao::rt::kInvalidViewId;
           _report.check(hasTemporaryFocus && _trackListPtr->viewId() == mountedViewId,
@@ -4186,7 +4183,7 @@ namespace
             }
           }
         });
-      auto const openedRes = _runtimePtr->workspace().navigate({.target = _membershipListId, .recordHistory = false});
+      auto const openedRes = _runtime->workspace().navigate({.target = _membershipListId, .recordHistory = false});
 
       if (!openedRes || *openedRes == mountedViewId)
       {
@@ -4223,10 +4220,9 @@ namespace
       verifyNativeHeaderText(L"display-track-number", L"Track #");
       verifyNativeHeaderText(L"track-number", L"Track \u2191");
       verifyHeaderOnlyTable();
-      _report.check(_runtimePtr->workspace()
-                      .setActivePresentation(kTrackNumberAliasesPresetId, {.recordHistory = false})
-                      .has_value(),
-                    "selecting the same preset clears the override");
+      _report.check(
+        _runtime->workspace().setActivePresentation(kTrackNumberAliasesPresetId, {.recordHistory = false}).has_value(),
+        "selecting the same preset clears the override");
       afterPostedNotifications(&WinUiTrackTableProbeApplication::verifyClearedTrackNumberAlias);
     }
 
@@ -4337,9 +4333,9 @@ namespace
           _executor->beginClosing();
         }
 
-        if (_runtimePtr)
+        if (_runtimeOwnerPtr)
         {
-          _runtimePtr->shutdown();
+          _runtimeOwnerPtr->shutdown();
         }
 
         if (_executor != nullptr)
@@ -4347,7 +4343,8 @@ namespace
           _executor->completeClosing();
         }
 
-        _runtimePtr.reset();
+        _runtime = nullptr;
+        _runtimeOwnerPtr.reset();
         _optTempRoot.reset();
         ao::winui::resetResourceLanguage();
       }
@@ -4412,7 +4409,8 @@ namespace
     TrackId _anchorTrack{};
     TrackId _revealTrackId{};
 
-    std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
+    std::unique_ptr<ao::rt::AppRuntimeOwner> _runtimeOwnerPtr;
+    ao::rt::AppRuntime* _runtime = nullptr;
     // AppRuntime owns this borrow through executor closing and runtime destruction.
     ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;

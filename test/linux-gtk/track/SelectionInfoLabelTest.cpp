@@ -69,7 +69,7 @@ namespace ao::gtk::test
     REQUIRE(firstTrackId != kInvalidTrackId);
     REQUIRE(secondTrackId != kInvalidTrackId);
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Second view"})));
+      runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Second view"})));
     auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
     REQUIRE(firstViewId != secondViewId);
@@ -127,13 +127,13 @@ namespace ao::gtk::test
 
     bool selectionChanged = false;
     auto const selectionSub = runtime.views().onSelectionChanged([&](auto const&) { selectionChanged = true; });
-    auto& commands = runtime.library().commands();
+    auto& commands = fixture.owner().libraryCommands();
     REQUIRE(runGtkTask(runtime, commands.deleteTrackAsync(other)));
     CHECK(text.get_text() == "1 item selected (2:00)");
 
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("basic_metadata.flac"), runtime.musicRoot() / "selected.flac");
-    auto& jobs = runtime.library().jobs();
+    auto& jobs = fixture.owner().libraryJobs();
     auto plan = ao::test::requireValue(runGtkTask(runtime, jobs.buildScanPlanAsync()));
     auto const result = ao::test::requireValue(runGtkTask(runtime, jobs.applyScanPlanAsync(std::move(plan))));
     REQUIRE(result.mutatedIds == std::vector{selected});

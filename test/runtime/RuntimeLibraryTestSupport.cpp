@@ -3,6 +3,7 @@
 
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 
+#include "runtime/library/LibraryOwner.h"
 #include "runtime/library/LibraryWriteLane.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
@@ -22,6 +23,7 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
@@ -99,10 +101,11 @@ namespace ao::rt::test
     return patch;
   }
 
-  TrackId addRuntimeTrack(AppRuntime& runtime,
+  TrackId addRuntimeTrack(AppRuntimeOwner& owner,
                           library::test::TrackSpec const& spec,
                           compat::MoveOnlyFunction<void()> settlePublication)
   {
+    auto& runtime = owner.runtime();
     static auto nextFixtureTrack = std::atomic<std::uint64_t>{0};
     auto sourcePath = std::filesystem::path{spec.uri};
 
@@ -123,7 +126,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(destinationPath.parent_path());
     std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
 
-    auto& commands = runtime.library().commands();
+    auto& commands = owner.libraryCommands();
     auto createRes = settlePublication
                        ? runRuntimeTask(runtime, commands.createTrackFromFileAsync(destinationPath), settlePublication)
                        : runRuntimeTask(runtime, commands.createTrackFromFileAsync(destinationPath));
@@ -244,23 +247,21 @@ namespace ao::rt::test
     return spec;
   }
 
-  void updateRuntimeTrack(AppRuntime& runtime,
+  void updateRuntimeTrack(AppRuntimeOwner& owner,
                           TrackId const trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater,
                           compat::MoveOnlyFunction<void()> settlePublication)
   {
+    auto& runtime = owner.runtime();
     auto spec = runtimeTrackSpec(runtime, trackId);
 
     updater(spec);
     REQUIRE(spec.coverArtId == kInvalidResourceId);
     auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
     REQUIRE(bindingRes);
-    auto res =
-      settlePublication
-        ? runRuntimeTask(runtime,
-                         runtime.library().commands().updateMetadataAsync(*bindingRes, metadataPatch(spec)),
-                         settlePublication)
-        : runRuntimeTask(runtime, runtime.library().commands().updateMetadataAsync(*bindingRes, metadataPatch(spec)));
+    auto task = owner.libraryCommands().updateMetadataAsync(*bindingRes, metadataPatch(spec));
+    auto res = settlePublication ? runRuntimeTask(runtime, std::move(task), settlePublication)
+                                 : runRuntimeTask(runtime, std::move(task));
     REQUIRE(res);
     REQUIRE((res->status == AuthoringStatus::Applied || res->status == AuthoringStatus::NoOp));
   }
@@ -409,11 +410,12 @@ namespace ao::rt::test
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    Library& ensureLibrary()
+    LibraryOwner& ensureLibrary()
     {
       if (!optLibrary)
       {
-        optLibrary.emplace(asyncRuntime, ao::test::requireValue(Library::prepare(storage)), changes);
+        optLibrary.emplace(
+          asyncRuntime, ao::test::requireValue(library::WritableMusicLibrary::acquire(storage)), changes);
       }
 
       return *optLibrary;
@@ -423,7 +425,7 @@ namespace ao::rt::test
     async::Runtime asyncRuntime;
     library::MusicLibrary& storage;
     LibraryChanges& changes;
-    std::optional<Library> optLibrary;
+    std::optional<LibraryOwner> optLibrary;
     std::uint64_t nextFixtureTrack = 0;
   };
 
@@ -436,19 +438,29 @@ namespace ao::rt::test
 
   LibraryCommandsFixture::~LibraryCommandsFixture() = default;
 
-  Library& LibraryCommandsFixture::library()
+  Library const& LibraryCommandsFixture::library()
   {
-    return _implPtr->ensureLibrary();
+    return _implPtr->ensureLibrary().library();
+  }
+
+  LibraryJobs& LibraryCommandsFixture::jobs()
+  {
+    return _implPtr->ensureLibrary().libraryJobs();
   }
 
   LibraryCommands& LibraryCommandsFixture::commands()
   {
-    return _implPtr->ensureLibrary().commands();
+    return _implPtr->ensureLibrary().libraryCommands();
   }
 
   async::Runtime& LibraryCommandsFixture::runtime()
   {
     return _implPtr->asyncRuntime;
+  }
+
+  void LibraryCommandsFixture::beginClosing()
+  {
+    _implPtr->ensureLibrary().beginClosing();
   }
 
   void LibraryCommandsFixture::releaseLibrary()
@@ -493,20 +505,20 @@ namespace ao::rt::test
 
   BoundTrackTargets LibraryCommandsFixture::bind(std::span<TrackId const> const trackIds)
   {
-    return ao::test::requireValue(_implPtr->ensureLibrary().bindTrackTargets(trackIds));
+    return ao::test::requireValue(library().bindTrackTargets(trackIds));
   }
 
   Result<UpdateTrackMetadataReply> LibraryCommandsFixture::updateMetadata(std::span<TrackId const> const trackIds,
                                                                           MetadataPatch const& patch)
   {
-    auto bindingRes = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
+    auto bindingRes = library().bindTrackTargets(trackIds);
 
     if (!bindingRes)
     {
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().updateMetadataAsync(*bindingRes, patch));
+    auto outcomeRes = runTask(commands().updateMetadataAsync(*bindingRes, patch));
 
     if (!outcomeRes)
     {
@@ -529,17 +541,17 @@ namespace ao::rt::test
                                                               std::span<std::string const> const tagsToAdd,
                                                               std::span<std::string const> const tagsToRemove)
   {
-    auto bindingRes = _implPtr->ensureLibrary().bindTrackTargets(trackIds);
+    auto bindingRes = library().bindTrackTargets(trackIds);
 
     if (!bindingRes)
     {
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().editTagsAsync(
-      *bindingRes,
-      std::vector<std::string>{tagsToAdd.begin(), tagsToAdd.end()},
-      std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()}));
+    auto outcomeRes =
+      runTask(commands().editTagsAsync(*bindingRes,
+                                       std::vector<std::string>{tagsToAdd.begin(), tagsToAdd.end()},
+                                       std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()}));
 
     if (!outcomeRes)
     {

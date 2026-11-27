@@ -11,6 +11,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -79,27 +80,30 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
-    auto const listIdRes = commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.name = "First name"}));
+    auto const editing = LibraryEditing{commands.commands()};
+    // The temporary handle is gone before the lazy task starts; its command owner still lives.
+    auto save = saveListAsync(LibraryEditing{commands.commands()}, rt::ListDraft{.name = "First name"});
+    auto const listIdRes = commands.runTask(std::move(save));
     REQUIRE(listIdRes);
-    auto const optCreated = commands.library().snapshot().listNode(*listIdRes);
+    auto const optCreated = editing.library().snapshot().listNode(*listIdRes);
     REQUIRE(optCreated);
     CHECK(optCreated->id == *listIdRes);
     CHECK(optCreated->name == "First name");
 
     auto updated = rt::ListDraft{.listId = *listIdRes, .name = "Renamed"};
-    auto const updatedIdRes = commands.runTask(saveListAsync(&commands.library(), std::move(updated)));
+    auto const updatedIdRes = commands.runTask(saveListAsync(editing, std::move(updated)));
     REQUIRE(updatedIdRes);
     CHECK(*updatedIdRes == *listIdRes);
     REQUIRE(commands.library().snapshot().listNode(*listIdRes));
     CHECK(commands.library().snapshot().listNode(*listIdRes)->name == "Renamed");
 
-    auto const previewRes = commands.runTask(previewListDeletionAsync(&commands.library(), *listIdRes, false));
+    auto const previewRes = commands.runTask(previewListDeletionAsync(editing, *listIdRes, false));
     REQUIRE(previewRes);
     REQUIRE(previewRes->deletedLists.size() == 1);
     CHECK(previewRes->rootListId == *listIdRes);
     CHECK(previewRes->deletedLists.front().listId == *listIdRes);
 
-    auto const deletedRes = commands.runTask(deleteListAsync(&commands.library(), *listIdRes, false));
+    auto const deletedRes = commands.runTask(deleteListAsync(editing, *listIdRes, false));
     REQUIRE(deletedRes);
     CHECK_FALSE(commands.library().snapshot().listNode(*listIdRes));
   }
@@ -109,21 +113,22 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto const editing = LibraryEditing{commands.commands()};
 
-    auto const parentIdRes = commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.name = "Parent"}));
+    auto const parentIdRes = commands.runTask(saveListAsync(editing, rt::ListDraft{.name = "Parent"}));
     REQUIRE(parentIdRes);
     auto const childIdRes =
-      commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
+      commands.runTask(saveListAsync(editing, rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
     REQUIRE(childIdRes);
 
-    auto const previewRes = commands.runTask(previewListDeletionAsync(&commands.library(), *parentIdRes, true));
+    auto const previewRes = commands.runTask(previewListDeletionAsync(editing, *parentIdRes, true));
     REQUIRE(previewRes);
     CHECK(previewRes->rootListId == *parentIdRes);
     REQUIRE(previewRes->deletedLists.size() == 2);
     CHECK(previewRes->deletedLists[0].listId == *parentIdRes);
     CHECK(previewRes->deletedLists[1].listId == *childIdRes);
 
-    auto const deletedRes = commands.runTask(deleteListAsync(&commands.library(), *parentIdRes, true));
+    auto const deletedRes = commands.runTask(deleteListAsync(editing, *parentIdRes, true));
     REQUIRE(deletedRes);
     CHECK(*deletedRes == *previewRes);
     CHECK_FALSE(commands.library().snapshot().listNode(*parentIdRes));
@@ -135,8 +140,9 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto const editing = LibraryEditing{commands.commands()};
     auto const retainedIdRes = commands.runTask(saveListAsync(
-      &commands.library(), rt::ListDraft{.name = "Retained", .description = "Sentinel", .expression = "$year = 2000"}));
+      editing, rt::ListDraft{.name = "Retained", .description = "Sentinel", .expression = "$year = 2000"}));
     REQUIRE(retainedIdRes);
     auto const revisionBefore = commands.library().snapshot().revision();
     auto const missingId = ListId{999};
@@ -144,36 +150,35 @@ namespace ao::uimodel::test
 
     SECTION("update")
     {
-      auto const res =
-        commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.listId = missingId, .name = "Missing"}));
+      auto const res = commands.runTask(saveListAsync(editing, rt::ListDraft{.listId = missingId, .name = "Missing"}));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
     }
 
     SECTION("single preview")
     {
-      auto const res = commands.runTask(previewListDeletionAsync(&commands.library(), missingId, false));
+      auto const res = commands.runTask(previewListDeletionAsync(editing, missingId, false));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
     }
 
     SECTION("subtree preview")
     {
-      auto const res = commands.runTask(previewListDeletionAsync(&commands.library(), missingId, true));
+      auto const res = commands.runTask(previewListDeletionAsync(editing, missingId, true));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
     }
 
     SECTION("single deletion")
     {
-      auto const res = commands.runTask(deleteListAsync(&commands.library(), missingId, false));
+      auto const res = commands.runTask(deleteListAsync(editing, missingId, false));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
     }
 
     SECTION("subtree deletion")
     {
-      auto const res = commands.runTask(deleteListAsync(&commands.library(), missingId, true));
+      auto const res = commands.runTask(deleteListAsync(editing, missingId, true));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
     }
@@ -194,23 +199,24 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
-    auto const parentIdRes = commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.name = "Parent"}));
+    auto const editing = LibraryEditing{commands.commands()};
+    auto const parentIdRes = commands.runTask(saveListAsync(editing, rt::ListDraft{.name = "Parent"}));
     REQUIRE(parentIdRes);
     auto const childIdRes =
-      commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
+      commands.runTask(saveListAsync(editing, rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
     REQUIRE(childIdRes);
     auto const revisionBefore = commands.library().snapshot().revision();
 
     SECTION("preview")
     {
-      auto const res = commands.runTask(previewListDeletionAsync(&commands.library(), *parentIdRes, false));
+      auto const res = commands.runTask(previewListDeletionAsync(editing, *parentIdRes, false));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::Conflict);
     }
 
     SECTION("delete")
     {
-      auto const res = commands.runTask(deleteListAsync(&commands.library(), *parentIdRes, false));
+      auto const res = commands.runTask(deleteListAsync(editing, *parentIdRes, false));
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::Conflict);
     }
@@ -236,16 +242,17 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto const editing = LibraryEditing{commands.commands()};
     auto const trackId = commands.addTrack({.title = "Tagged", .tags = {"favorite", "keep"}});
-    auto const listIdRes = commands.runTask(
-      saveListAsync(&commands.library(), rt::ListDraft{.name = "Favorites", .expression = "#favorite"}));
+    auto const listIdRes =
+      commands.runTask(saveListAsync(editing, rt::ListDraft{.name = "Favorites", .expression = "#favorite"}));
     REQUIRE(listIdRes);
     auto childId = kInvalidListId;
 
     if (includeDescendants)
     {
-      auto const childRes = commands.runTask(saveListAsync(
-        &commands.library(), rt::ListDraft{.parentId = *listIdRes, .name = "Child", .expression = "#keep"}));
+      auto const childRes = commands.runTask(
+        saveListAsync(editing, rt::ListDraft{.parentId = *listIdRes, .name = "Child", .expression = "#keep"}));
       REQUIRE(childRes);
       childId = *childRes;
     }
@@ -255,10 +262,8 @@ namespace ao::uimodel::test
     std::ranges::sort(beforeTags);
     REQUIRE(beforeTags == std::vector<std::string>{"favorite", "keep"});
 
-    auto const res = commands.runTask(deleteListAsync(&commands.library(),
-                                                      *listIdRes,
-                                                      includeDescendants,
-                                                      rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag}));
+    auto const res = commands.runTask(deleteListAsync(
+      editing, *listIdRes, includeDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag}));
     REQUIRE(res);
     CHECK(res->rootListId == *listIdRes);
     REQUIRE(res->deletedLists.size() == (includeDescendants ? 2U : 1U));

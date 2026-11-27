@@ -707,7 +707,7 @@ namespace
 
       _seed = *seedRes;
       _window = winrt::make<winrt::Aobus::implementation::MainWindow>();
-      auto const createSession = [&]
+      auto const createSession = [&](ao::rt::AppRuntimeOwner::BindLibraryCommands bindLibraryCommands = {})
       {
         return ao::winui::LibrarySession::create(
           _scratch,
@@ -715,7 +715,8 @@ namespace
           *catalogRes,
           *_orderingPtr,
           *_aliasesPtr,
-          ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false});
+          ao::desktop::LibrarySwitchRequest{.libraryRoot = libraryRoot, .scanAfterOpen = false},
+          std::move(bindLibraryCommands));
       };
 
       if (!_optListPreviewLocale && !_optPrimaryFixture)
@@ -761,10 +762,12 @@ namespace
           return;
         }
 
-        _sessionPtr.reset();
+        resetSession();
       }
 
-      auto sessionRes = createSession();
+      ao::rt::LibraryCommands* commandsBorrow = nullptr;
+      auto sessionRes =
+        createSession([&commandsBorrow](ao::rt::LibraryCommands& commands) { commandsBorrow = &commands; });
 
       if (!sessionRes)
       {
@@ -774,6 +777,7 @@ namespace
       }
 
       _sessionPtr = std::move(*sessionRes);
+      _libraryCommands = commandsBorrow;
 
       if (_optListPreviewLocale || _optPrimaryFixture)
       {
@@ -802,9 +806,9 @@ namespace
         _sessionPtr->settings().shellMode = *_optSeekRangeMode;
       }
 
-      implementation()->initialize(*_sessionPtr,
-                                   [](std::filesystem::path) -> ao::Result<>
-                                   { return ao::makeError(ao::Error::Code::NotSupported, "Audit does not restart"); });
+      _sessionPtr->initializeWindow(*implementation(),
+                                    [](std::filesystem::path) -> ao::Result<>
+                                    { return ao::makeError(ao::Error::Code::NotSupported, "Audit does not restart"); });
       _root = _window.Content().as<Grid>();
       _timeout = _window.DispatcherQueue().CreateTimer();
       _timeout.Interval(std::chrono::seconds{90});
@@ -2332,7 +2336,7 @@ namespace
             "Create synchronously rejects the current filter over a broken parent");
 
       // Unlike the editor, the writer accepts this locally valid predicate.
-      runLibraryCommand(_sessionPtr->runtime().library().commands().previewCreateListAsync(
+      runLibraryCommand(_libraryCommands->previewCreateListAsync(
                           {.parentId = _seed.previewParentId, .name = "Child draft", .expression = "$year = 2000"}),
                         &WinUiAutomationProbe::repairPreviewParent);
     }
@@ -2348,7 +2352,7 @@ namespace
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkLiveParent); });
-      runLibraryCommand(_sessionPtr->runtime().library().commands().updateListAsync(
+      runLibraryCommand(_libraryCommands->updateListAsync(
         {.listId = _seed.previewParentId, .name = "Preview parent", .expression = "$composer = 'Debussy'"}));
     }
 
@@ -2372,7 +2376,7 @@ namespace
       _optPreviewStatusToken = _previewStatus.RegisterPropertyChangedCallback(
         Controls::TextBlock::TextProperty(),
         [this](auto const&, auto const&) { enqueue(&WinUiAutomationProbe::checkDeletedParent); });
-      runLibraryCommand(_sessionPtr->runtime().library().commands().deleteListAsync(_seed.previewParentId));
+      runLibraryCommand(_libraryCommands->deleteListAsync(_seed.previewParentId));
     }
 
     void checkDeletedParent()
@@ -2662,8 +2666,8 @@ namespace
 
       _modernFilteredViewId = *viewRes;
       // Commit outside the List editor so its own post-save navigation cannot replace the view under test.
-      runLibraryCommand(runtime.library().commands().createListAsync({.name = "Rebuild witness"}),
-                        &WinUiAutomationProbe::modernListRebuilt);
+      runLibraryCommand(
+        _libraryCommands->createListAsync({.name = "Rebuild witness"}), &WinUiAutomationProbe::modernListRebuilt);
     }
 
     void modernListRebuilt()
@@ -3296,7 +3300,7 @@ namespace
       }
 
       rows.SelectedIndex(0);
-      auto& library = _sessionPtr->runtime().library();
+      auto const& library = _sessionPtr->runtime().library();
 
       if (!isClassicMoveViewIntact() || library.snapshot().listOrderTrackIds(_seed.composerListId) !=
                                           std::vector{_seed.summaryTracks.front(), _seed.summaryTracks.at(1)})
@@ -3418,6 +3422,12 @@ namespace
       finish();
     }
 
+    void resetSession() noexcept
+    {
+      _libraryCommands = nullptr;
+      _sessionPtr.reset();
+    }
+
     void finish()
     {
       if (std::exchange(_finished, true))
@@ -3458,7 +3468,7 @@ namespace
         _window = nullptr;
       }
 
-      _sessionPtr.reset();
+      resetSession();
       _aliasesPtr.reset();
       _orderingPtr.reset();
       ao::winui::resetResourceLanguage();
@@ -3525,6 +3535,7 @@ namespace
     std::unique_ptr<ao::rt::TextOrderingPolicy> _orderingPtr;
     std::unique_ptr<ao::rt::CompletionAliasPolicy> _aliasesPtr;
     std::unique_ptr<ao::winui::LibrarySession> _sessionPtr;
+    ao::rt::LibraryCommands* _libraryCommands = nullptr; // Borrowed at session creation.
     std::uint64_t _expectedRangeFinalRevision = 0;
     std::chrono::milliseconds _seekRangeElapsed{};
     SeekRangeStep _seekRangeStep = SeekRangeStep::Minimum;

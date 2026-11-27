@@ -62,6 +62,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
@@ -95,12 +96,42 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    // Window callers cannot mix display, editing, and job services from different owners.
+    static_assert(!std::is_constructible_v<MainWindow,
+                                           rt::AppRuntime&,
+                                           uimodel::LibraryEditing,
+                                           rt::LibraryJobs&,
+                                           std::shared_ptr<AppConfigStore>,
+                                           std::shared_ptr<ShellLayoutStore>,
+                                           i18n::MessageCatalog,
+                                           std::shared_ptr<ShellLayoutComponentStateStore>>);
+    static_assert(!std::is_constructible_v<MainWindow,
+                                           rt::AppRuntimeOwner&&,
+                                           std::shared_ptr<AppConfigStore>,
+                                           std::shared_ptr<ShellLayoutStore>,
+                                           i18n::MessageCatalog,
+                                           std::shared_ptr<ShellLayoutComponentStateStore>>);
+
+    MainWindow makeWindow(rt::AppRuntimeOwner& owner,
+                          std::shared_ptr<AppConfigStore> configStorePtr,
+                          std::shared_ptr<ShellLayoutStore> layoutStorePtr = {},
+                          i18n::MessageCatalog const& catalog = ao::test::englishMessageCatalog(),
+                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr = {})
+    {
+      return MainWindow{
+        owner, std::move(configStorePtr), std::move(layoutStorePtr), catalog, std::move(componentStateStorePtr)};
+    }
+  } // namespace
+
   TEST_CASE("MainWindow - restores saved window size and title")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
@@ -110,7 +141,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     configStorePtr->saveWindow(WindowState{.width = 640, .height = 480, .maximized = false});
 
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
 
     CHECK(window.get_title() == "Aobus");
 
@@ -126,7 +157,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto configStorePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app_config.yaml");
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
 
     auto* const actionMap = dynamic_cast<Gio::ActionMap*>(&window);
     REQUIRE(actionMap != nullptr);
@@ -151,7 +182,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto configStorePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app_config.yaml");
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     auto const scanActionPtr = window.lookup_action("scan-library");
     REQUIRE(scanActionPtr);
     REQUIRE(scanActionPtr->get_enabled());
@@ -208,7 +239,7 @@ namespace ao::gtk::test
     auto actionRemovedConnection = sigc::connection{};
 
     {
-      auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+      auto window = makeWindow(fixture.owner(), configStorePtr);
       auto* const actionGroup = dynamic_cast<Gio::ActionGroup*>(&window);
       REQUIRE(actionGroup != nullptr);
       actionRemovedConnection = actionGroup->signal_action_removed().connect(
@@ -261,7 +292,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
@@ -285,7 +316,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
@@ -311,7 +342,7 @@ namespace ao::gtk::test
     REQUIRE(runtime.workspaceConfigStore().save(
       rt::kPlaybackSessionConfigGroup, rt::PlaybackSessionState{}, rt::PlaybackSessionYamlSchema{}));
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
     REQUIRE(window.retireForLibrarySwitch());
@@ -352,28 +383,28 @@ namespace ao::gtk::test
     REQUIRE(configStorePtr->saveAppSession(oldSession));
     REQUIRE_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
 
-    auto runtimePtr =
-      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
-        .musicRoot = musicRoot,
-        .databasePath = databasePath,
-        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
-        .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
-      })));
-    rt::test::addReadyAudioProvider(*runtimePtr);
+    auto owner = ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
+      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+      .musicRoot = musicRoot,
+      .databasePath = databasePath,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
+      .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
+    }));
+    auto& runtime = owner.runtime();
+    rt::test::addReadyAudioProvider(runtime);
     drainGtkEvents();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = addRuntimeTrack(*runtimePtr, {.title = "Successor Track", .uri = fixturePath});
+    auto const trackId = addRuntimeTrack(owner, {.title = "Successor Track", .uri = fixturePath});
 
     {
-      auto window = MainWindow{*runtimePtr, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+      auto window = makeWindow(owner, configStorePtr);
       REQUIRE(window.prepareSession());
       REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
-      auto const viewId = runtimePtr->workspace().snapshot().activeViewId;
+      auto const viewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
-      runtimePtr->playback().commands().setOutputDevice(
+      runtime.playback().commands().setOutputDevice(
         audio::BackendId{"test_backend"}, audio::DeviceId{"test_device"}, audio::kProfileShared);
       drainGtkEvents();
       std::filesystem::remove(workspacePath);
@@ -395,7 +426,7 @@ namespace ao::gtk::test
       // shared report past the startup scan.
       auto const expected =
         uimodel::librarySwitchNotSavedNotification(ao::test::englishMessageCatalog(), committedRes.error());
-      auto const feed = runtimePtr->notifications().feed();
+      auto const feed = runtime.notifications().feed();
       CHECK(std::ranges::any_of(feed.entries,
                                 [&expected](rt::NotificationEntry const& entry)
                                 {
@@ -413,13 +444,13 @@ namespace ao::gtk::test
 
       SECTION("playback stays blocked while ordinary window state saves")
       {
-        REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-        REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
-        runtimePtr->playback().commands().pause();
+        REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+        REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
+        runtime.playback().commands().pause();
         drainGtkEvents();
         CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
 
-        REQUIRE(runtimePtr->savePlaybackSession());
+        REQUIRE(runtime.savePlaybackSession());
         CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
 
         window.saveSession();
@@ -447,8 +478,8 @@ namespace ao::gtk::test
       }
     }
 
-    runtimePtr->shutdown();
-    runtimePtr->shutdown();
+    owner.shutdown();
+    owner.shutdown();
     drainGtkEvents();
     CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
   }
@@ -464,17 +495,17 @@ namespace ao::gtk::test
     std::filesystem::create_directories(databasePath);
     std::filesystem::create_directories(invalidPlaybackStorePath);
     auto invalidPlaybackStore = rt::ConfigStore{invalidPlaybackStorePath};
-    auto runtimePtr =
-      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
-        .musicRoot = musicRoot,
-        .databasePath = databasePath,
-        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
-        .playbackSessionConfigStore = &invalidPlaybackStore,
-      })));
+    auto owner = ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
+      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+      .musicRoot = musicRoot,
+      .databasePath = databasePath,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
+      .playbackSessionConfigStore = &invalidPlaybackStore,
+    }));
+    auto const& musicRootPath = owner.runtime().musicRoot();
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
-    auto window = MainWindow{*runtimePtr, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(owner, configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     window.applyTheme(uimodel::ThemePreset::Modern);
@@ -484,13 +515,13 @@ namespace ao::gtk::test
     REQUIRE_FALSE(retiredRes);
     CHECK(retiredRes.error().code == Error::Code::IoError);
     CHECK(window.sessionPhase() == MainWindow::SessionPhase::Active);
-    CHECK(window.musicRoot() == runtimePtr->musicRoot());
+    CHECK(window.musicRoot() == musicRootPath);
     CHECK_NOTHROW(window.playback());
 
     window.saveSession();
     auto persistedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(persistedSession);
-    CHECK(persistedSession.lastLibraryPath == runtimePtr->musicRoot().string());
+    CHECK(persistedSession.lastLibraryPath == musicRootPath.string());
     auto* const errorDialog = findAppDialogByTitle("Unable to Switch Libraries");
     REQUIRE(errorDialog != nullptr);
     CHECK(errorDialog->get_transient_for() == &window);
@@ -517,7 +548,7 @@ namespace ao::gtk::test
 
     rt::test::addReadyAudioProvider(fixture.runtime());
 
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     drainGtkEvents();
 
     auto const output = fixture.runtime().playback().snapshot().transport.output.selectedDevice;
@@ -535,7 +566,7 @@ namespace ao::gtk::test
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     {
-      auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+      auto window = makeWindow(fixture.owner(), configStorePtr);
       REQUIRE(window.prepareSession());
 
       CHECK(window.sessionPhase() == MainWindow::SessionPhase::Prepared);
@@ -557,7 +588,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto configStorePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app_config.yaml");
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE_FALSE(window.get_application());
 
@@ -726,7 +757,7 @@ namespace ao::gtk::test
 
     auto const& catalog = ao::test::englishMessageCatalog();
     auto window =
-      MainWindow{fixture.runtime(), configStorePtr, std::move(layoutStorePtr), catalog, componentStateStorePtr};
+      makeWindow(fixture.owner(), configStorePtr, std::move(layoutStorePtr), catalog, componentStateStorePtr);
     REQUIRE(window.prepareSession());
 
     auto const modernBarPresent = [&window]
@@ -765,8 +796,7 @@ namespace ao::gtk::test
 
     auto layoutStorePtr =
       std::make_shared<ShellLayoutStore>(std::filesystem::path{fixture.tempDir().path()} / "layouts");
-    auto window =
-      MainWindow{fixture.runtime(), configStorePtr, std::move(layoutStorePtr), ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr, std::move(layoutStorePtr));
     REQUIRE(window.prepareSession());
 
     auto* const shell = window.get_child();
@@ -820,7 +850,7 @@ namespace ao::gtk::test
     auto const configPath = configDir / "config.yaml";
     std::filesystem::create_directories(configDir);
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     appPtr->add_window(window);
 
     auto const chord = [](std::string const& text)
@@ -881,7 +911,7 @@ namespace ao::gtk::test
     initialPrefs.preferredOutputSelection.profileId = audio::ProfileId{"preference-profile"};
     configStorePtr->saveAppPrefs(initialPrefs);
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
 
@@ -912,7 +942,7 @@ namespace ao::gtk::test
                                  "runtime:\n  version: 99\n  futurePreference: kept\n";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     window.saveSession();
@@ -954,7 +984,7 @@ namespace ao::gtk::test
     std::ofstream{workspacePath} << rejected;
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
 
     REQUIRE(window.prepareSession());
 
@@ -985,7 +1015,7 @@ namespace ao::gtk::test
     session.lastOutputSelection.profileId = audio::kProfileShared;
     REQUIRE(configStorePtr->saveAppSession(session));
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
     drainGtkEvents();
 
     auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
@@ -1064,23 +1094,23 @@ namespace ao::gtk::test
       auto prefs = rt::AppPrefsState{};
       prefs.lastLayoutPreset = "modern";
       storePtr->saveAppPrefs(prefs);
-      auto runtimePtr =
+      auto ownerPtr =
         rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
-      runtimePtr->addAudioProvider(provider(fallback, "Room speakers", {}));
-      runtimePtr->addAudioProvider(provider(dac, "Studio DAC", {}));
+      auto& runtime = ownerPtr->runtime();
+      runtime.addAudioProvider(provider(fallback, "Room speakers", {}));
+      runtime.addAudioProvider(provider(dac, "Studio DAC", {}));
       track = addRuntimeTrack(
-        *runtimePtr,
-        {.title = "Saved subject", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+        *ownerPtr, {.title = "Saved subject", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       auto window =
-        MainWindow{*runtimePtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog};
+        makeWindow(*ownerPtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog);
       REQUIRE(window.prepareSession());
       REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
       selectOutput(window, "Studio DAC");
       REQUIRE(preferredOnDisk() == dac);
       auto& playback = window.playback();
       REQUIRE(playback.snapshot().transport.output.selectedDevice == dac);
-      REQUIRE(playback.commands().startFromView(runtimePtr->workspace().snapshot().activeViewId, track));
-      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, track));
+      REQUIRE(playback.commands().startFromView(runtime.workspace().snapshot().activeViewId, track));
+      REQUIRE(tryWaitForPlaybackSettlement(runtime, track));
       playback.commands().pause();
       playback.commands().seek(offset);
       window.saveSession();
@@ -1094,13 +1124,14 @@ namespace ao::gtk::test
     REQUIRE(savedSession.lastOutputSelection == dac);
     savedSession.lastOutputSelection = fallback;
     REQUIRE(storePtr->saveAppSession(savedSession));
-    auto runtimePtr =
+    auto ownerPtr =
       rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
+    auto& runtime = ownerPtr->runtime();
     auto const fallbackCountsPtr = std::make_shared<rt::test::SilentRouteCounts>();
-    runtimePtr->addAudioProvider(provider(fallback, "Room speakers", fallbackCountsPtr));
+    runtime.addAudioProvider(provider(fallback, "Room speakers", fallbackCountsPtr));
     drainGtkEvents();
     auto window =
-      MainWindow{*runtimePtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog};
+      makeWindow(*ownerPtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"), catalog);
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     auto& playback = window.playback();
@@ -1119,7 +1150,7 @@ namespace ao::gtk::test
     SECTION("late DAC discovery does not replay the rejected resume")
     {
       auto const dacCountsPtr = std::make_shared<rt::test::SilentRouteCounts>();
-      runtimePtr->addAudioProvider(provider(dac, "Studio DAC", dacCountsPtr));
+      runtime.addAudioProvider(provider(dac, "Studio DAC", dacCountsPtr));
       REQUIRE(tryPumpGtkEventsUntil([&] { return playback.snapshot().transport.output.selectedDevice == dac; }));
       CHECK_FALSE(playback.snapshot().transport.output.optPendingOutputSelection);
       CHECK(dacCountsPtr->opens.load() == 0);
@@ -1168,31 +1199,29 @@ namespace ao::gtk::test
       [&](audio::OutputDeviceSelection const& expected, std::optional<audio::OutputDeviceSelection> const& optNext)
     {
       auto storePtr = std::make_shared<AppConfigStore>(configPath);
-      auto runtimePtr =
+      auto ownerPtr =
         rt::test::makeRuntime(tempDir, std::make_unique<GtkMainContextExecutor>(), &storePtr->playbackSessionStore());
+      auto& runtime = ownerPtr->runtime();
       // The only published sink is node:device1, not node:studio-dac. This provider opens only silent backends.
       auto const countsPtr = std::make_shared<rt::test::SilentRouteCounts>();
-      runtimePtr->addAudioProvider(rt::test::makeReadyAudioProvider(rt::test::makePipeWireOutputStatus(), countsPtr));
+      runtime.addAudioProvider(rt::test::makeReadyAudioProvider(rt::test::makePipeWireOutputStatus(), countsPtr));
 
       if (track == kInvalidTrackId)
       {
         track = addRuntimeTrack(
-          *runtimePtr,
+          *ownerPtr,
           {.title = "Reroute consent", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       }
 
       drainGtkEvents();
-      auto window = MainWindow{*runtimePtr,
-                               storePtr,
-                               std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"),
-                               ao::test::englishMessageCatalog()};
+      auto window = makeWindow(*ownerPtr, storePtr, std::make_shared<ShellLayoutStore>(tempDir.path() / "layouts"));
       REQUIRE(window.prepareSession());
       REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
       drainGtkEvents();
       auto& playback = window.playback();
       REQUIRE(savedOutputPreference(configPath) == expected);
       REQUIRE(countsPtr->opens.load() == 0);
-      auto const startRes = playback.commands().startFromView(runtimePtr->workspace().snapshot().activeViewId, track);
+      auto const startRes = playback.commands().startFromView(runtime.workspace().snapshot().activeViewId, track);
 
       if (expected == allowed)
       {
@@ -1247,11 +1276,11 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime);
     auto const uri = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const browsedTrack = addRuntimeTrack(runtime, {.title = "Browsed track", .uri = uri});
-    auto const playingTrack = addRuntimeTrack(runtime, {.title = "Selected track", .uri = uri});
+    auto const browsedTrack = addRuntimeTrack(fixture.owner(), {.title = "Browsed track", .uri = uri});
+    auto const playingTrack = addRuntimeTrack(fixture.owner(), {.title = "Selected track", .uri = uri});
     auto const otherList =
       ao::test::requireValue(runGtkTask(runtime,
-                                        runtime.library().commands().createListAsync(
+                                        fixture.owner().libraryCommands().createListAsync(
                                           {.name = "Other list", .expression = R"($title = "Browsed track")"})));
     runtime.sources().reloadAllTracks();
 
@@ -1259,10 +1288,8 @@ namespace ao::gtk::test
     auto prefs = rt::AppPrefsState{};
     prefs.lastLayoutPreset = "modern";
     storePtr->saveAppPrefs(prefs);
-    auto window = MainWindow{runtime,
-                             storePtr,
-                             std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
-                             ao::test::englishMessageCatalog()};
+    auto window =
+      makeWindow(fixture.owner(), storePtr, std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"));
     REQUIRE(window.prepareSession());
     REQUIRE(tryPumpGtkEventsUntil(
       [&] { return findWidgetByClass<Gtk::Button>(window, "ao-play-button-prominent") != nullptr; }));
@@ -1321,13 +1348,11 @@ namespace ao::gtk::test
     auto const path = runtime.musicRoot() / "song.flac";
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), path);
     auto const created =
-      ao::test::requireValue(runGtkTask(runtime, runtime.library().commands().createTrackFromFileAsync(path)));
+      ao::test::requireValue(runGtkTask(runtime, fixture.owner().libraryCommands().createTrackFromFileAsync(path)));
 
     auto storePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app.yaml");
-    auto window = MainWindow{runtime,
-                             storePtr,
-                             std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
-                             ao::test::englishMessageCatalog()};
+    auto window =
+      makeWindow(fixture.owner(), storePtr, std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"));
     REQUIRE(window.prepareSession());
     REQUIRE(tryPumpGtkEventsUntil([&] { return findWidget<TrackViewPage>(window) != nullptr; }));
     findWidget<TrackViewPage>(window)->selectionController().selectTrack(created.trackId);
@@ -1356,18 +1381,18 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const removedTrack = addRuntimeTrack(runtime, {.title = "Removed track"});
-    auto const keptTrack = addRuntimeTrack(runtime, {.title = "Kept track"});
+    auto const removedTrack = addRuntimeTrack(fixture.owner(), {.title = "Removed track"});
+    auto const keptTrack = addRuntimeTrack(fixture.owner(), {.title = "Kept track"});
     runtime.sources().reloadAllTracks();
 
     auto storePtr = std::make_shared<AppConfigStore>(fixture.tempDir().path() / "app.yaml");
     auto prefs = rt::AppPrefsState{};
     prefs.lastLayoutPreset = "modern";
     storePtr->saveAppPrefs(prefs);
-    auto window = MainWindow{runtime,
+    auto window = makeWindow(fixture.owner(),
                              storePtr,
                              std::make_shared<ShellLayoutStore>(fixture.tempDir().path() / "layouts"),
-                             ao::test::messageCatalog("fr")};
+                             ao::test::messageCatalog("fr"));
     REQUIRE(window.prepareSession());
     auto& commands = runtime.playback().commands();
 
@@ -1395,7 +1420,7 @@ namespace ao::gtk::test
       .target = rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = R"($title = "Kept track")"},
     }));
     REQUIRE(runtime.workspace().closeView(sourceViewId));
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteTrackAsync(removedTrack)));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().deleteTrackAsync(removedTrack)));
     REQUIRE_FALSE(runtime.library().snapshot().containsTrack(removedTrack));
     REQUIRE(runtime.playback().snapshot().transport.nowPlaying.trackId == removedTrack);
 
@@ -1455,7 +1480,7 @@ namespace ao::gtk::test
     auto& playback = runtime.playback();
     auto const sourceListId =
       ao::test::requireValue(runGtkTask(runtime,
-                                        runtime.library().commands().createListAsync(rt::ListDraft{
+                                        fixture.owner().libraryCommands().createListAsync(rt::ListDraft{
                                           .name = "Temporary sequence source",
                                         })));
     runtime.sources().reloadAllTracks();
@@ -1466,12 +1491,12 @@ namespace ao::gtk::test
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
     playback.commands().setRepeatMode(rt::RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteListAsync(sourceListId)));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().deleteListAsync(sourceListId)));
     playback.commands().stop();
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
 
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
@@ -1502,12 +1527,12 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 = addRuntimeTrack(runtime, {.title = "Restored Track", .uri = fixturePath});
-    auto const track2 = addRuntimeTrack(runtime, {.title = "Changed Track", .uri = fixturePath});
+    auto const track1 = addRuntimeTrack(fixture.owner(), {.title = "Restored Track", .uri = fixturePath});
+    auto const track2 = addRuntimeTrack(fixture.owner(), {.title = "Changed Track", .uri = fixturePath});
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    auto window = makeWindow(fixture.owner(), configStorePtr);
 
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));

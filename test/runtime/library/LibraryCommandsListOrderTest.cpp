@@ -58,7 +58,7 @@ namespace ao::rt::test
         return *res;
       }
 
-      Library& library()
+      Library const& library()
       {
         ensureRuntime();
         return writerFixturePtr->library();

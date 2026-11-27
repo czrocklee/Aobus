@@ -25,7 +25,7 @@ media picture bytes or imported descriptor
   -> runtime verified byte reader
        |-> derived digest-keyed disk cache
        `-> carrier audio files from the reverse index
-  -> AppRuntime encoded-byte memory cache
+  -> encoded-byte memory cache owned by AppRuntimeOwner
        |-> GTK / WinUI / AppKit image delivery
        |-> TUI block or Kitty transform
        |-> MediaPlayer / SMTC artwork
@@ -55,7 +55,7 @@ It copies the descriptor and an immutable carrier-index snapshot under a short r
 Every candidate is evidence rather than authority: bytes are accepted only when their SHA-256 digest matches the descriptor.
 A stale or unsatisfied reference remains unchanged.
 
-Interactive reads feed one `AppRuntime`-owned encoded-byte memory cache shared by that runtime's consumers.
+Each `AppRuntimeOwner` owns one encoded-byte memory cache shared by the graph's interactive consumers through `AppRuntime::resourceBytes()`.
 The cache coalesces equal requests, retains immutable owned bytes within bounded budgets, and may complete a hit synchronously.
 CLI export uses the same verified source walk without the interactive byte ceiling.
 YAML export reads descriptors, not cover payloads.
@@ -97,7 +97,8 @@ A completion token identifies the exact flight generation so late work cannot re
 
 Runtime closes its read transaction before worker I/O and returns on the selected callback executor.
 Frontend owners cancel interests/tasks and fence current identity before releasing widgets or runtime borrowers.
-`ResourceBytes` owns shared immutable storage and can outlive cache eviction or destruction; the reader and callback runtime remain retained for an in-flight cache miss according to the memory-cache lifetime contract.
+`ResourceBytes` copies share ownership of immutable storage and can outlive cache eviction or destruction.
+An in-flight miss retains the reader callable, not the runtime it borrows. Coordinated shutdown closes callback resumption and joins workers before releasing borrowed runtime collaborators.
 
 ## Presentation boundary
 

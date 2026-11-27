@@ -19,10 +19,10 @@ The library pipeline is composed in two stages:
 ```text
 CoreRuntime
   MusicLibrary storage and transactions
-    -> Library snapshot | commands | jobs | changes
+    -> LibraryOwner: Library (snapshots and changes) | LibraryCommands | LibraryJobs
     -> TrackSourceCache and TrackSource implementations
 
-AppRuntime
+AppRuntimeOwner
   CoreRuntime
     -> ViewService / playback consumers
     -> TrackListProjection / TrackDetailProjection
@@ -31,7 +31,7 @@ AppRuntime
 
 `CoreRuntime` owns one physical library, runtime facade, change bus, and source cache for one music root and database path.
 CLI operations use this core composition without constructing interactive views or projections.
-`AppRuntime` owns `CoreRuntime` and adds `ViewService`, workspace, playback, and projection consumers for interactive applications.
+`AppRuntimeOwner` owns `CoreRuntime` and adds `ViewService`, workspace, playback, and projection consumers for interactive applications.
 
 All stages remain in the application-runtime or core-library layers defined by the [system overview](../overview.md):
 
@@ -109,16 +109,14 @@ This is a containment contract, not protection against an adversarial tree repla
 
 ## Runtime library facade
 
-`ao::rt::Library` groups four public roles over the physical library:
+`LibraryOwner` distributes separate borrows over one physical library:
 
-- `LibrarySnapshot` owns one read transaction for a coherent read batch.
-- `LibraryCommands` owns semantic mutations and exact previews.
-- `LibraryJobs` owns scan, transfer, and identity work plus best-effort task progress.
-- `LibraryChanges` exposes committed revision observation.
+- `Library` opens a `LibrarySnapshot` with one read transaction per batch, exposes committed revisions through `LibraryChanges`, and lets callers observe authoring availability and bind targets. A binding alone cannot submit a write.
+- `LibraryCommands` submits semantic mutations and exact previews. Its `library()` is the reader for that same instance.
+- `LibraryJobs` runs scan, transfer, and identity work. Progress observers receive only `LibraryJobs const&`.
 
 The private `LibraryWriteLane` owns the one live-runtime `WritableMusicLibrary` and command lane.
-`Library::prepare()` acquires that authority and returns a move-only construction token which is consumed when `CoreRuntime` constructs the nonmovable facade in final storage.
-The token is not a public runtime role.
+`CoreRuntime` acquires that move-only authority against final-position storage and transfers it into the private `LibraryOwner`. Neither the owner nor the storage writer is a public interactive service.
 The [session lifecycle](../session-lifecycle.md#interactive-runtime-composition) owns the surrounding composition and teardown order.
 
 The lane serializes interactive commands, background write phases, and YAML-import Maintenance transitions.
@@ -167,7 +165,7 @@ See [track sources](track-source.md) for cache rebinding, error propagation, and
 ## Projections and views
 
 Live projections are interactive application consumers above `CoreRuntime`, not members of `CoreRuntime` itself.
-`AppRuntime` constructs `ViewService` from the core source cache, physical read facade, change bus, and ordering policy.
+The interactive runtime constructs `ViewService` from the core source cache, physical read facade, change bus, and ordering policy.
 `ViewService` owns open track-list projections; playback may own detached projections that capture the source and ordering policy at construction.
 A later locale-policy update reaches open view projections, not an already detached playback conversation.
 Track-detail projections also borrow `ViewService`, workspace, library reads, and `LibraryChanges`.
@@ -191,7 +189,7 @@ The [presentation architecture](../presentation/README.md) owns presentation sta
 - Sources consume committed library state and changes; storage does not know sources exist.
 - Query evaluation does not own source identity, leases, saved rank, or source deltas.
 - Projections consume source leases and library reads; sources do not depend on projections.
-- `CoreRuntime` owns storage, library roles, completion, and source state; `AppRuntime` adds views, workspace, playback, and projections.
+- `CoreRuntime` owns storage, library roles, completion, and source state; the interactive owner adds views, workspace, playback, and projections.
 - UIModel and normal frontends cannot name committing write authority or include direct storage implementation types.
 - CLI inspection may use `CoreRuntime::musicLibrary()` for the documented low-level escape hatch, but that const access cannot create a write transaction.
 
@@ -267,7 +265,7 @@ Coordinated Closing is the sole retirement path: it seals command and task admis
 A synchronous publication observer must defer shutdown to a later callback-executor turn.
 
 `CoreRuntime::shutdown()` seals library mutation/publication before closing callback resumption, then stops and joins workers while library-backed collaborators remain alive.
-`AppRuntime::shutdown()` first quiesces playback callback producers, then shuts down its owned core.
+`AppRuntimeOwner::shutdown()` first quiesces playback callback producers, then shuts down its owned core.
 Source and projection subscriptions release before the owners they observe; projection caches release borrowed dictionary and arena views before `MusicLibrary` destruction.
 
 ## Implementation map

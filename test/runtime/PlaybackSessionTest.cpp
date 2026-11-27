@@ -113,14 +113,14 @@ namespace ao::rt::test
       {TrackSortField::RecordingDate, 16},
     });
 
-    TrackId addPlayableTrack(AppRuntime& runtime,
+    TrackId addPlayableTrack(AppRuntimeOwner& owner,
                              std::string title,
                              std::uint16_t const year = 2020,
                              compat::MoveOnlyFunction<void()> settlePublication = {})
     {
       auto const uri =
-        audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "session-playable.flac");
-      return addRuntimeTrack(runtime,
+        audio::test::installAudioFixture(owner.runtime().musicRoot(), "basic_metadata.flac", "session-playable.flac");
+      return addRuntimeTrack(owner,
                              library::test::TrackSpec{
                                .title = std::move(title),
                                .uri = uri,
@@ -140,33 +140,35 @@ namespace ao::rt::test
     }
 
     template<typename ExecutorT>
-    TrackId addPlayableTrack(AppRuntime& runtime,
+    TrackId addPlayableTrack(AppRuntimeOwner& owner,
                              ExecutorT& executor,
                              std::string title,
                              std::uint16_t const year = 2020)
     {
-      return addPlayableTrack(runtime, std::move(title), year, [&executor] { settlePublication(executor); });
+      return addPlayableTrack(owner, std::move(title), year, [&executor] { settlePublication(executor); });
     }
 
     // Creates a track whose media file stays at a test-chosen path under the
     // music root, so a test can withdraw and restore that exact file around a
     // playback attempt.
     template<typename ExecutorT>
-    TrackId addTrackWithOwnedMedia(AppRuntime& runtime,
+    TrackId addTrackWithOwnedMedia(AppRuntimeOwner& owner,
                                    ExecutorT& executor,
                                    std::string_view const mediaName,
                                    std::string title)
     {
+      auto& runtime = owner.runtime();
+      auto& commands = owner.libraryCommands();
       audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", mediaName);
       auto const createdRes =
-        runRuntimeTask(runtime, runtime.library().commands().createTrackFromFileAsync(runtime.musicRoot() / mediaName));
+        runRuntimeTask(runtime, commands.createTrackFromFileAsync(runtime.musicRoot() / mediaName));
       REQUIRE(createdRes);
       auto const trackId = createdRes->trackId;
       auto const targetsRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
       REQUIRE(targetsRes);
       auto const patchRes = runRuntimeTask(
         runtime,
-        runtime.library().commands().updateMetadataAsync(
+        commands.updateMetadataAsync(
           *targetsRes,
           metadataPatch(library::test::TrackSpec{.title = std::move(title), .duration = std::chrono::seconds{10}})));
       REQUIRE(patchRes);
@@ -178,13 +180,14 @@ namespace ao::rt::test
     // Moves a track's file under the music root and relinks it with a scan,
     // which matches the moved file by its indexed audio identity.
     template<typename ExecutorT>
-    void relinkByScan(AppRuntime& runtime,
+    void relinkByScan(AppRuntimeOwner& owner,
                       ExecutorT& executor,
                       std::string_view const fromName,
                       std::string_view const toName,
                       TrackId const trackId)
     {
-      auto& jobs = runtime.library().jobs();
+      auto& runtime = owner.runtime();
+      auto& jobs = owner.libraryJobs();
       REQUIRE(runRuntimeTask(runtime, jobs.backfillAudioIdentityAsync()));
       auto const destination = runtime.musicRoot() / toName;
       std::filesystem::create_directories(destination.parent_path());
@@ -276,18 +279,19 @@ namespace ao::rt::test
       ViewId viewId = kInvalidViewId;
     };
 
-    OrderedListView createOrderedListView(AppRuntime& runtime,
+    OrderedListView createOrderedListView(AppRuntimeOwner& owner,
                                           QueuedExecutor& executor,
                                           std::vector<TrackId> trackIds,
                                           std::vector<TrackSortTerm> sortBy = {})
     {
+      auto& runtime = owner.runtime();
+      auto& commands = owner.libraryCommands();
       auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
       auto targetsRes = runtime.library().bindTrackTargets(trackIds);
       INFO((targetsRes ? "initial membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
-      auto membershipResultValueRes = runRuntimeTask(
-        runtime,
-        runtime.library().commands().editTagsAsync(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
+      auto membershipResultValueRes =
+        runRuntimeTask(runtime, commands.editTagsAsync(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
       INFO((membershipResultValueRes ? "initial membership updated" : membershipResultValueRes.error().message));
       REQUIRE(membershipResultValueRes);
       auto const& membershipRes = *membershipResultValueRes;
@@ -295,7 +299,7 @@ namespace ao::rt::test
       executor.drain();
       runtime.sources().reloadAllTracks();
       auto listRes = runRuntimeTask(runtime,
-                                    runtime.library().commands().createListAsync(ListDraft{
+                                    commands.createListAsync(ListDraft{
                                       .name = "Playback session order",
                                       .expression = "#playbacksessionorder",
                                     }));
@@ -318,34 +322,36 @@ namespace ao::rt::test
       return OrderedListView{.listId = listId, .viewId = *createdRes};
     }
 
-    void setOrderedListViewMembership(AppRuntime& runtime, std::span<TrackId const> const trackIds, bool const included)
+    void setOrderedListViewMembership(AppRuntimeOwner& owner,
+                                      std::span<TrackId const> const trackIds,
+                                      bool const included)
     {
+      auto& runtime = owner.runtime();
+      auto& commands = owner.libraryCommands();
       auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
       auto targetsRes = runtime.library().bindTrackTargets(trackIds);
       INFO((targetsRes ? "membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
-      auto resultValueRes = included ? runRuntimeTask(runtime,
-                                                      runtime.library().commands().editTagsAsync(
-                                                        *targetsRes, {membershipTag.begin(), membershipTag.end()}, {}))
-                                     : runRuntimeTask(runtime,
-                                                      runtime.library().commands().editTagsAsync(
-                                                        *targetsRes, {}, {membershipTag.begin(), membershipTag.end()}));
+      auto task = included ? commands.editTagsAsync(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {})
+                           : commands.editTagsAsync(*targetsRes, {}, {membershipTag.begin(), membershipTag.end()});
+      auto resultValueRes = runRuntimeTask(runtime, std::move(task));
       INFO((resultValueRes ? "membership updated" : resultValueRes.error().message));
       REQUIRE(resultValueRes);
       auto const& result = *resultValueRes;
       REQUIRE((result.status == AuthoringStatus::Applied || result.status == AuthoringStatus::NoOp));
     }
 
-    AuthoringResult<MoveListOrderReply> moveOrderedListViewOrder(AppRuntime& runtime,
+    AuthoringResult<MoveListOrderReply> moveOrderedListViewOrder(AppRuntimeOwner& owner,
                                                                  OrderedListView const& view,
                                                                  std::span<TrackId const> const selectedTrackIds,
                                                                  std::optional<TrackId> const optBeforeTrackId)
     {
+      auto& runtime = owner.runtime();
       auto const effectiveTrackIds = ao::test::requireValue(runtime.views().listSourceTrackIds(view.viewId));
       auto binding = ao::test::requireValue(runtime.library().bindListOrder(view.listId, effectiveTrackIds));
       return ao::test::requireValue(
         runRuntimeTask(runtime,
-                       runtime.library().commands().moveListOrderAsync(
+                       owner.libraryCommands().moveListOrderAsync(
                          binding, {selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId)));
     }
 
@@ -855,33 +861,34 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
-    addReadyAudioProvider(*runtimePtr);
-    auto const alpha = addPlayableTrack(*runtimePtr, *executor, "Alpha", 2022);
-    std::ignore = addPlayableTrack(*runtimePtr, *executor, "Filtered", 1990);
-    std::ignore = addPlayableTrack(*runtimePtr, *executor, "Zulu", 2023);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const alpha = addPlayableTrack(*ownerPtr, *executor, "Alpha", 2022);
+    std::ignore = addPlayableTrack(*ownerPtr, *executor, "Filtered", 1990);
+    std::ignore = addPlayableTrack(*ownerPtr, *executor, "Zulu", 2023);
     auto const sortBy = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
-    auto const viewId = createView(*runtimePtr, "$year > 2000", sortBy);
+    auto const viewId = createView(runtime, "$year > 2000", sortBy);
 
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, alpha));
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{500});
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
-    runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
-    runtimePtr->playback().commands().setVolume(0.5F);
-    runtimePtr->playback().commands().setMuted(true);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, alpha));
+    runtime.playback().commands().seek(std::chrono::milliseconds{500});
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().setRepeatMode(RepeatMode::All);
+    runtime.playback().commands().setVolume(0.5F);
+    runtime.playback().commands().setMuted(true);
+    REQUIRE(runtime.savePlaybackSession());
 
-    CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
     CHECK(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     auto const saved = storedSession(playbackSessionStore);
     CHECK(saved.schemaVersion == 1);
-    CHECK(saved.libraryId == runtimePtr->library().snapshot().libraryId());
+    CHECK(saved.libraryId == runtime.library().snapshot().libraryId());
     CHECK(saved.sourceListId == kAllTracksListId);
     CHECK(saved.quickFilterExpression == "$year > 2000");
     CHECK(saved.sortBy == sortBy);
     CHECK(saved.currentTrackId == alpha);
-    CHECK(saved.currentTrackUri == runtimePtr->library().snapshot().trackUri(alpha));
+    CHECK(saved.currentTrackUri == runtime.library().snapshot().trackUri(alpha));
     CHECK(saved.anchorIndex == 1);
     CHECK(saved.positionMs == 500);
     CHECK(saved.shuffleMode == ShuffleMode::On);
@@ -889,13 +896,13 @@ namespace ao::rt::test
     CHECK(saved.volume == 0.5F);
     CHECK(saved.muted);
 
-    runtimePtr->playback().commands().stop();
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    runtime.playback().commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->trackId == alpha);
-    auto const restoredSnapshot = runtimePtr->playback().snapshot();
+    auto const restoredSnapshot = runtime.playback().snapshot();
     CHECK(restoredSnapshot.transport.transport == audio::Transport::Idle);
     CHECK(restoredSnapshot.transport.nowPlaying.trackId == alpha);
     CHECK(restoredSnapshot.transport.elapsed == std::chrono::milliseconds{500});
@@ -906,21 +913,21 @@ namespace ao::rt::test
     REQUIRE(restoredSnapshot.transport.occurrenceId.value != 0);
     REQUIRE(restoredSnapshot.transport.duration > std::chrono::milliseconds{750});
 
-    CHECK(runtimePtr->playback().commands().trySeek(
-      restoredSnapshot.transport.occurrenceId, std::chrono::milliseconds{750}));
-    auto const soughtSnapshot = runtimePtr->playback().snapshot();
+    CHECK(
+      runtime.playback().commands().trySeek(restoredSnapshot.transport.occurrenceId, std::chrono::milliseconds{750}));
+    auto const soughtSnapshot = runtime.playback().snapshot();
     CHECK(soughtSnapshot.transport.transport == audio::Transport::Idle);
     CHECK(soughtSnapshot.transport.occurrenceId == restoredSnapshot.transport.occurrenceId);
     CHECK(soughtSnapshot.transport.elapsed == std::chrono::milliseconds{750});
-    CHECK(runtimePtr->playback().elapsed() == soughtSnapshot.transport.elapsed);
+    CHECK(runtime.playback().elapsed() == soughtSnapshot.transport.elapsed);
     CHECK(soughtSnapshot.transport.finalSeekRevision.value == restoredSnapshot.transport.finalSeekRevision.value + 1);
 
     // A restored sequence owns an exact runtime occurrence while Engine is
     // intentionally stopped, so guarded navigation may resume from that cursor.
-    REQUIRE(runtimePtr->playback().commands().tryNext(soughtSnapshot.transport.occurrenceId));
+    REQUIRE(runtime.playback().commands().tryNext(soughtSnapshot.transport.occurrenceId));
     REQUIRE(executor->tryDrainUntil(
-      [&] { return runtimePtr->playback().snapshot().transport.transport == audio::Transport::Playing; }));
-    auto const advancedSnapshot = runtimePtr->playback().snapshot();
+      [&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Playing; }));
+    auto const advancedSnapshot = runtime.playback().snapshot();
     CHECK(advancedSnapshot.transport.occurrenceId.value != 0);
     CHECK(advancedSnapshot.transport.occurrenceId != soughtSnapshot.transport.occurrenceId);
     CHECK(advancedSnapshot.transport.nowPlaying.trackId != kInvalidTrackId);
@@ -932,12 +939,13 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
+    auto& runtime = ownerPtr->runtime();
     auto captureStatePtr = std::make_shared<RenderCaptureState>();
-    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    runtime.addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
     executor->drain();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Deferred output");
-    auto const viewId = createView(*runtimePtr);
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Deferred output");
+    auto const viewId = createView(runtime);
     auto const session = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
@@ -945,14 +953,14 @@ namespace ao::rt::test
       .volume = 0.999F,
       .muted = true,
     };
-    storeSavedSession(*runtimePtr, playbackSessionStore, session);
+    storeSavedSession(runtime, playbackSessionStore, session);
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     executor->drain();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    auto const snapshot = runtimePtr->playback().snapshot();
+    auto const snapshot = runtime.playback().snapshot();
     CHECK(snapshot.transport.transport == audio::Transport::Idle);
     CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{250});
     CHECK(snapshot.transport.volume.level == session.volume);
@@ -960,7 +968,7 @@ namespace ao::rt::test
     // The capture backend records its render target only when open is called.
     CHECK(captureStatePtr->renderTarget == nullptr);
 
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     CHECK(captureStatePtr->renderTarget != nullptr);
   }
 
@@ -971,24 +979,25 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
 
-    addReadyAudioProvider(*runtimePtr);
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Debounced Track", 2020);
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Debounced Track", 2020);
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
 
-    runtimePtr->playback().commands().setVolume(0.4F);
+    runtime.playback().commands().setVolume(0.4F);
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
     REQUIRE(executor->tryRunOne());
 
     CHECK(storedSession(playbackSessionStore).volume == 0.4F);
 
-    runtimePtr->playback().commands().setVolume(0.6F);
+    runtime.playback().commands().setVolume(0.6F);
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
     REQUIRE(executor->tryRunOne());
@@ -1002,21 +1011,22 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
 
-    addReadyAudioProvider(*runtimePtr);
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Replaced debounce", 2020);
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Replaced debounce", 2020);
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
 
-    runtimePtr->playback().commands().setVolume(0.4F);
+    runtime.playback().commands().setVolume(0.4F);
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
 
-    runtimePtr->playback().commands().setVolume(0.6F);
+    runtime.playback().commands().setVolume(0.6F);
     REQUIRE(executor->tryRunOne());
     CHECK(storedSession(playbackSessionStore).volume == 1.0F);
 
@@ -1033,15 +1043,16 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
-    REQUIRE(runtimePtr->restorePlaybackSession());
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
+    REQUIRE(runtime.restorePlaybackSession());
 
     auto captureStatePtr = std::make_shared<RenderCaptureState>();
-    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    runtime.addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Latent elapsed", 2020);
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Latent elapsed", 2020);
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     executor->runUntilIdle();
     REQUIRE(captureStatePtr->renderTarget != nullptr);
 
@@ -1049,14 +1060,14 @@ namespace ao::rt::test
     auto const renderRes = captureStatePtr->renderTarget->renderPcm(output);
     REQUIRE(renderRes.bytesWritten > 0);
     captureStatePtr->renderTarget->handlePositionAdvanced(renderRes.positionFrames);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
 
     auto sentinel = storedSession(playbackSessionStore);
     sentinel.positionMs = 0;
     sentinel.shuffleMode = ShuffleMode::Off;
-    storeSavedSession(*runtimePtr, playbackSessionStore, sentinel);
+    storeSavedSession(runtime, playbackSessionStore, sentinel);
 
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
 
     auto const beforeDebounce = storedSession(playbackSessionStore);
     CHECK(beforeDebounce.positionMs == 0);
@@ -1078,28 +1089,29 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK_FALSE(restoredRes->restored);
 
-    addReadyAudioProvider(*runtimePtr);
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Deferred Save", 2020);
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Deferred Save", 2020);
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
     REQUIRE(std::filesystem::remove(configPath));
     REQUIRE(std::filesystem::create_directory(configPath));
-    runtimePtr->playback().commands().setVolume(0.4F);
+    runtime.playback().commands().setVolume(0.4F);
 
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
     REQUIRE(executor->tryRunOne());
 
     REQUIRE(std::filesystem::remove(configPath));
-    runtimePtr->playback().commands().setVolume(0.6F);
+    runtime.playback().commands().setVolume(0.6F);
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
     REQUIRE(executor->tryRunOne());
@@ -1110,28 +1122,29 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const insertedBeforeCurrent = addPlayableTrack(*runtimePtr, *executor, "Inserted before current");
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Current");
-    auto const removedSuccessor = addPlayableTrack(*runtimePtr, *executor, "Removed successor");
-    auto const finalSuccessor = addPlayableTrack(*runtimePtr, *executor, "Final successor");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {current, removedSuccessor, finalSuccessor});
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const insertedBeforeCurrent = addPlayableTrack(*ownerPtr, *executor, "Inserted before current");
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Current");
+    auto const removedSuccessor = addPlayableTrack(*ownerPtr, *executor, "Removed successor");
+    auto const finalSuccessor = addPlayableTrack(*ownerPtr, *executor, "Final successor");
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {current, removedSuccessor, finalSuccessor});
     executor->drain();
     auto const insertedIds = std::vector{insertedBeforeCurrent};
     auto const removedIds = std::vector{removedSuccessor};
     auto changedStates = std::vector<PlaybackSnapshot>{};
-    auto const changedSubscription = runtimePtr->playback().events().onSnapshot(
+    auto const changedSubscription = runtime.playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept { changedStates.push_back(snapshot); });
 
-    setOrderedListViewMembership(*runtimePtr, insertedIds, true);
+    setOrderedListViewMembership(*ownerPtr, insertedIds, true);
     executor->drain();
-    setOrderedListViewMembership(*runtimePtr, removedIds, false);
+    setOrderedListViewMembership(*ownerPtr, removedIds, false);
 
-    auto const launchedRes = startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, current);
+    auto const launchedRes = startFromViewAndWait(runtime, *executor, orderedList.viewId, current);
 
     REQUIRE(launchedRes);
-    auto const accepted = runtimePtr->playback().snapshot().succession;
+    auto const accepted = runtime.playback().snapshot().succession;
     CHECK(accepted.sourceState == PlaybackSourceState::Live);
     CHECK(accepted.currentTrackId == current);
     CHECK(accepted.shuffle == ShuffleMode::Off);
@@ -1139,15 +1152,15 @@ namespace ao::rt::test
     CHECK(accepted.hasPrevious);
     CHECK(accepted.hasNext);
     REQUIRE(changedStates.size() == 1);
-    CHECK(changedStates.front() == runtimePtr->playback().snapshot());
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == current);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(changedStates.front() == runtime.playback().snapshot());
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == current);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Playing);
 
-    runtimePtr->playback().commands().next();
+    runtime.playback().commands().next();
 
-    CHECK(runtimePtr->playback().snapshot().succession.currentTrackId == finalSuccessor);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == finalSuccessor);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(runtime.playback().snapshot().succession.currentTrackId == finalSuccessor);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == finalSuccessor);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Playing);
   }
 
   TEST_CASE("PlaybackSession - restore defers nested playback commands issued by a snapshot observer")
@@ -1155,21 +1168,22 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
     executor->drain();
-    auto const firstTrackId = addPlayableTrack(*runtimePtr, *executor, "First", 2020);
-    auto const secondTrackId = addPlayableTrack(*runtimePtr, *executor, "Second", 2020);
-    auto const viewId = createView(*runtimePtr, {}, {{.field = TrackSortField::Title, .ascending = true}});
+    auto const firstTrackId = addPlayableTrack(*ownerPtr, *executor, "First", 2020);
+    auto const secondTrackId = addPlayableTrack(*ownerPtr, *executor, "Second", 2020);
+    auto const viewId = createView(runtime, {}, {{.field = TrackSortField::Title, .ascending = true}});
     executor->drain();
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, firstTrackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
-    runtimePtr->playback().commands().stop();
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, firstTrackId));
+    REQUIRE(runtime.savePlaybackSession());
+    runtime.playback().commands().stop();
     executor->drain();
-    auto normalizedPayload = storedSession(runtimePtr->workspaceConfigStore());
+    auto normalizedPayload = storedSession(runtime.workspaceConfigStore());
     normalizedPayload.anchorIndex = 999;
     normalizedPayload.positionMs = 400;
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), normalizedPayload);
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), normalizedPayload);
 
     std::uint32_t snapshotCount = 0;
     bool nestedCommandRequested = false;
@@ -1179,7 +1193,7 @@ namespace ao::rt::test
     auto observedSuccessionTrackId = kInvalidTrackId;
     auto observedTransportTrackId = kInvalidTrackId;
     auto observedElapsed = std::chrono::milliseconds{};
-    auto snapshotSubscription = runtimePtr->playback().events().onSnapshot(
+    auto snapshotSubscription = runtime.playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept
       {
         ++snapshotCount;
@@ -1190,7 +1204,7 @@ namespace ao::rt::test
         if (!nestedCommandRequested)
         {
           nestedCommandRequested = true;
-          auto const nestedRestoreRes = runtimePtr->restorePlaybackSession();
+          auto const nestedRestoreRes = runtime.restorePlaybackSession();
           nestedRestoreAccepted = nestedRestoreRes.has_value();
 
           if (!nestedRestoreRes)
@@ -1198,12 +1212,12 @@ namespace ao::rt::test
             nestedRestoreError = nestedRestoreRes.error().code;
           }
 
-          auto const nestedLaunchRes = runtimePtr->playback().commands().startFromView(viewId, secondTrackId);
+          auto const nestedLaunchRes = runtime.playback().commands().startFromView(viewId, secondTrackId);
           nestedLaunchAccepted = nestedLaunchRes.has_value();
         }
       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
@@ -1215,20 +1229,20 @@ namespace ao::rt::test
     CHECK_FALSE(nestedRestoreAccepted);
     CHECK(nestedRestoreError == Error::Code::InvalidState);
     CHECK(nestedLaunchAccepted);
-    CHECK(runtimePtr->playback().snapshot().succession.currentTrackId == firstTrackId);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == firstTrackId);
-    CHECK(runtimePtr->playback().snapshot().succession.hasNext);
-    CHECK_FALSE(runtimePtr->playback().snapshot().succession.hasPrevious);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Idle);
+    CHECK(runtime.playback().snapshot().succession.currentTrackId == firstTrackId);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == firstTrackId);
+    CHECK(runtime.playback().snapshot().succession.hasNext);
+    CHECK_FALSE(runtime.playback().snapshot().succession.hasPrevious);
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Idle);
 
     snapshotSubscription.reset();
     REQUIRE(executor->tryDrainUntil(
       [&]
       {
-        return runtimePtr->playback().snapshot().succession.currentTrackId == secondTrackId &&
-               runtimePtr->playback().snapshot().transport.nowPlaying.trackId == secondTrackId &&
-               runtimePtr->playback().snapshot().transport.transport == audio::Transport::Playing;
+        return runtime.playback().snapshot().succession.currentTrackId == secondTrackId &&
+               runtime.playback().snapshot().transport.nowPlaying.trackId == secondTrackId &&
+               runtime.playback().snapshot().transport.transport == audio::Transport::Playing;
       }));
   }
 
@@ -1237,52 +1251,54 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
     executor->drain();
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Pending restore", 2020);
-    auto const viewId = createView(*runtimePtr);
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Pending restore", 2020);
+    auto const viewId = createView(runtime);
     executor->drain();
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
 
     bool queuedRepeat = false;
-    auto const snapshotSubscription = runtimePtr->playback().events().onSnapshot(
+    auto const snapshotSubscription = runtime.playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept
       {
         if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
         {
           queuedRepeat = true;
-          runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
+          runtime.playback().commands().setRepeatMode(RepeatMode::All);
         }
       });
 
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(queuedRepeat);
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == Error::Code::InvalidState);
     executor->drain();
-    CHECK(runtimePtr->playback().snapshot().succession.repeat == RepeatMode::All);
+    CHECK(runtime.playback().snapshot().succession.repeat == RepeatMode::All);
   }
 
   TEST_CASE("PlaybackSession - a natural finish report rejects synchronous restore", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
     auto captureStatePtr = std::make_shared<RenderCaptureState>();
-    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
-    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Last track");
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, createView(*runtimePtr), trackId));
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    runtime.addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    auto const trackId = addPlayableTrack(*ownerPtr, *executor, "Last track");
+    REQUIRE(startFromViewAndWait(runtime, *executor, createView(runtime), trackId));
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       {.sourceListId = kAllTracksListId, .currentTrackId = trackId, .positionMs = 250});
 
     auto optRestoreRes = std::optional<Result<PlaybackSessionRestoreResult>>{};
-    auto const subscription = runtimePtr->notifications().onFeedUpdated(
+    auto const subscription = runtime.notifications().onFeedUpdated(
       [&](NotificationFeedUpdate const& update)
       {
         for (auto const& entry : update.feedPtr->entries)
@@ -1291,7 +1307,7 @@ namespace ao::rt::test
               entry.id == update.id && update.mutationKind == NotificationFeedMutationKind::Posted &&
               report != nullptr && report->templateId == NotificationReportTemplate::PlaybackSequenceFinished)
           {
-            optRestoreRes = runtimePtr->restorePlaybackSession();
+            optRestoreRes = runtime.restorePlaybackSession();
             return;
           }
         }
@@ -1307,39 +1323,40 @@ namespace ao::rt::test
     REQUIRE_FALSE(*optRestoreRes);
     CHECK(optRestoreRes->error().code == Error::Code::InvalidState);
     executor->drain();
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->trackId == trackId);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{250});
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{250});
   }
 
   TEST_CASE("PlaybackSession - same-subject restore publishes a changed offset")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    auto const trackId = addPlayableTrack(*runtimePtr, "Restored offset");
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const trackId = addPlayableTrack(*ownerPtr, "Restored offset");
+    runtime.sources().reloadAllTracks();
     auto session = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
       .positionMs = 250,
     };
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), session);
-    REQUIRE(runtimePtr->restorePlaybackSession());
-    auto const before = runtimePtr->playback().snapshot();
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), session);
+    REQUIRE(runtime.restorePlaybackSession());
+    auto const before = runtime.playback().snapshot();
     REQUIRE(before.transport.elapsed == std::chrono::milliseconds{250});
     session.positionMs = 750;
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), session);
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), session);
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    auto const after = runtimePtr->playback().snapshot();
+    auto const after = runtime.playback().snapshot();
     CHECK(after.transport.positionRevision.value == before.transport.positionRevision.value + 1);
     CHECK(after.transport.finalSeekRevision == before.transport.finalSeekRevision);
     CHECK(after.transport.elapsed == std::chrono::milliseconds{750});
@@ -1348,9 +1365,10 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - validates the complete serialized payload before lookup")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const trackId = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const trackId = addPlayableTrack(*ownerPtr, "Current");
+    runtime.sources().reloadAllTracks();
     auto payload = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
@@ -1426,8 +1444,8 @@ namespace ao::rt::test
       payload.volume = 5.0F;
     }
 
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == expectedError);
   }
@@ -1435,9 +1453,10 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - exact schema rejects missing and malformed raw YAML fields")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const trackId = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const trackId = addPlayableTrack(*ownerPtr, "Current");
+    runtime.sources().reloadAllTracks();
     auto schemaLine = std::string_view{"  schemaVersion: 1\n"};
     auto sortBy = std::string_view{"[]"};
     auto libraryIdLine = std::string_view{"  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"};
@@ -1473,26 +1492,27 @@ namespace ao::rt::test
     }
 
     writeWorkspaceYaml(tempDir, rawPlaybackSessionYaml(trackId, schemaLine, sortBy, libraryIdLine));
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == Error::Code::FormatRejected);
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
   TEST_CASE("PlaybackSession - rejects a missing or non-canonical current track URI")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const trackId = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const trackId = addPlayableTrack(*ownerPtr, "Current");
+    runtime.sources().reloadAllTracks();
 
     SECTION("a missing currentTrackUri")
     {
       // The open library's id, so parsing alone can reject the document.
       auto const libraryIdLine =
-        std::format("  libraryId: {}\n", utility::formatUuid(runtimePtr->library().snapshot().libraryId()));
+        std::format("  libraryId: {}\n", utility::formatUuid(runtime.library().snapshot().libraryId()));
       auto yaml = rawPlaybackSessionYaml(trackId, "  schemaVersion: 1\n", "[]", libraryIdLine);
       auto const uriLine = std::string_view{"  currentTrackUri: current.flac\n"};
       auto const uriPosition = yaml.find(uriLine);
@@ -1500,7 +1520,7 @@ namespace ao::rt::test
       yaml.erase(uriPosition, uriLine.size());
       writeWorkspaceYaml(tempDir, yaml);
 
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE_FALSE(restoredRes);
       CHECK(restoredRes.error().code == Error::Code::FormatRejected);
     }
@@ -1539,31 +1559,32 @@ namespace ao::rt::test
         uri = std::string(library::LibraryUri::kMaxLength + 1, 'a');
       }
 
-      storeSession(runtimePtr->workspaceConfigStore(),
+      storeSession(runtime.workspaceConfigStore(),
                    PlaybackSessionState{
-                     .libraryId = runtimePtr->library().snapshot().libraryId(),
+                     .libraryId = runtime.library().snapshot().libraryId(),
                      .sourceListId = kAllTracksListId,
                      .currentTrackId = currentTrackId,
                      .currentTrackUri = uri,
                    });
 
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE_FALSE(restoredRes);
       CHECK(restoredRes.error().code == Error::Code::CorruptData);
     }
 
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
   }
 
   TEST_CASE("PlaybackSession - restore resolves bound, gap, and replacement rows")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    auto const first = addPlayableTrack(*runtimePtr, "First", 1990);
-    auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
-    std::ignore = addPlayableTrack(*runtimePtr, "Third", 2023);
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const first = addPlayableTrack(*ownerPtr, "First", 1990);
+    auto const second = addPlayableTrack(*ownerPtr, "Second", 2022);
+    std::ignore = addPlayableTrack(*ownerPtr, "Third", 2023);
+    runtime.sources().reloadAllTracks();
 
     auto payload = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
@@ -1574,25 +1595,25 @@ namespace ao::rt::test
     SECTION("projected current is bound and retains position")
     {
       payload.anchorIndex = 0;
-      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
       CHECK(restoredRes->trackId == first);
-      CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
+      CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
     }
 
     SECTION("existing filtered current remains a gap and retains position")
     {
       payload.quickFilterExpression = "$year > 2000";
       payload.anchorIndex = 1;
-      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
       CHECK(restoredRes->trackId == first);
-      CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
-      CHECK(runtimePtr->playback().snapshot().succession.hasNext);
+      CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{400});
+      CHECK(runtime.playback().snapshot().succession.hasNext);
     }
 
     SECTION("missing current promotes the row at its saved anchor before shuffle")
@@ -1600,12 +1621,12 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 1;
       payload.shuffleMode = ShuffleMode::On;
-      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
       CHECK(restoredRes->trackId == second);
-      CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
+      CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("missing current at end wraps only for repeat all")
@@ -1613,35 +1634,36 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 3;
       payload.repeatMode = RepeatMode::All;
-      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
       CHECK(restoredRes->trackId == first);
-      CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
+      CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("missing current without deterministic successor is discarded")
     {
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 3;
-      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      storeSavedSession(runtime, runtime.workspaceConfigStore(), payload);
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       CHECK_FALSE(restoredRes->restored);
-      CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+      CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
     }
   }
 
   TEST_CASE("PlaybackSession - an identity failure drops the session instead of replacing its track")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    auto const first = addPlayableTrack(*runtimePtr, "First", 1990);
-    auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
-    runtimePtr->sources().reloadAllTracks();
-    auto const reader = runtimePtr->library().snapshot();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const first = addPlayableTrack(*ownerPtr, "First", 1990);
+    auto const second = addPlayableTrack(*ownerPtr, "Second", 2022);
+    runtime.sources().reloadAllTracks();
+    auto const reader = runtime.library().snapshot();
     auto const libraryId = reader.libraryId();
     auto const firstUri = reader.trackUri(first).value();
     auto const secondUri = reader.trackUri(second).value();
@@ -1679,24 +1701,25 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
     }
 
-    storeSession(runtimePtr->workspaceConfigStore(), payload);
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    storeSession(runtime.workspaceConfigStore(), payload);
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK_FALSE(restoredRes->restored);
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
   }
 
   TEST_CASE("PlaybackSession - an absent track whose file left the library keeps anchor replacement")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    std::ignore = addPlayableTrack(*runtimePtr, "First", 1990);
-    auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
-    runtimePtr->sources().reloadAllTracks();
-    storeSession(runtimePtr->workspaceConfigStore(),
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    std::ignore = addPlayableTrack(*ownerPtr, "First", 1990);
+    auto const second = addPlayableTrack(*ownerPtr, "Second", 2022);
+    runtime.sources().reloadAllTracks();
+    storeSession(runtime.workspaceConfigStore(),
                  PlaybackSessionState{
-                   .libraryId = runtimePtr->library().snapshot().libraryId(),
+                   .libraryId = runtime.library().snapshot().libraryId(),
                    .sourceListId = kAllTracksListId,
                    .currentTrackId = TrackId{999'999},
                    .currentTrackUri = "deleted.flac",
@@ -1704,11 +1727,11 @@ namespace ao::rt::test
                    .positionMs = 400,
                  });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->trackId == second);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
   }
 
   TEST_CASE("PlaybackSession - a session saved after a live library restore is not resumed")
@@ -1716,30 +1739,31 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto backupDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    std::ignore = addPlayableTrack(*runtimePtr, *executor, "Alpha");
-    auto const beta = addPlayableTrack(*runtimePtr, *executor, "Beta");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, beta));
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    std::ignore = addPlayableTrack(*ownerPtr, *executor, "Alpha");
+    auto const beta = addPlayableTrack(*ownerPtr, *executor, "Beta");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, beta));
     auto const yamlPath = backupDir.path() / "backup.yaml";
-    auto& jobs = runtimePtr->library().jobs();
-    REQUIRE(runRuntimeTask(*runtimePtr, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
-    auto planRes = runRuntimeTask(*runtimePtr, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    auto& jobs = ownerPtr->libraryJobs();
+    REQUIRE(runRuntimeTask(runtime, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
+    auto planRes = runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
     REQUIRE(planRes);
-    REQUIRE(runRuntimeTask(*runtimePtr, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
+    REQUIRE(runRuntimeTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
     executor->drain();
 
     // The restore leaves the subject playing under an id the library no longer has.
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
-    auto const reader = runtimePtr->library().snapshot();
+    REQUIRE(runtime.savePlaybackSession());
+    auto const saved = storedSession(runtime.workspaceConfigStore());
+    auto const reader = runtime.library().snapshot();
     CHECK(saved.currentTrackId == beta);
     CHECK_FALSE(reader.containsTrack(beta));
     CHECK(reader.containsTrackUri(saved.currentTrackUri));
 
-    runtimePtr->playback().commands().stop();
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    runtime.playback().commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK_FALSE(restoredRes->restored);
   }
@@ -1748,28 +1772,29 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{500});
-    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const trackId = addTrackWithOwnedMedia(*ownerPtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    runtime.playback().commands().seek(std::chrono::milliseconds{500});
+    relinkByScan(*ownerPtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
 
     // The relink keeps the id and changes the file, so the save records the library's URI.
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
+    REQUIRE(runtime.savePlaybackSession());
+    auto const saved = storedSession(runtime.workspaceConfigStore());
     CHECK(saved.currentTrackId == trackId);
     CHECK(saved.currentTrackUri == "moved/after-move.flac");
     CHECK(saved.positionMs == 500);
 
-    runtimePtr->playback().commands().stop();
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    runtime.playback().commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK(restoredRes->restored);
     CHECK(restoredRes->trackId == trackId);
     // A replacement would start from zero; the relinked track keeps its position.
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{500});
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{500});
   }
 
   TEST_CASE("PlaybackSession - a relink of the current track requests a debounced save")
@@ -1779,19 +1804,20 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
-    runtimePtr->startPlaybackSessionPersistence();
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
+    runtime.startPlaybackSessionPersistence();
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const trackId = addTrackWithOwnedMedia(*ownerPtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
     REQUIRE(storedSession(playbackSessionStore).currentTrackUri == "before-move.flac");
 
     // No playback change follows the relink, so only the relink can schedule this save.
-    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+    relinkByScan(*ownerPtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
     REQUIRE(executor->tryRunOne());
@@ -1803,35 +1829,36 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto backupDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
     // Frontends start observation after restore; it sees the relink publish.
-    runtimePtr->startPlaybackSessionPersistence();
-    addReadyAudioProvider(*runtimePtr);
-    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
-    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+    runtime.startPlaybackSessionPersistence();
+    addReadyAudioProvider(runtime);
+    auto const trackId = addTrackWithOwnedMedia(*ownerPtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    relinkByScan(*ownerPtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
 
     // The backup holds the relinked file, which the restore gives a new id.
     auto const yamlPath = backupDir.path() / "backup.yaml";
-    auto& jobs = runtimePtr->library().jobs();
-    REQUIRE(runRuntimeTask(*runtimePtr, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
-    auto planRes = runRuntimeTask(*runtimePtr, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    auto& jobs = ownerPtr->libraryJobs();
+    REQUIRE(runRuntimeTask(runtime, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
+    auto planRes = runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
     REQUIRE(planRes);
-    REQUIRE(runRuntimeTask(*runtimePtr, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
+    REQUIRE(runRuntimeTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
     executor->drain();
 
     // The save keeps the file the track last played, not the one the transport opened.
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
-    auto const reader = runtimePtr->library().snapshot();
+    REQUIRE(runtime.savePlaybackSession());
+    auto const saved = storedSession(runtime.workspaceConfigStore());
+    auto const reader = runtime.library().snapshot();
     CHECK(saved.currentTrackId == trackId);
     CHECK_FALSE(reader.containsTrack(trackId));
     CHECK(saved.currentTrackUri == "moved/after-move.flac");
     CHECK(reader.containsTrackUri(saved.currentTrackUri));
 
-    runtimePtr->playback().commands().stop();
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    runtime.playback().commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK_FALSE(restoredRes->restored);
   }
@@ -1839,13 +1866,14 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - missing-source fallback preserves order and clears filter")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    auto const current = addPlayableTrack(*runtimePtr, "Current", 1990);
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const current = addPlayableTrack(*ownerPtr, "Current", 1990);
+    runtime.sources().reloadAllTracks();
     auto const sortBy = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = ListId{999'999},
                         .quickFilterExpression = "$year > 2000",
@@ -1854,24 +1882,24 @@ namespace ao::rt::test
                         .positionMs = 250,
                       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->sourceListId == kAllTracksListId);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const corrected = storedSession(runtimePtr->workspaceConfigStore());
+    REQUIRE(runtime.savePlaybackSession());
+    auto const corrected = storedSession(runtime.workspaceConfigStore());
     CHECK(corrected.sourceListId == kAllTracksListId);
     CHECK(corrected.quickFilterExpression.empty());
     CHECK(corrected.sortBy == sortBy);
 
-    runtimePtr->playback().commands().stop();
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    runtime.playback().commands().stop();
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = ListId{999'999},
                         .currentTrackId = TrackId{888'888},
                       });
-    auto const discardedRes = runtimePtr->restorePlaybackSession();
+    auto const discardedRes = runtime.restorePlaybackSession();
     REQUIRE(discardedRes);
     CHECK_FALSE(discardedRes->restored);
   }
@@ -1879,24 +1907,25 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - duration clamping restores zero")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    auto const current = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->sources().reloadAllTracks();
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const current = addPlayableTrack(*ownerPtr, "Current");
+    runtime.sources().reloadAllTracks();
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = kAllTracksListId,
                         .currentTrackId = current,
                         .positionMs = 10'000,
                       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 0);
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()).positionMs == 0);
   }
 
   TEST_CASE("PlaybackSession - restored endpoint seek is held until resume and saved as zero")
@@ -1904,22 +1933,23 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Restored endpoint");
-    runtimePtr->sources().reloadAllTracks();
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Restored endpoint");
+    runtime.sources().reloadAllTracks();
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = kAllTracksListId,
                         .currentTrackId = current,
                         .positionMs = 250,
                       });
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    auto& playback = runtimePtr->playback();
+    auto& playback = runtime.playback();
     auto const restored = playback.snapshot().transport;
     REQUIRE(restored.transport == audio::Transport::Idle);
     REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
@@ -1959,8 +1989,8 @@ namespace ao::rt::test
     CHECK(sought.transport == audio::Transport::Idle);
     CHECK(sought.occurrenceId == restored.occurrenceId);
     CHECK(sought.finalSeekRevision.value == restored.finalSeekRevision.value + 1);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 0);
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()).positionMs == 0);
 
     // Resume consumes the live end request, rather than reopening at zero.
     playback.commands().resume();
@@ -1969,7 +1999,7 @@ namespace ao::rt::test
     CHECK(playback.snapshot().transport.occurrenceId.value == 0);
 
     // Persistence has a separate normalization rule: the saved subject restarts.
-    auto const restartedRes = runtimePtr->restorePlaybackSession();
+    auto const restartedRes = runtime.restorePlaybackSession();
     REQUIRE(restartedRes);
     REQUIRE(restartedRes->restored);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == current);
@@ -1981,30 +2011,31 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const current = addTrackWithOwnedMedia(*runtimePtr, *executor, "session-resume.flac", "Deferred resume");
-    runtimePtr->sources().reloadAllTracks();
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    auto const current = addTrackWithOwnedMedia(*ownerPtr, *executor, "session-resume.flac", "Deferred resume");
+    runtime.sources().reloadAllTracks();
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = kAllTracksListId,
                         .currentTrackId = current,
                         .positionMs = 250,
                       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    auto& playback = runtimePtr->playback();
+    auto& playback = runtime.playback();
     auto const restored = playback.snapshot().transport;
     REQUIRE(restored.transport == audio::Transport::Idle);
     REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
 
     // The media file behind the restored track is the exact file the deferred
     // start opens, so the test can withdraw and restore the failure cause.
-    auto const mediaPath = runtimePtr->musicRoot() / "session-resume.flac";
+    auto const mediaPath = runtime.musicRoot() / "session-resume.flac";
     REQUIRE(std::filesystem::is_regular_file(mediaPath));
 
     SECTION("a rejected start keeps the restorable position")
@@ -2023,7 +2054,7 @@ namespace ao::rt::test
 
       // The rejected start is reported through the ordinary playback failure
       // feed, exactly like any other rejected start.
-      auto const feed = runtimePtr->notifications().feed();
+      auto const feed = runtime.notifications().feed();
       REQUIRE(feed.entries.size() == 1);
       CHECK(feed.entries.front().severity == NotificationSeverity::Error);
       // A rejected stage reports a route-activation failure (see
@@ -2033,8 +2064,8 @@ namespace ao::rt::test
             NotificationReportTemplate::PlaybackRouteActivationFailed);
 
       // The session snapshot still contains the restored position.
-      REQUIRE(runtimePtr->savePlaybackSession());
-      CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 250);
+      REQUIRE(runtime.savePlaybackSession());
+      CHECK(storedSession(runtime.workspaceConfigStore()).positionMs == 250);
     }
 
     SECTION("a later resume retries from the same offset")
@@ -2063,23 +2094,24 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    addReadyAudioProvider(*runtimePtr);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Stopped while deferred");
-    runtimePtr->sources().reloadAllTracks();
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Stopped while deferred");
+    runtime.sources().reloadAllTracks();
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = kAllTracksListId,
                         .currentTrackId = current,
                         .positionMs = 250,
                       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
-    auto& playback = runtimePtr->playback();
+    auto& playback = runtime.playback();
     auto const restored = playback.snapshot().transport;
     REQUIRE(restored.transport == audio::Transport::Idle);
     REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
@@ -2093,8 +2125,8 @@ namespace ao::rt::test
 
     // Stop discards the deferred token but freezes the restored subject and
     // position for the resulting idle checkpoint.
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const stored = storedSession(runtimePtr->workspaceConfigStore());
+    REQUIRE(runtime.savePlaybackSession());
+    auto const stored = storedSession(runtime.workspaceConfigStore());
     CHECK(stored.currentTrackId == current);
     CHECK(stored.positionMs == 250);
   }
@@ -2105,29 +2137,30 @@ namespace ao::rt::test
     // valid for the runtime's whole lifetime.
     auto arm = PropertyFailArm{};
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    runtimePtr->addAudioProvider(std::make_unique<PropertyFailProvider>(arm));
-    auto const current = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->sources().reloadAllTracks();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    runtime.addAudioProvider(std::make_unique<PropertyFailProvider>(arm));
+    auto const current = addPlayableTrack(*ownerPtr, "Current");
+    runtime.sources().reloadAllTracks();
 
     // Establish a baseline live volume/mute while the backend still accepts writes.
-    runtimePtr->playback().commands().setVolume(0.25F);
-    runtimePtr->playback().commands().setMuted(false);
-    auto const baseline = runtimePtr->playback().snapshot().transport.volume;
+    runtime.playback().commands().setVolume(0.25F);
+    runtime.playback().commands().setMuted(false);
+    auto const baseline = runtime.playback().snapshot().transport.volume;
     REQUIRE(baseline.level == 0.25F);
     REQUIRE(baseline.muted == false);
-    auto const snapshotBefore = runtimePtr->playback().snapshot();
+    auto const snapshotBefore = runtime.playback().snapshot();
     auto const sequenceBefore = snapshotBefore.succession;
     auto const playbackBefore = snapshotBefore.transport;
 
-    auto const payload = savedFor(*runtimePtr,
+    auto const payload = savedFor(runtime,
                                   PlaybackSessionState{
                                     .sourceListId = kAllTracksListId,
                                     .currentTrackId = current,
                                     .volume = 0.75F,
                                     .muted = true,
                                   });
-    storeSession(runtimePtr->workspaceConfigStore(), payload);
+    storeSession(runtime.workspaceConfigStore(), payload);
 
     bool muteAttempted = false;
 
@@ -2142,12 +2175,12 @@ namespace ao::rt::test
       muteAttempted = true;
     }
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
 
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == Error::Code::IoError);
-    CHECK(runtimePtr->playback().snapshot().succession == sequenceBefore);
-    auto const snapshotAfter = runtimePtr->playback().snapshot();
+    CHECK(runtime.playback().snapshot().succession == sequenceBefore);
+    auto const snapshotAfter = runtime.playback().snapshot();
     auto const& playbackAfter = snapshotAfter.transport;
     CHECK(playbackAfter.transport == playbackBefore.transport);
     CHECK(playbackAfter.elapsed == playbackBefore.elapsed);
@@ -2160,41 +2193,42 @@ namespace ao::rt::test
     CHECK(playbackAfter.volume.hardwareAssisted == playbackBefore.volume.hardwareAssisted);
     CHECK(playbackAfter.output == playbackBefore.output);
     CHECK(playbackAfter.quality == playbackBefore.quality);
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == payload);
+    CHECK(storedSession(runtime.workspaceConfigStore()) == payload);
   }
 
   TEST_CASE("PlaybackSession - source invalidation and stop retain the frozen cursor")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
-    addPlayableTrack(*runtimePtr, *executor, "Second");
-    runtimePtr->sources().reloadAllTracks();
-    auto const listId = ao::test::requireValue(runRuntimeTask(
-      *runtimePtr, runtimePtr->library().commands().createListAsync(ListDraft{.name = "Temporary source"})));
-    auto const viewRes = runtimePtr->workspace().navigate({.target = listId});
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const first = addPlayableTrack(*ownerPtr, *executor, "First");
+    addPlayableTrack(*ownerPtr, *executor, "Second");
+    runtime.sources().reloadAllTracks();
+    auto const listId = ao::test::requireValue(
+      runRuntimeTask(runtime, ownerPtr->libraryCommands().createListAsync(ListDraft{.name = "Temporary source"})));
+    auto const viewRes = runtime.workspace().navigate({.target = listId});
     REQUIRE(viewRes);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *viewRes, first));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(startFromViewAndWait(runtime, *executor, *viewRes, first));
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const selected = runtimePtr->playback().snapshot().transport.output.selectedDevice;
-    runtimePtr->playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
-    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteListAsync(listId)));
+    auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
+    runtime.playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
+    REQUIRE(runRuntimeTask(runtime, ownerPtr->libraryCommands().deleteListAsync(listId)));
     executor->drain();
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == first);
-    runtimePtr->playback().commands().pause();
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
-    runtimePtr->playback().commands().resume();
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).sourceListId == listId);
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == first);
+    runtime.playback().commands().pause();
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
+    runtime.playback().commands().resume();
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()).sourceListId == listId);
 
-    runtimePtr->playback().commands().stop();
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const frozen = storedSession(runtimePtr->workspaceConfigStore());
+    runtime.playback().commands().stop();
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    REQUIRE(runtime.savePlaybackSession());
+    auto const frozen = storedSession(runtime.workspaceConfigStore());
     CHECK(frozen.sourceListId == listId);
     CHECK(frozen.currentTrackId == first);
   }
@@ -2203,80 +2237,83 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const only = addPlayableTrack(*runtimePtr, *executor, "Only");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, only));
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{350});
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const only = addPlayableTrack(*ownerPtr, *executor, "Only");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, only));
+    runtime.playback().commands().seek(std::chrono::milliseconds{350});
+    REQUIRE(runtime.savePlaybackSession());
 
-    runtimePtr->playback().commands().next();
+    runtime.playback().commands().next();
 
-    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Idle);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const frozen = storedSession(runtimePtr->workspaceConfigStore());
+    CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Idle);
+    REQUIRE(runtime.savePlaybackSession());
+    auto const frozen = storedSession(runtime.workspaceConfigStore());
     CHECK(frozen.currentTrackId == only);
     CHECK(frozen.positionMs == 350);
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->trackId == only);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{350});
+    CHECK(runtime.playback().snapshot().transport.elapsed == std::chrono::milliseconds{350});
   }
 
   TEST_CASE("PlaybackSession - paused seek and live anchor mutation each become saveable")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Second");
-    std::ignore = addPlayableTrack(*runtimePtr, *executor, "Third");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, current));
-    runtimePtr->playback().commands().pause();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const first = addPlayableTrack(*ownerPtr, *executor, "First");
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Second");
+    std::ignore = addPlayableTrack(*ownerPtr, *executor, "Third");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, current));
+    runtime.playback().commands().pause();
+    REQUIRE(runtime.savePlaybackSession());
 
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{450});
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 450);
+    runtime.playback().commands().seek(std::chrono::milliseconds{450});
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()).positionMs == 450);
 
-    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteTrackAsync(first)));
+    REQUIRE(runRuntimeTask(runtime, ownerPtr->libraryCommands().deleteTrackAsync(first)));
     executor->drain();
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const moved = storedSession(runtimePtr->workspaceConfigStore());
+    REQUIRE(runtime.savePlaybackSession());
+    auto const moved = storedSession(runtime.workspaceConfigStore());
     CHECK(moved.currentTrackId == current);
     CHECK(moved.anchorIndex == 0);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
   }
 
   TEST_CASE("PlaybackSession - List Order breaks column sort ties in browse and playback")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    auto const firstAlpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
-    auto const secondAlpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
-    auto const charlie = addPlayableTrack(*runtimePtr, *executor, "Charlie");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {firstAlpha, secondAlpha, charlie});
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    auto const firstAlpha = addPlayableTrack(*ownerPtr, *executor, "Alpha");
+    auto const secondAlpha = addPlayableTrack(*ownerPtr, *executor, "Alpha");
+    auto const charlie = addPlayableTrack(*ownerPtr, *executor, "Charlie");
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {firstAlpha, secondAlpha, charlie});
     auto const movedIds = std::vector{firstAlpha};
-    auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, {});
+    auto const moved = moveOrderedListViewOrder(*ownerPtr, orderedList, movedIds, {});
     REQUIRE(moved.status == AuthoringStatus::Applied);
     executor->drain();
 
-    auto viewProjectionPtr = ao::test::requireValue(runtimePtr->views().findTrackListProjection(orderedList.viewId));
+    auto viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(orderedList.viewId));
     auto const manualOrder = std::vector{secondAlpha, charlie, firstAlpha};
     CHECK(projectionTrackIds(*viewProjectionPtr) == manualOrder);
-    CHECK(playbackProjectionTrackIds(*runtimePtr, orderedList.viewId) == manualOrder);
+    CHECK(playbackProjectionTrackIds(runtime, orderedList.viewId) == manualOrder);
 
-    REQUIRE(runtimePtr->views().setColumnSort(orderedList.viewId, TrackColumnSort{.column = TrackField::Title}));
-    CHECK(runtimePtr->views().trackListState(orderedList.viewId).presentation.isPreset(BuiltinPreset::ListOrder));
+    REQUIRE(runtime.views().setColumnSort(orderedList.viewId, TrackColumnSort{.column = TrackField::Title}));
+    CHECK(runtime.views().trackListState(orderedList.viewId).presentation.isPreset(BuiltinPreset::ListOrder));
     auto const titleOrder = std::vector{secondAlpha, firstAlpha, charlie};
     CHECK(projectionTrackIds(*viewProjectionPtr) == titleOrder);
-    CHECK(playbackProjectionTrackIds(*runtimePtr, orderedList.viewId) == titleOrder);
+    CHECK(playbackProjectionTrackIds(runtime, orderedList.viewId) == titleOrder);
   }
 
   TEST_CASE("PlaybackSession - view and playback reconstruction share locale order")
@@ -2285,49 +2322,51 @@ namespace ao::rt::test
     REQUIRE(policyRes);
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor, nullptr, nullptr, policyRes->get());
-    addReadyAudioProvider(*runtimePtr);
-    auto const zed = addPlayableTrack(*runtimePtr, *executor, "z");
-    auto const umlaut = addPlayableTrack(*runtimePtr, *executor, "ä");
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor, nullptr, nullptr, policyRes->get());
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const zed = addPlayableTrack(*ownerPtr, *executor, "z");
+    auto const umlaut = addPlayableTrack(*ownerPtr, *executor, "ä");
     auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
-    auto const viewId = createView(*runtimePtr, {}, titleSort);
-    auto const viewProjectionPtr = ao::test::requireValue(runtimePtr->views().findTrackListProjection(viewId));
+    auto const viewId = createView(runtime, {}, titleSort);
+    auto const viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
 
     CHECK(projectionTrackIds(*viewProjectionPtr) == std::vector{umlaut, zed});
-    CHECK(playbackProjectionTrackIds(*runtimePtr, viewId) == std::vector{umlaut, zed});
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, umlaut));
-    REQUIRE(runtimePtr->playback().snapshot().succession.hasNext);
-    runtimePtr->playback().commands().next();
-    CHECK(runtimePtr->playback().snapshot().succession.currentTrackId == zed);
+    CHECK(playbackProjectionTrackIds(runtime, viewId) == std::vector{umlaut, zed});
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, umlaut));
+    REQUIRE(runtime.playback().snapshot().succession.hasNext);
+    runtime.playback().commands().next();
+    CHECK(runtime.playback().snapshot().succession.currentTrackId == zed);
   }
 
   TEST_CASE("PlaybackSession - sorted List Gap ignores stored order changes with identical projected order")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Bravo");
-    auto const alpha = addPlayableTrack(*runtimePtr, *executor, "Alpha");
-    auto const charlie = addPlayableTrack(*runtimePtr, *executor, "Charlie");
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Bravo");
+    auto const alpha = addPlayableTrack(*ownerPtr, *executor, "Alpha");
+    auto const charlie = addPlayableTrack(*ownerPtr, *executor, "Charlie");
     auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {current, alpha, charlie}, titleSort);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, current));
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {current, alpha, charlie}, titleSort);
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, current));
 
     auto const currentIds = std::vector{current};
-    setOrderedListViewMembership(*runtimePtr, currentIds, false);
+    setOrderedListViewMembership(*ownerPtr, currentIds, false);
     executor->drain();
-    runtimePtr->playback().commands().pause();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    runtime.playback().commands().pause();
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const beforeState = runtimePtr->playback().snapshot().succession;
+    auto const beforeState = runtime.playback().snapshot().succession;
     REQUIRE(beforeState.hasNext);
     CHECK(beforeState.hasPrevious);
-    auto const beforePayload = storedSession(runtimePtr->workspaceConfigStore());
+    auto const beforePayload = storedSession(runtime.workspaceConfigStore());
     CHECK(beforePayload.currentTrackId == current);
     CHECK(beforePayload.anchorIndex == 1);
     CHECK(beforePayload.sortBy == titleSort);
-    auto const projectionRes = runtimePtr->views().findTrackListProjection(orderedList.viewId);
+    auto const projectionRes = runtime.views().findTrackListProjection(orderedList.viewId);
     REQUIRE(projectionRes);
     auto const& projectionPtr = *projectionRes;
     REQUIRE(projectionPtr->size() == 2);
@@ -2340,151 +2379,155 @@ namespace ao::rt::test
     projectionBatchCount = 0;
 
     auto const movedIds = std::vector{charlie};
-    auto const moved = moveOrderedListViewOrder(*runtimePtr, orderedList, movedIds, alpha);
+    auto const moved = moveOrderedListViewOrder(*ownerPtr, orderedList, movedIds, alpha);
     REQUIRE(moved.status == AuthoringStatus::Applied);
     executor->drain();
 
     CHECK(projectionBatchCount == 0);
-    CHECK(runtimePtr->playback().snapshot().succession == beforeState);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == current);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == beforePayload);
+    CHECK(runtime.playback().snapshot().succession == beforeState);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == current);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - prepared replacement remains outside public playback and session state")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
-    auto const insertedTrack = addPlayableTrack(*runtimePtr, *executor, "Inserted successor");
-    auto const originalSuccessor = addPlayableTrack(*runtimePtr, *executor, "Original successor");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {first, originalSuccessor});
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, first));
-    runtimePtr->playback().commands().pause();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const first = addPlayableTrack(*ownerPtr, *executor, "First");
+    auto const insertedTrack = addPlayableTrack(*ownerPtr, *executor, "Inserted successor");
+    auto const originalSuccessor = addPlayableTrack(*ownerPtr, *executor, "Original successor");
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {first, originalSuccessor});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, first));
+    runtime.playback().commands().pause();
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const beforeSnapshot = runtimePtr->playback().snapshot();
+    auto const beforeSnapshot = runtime.playback().snapshot();
     REQUIRE(beforeSnapshot.succession.hasNext);
-    auto const beforePayload = storedSession(runtimePtr->workspaceConfigStore());
+    auto const beforePayload = storedSession(runtime.workspaceConfigStore());
 
     auto const insertedIds = std::vector{insertedTrack};
-    setOrderedListViewMembership(*runtimePtr, insertedIds, true);
+    setOrderedListViewMembership(*ownerPtr, insertedIds, true);
     executor->drain();
 
-    auto const afterSnapshot = runtimePtr->playback().snapshot();
+    auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == first);
     CHECK(afterSnapshot.succession.hasNext);
     CHECK(afterSnapshot == beforeSnapshot);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == beforePayload);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - shuffle source mutation remains transient when public state is unchanged")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const current = addPlayableTrack(*runtimePtr, *executor, "Current");
-    auto const second = addPlayableTrack(*runtimePtr, *executor, "Second");
-    auto const third = addPlayableTrack(*runtimePtr, *executor, "Third");
-    auto const fourth = addPlayableTrack(*runtimePtr, *executor, "Fourth");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {current, second, third, fourth});
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, current));
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
-    runtimePtr->playback().commands().pause();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const current = addPlayableTrack(*ownerPtr, *executor, "Current");
+    auto const second = addPlayableTrack(*ownerPtr, *executor, "Second");
+    auto const third = addPlayableTrack(*ownerPtr, *executor, "Third");
+    auto const fourth = addPlayableTrack(*ownerPtr, *executor, "Fourth");
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {current, second, third, fourth});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, current));
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().pause();
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const beforeSnapshot = runtimePtr->playback().snapshot();
+    auto const beforeSnapshot = runtime.playback().snapshot();
     REQUIRE(beforeSnapshot.succession.hasNext);
-    auto const beforePayload = storedSession(runtimePtr->workspaceConfigStore());
+    auto const beforePayload = storedSession(runtime.workspaceConfigStore());
 
     auto const removedIds = std::vector{second};
-    setOrderedListViewMembership(*runtimePtr, removedIds, false);
+    setOrderedListViewMembership(*ownerPtr, removedIds, false);
     executor->drain();
 
-    auto const afterSnapshot = runtimePtr->playback().snapshot();
+    auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == current);
     CHECK(afterSnapshot.succession.hasNext);
     CHECK(afterSnapshot == beforeSnapshot);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == beforePayload);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - stale shuffle-history pop remains transient")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const historyTrack = addPlayableTrack(*runtimePtr, *executor, "History track");
-    auto const second = addPlayableTrack(*runtimePtr, *executor, "Second");
-    auto const third = addPlayableTrack(*runtimePtr, *executor, "Third");
-    auto const orderedList = createOrderedListView(*runtimePtr, *executor, {historyTrack, second, third});
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, orderedList.viewId, historyTrack));
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
-    runtimePtr->playback().commands().next();
-    auto const current = runtimePtr->playback().snapshot().succession.currentTrackId;
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const historyTrack = addPlayableTrack(*ownerPtr, *executor, "History track");
+    auto const second = addPlayableTrack(*ownerPtr, *executor, "Second");
+    auto const third = addPlayableTrack(*ownerPtr, *executor, "Third");
+    auto const orderedList = createOrderedListView(*ownerPtr, *executor, {historyTrack, second, third});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, historyTrack));
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().next();
+    auto const current = runtime.playback().snapshot().succession.currentTrackId;
     REQUIRE(current != historyTrack);
-    REQUIRE(runtimePtr->playback().snapshot().succession.hasPrevious);
-    runtimePtr->playback().commands().pause();
+    REQUIRE(runtime.playback().snapshot().succession.hasPrevious);
+    runtime.playback().commands().pause();
 
     auto const removedIds = std::vector{historyTrack};
-    setOrderedListViewMembership(*runtimePtr, removedIds, false);
+    setOrderedListViewMembership(*ownerPtr, removedIds, false);
     executor->drain();
-    REQUIRE_FALSE(runtimePtr->playback().snapshot().succession.hasPrevious);
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE_FALSE(runtime.playback().snapshot().succession.hasPrevious);
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const beforeState = runtimePtr->playback().snapshot().succession;
-    auto const beforePayload = storedSession(runtimePtr->workspaceConfigStore());
+    auto const beforeState = runtime.playback().snapshot().succession;
+    auto const beforePayload = storedSession(runtime.workspaceConfigStore());
 
-    runtimePtr->playback().commands().previous();
+    runtime.playback().commands().previous();
 
-    CHECK(runtimePtr->playback().snapshot().succession == beforeState);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == current);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Paused);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == beforePayload);
+    CHECK(runtime.playback().snapshot().succession == beforeState);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == current);
+    CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK(storedSession(runtime.workspaceConfigStore()) == beforePayload);
 
     auto const reinsertedIds = std::vector{historyTrack};
-    setOrderedListViewMembership(*runtimePtr, reinsertedIds, true);
+    setOrderedListViewMembership(*ownerPtr, reinsertedIds, true);
     executor->drain();
-    CHECK_FALSE(runtimePtr->playback().snapshot().succession.hasPrevious);
+    CHECK_FALSE(runtime.playback().snapshot().succession.hasPrevious);
   }
 
   TEST_CASE("PlaybackSession - discard suppresses recreation until active state changes")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    REQUIRE(runtimePtr->savePlaybackSession());
-    REQUIRE(runtimePtr->discardRestorablePlaybackSession());
-    CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    REQUIRE(runtime.savePlaybackSession());
+    REQUIRE(runtime.discardRestorablePlaybackSession());
+    CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
 
     SECTION("explicit checkpoint stays suppressed until a mode changes")
     {
-      REQUIRE(runtimePtr->savePlaybackSession());
-      CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
-      runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
-      REQUIRE(runtimePtr->savePlaybackSession());
-      CHECK(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      REQUIRE(runtime.savePlaybackSession());
+      CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      runtime.playback().commands().setRepeatMode(RepeatMode::All);
+      REQUIRE(runtime.savePlaybackSession());
+      CHECK(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
     }
 
     SECTION("final seek admits and checkpoints the active session immediately")
     {
-      runtimePtr->playback().commands().seek(std::chrono::milliseconds{450});
+      runtime.playback().commands().seek(std::chrono::milliseconds{450});
 
-      REQUIRE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
-      CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 450);
+      REQUIRE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      CHECK(storedSession(runtime.workspaceConfigStore()).positionMs == 450);
     }
   }
 
@@ -2492,56 +2535,58 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
 
-    runtimePtr->startPlaybackSessionPersistence();
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    runtime.startPlaybackSessionPersistence();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE(restoredRes);
     CHECK_FALSE(restoredRes->restored);
-    REQUIRE_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    runtimePtr->playback().commands().pause();
+    REQUIRE_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    runtime.playback().commands().pause();
     executor->drain();
 
-    REQUIRE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).currentTrackId == track);
+    REQUIRE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    CHECK(storedSession(runtime.workspaceConfigStore()).currentTrackId == track);
   }
 
   TEST_CASE("PlaybackSession - shutdown checkpoints only an observing lifecycle")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    REQUIRE_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    REQUIRE_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
 
     SECTION("dormant lifecycle stays inert")
     {
-      runtimePtr->shutdown();
-      CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      ownerPtr->shutdown();
+      CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
     }
 
     SECTION("observing lifecycle performs the final checkpoint")
     {
-      runtimePtr->startPlaybackSessionPersistence();
-      runtimePtr->shutdown();
+      runtime.startPlaybackSessionPersistence();
+      ownerPtr->shutdown();
 
-      REQUIRE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
-      CHECK(storedSession(runtimePtr->workspaceConfigStore()).currentTrackId == track);
+      REQUIRE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      CHECK(storedSession(runtime.workspaceConfigStore()).currentTrackId == track);
     }
 
     SECTION("write-sealed lifecycle stays inert")
     {
-      runtimePtr->startPlaybackSessionPersistence();
-      runtimePtr->sealPlaybackSessionPersistenceWrites();
-      runtimePtr->shutdown();
-      CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+      runtime.startPlaybackSessionPersistence();
+      runtime.sealPlaybackSessionPersistenceWrites();
+      ownerPtr->shutdown();
+      CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
     }
   }
 
@@ -2549,19 +2594,20 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Frozen checkpoint");
-    auto const viewId = createView(*runtimePtr);
-    runtimePtr->startPlaybackSessionPersistence();
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    runtimePtr->playback().commands().pause();
-    runtimePtr->playback().commands().seek(std::chrono::milliseconds{450});
-    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
-    runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Frozen checkpoint");
+    auto const viewId = createView(runtime);
+    runtime.startPlaybackSessionPersistence();
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    runtime.playback().commands().pause();
+    runtime.playback().commands().seek(std::chrono::milliseconds{450});
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
+    runtime.playback().commands().setRepeatMode(RepeatMode::All);
     executor->drain();
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const expected = storedSession(runtimePtr->workspaceConfigStore());
+    REQUIRE(runtime.savePlaybackSession());
+    auto const expected = storedSession(runtime.workspaceConfigStore());
     CHECK(expected.currentTrackId == track);
     CHECK(expected.positionMs == 450);
     CHECK(expected.shuffleMode == ShuffleMode::On);
@@ -2571,21 +2617,21 @@ namespace ao::rt::test
     stopSentinel.positionMs = 1;
     stopSentinel.shuffleMode = ShuffleMode::Off;
     REQUIRE(stopSentinel != expected);
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), stopSentinel);
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), stopSentinel);
 
-    runtimePtr->playback().commands().stop();
+    runtime.playback().commands().stop();
 
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == expected);
+    CHECK(storedSession(runtime.workspaceConfigStore()) == expected);
 
     auto shutdownSentinel = expected;
     shutdownSentinel.positionMs = 2;
     shutdownSentinel.repeatMode = RepeatMode::Off;
     REQUIRE(shutdownSentinel != expected);
-    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), shutdownSentinel);
+    storeSavedSession(runtime, runtime.workspaceConfigStore(), shutdownSentinel);
 
-    runtimePtr->shutdown();
+    ownerPtr->shutdown();
 
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()) == expected);
+    CHECK(storedSession(runtime.workspaceConfigStore()) == expected);
   }
 
   TEST_CASE("PlaybackSession - library-switch retirement permanently seals persistence", "[concurrency]")
@@ -2595,45 +2641,45 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
 
-    addReadyAudioProvider(*runtimePtr);
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    runtimePtr->playback().commands().pause();
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    runtime.playback().commands().pause();
     executor->runUntilIdle();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
     REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     auto const scheduledSaveIndex = sleeper.callCount();
-    runtimePtr->playback().commands().setVolume(0.4F);
+    runtime.playback().commands().setVolume(0.4F);
     REQUIRE(sleeper.tryWaitForCallCount(scheduledSaveIndex + 1));
-    auto const beforeFinalSeekRevision = runtimePtr->playback().snapshot().transport.finalSeekRevision;
-    executor->defer([runtime = runtimePtr.get()]
-                    { runtime->playback().commands().seek(std::chrono::milliseconds{450}); });
+    auto const beforeFinalSeekRevision = runtime.playback().snapshot().transport.finalSeekRevision;
+    executor->defer([&runtime] { runtime.playback().commands().seek(std::chrono::milliseconds{450}); });
     REQUIRE(executor->queuedCount() == 1);
 
-    runtimePtr->sealPlaybackSessionPersistenceWrites();
+    runtime.sealPlaybackSessionPersistenceWrites();
     REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
     REQUIRE(sleeper.tryWaitForCancellation(scheduledSaveIndex));
 
-    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
-    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
+    REQUIRE(runtime.retirePlaybackSessionForLibrarySwitch());
+    REQUIRE(runtime.retirePlaybackSessionForLibrarySwitch());
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     REQUIRE(executor->tryRunOne());
-    CHECK(runtimePtr->playback().snapshot().transport.finalSeekRevision != beforeFinalSeekRevision);
+    CHECK(runtime.playback().snapshot().transport.finalSeekRevision != beforeFinalSeekRevision);
     executor->runUntilIdle();
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
-    runtimePtr->shutdown();
-    runtimePtr->shutdown();
+    ownerPtr->shutdown();
+    ownerPtr->shutdown();
     executor->runUntilIdle();
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
   }
@@ -2645,31 +2691,32 @@ namespace ao::rt::test
     auto sleeper = ControlledSleeper{};
     auto executorPtr = std::make_unique<ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    auto& runtime = ownerPtr->runtime();
 
-    addReadyAudioProvider(*runtimePtr);
+    addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    runtimePtr->playback().commands().pause();
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    runtime.playback().commands().pause();
     executor->runUntilIdle();
-    REQUIRE(runtimePtr->savePlaybackSession());
+    REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
     REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     auto const scheduledSaveIndex = sleeper.callCount();
-    runtimePtr->playback().commands().setVolume(0.4F);
+    runtime.playback().commands().setVolume(0.4F);
     REQUIRE(sleeper.tryWaitForCallCount(scheduledSaveIndex + 1));
     REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     REQUIRE(executor->tryWaitUntilQueued());
 
-    REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
+    REQUIRE(runtime.retirePlaybackSessionForLibrarySwitch());
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
     executor->runUntilIdle();
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
-    runtimePtr->shutdown();
+    ownerPtr->shutdown();
     executor->runUntilIdle();
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
   }
@@ -2678,43 +2725,45 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    runtimePtr->addAudioProvider(std::make_unique<VolumeCapabilityProvider>());
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    REQUIRE(runtimePtr->savePlaybackSession());
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    runtime.addAudioProvider(std::make_unique<VolumeCapabilityProvider>());
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    REQUIRE(runtime.savePlaybackSession());
 
-    auto const volumeBefore = runtimePtr->playback().snapshot().transport.volume;
-    REQUIRE(runtimePtr->discardRestorablePlaybackSession());
-    runtimePtr->playback().commands().setOutputDevice(
+    auto const volumeBefore = runtime.playback().snapshot().transport.volume;
+    REQUIRE(runtime.discardRestorablePlaybackSession());
+    runtime.playback().commands().setOutputDevice(
       audio::BackendId{"test_backend"}, audio::DeviceId{"hardware_volume_device"}, audio::kProfileShared);
-    auto const volumeAfter = runtimePtr->playback().snapshot().transport.volume;
+    auto const volumeAfter = runtime.playback().snapshot().transport.volume;
 
     CHECK(volumeAfter.level == volumeBefore.level);
     CHECK(volumeAfter.muted == volumeBefore.muted);
     REQUIRE((volumeAfter.available != volumeBefore.available ||
              volumeAfter.hardwareAssisted != volumeBefore.hardwareAssisted));
-    REQUIRE(runtimePtr->savePlaybackSession());
-    CHECK_FALSE(*runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    REQUIRE(runtime.savePlaybackSession());
+    CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
   }
 
   TEST_CASE("PlaybackSession - restore preparation failure preserves live state")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const live = addPlayableTrack(*runtimePtr, *executor, "Live");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, live));
-    runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
-    runtimePtr->playback().commands().setVolume(0.25F);
-    REQUIRE(runtimePtr->savePlaybackSession());
-    auto const sequenceBefore = runtimePtr->playback().snapshot().succession;
-    auto const playbackBefore = runtimePtr->playback().snapshot().transport;
-    storeSavedSession(*runtimePtr,
-                      runtimePtr->workspaceConfigStore(),
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const live = addPlayableTrack(*ownerPtr, *executor, "Live");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, live));
+    runtime.playback().commands().setRepeatMode(RepeatMode::All);
+    runtime.playback().commands().setVolume(0.25F);
+    REQUIRE(runtime.savePlaybackSession());
+    auto const sequenceBefore = runtime.playback().snapshot().succession;
+    auto const playbackBefore = runtime.playback().snapshot().transport;
+    storeSavedSession(runtime,
+                      runtime.workspaceConfigStore(),
                       PlaybackSessionState{
                         .sourceListId = ListId{999'999},
                         .quickFilterExpression = "$year >",
@@ -2722,31 +2771,32 @@ namespace ao::rt::test
                         .volume = 0.75F,
                       });
 
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto const restoredRes = runtime.restorePlaybackSession();
     REQUIRE_FALSE(restoredRes);
-    CHECK(runtimePtr->playback().snapshot().succession == sequenceBefore);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying == playbackBefore.nowPlaying);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == playbackBefore.transport);
-    CHECK(runtimePtr->playback().snapshot().transport.volume.level == playbackBefore.volume.level);
+    CHECK(runtime.playback().snapshot().succession == sequenceBefore);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying == playbackBefore.nowPlaying);
+    CHECK(runtime.playback().snapshot().transport.transport == playbackBefore.transport);
+    CHECK(runtime.playback().snapshot().transport.volume.level == playbackBefore.volume.level);
   }
 
   TEST_CASE("PlaybackSession - public commands keep cursor and transport matched for save")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const cursorTrack = addPlayableTrack(*runtimePtr, *executor, "Cursor");
-    auto const otherTrack = addPlayableTrack(*runtimePtr, *executor, "Other");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, cursorTrack));
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, otherTrack));
-    auto const snapshot = runtimePtr->playback().snapshot();
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const cursorTrack = addPlayableTrack(*ownerPtr, *executor, "Cursor");
+    auto const otherTrack = addPlayableTrack(*ownerPtr, *executor, "Other");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, cursorTrack));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, otherTrack));
+    auto const snapshot = runtime.playback().snapshot();
     REQUIRE(snapshot.succession.currentTrackId == otherTrack);
     REQUIRE(snapshot.transport.nowPlaying.trackId == otherTrack);
-    auto const savedRes = runtimePtr->savePlaybackSession();
+    auto const savedRes = runtime.savePlaybackSession();
     REQUIRE(savedRes);
-    CHECK(storedSession(runtimePtr->workspaceConfigStore()).currentTrackId == otherTrack);
+    CHECK(storedSession(runtime.workspaceConfigStore()).currentTrackId == otherTrack);
   }
 
   TEST_CASE("PlaybackSession - flush failure returns an I/O diagnostic")
@@ -2754,12 +2804,13 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     REQUIRE(std::filesystem::create_directory(tempDir.path() / "workspace.yaml"));
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
-    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
-    addReadyAudioProvider(*runtimePtr);
-    auto const track = addPlayableTrack(*runtimePtr, *executor, "Track");
-    auto const viewId = createView(*runtimePtr);
-    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
-    auto const savedRes = runtimePtr->savePlaybackSession();
+    auto ownerPtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    auto const track = addPlayableTrack(*ownerPtr, *executor, "Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
+    auto const savedRes = runtime.savePlaybackSession();
     REQUIRE_FALSE(savedRes);
     CHECK(savedRes.error().code == Error::Code::IoError);
   }
@@ -2768,8 +2819,8 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     std::ofstream{tempDir.path() / "workspace.yaml"} << "playback-session: [not, a, map]\n";
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto const restoredRes = ownerPtr->runtime().restorePlaybackSession();
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == Error::Code::FormatRejected);
   }

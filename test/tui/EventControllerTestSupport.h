@@ -57,21 +57,22 @@ namespace ao::tui::test
     ao::test::TempDir tempDir{};
     std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr{};
     rt::test::QueuedExecutor* executor = nullptr;
-    std::unique_ptr<rt::AppRuntime> runtimePtr;
-    uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
+    std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr;
+    rt::AppRuntime& runtime = runtimeOwnerPtr->runtime();
+    uimodel::TrackPresentationCatalog presentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    uimodel::ListPresentations listPresentations{presentationCatalog, runtime.library().changes()};
     ShellInteractionModel shell{};
     HitRegions hitRegions{};
     std::int32_t layoutCheckpointCount = 0;
-    uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
+    uimodel::TrackColumnLayouts trackColumnLayouts{runtime.library().changes()};
     TrackColumnResizePreview trackColumnResizePreview{};
     std::vector<audio::OutputDeviceSelection> recordedOutputSelections{};
     OutputDeviceController outputDevices{
-      runtimePtr->playback(),
+      runtime.playback(),
       ao::test::englishMessageCatalog(),
       uimodel::OutputDeviceIntent::recordedBy([this](audio::OutputDeviceSelection const& selection)
                                               { recordedOutputSelections.push_back(selection); })};
-    uimodel::ActivityStatusViewModel activityStatusViewModel{runtimePtr->notifications(),
+    uimodel::ActivityStatusViewModel activityStatusViewModel{runtime.notifications(),
                                                              ao::test::englishMessageCatalog(),
                                                              [](uimodel::ActivityStatusViewState const&) {}};
     std::unique_ptr<LibraryScanController> libraryScanPtr{};

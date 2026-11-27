@@ -38,6 +38,7 @@ cc_library(
         "layout/document/LayoutValue.cpp",
         "layout/shell/LayoutSession.cpp",
         "layout/shell/ShellGenerationSequence.cpp",
+        "library/LibraryEditing.cpp",
         "library/detail/TrackCredits.cpp",
         "library/detail/TrackCustomMetadata.cpp",
         "library/detail/TrackFieldGrid.cpp",

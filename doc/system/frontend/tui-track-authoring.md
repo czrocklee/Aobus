@@ -214,7 +214,7 @@ Pending-submission bookkeeping clears before any presentation work, so a present
 ## Admitted-write lifetime and exit
 
 Creating the submission task transfers retention to shared authoring Session State before the editor can close.
-Closing the editor during submission therefore keeps the authoring session state alive until the write settles. That state only borrows the runtime `Library`; it does not extend the runtime's lifetime.
+The task keeps that State alive until the write settles, even if the editor closes. State stores a copy of the `LibraryEditing` grant, which borrows the commands and gives access to their reader without extending the runtime's lifetime.
 Controller retirement suppresses late presentation but never cancels the write.
 The controller destructor drops only the editor, invalidation observer, and output callbacks; it does not dispatch, cancel, or present.
 The runtime must outlive that admitted operation.

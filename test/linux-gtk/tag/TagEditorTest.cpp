@@ -107,13 +107,13 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const selectedTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
+    auto const selectedTrackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{});
     auto policy = TestTextOrderingPolicy{};
 
     SECTION("Equal frequencies use locale keys")
     {
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"ä"}});
       auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
@@ -122,9 +122,9 @@ namespace ao::gtk::test
 
     SECTION("Frequency rank remains primary")
     {
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"z"}});
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ä"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"z"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"ä"}});
       auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
@@ -133,8 +133,8 @@ namespace ao::gtk::test
 
     SECTION("Equal locale keys use raw NFC bytes")
     {
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ＡＢＣ"}});
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"ABC"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"ＡＢＣ"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"ABC"}});
       auto editor = TagEditor{ao::test::englishMessageCatalog(), &policy};
       editor.setup(runtime.library(), {selectedTrackId});
 
@@ -147,7 +147,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const selectedTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Chosen"}});
+    auto const selectedTrackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"Chosen"}});
     auto tags = std::vector<std::string>{"ä"};
 
     for (std::size_t index = 0; index < 49; ++index)
@@ -155,7 +155,7 @@ namespace ao::gtk::test
       tags.push_back(std::format("tag{:02}", index));
     }
 
-    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = std::move(tags)});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = std::move(tags)});
     auto const checkWindow = [&](rt::TextOrderingPolicy const* policy,
                                  std::string_view const expectedFirst,
                                  std::string_view const expectedLast)
@@ -190,9 +190,9 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
 
     auto const trackId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
-    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
-    auto const emptyTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"Jazz"}});
+    auto const emptyTrackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{});
 
     auto editor = TagEditor{ao::test::englishMessageCatalog()};
     auto window = Gtk::Window{};
@@ -380,8 +380,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
 
     auto const trackId =
-      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
-    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.tags = {"Jazz"}});
 
     auto editor = TagEditor{ao::test::englishMessageCatalog()};
     auto window = Gtk::Window{};

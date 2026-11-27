@@ -43,7 +43,7 @@ namespace ao::rt::test
     auto const second = storage.addTrack(library::test::TrackSpec{.title = "Second", .credits = original});
     auto changes = makeStateOnlyLibraryChanges(storage.library());
     auto fixture = LibraryCommandsFixture{storage.library(), changes};
-    auto& runtimeLibrary = fixture.library();
+    auto const& runtimeLibrary = fixture.library();
     auto publications = std::vector<LibraryChangeSet>{};
     [[maybe_unused]] auto subscription = changes.onChanged([&publications](LibraryChangeSet const& changeSet) noexcept
                                                            { publications.push_back(changeSet); });
@@ -188,7 +188,7 @@ namespace ao::rt::test
     auto const second = storage.addTrack(library::test::TrackSpec{.title = "Second"});
     auto changes = makeStateOnlyLibraryChanges(storage.library());
     auto fixture = LibraryCommandsFixture{storage.library(), changes};
-    auto& runtimeLibrary = fixture.library();
+    auto const& runtimeLibrary = fixture.library();
     auto publications = std::vector<LibraryChangeSet>{};
     [[maybe_unused]] auto subscription = changes.onChanged([&publications](LibraryChangeSet const& changeSet) noexcept
                                                            { publications.push_back(changeSet); });
@@ -409,7 +409,7 @@ namespace ao::rt::test
     auto const existing = storage.addTrack(library::test::TrackSpec{.title = "Existing"});
     auto changes = makeStateOnlyLibraryChanges(storage.library());
     auto fixture = LibraryCommandsFixture{storage.library(), changes};
-    auto& runtimeLibrary = fixture.library();
+    auto const& runtimeLibrary = fixture.library();
     auto const revision = runtimeLibrary.snapshot().revision();
     auto const dictionarySize = storage.library().dictionary().size();
     auto const dictionaryGeneration = storage.library().dictionary().generation();
@@ -459,9 +459,9 @@ namespace ao::rt::test
     auto const existing = storage.addTrack(library::test::TrackSpec{.title = "Existing"});
     auto changes = makeStateOnlyLibraryChanges(storage.library());
     auto fixture = LibraryCommandsFixture{storage.library(), changes};
-    auto& runtimeLibrary = fixture.library();
+    auto const& runtimeLibrary = fixture.library();
     auto const revision = runtimeLibrary.snapshot().revision();
-    runtimeLibrary.beginClosing();
+    fixture.beginClosing();
     auto const res = runtimeLibrary.bindTrackTargets(std::array{existing, existing});
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::InvalidState);

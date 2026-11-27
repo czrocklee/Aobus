@@ -49,7 +49,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const target = library.tracks().front().id;
     REQUIRE(playback.commands().startFromView(library.activeViewId(), target));
     REQUIRE(fixture.tryWaitForPlayback(target));

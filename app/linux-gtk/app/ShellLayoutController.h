@@ -49,6 +49,7 @@ namespace ao::async
 
 namespace ao::uimodel
 {
+  class LibraryEditing;
   class ListPresentations;
   class PlaybackActions;
   class TrackPresentationCatalog;
@@ -86,6 +87,7 @@ namespace ao::gtk
                                                 layout::ActionStateProvider)>;
 
     ShellLayoutController(rt::AppRuntime& runtime,
+                          uimodel::LibraryEditing editing,
                           Gtk::Window& parentWindow,
                           std::shared_ptr<AppConfigStore> configStorePtr,
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,

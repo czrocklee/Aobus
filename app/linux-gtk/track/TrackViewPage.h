@@ -15,6 +15,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -43,7 +44,6 @@ namespace Gtk
 
 namespace ao::rt
 {
-  class Library;
   class ViewService;
 }
 
@@ -77,7 +77,7 @@ namespace ao::gtk
                            uimodel::TrackColumnLayouts& columnLayouts,
                            i18n::MessageCatalog textCatalog,
                            async::Runtime& asyncRuntime,
-                           rt::Library& library,
+                           uimodel::LibraryEditing editing,
                            rt::ViewService& views,
                            ResourceImageLoader& thumbnailLoader,
                            rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec(),
@@ -161,7 +161,7 @@ namespace ao::gtk
     uimodel::TrackColumnLayouts& _columnLayouts;
     i18n::MessageCatalog _textCatalog;
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     rt::ViewService& _views;
     ResourceImageLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;

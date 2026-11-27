@@ -110,7 +110,7 @@ namespace ao::winui
   TrackPropertiesCoordinator::TrackPropertiesCoordinator(TrackPropertiesCoordinatorConfig config)
     : _xamlRoot{std::move(config.xamlRoot)}
     , _asyncRuntime{config.asyncRuntime}
-    , _library{config.library}
+    , _editing{config.editing}
     , _workspace{config.workspace}
     , _completion{config.completion}
     , _textCatalog{std::move(config.textCatalog)}
@@ -190,8 +190,8 @@ namespace ao::winui
     auto tags = std::vector<std::string>{};
     auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
     {
-      auto snapshot = _library.snapshot();
-      auto boundRes = uimodel::prepareTrackProperties(_library, snapshot, _trackIds, _formSpec, baseline);
+      auto snapshot = _editing.library().snapshot();
+      auto boundRes = uimodel::prepareTrackProperties(_editing, snapshot, _trackIds, _formSpec, baseline);
 
       if (!boundRes)
       {

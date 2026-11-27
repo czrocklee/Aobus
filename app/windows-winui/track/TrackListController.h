@@ -74,7 +74,7 @@ namespace ao::winui
   public:
     TrackListController(rt::ViewService& views,
                         rt::WorkspaceService& workspace,
-                        rt::Library& library,
+                        rt::Library const& library,
                         uimodel::TrackColumnLayouts& columnLayouts,
                         uimodel::ListPresentations const& listPresentations,
                         i18n::MessageCatalog textCatalog);
@@ -138,7 +138,7 @@ namespace ao::winui
     i18n::MessageCatalog _textCatalog;
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;
-    rt::Library& _library;
+    rt::Library const& _library;
     uimodel::TrackColumnLayouts& _columnLayouts;
     uimodel::ListPresentations const& _listPresentations;
     rt::ViewId _viewId{rt::kInvalidViewId};

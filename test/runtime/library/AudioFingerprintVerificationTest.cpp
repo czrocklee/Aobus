@@ -71,7 +71,7 @@ namespace ao::rt::test
         return std::move(res->insertedIds);
       }
 
-      LibraryJobs& jobs() { return runtime.library().jobs(); }
+      LibraryJobs& jobs() { return runtime.jobs(); }
 
       std::uint64_t revision() const { return music.library().libraryRevision(music.library().readTransaction()); }
 

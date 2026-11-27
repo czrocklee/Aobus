@@ -173,9 +173,10 @@ namespace ao::gtk::test
       return title;
     }
 
-    TrackId restoreRevealTarget(rt::AppRuntime& runtime)
+    TrackId restoreRevealTarget(rt::AppRuntimeOwner& owner)
     {
-      auto const trackId = addRuntimeTrack(runtime, {.title = "Restored reveal target"});
+      auto& runtime = owner.runtime();
+      auto const trackId = addRuntimeTrack(owner, {.title = "Restored reveal target"});
       runtime.sources().reloadAllTracks();
       auto const snapshot = runtime.library().snapshot();
       auto const optUri = snapshot.trackUri(trackId);
@@ -204,7 +205,7 @@ namespace ao::gtk::test
     auto tagEditCallbacks = TagEditController::Callbacks{};
     auto tagEditController = TagEditController{window,
                                                runtime.async(),
-                                               runtime.library(),
+                                               fixture.editing(),
                                                runtime.completion(),
                                                runtime.notifications(),
                                                runtime.textOrderingPolicy(),
@@ -214,12 +215,12 @@ namespace ao::gtk::test
 
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{
-      window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
+      window, runtime, fixture.editing(), ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
 
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto host = TrackPageHost{stack,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.playback(),
                               runtime.views(),
                               runtime.workspace(),
@@ -253,11 +254,11 @@ namespace ao::gtk::test
     SECTION("only explicit header sorts show an arrow and reset direction when changing columns")
     {
       requireOwnedGtkDisplay();
-      auto const firstTrack = addRuntimeTrack(runtime, {.title = "Alpha", .year = 1990});
-      auto const lastTrack = addRuntimeTrack(runtime, {.title = "Zulu", .year = 2000});
+      auto const firstTrack = addRuntimeTrack(fixture.owner(), {.title = "Alpha", .year = 1990});
+      auto const lastTrack = addRuntimeTrack(fixture.owner(), {.title = "Zulu", .year = 2000});
       runtime.sources().reloadAllTracks();
       auto const otherListId = ao::test::requireValue(
-        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other page"})));
+        runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Other page"})));
       auto const otherViewId = ao::test::requireValue(runtime.workspace().navigate({.target = otherListId}));
       auto const& preset = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs);
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
@@ -333,9 +334,9 @@ namespace ao::gtk::test
     {
       requireOwnedGtkDisplay();
       auto const discOne =
-        addRuntimeTrack(runtime, {.title = "First Disc", .discNumber = 1, .discTotal = 2, .trackNumber = 2});
+        addRuntimeTrack(fixture.owner(), {.title = "First Disc", .discNumber = 1, .discTotal = 2, .trackNumber = 2});
       auto const discTwo =
-        addRuntimeTrack(runtime, {.title = "Second Disc", .discNumber = 2, .discTotal = 2, .trackNumber = 1});
+        addRuntimeTrack(fixture.owner(), {.title = "Second Disc", .discNumber = 2, .discTotal = 2, .trackNumber = 1});
       runtime.sources().reloadAllTracks();
       auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
@@ -493,7 +494,7 @@ namespace ao::gtk::test
     SECTION("a pending sort request belongs to its column view generation and runtime view")
     {
       auto const otherListId = ao::test::requireValue(
-        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other page"})));
+        runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Other page"})));
       auto const otherViewId = ao::test::requireValue(runtime.workspace().navigate({.target = otherListId}));
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       auto const original = runtime.views().trackListState(viewId).presentation;
@@ -550,7 +551,7 @@ namespace ao::gtk::test
 
     SECTION("authored columns stay authoritative when a filter replaces the projection")
     {
-      auto const trackId = addRuntimeTrack(runtime, {.title = "Authored columns track", .album = "Album A"});
+      auto const trackId = addRuntimeTrack(fixture.owner(), {.title = "Authored columns track", .album = "Album A"});
       auto const showAlbum =
         uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Show};
       columnLayouts.restore({{rt::kAllTracksListId, {showAlbum}}}, {});
@@ -602,7 +603,7 @@ namespace ao::gtk::test
 
     SECTION("rebuild restores the runtime selection into the new page generation")
     {
-      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored selection"});
+      auto const trackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Restored selection"});
       runtime.sources().reloadAllTracks();
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
 
@@ -620,12 +621,13 @@ namespace ao::gtk::test
 
     SECTION("rebuild restores mixed selections without publishing or changing workspace focus")
     {
-      auto const firstTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "A restored track"});
-      auto const secondTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Z restored track"});
+      auto const firstTrackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "A restored track"});
+      auto const secondTrackId =
+        addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Z restored track"});
       auto const absentTrackId = TrackId{9999};
       runtime.sources().reloadAllTracks();
       auto const listId = ao::test::requireValue(
-        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other page"})));
+        runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Other page"})));
       auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
       REQUIRE(firstViewId != secondViewId);
@@ -665,9 +667,9 @@ namespace ao::gtk::test
 
     SECTION("title edits preserve selected track IDs when All Tracks reorders")
     {
-      auto const editedTrackId = addRuntimeTrack(runtime, {.title = "Song A"});
-      addRuntimeTrack(runtime, {.title = "Song B"});
-      auto const neighborTrackId = addRuntimeTrack(runtime, {.title = "Song C"});
+      auto const editedTrackId = addRuntimeTrack(fixture.owner(), {.title = "Song A"});
+      addRuntimeTrack(fixture.owner(), {.title = "Song B"});
+      auto const neighborTrackId = addRuntimeTrack(fixture.owner(), {.title = "Song C"});
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
         .target = rt::GlobalViewKind::AllTracks,
         .optPresentation = rt::NavigationPresentation{.spec = {.sortBy = {{.field = rt::TrackSortField::Title}}}},
@@ -687,7 +689,7 @@ namespace ao::gtk::test
       auto selectionSubscription =
         runtime.views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&) { ++selectionChangeCount; });
 
-      updateRuntimeTrack(runtime, editedTrackId, [](library::test::TrackSpec& spec) { spec.title = "Song D"; });
+      updateRuntimeTrack(fixture.owner(), editedTrackId, [](library::test::TrackSpec& spec) { spec.title = "Song D"; });
       drainGtkEvents();
 
       auto const* const projection = entry->pagePtr->projection();
@@ -734,7 +736,7 @@ namespace ao::gtk::test
     SECTION("focus and close retire the exact page generation")
     {
       auto const listId = ao::test::requireValue(
-        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Second page"})));
+        runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Second page"})));
       auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
       REQUIRE(firstViewId != secondViewId);
@@ -764,7 +766,7 @@ namespace ao::gtk::test
     {
       rt::test::addReadyAudioProvider(runtime);
       auto const trackId = addRuntimeTrack(
-        runtime,
+        fixture.owner(),
         library::test::TrackSpec{
           .title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.sources().reloadAllTracks();
@@ -788,7 +790,7 @@ namespace ao::gtk::test
 
     SECTION("reveal playing track opens its missing source page and selects the restored row")
     {
-      auto const trackId = restoreRevealTarget(runtime);
+      auto const trackId = restoreRevealTarget(fixture.owner());
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);
 
@@ -804,7 +806,7 @@ namespace ao::gtk::test
 
     SECTION("reveal reconciles a stale runtime selection when the row is already selected")
     {
-      auto const trackId = restoreRevealTarget(runtime);
+      auto const trackId = restoreRevealTarget(fixture.owner());
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       auto const storedSelection = std::vector{trackId, TrackId{9999}};
       REQUIRE(runtime.views().setSelection(viewId, storedSelection));
@@ -833,7 +835,7 @@ namespace ao::gtk::test
 
     SECTION("reveal selects the newly visible track before queued filter replacements arrive")
     {
-      auto const trackId = restoreRevealTarget(runtime);
+      auto const trackId = restoreRevealTarget(fixture.owner());
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       REQUIRE(runtime.views().setFilter(viewId, R"($title = "Hidden")"));
       host.rebuild(cache);
@@ -859,7 +861,7 @@ namespace ao::gtk::test
 
     SECTION("a hidden page's queued filter reset keeps the revealed page focused")
     {
-      auto const trackId = restoreRevealTarget(runtime);
+      auto const trackId = restoreRevealTarget(fixture.owner());
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       host.rebuild(cache);
       drainGtkEvents();
@@ -884,7 +886,7 @@ namespace ao::gtk::test
 
     SECTION("reveal synchronizes a missing workspace page before selecting the track")
     {
-      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Reveal Target"});
+      auto const trackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Reveal Target"});
       runtime.sources().reloadAllTracks();
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);
@@ -943,18 +945,18 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto tagEditController = TagEditController{window,
                                                runtime.async(),
-                                               runtime.library(),
+                                               fixture.editing(),
                                                runtime.completion(),
                                                runtime.notifications(),
                                                runtime.textOrderingPolicy(),
                                                catalog,
                                                {},
                                                themeCoordinator};
-    auto listNavigation = ListNavigationController{window, runtime, catalog, {}, themeCoordinator};
+    auto listNavigation = ListNavigationController{window, runtime, fixture.editing(), catalog, {}, themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto host = TrackPageHost{stack,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.playback(),
                               runtime.views(),
                               runtime.workspace(),

@@ -33,7 +33,7 @@ library sources
   -> UIModel and frontend consumers
 ```
 
-`AppRuntime` owns one `ViewService` and one `WorkspaceService`. `ViewService`
+`AppRuntimeOwner` owns one `ViewService` and one `WorkspaceService`. `ViewService`
 owns each live view and the resources needed to produce it. `WorkspaceService`
 is the only full-runtime authority that creates or destroys those views, decides
 whether navigation reuses a plain view or creates a new one, and commits the

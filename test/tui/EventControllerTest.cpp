@@ -114,7 +114,7 @@ namespace ao::tui::test
 
     rt::PlaybackSnapshot currentPlayback(EventControllerFixture& fixture)
     {
-      return fixture.runtimePtr->playback().snapshot();
+      return fixture.runtime.playback().snapshot();
     }
 
     std::int32_t presentationIndex(LibraryController const& library, std::string_view const presentationId)
@@ -151,7 +151,7 @@ namespace ao::tui::test
       REQUIRE_FALSE(library.tracks().empty());
       fixture.addReadyAudioProvider();
       auto const startTrackId = library.tracks()[0].id;
-      auto& playback = fixture.runtimePtr->playback();
+      auto& playback = fixture.runtime.playback();
       REQUIRE(playback.commands().startFromView(library.activeViewId(), startTrackId));
       REQUIRE(fixture.tryWaitForPlayback(startTrackId));
       REQUIRE(playback.snapshot().transport.duration > std::chrono::milliseconds{0});
@@ -213,14 +213,14 @@ namespace ao::tui::test
 
     std::string lastNotification(EventControllerFixture const& fixture)
     {
-      auto const feed = fixture.runtimePtr->notifications().feed();
+      auto const feed = fixture.runtime.notifications().feed();
       REQUIRE_FALSE(feed.entries.empty());
       return std::get<std::string>(feed.entries.back().message);
     }
 
     std::size_t notificationCount(EventControllerFixture const& fixture)
     {
-      return fixture.runtimePtr->notifications().feed().entries.size();
+      return fixture.runtime.notifications().feed().entries.size();
     }
 
     /// Prepares a manual-membership saved List with the library's tracks in
@@ -228,8 +228,8 @@ namespace ao::tui::test
     void openManualOrderList(EventControllerFixture& fixture, LibraryController& library)
     {
       auto const listId =
-        ao::test::requireValue(rt::test::runRuntimeTask(*fixture.runtimePtr,
-                                                        fixture.runtimePtr->library().commands().createListAsync(
+        ao::test::requireValue(rt::test::runRuntimeTask(fixture.runtime,
+                                                        fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
                                                           rt::ListDraft{.name = "Manual", .expression = "#manual"})));
       auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(library.tracks().size());
@@ -239,11 +239,11 @@ namespace ao::tui::test
         trackIds.push_back(entry.id);
       }
 
-      auto targetsRes = fixture.runtimePtr->library().bindTrackTargets(trackIds);
+      auto targetsRes = fixture.runtime.library().bindTrackTargets(trackIds);
       REQUIRE(targetsRes);
       REQUIRE(rt::test::runRuntimeTask(
-        *fixture.runtimePtr,
-        fixture.runtimePtr->library().commands().addTracksToListAsync(listId, std::move(*targetsRes))));
+        fixture.runtime,
+        fixture.runtimeOwnerPtr->libraryCommands().addTracksToListAsync(listId, std::move(*targetsRes))));
       fixture.executor->drain();
 
       openList(library, listId);
@@ -367,7 +367,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 1; }));
 
     CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
-    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+    CHECK(fixture.runtime.library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
 
     // The focus stayed on the moved track while the view adopted the new order.
     REQUIRE(library.tracks().size() == 2);
@@ -377,7 +377,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 2; }));
 
     CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
-    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{firstId, secondId});
+    CHECK(fixture.runtime.library().snapshot().listOrderTrackIds(listId) == std::vector{firstId, secondId});
   }
 
   TEST_CASE("EventController - an order key on a virtual source reports the blocking reason")
@@ -410,7 +410,7 @@ namespace ao::tui::test
     fixture.executor->drain();
 
     CHECK(notificationCount(fixture) == 0);
-    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId).empty());
+    CHECK(fixture.runtime.library().snapshot().listOrderTrackIds(listId).empty());
   }
 
   TEST_CASE("EventController - select commands mark and clear tracks")
@@ -719,20 +719,20 @@ namespace ao::tui::test
     // The order landed; the library refused the overlapping save, and the
     // editor keeps the draft with the runtime's reason instead of losing it.
     CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
-    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+    CHECK(fixture.runtime.library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
     auto const* const editor = fixture.listAuthoringPtr->activeEditor();
     REQUIRE(editor != nullptr);
     CHECK(editor->status() == ListEditorStatus::Ready);
     CHECK(editor->diagnostic().ends_with(" is busy"));
     CHECK(editor->draft().name == "Manualx");
-    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId)->name == "Manual");
+    CHECK(fixture.runtime.library().snapshot().listNode(listId)->name == "Manual");
 
     // The ordinary Save key retries it once the library is free.
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !fixture.listAuthoringPtr->hasPendingSubmission(); }));
     CHECK_FALSE(fixture.listAuthoringPtr->isActive());
-    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId)->name == "Manualx");
-    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+    CHECK(fixture.runtime.library().snapshot().listNode(listId)->name == "Manualx");
+    CHECK(fixture.runtime.library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
   }
 
   TEST_CASE("EventController - list authoring refuses the virtual All Tracks target")
@@ -744,7 +744,7 @@ namespace ao::tui::test
     enterCommand(controller, "list edit");
 
     CHECK_FALSE(fixture.listAuthoringPtr->isActive());
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(std::get<std::string>(feed.entries.back().message) == "All Tracks cannot be edited or deleted");
   }
@@ -800,7 +800,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK_FALSE(fixture.listAuthoringPtr->isActive());
-    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+    CHECK(fixture.runtime.library().snapshot().listNode(listId).has_value());
   }
 
   TEST_CASE("EventController - the Lists pane edits and deletes the List under its cursor")
@@ -826,7 +826,7 @@ namespace ao::tui::test
     REQUIRE(fixture.listAuthoringPtr->activeDeleteConfirmation() != nullptr);
     CHECK(fixture.listAuthoringPtr->activeDeleteConfirmation()->listId == secondId);
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
-    CHECK(fixture.runtimePtr->library().snapshot().listNode(secondId).has_value());
+    CHECK(fixture.runtime.library().snapshot().listNode(secondId).has_value());
   }
 
   TEST_CASE("EventController - deleting the open List falls back to a live view")
@@ -853,7 +853,7 @@ namespace ao::tui::test
     // The workspace closed the deleted List's view, and the track surface
     // followed it to a live view instead of keeping a dangling one.
     CHECK_FALSE(fixture.listAuthoringPtr->isActive());
-    CHECK_FALSE(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+    CHECK_FALSE(fixture.runtime.library().snapshot().listNode(listId).has_value());
     CHECK(library.currentListId() != listId);
     CHECK(library.currentListId() != kInvalidListId);
     CHECK(library.emptyStateText().empty());
@@ -871,7 +871,7 @@ namespace ao::tui::test
 
     enterCommand(controller, "select");
     CHECK(fixture.shell.isInputActive());
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     auto const& message = std::get<std::string>(feed.entries.back().message);
     CHECK(message.contains("select"));
@@ -1035,12 +1035,12 @@ namespace ao::tui::test
 
     CHECK(fixture.shell.isInputActive());
     CHECK(library.filterError().contains("Filter error:"));
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK_FALSE(fixture.shell.isInputActive());
 
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     CHECK(std::get<std::string>(feed.entries.back().message).contains("Filter error:"));
@@ -1309,7 +1309,7 @@ namespace ao::tui::test
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     REQUIRE_FALSE(library.tracks().empty());
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const trackId = library.tracks()[0].id;
     auto controller = fixture.makeEvents(library);
 
@@ -1462,15 +1462,15 @@ namespace ao::tui::test
                                   Overlay const overlay,
                                   i18n::MessageId const closedMessage)
     {
-      auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
+      auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
 
       REQUIRE(controller.tryHandleEvent(openEvent));
       CHECK(fixture.shell.overlay() == overlay);
-      CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
+      CHECK(fixture.runtime.notifications().feed().entries.size() == notificationCount);
 
       REQUIRE(controller.tryHandleEvent(closeEvent));
       CHECK(fixture.shell.overlay() == Overlay::None);
-      auto const feed = fixture.runtimePtr->notifications().feed();
+      auto const feed = fixture.runtime.notifications().feed();
       REQUIRE(feed.entries.size() == notificationCount + 1);
       auto const* message = std::get_if<std::string>(&feed.entries.back().message);
       REQUIRE(message != nullptr);
@@ -1503,7 +1503,7 @@ namespace ao::tui::test
 
     SECTION("notification center")
     {
-      fixture.runtimePtr->notifications().post(
+      fixture.runtime.notifications().post(
         rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
       verifyToggle(ftxui::Event::Character("n"),
                    ftxui::Event::Character("n"),
@@ -1649,9 +1649,8 @@ namespace ao::tui::test
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtimePtr->views()
-            .trackListState(library.activeViewId())
-            .presentation.isPreset(rt::BuiltinPreset::Albums));
+    CHECK(
+      fixture.runtime.views().trackListState(library.activeViewId()).presentation.isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("EventController - rejected presentation choices preserve the All Tracks view and pin")
@@ -1667,7 +1666,7 @@ namespace ao::tui::test
 
     // Replaying back leaves an exact active view different from its pin, and
     // exposes any rejected choice that accidentally truncates forward history.
-    auto& workspace = fixture.runtimePtr->workspace();
+    auto& workspace = fixture.runtime.workspace();
     fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Songs);
     auto const forwardPresentation = ao::test::requireValue(workspace.setActivePresentation(rt::BuiltinPreset::Songs));
     REQUIRE(library.navigateHistory(false));
@@ -1738,7 +1737,7 @@ namespace ao::tui::test
     }
 
     CHECK(fixture.activityStatusViewModel.viewState().compact.text == expectedMessage);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
     CHECK(feed.entries.back().lifetime.kind() == rt::NotificationLifetimeKind::Transient);
@@ -1759,14 +1758,14 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    auto& workspace = fixture.runtimePtr->workspace();
+    auto& workspace = fixture.runtime.workspace();
     REQUIRE(workspace.closeView(library.activeViewId()));
     auto const closed = workspace.snapshot();
     REQUIRE(closed.openViews.empty());
 
     enterCommand(controller, "view list-order");
 
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     auto const& warning = feed.entries.back();
     CHECK(warning.severity == rt::NotificationSeverity::Warning);
@@ -1892,7 +1891,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto const activeViewId = library.activeViewId();
-    REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
+    REQUIRE(fixture.runtime.workspace().closeView(activeViewId));
     auto controller = fixture.makeEvents(library);
 
     enterQuickFilter(controller, "First");
@@ -1900,7 +1899,7 @@ namespace ao::tui::test
     CHECK(library.filterDraft() == "First");
     CHECK(library.activeViewId() == activeViewId);
     CHECK(library.tracks().size() == 2);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
     auto const& message = std::get<std::string>(feed.entries.back().message);
@@ -1950,9 +1949,8 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
 
     enterCommand(controller, "view albums");
-    CHECK(fixture.runtimePtr->views()
-            .trackListState(library.activeViewId())
-            .presentation.isPreset(rt::BuiltinPreset::Albums));
+    CHECK(
+      fixture.runtime.views().trackListState(library.activeViewId()).presentation.isPreset(rt::BuiltinPreset::Albums));
 
     enterCommand(controller, "reload");
     CHECK(library.tracks().size() == 2);
@@ -2090,7 +2088,7 @@ namespace ao::tui::test
     CAPTURE(missingId);
     auto const missing = audio::OutputDeviceSelection{
       .backendId = audio::kBackendPipeWire, .deviceId = audio::DeviceId{missingId}, .profileId = audio::kProfileShared};
-    fixture.runtimePtr->playback().commands().setOutputDevice(missing);
+    fixture.runtime.playback().commands().setOutputDevice(missing);
     fixture.executor->drain();
     REQUIRE(currentPlayback(fixture).transport.output.optPendingOutputSelection == missing);
     auto library = fixture.makeLibrary();
@@ -2128,7 +2126,7 @@ namespace ao::tui::test
     allowed.routingPolicy = audio::OutputRoutingPolicy::AllowSystemReroute;
     auto const systemDefault =
       audio::OutputDeviceSelection{.backendId = audio::kBackendPipeWire, .profileId = audio::kProfileShared};
-    auto& commands = fixture.runtimePtr->playback().commands();
+    auto& commands = fixture.runtime.playback().commands();
     commands.setOutputDevice(fixed);
     fixture.executor->drain();
     REQUIRE(currentPlayback(fixture).transport.output.selectedDevice == fixed);
@@ -2439,7 +2437,7 @@ namespace ao::tui::test
     REQUIRE(browsingList != sourceList);
     prepareSeekablePlayback(fixture, library);
     auto controller = fixture.makeEvents(library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const subject = playback.snapshot().transport.nowPlaying.trackId;
     auto const offset = playback.snapshot().transport.duration / 2;
     playback.commands().pause();
@@ -2458,9 +2456,9 @@ namespace ao::tui::test
 
     SECTION("Restored")
     {
-      REQUIRE(fixture.runtimePtr->savePlaybackSession());
+      REQUIRE(fixture.runtime.savePlaybackSession());
       playback.commands().stop();
-      auto const restoredRes = fixture.runtimePtr->restorePlaybackSession();
+      auto const restoredRes = fixture.runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
       REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
@@ -2488,7 +2486,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Character(" ")));
 
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
@@ -2502,7 +2500,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     // Commit the filter in the runtime, then press Space before the TUI sees the projection change.
-    auto& views = fixture.runtimePtr->views();
+    auto& views = fixture.runtime.views();
     auto const viewId = library.activeViewId();
     REQUIRE(views.setFilter(viewId, R"($title = "Second")"));
     auto const projectionPtr = ao::test::requireValue(views.findTrackListProjection(viewId));
@@ -2518,7 +2516,7 @@ namespace ao::tui::test
     auto const transport = currentPlayback(fixture).transport;
     CHECK(transport.transport == audio::Transport::Idle);
     CHECK(transport.nowPlaying.trackId == kInvalidTrackId);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE(feed.entries.size() == notificationsBefore + 1);
     auto const& warning = feed.entries.back();
     CHECK(warning.severity == rt::NotificationSeverity::Warning);
@@ -2535,7 +2533,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("s")));
 
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("EventController - space reports playback unavailable while the interrupted track waits for its output")
@@ -2544,7 +2542,7 @@ namespace ao::tui::test
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     REQUIRE_FALSE(library.tracks().empty());
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto& commands = playback.commands();
     auto const trackId = library.tracks()[0].id;
     REQUIRE(commands.startFromView(library.activeViewId(), trackId));
@@ -2557,14 +2555,14 @@ namespace ao::tui::test
     auto transport = playback.snapshot().transport;
     REQUIRE_FALSE(transport.ready);
     REQUIRE(transport.transport == audio::Transport::Paused);
-    auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
+    auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character(" ")));
 
     transport = playback.snapshot().transport;
     CHECK(transport.transport == audio::Transport::Paused);
     CHECK(transport.nowPlaying.trackId == trackId);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE(feed.entries.size() == notificationCount + 1);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
   }
@@ -2588,9 +2586,8 @@ namespace ao::tui::test
     auto clickRow = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 12};
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", clickRow)));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtimePtr->views()
-            .trackListState(library.activeViewId())
-            .presentation.isPreset(rt::BuiltinPreset::Albums));
+    CHECK(
+      fixture.runtime.views().trackListState(library.activeViewId()).presentation.isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("EventController - notification shortcut opens available activity details")
@@ -2603,7 +2600,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("n")));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
-    fixture.runtimePtr->notifications().post(
+    fixture.runtime.notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("n")));
@@ -2628,7 +2625,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
     CHECK_FALSE(fixture.shell.isDetailVisible());
     CHECK(fixture.activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Idle);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("EventController - root Escape is a silent no-op without an overlay")
@@ -2638,12 +2635,12 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     REQUIRE(fixture.shell.overlay() == Overlay::None);
-    REQUIRE(fixture.runtimePtr->notifications().feed().entries.empty());
+    REQUIRE(fixture.runtime.notifications().feed().entries.empty());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
 
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
   TEST_CASE("EventController - notification mouse targets hide only activity presentation")
@@ -2651,9 +2648,9 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& activityStatusViewModel = fixture.activityStatusViewModel;
-    fixture.runtimePtr->notifications().post(
+    fixture.runtime.notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::history());
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     auto const notificationId = feed.entries.front().id;
     auto& hitRegions = fixture.hitRegions;
@@ -2671,7 +2668,7 @@ namespace ao::tui::test
     CHECK(activityStatusViewModel.viewState().detail.items.empty());
     // Hiding the detail row retires the presentation only; the notification
     // itself stays in the feed, alongside whatever the overlay itself posted.
-    auto const entries = fixture.runtimePtr->notifications().feed().entries;
+    auto const entries = fixture.runtime.notifications().feed().entries;
     CHECK(std::ranges::any_of(entries, [notificationId](auto const& entry) { return entry.id == notificationId; }));
   }
 
@@ -2682,7 +2679,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{.title = "Third", .year = 1990});
     auto library = fixture.makeLibrary();
     auto const presetId = rt::CustomPresetId{1};
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+    REQUIRE(fixture.runtime.workspace().addCustomPreset({
       .label = "Sort columns",
       .spec = {.presetId = presetId,
                .sortBy = {{.field = rt::TrackSortField::Title}},
@@ -2812,7 +2809,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto const presetId = rt::CustomPresetId{1};
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+    REQUIRE(fixture.runtime.workspace().addCustomPreset({
       .label = "Paired columns",
       .spec = {.presetId = presetId, .visibleFields = {columns[0], columns[1]}},
     }));
@@ -2872,7 +2869,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{.title = "Third", .year = 1990});
     auto library = fixture.makeLibrary();
     auto const presetId = rt::CustomPresetId{1};
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+    REQUIRE(fixture.runtime.workspace().addCustomPreset({
       .label = "Year and Title",
       .spec = {.presetId = presetId,
                .sortBy = {{.field = rt::TrackSortField::Title}},
@@ -3362,7 +3359,7 @@ namespace ao::tui::test
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
       "", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = box.x_min + 1, .y = box.y_min})));
     CHECK(library.selectedTrack() == 0);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(std::get<std::string>(feed.entries.back().message) == "Section is no longer available");
   }
@@ -3407,7 +3404,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.currentListTitle() == "All Tracks");
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     CHECK(feed.entries.empty());
     CHECK_FALSE(fixture.shell.isNavigationFocused());
   }
@@ -3418,7 +3415,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto controller = fixture.makeEvents(library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto& commands = playback.commands();
     auto const before = playback.snapshot().transport;
 
@@ -3453,7 +3450,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
     auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot) noexcept
                                                     { snapshots.push_back(snapshot); });
@@ -3470,7 +3467,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const duration = playback.snapshot().transport.duration;
 
     auto& hitRegions = fixture.hitRegions;
@@ -3500,7 +3497,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const before = playback.snapshot().transport;
     auto const duration = before.duration;
 
@@ -3540,7 +3537,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto& hitRegions = fixture.hitRegions;
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto previews = std::vector<std::chrono::milliseconds>{};
@@ -3578,7 +3575,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     playback.commands().pause();
     auto const before = playback.snapshot().transport;
     fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
@@ -3613,7 +3610,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     playback.commands().pause();
     auto const before = playback.snapshot().transport;
     auto& hitRegions = fixture.hitRegions;
@@ -3648,11 +3645,11 @@ namespace ao::tui::test
       .audioData = std::vector<std::uint8_t>(2, 0x21),
     });
     auto const file = ao::test::TempFile{bytes, ".wav"};
-    std::filesystem::copy_file(file.path, fixture.runtimePtr->musicRoot() / "unknown.wav");
+    std::filesystem::copy_file(file.path, fixture.runtime.musicRoot() / "unknown.wav");
     auto const trackId = fixture.addTrack(library::test::TrackSpec{.title = "Unknown duration", .uri = "unknown.wav"});
     auto library = fixture.makeLibrary();
     fixture.addReadyAudioProvider();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     REQUIRE(playback.commands().startFromView(library.activeViewId(), trackId));
     REQUIRE(fixture.tryWaitForPlayback(trackId));
     auto const before = playback.snapshot().transport;
@@ -3681,7 +3678,7 @@ namespace ao::tui::test
     auto& hitRegions = fixture.hitRegions;
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
-    auto previewSub = fixture.runtimePtr->playback().events().onSeekPreview(
+    auto previewSub = fixture.runtime.playback().events().onSeekPreview(
       [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = fixture.makeEvents(library);
 
@@ -3700,7 +3697,7 @@ namespace ao::tui::test
     auto& hitRegions = fixture.hitRegions;
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
-    auto previewSub = fixture.runtimePtr->playback().events().onSeekPreview(
+    auto previewSub = fixture.runtime.playback().events().onSeekPreview(
       [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = fixture.makeEvents(library);
 
@@ -3766,7 +3763,7 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto& hitRegions = fixture.hitRegions;
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
                                                       { seekPreviews.push_back(elapsed); });
@@ -4023,8 +4020,8 @@ namespace ao::tui::test
       CHECK(library.selectedTrack() == 0);
     }
 
-    fixture.runtimePtr->playback().commands().setShuffleMode(rt::ShuffleMode::On);
-    fixture.runtimePtr->playback().commands().setRepeatMode(rt::RepeatMode::One);
+    fixture.runtime.playback().commands().setShuffleMode(rt::ShuffleMode::On);
+    fixture.runtime.playback().commands().setRepeatMode(rt::RepeatMode::One);
     fixture.executor->drain();
     auto const state = currentPlayback(fixture).succession;
     auto const rendered = renderElement(
@@ -4101,16 +4098,16 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
     fixture.hitRegions.playbackModeBox = {.x_min = 40, .x_max = 44, .y_min = 0, .y_max = 0};
-    auto const beforeNotifications = fixture.runtimePtr->notifications().feed().entries.size();
+    auto const beforeNotifications = fixture.runtime.notifications().feed().entries.size();
 
     REQUIRE(controller.tryHandleEvent(
       ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 42, .y = 0})));
     fixture.executor->drain();
 
-    auto const& playback = fixture.runtimePtr->playback().snapshot();
+    auto const& playback = fixture.runtime.playback().snapshot();
     CHECK(playback.succession.shuffle == rt::ShuffleMode::Off);
     CHECK(playback.succession.repeat == rt::RepeatMode::Off);
-    auto const feed = fixture.runtimePtr->notifications().feed();
+    auto const feed = fixture.runtime.notifications().feed();
     REQUIRE(feed.entries.size() == beforeNotifications + 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     auto const* message = std::get_if<std::string>(&feed.entries.back().message);
@@ -4126,7 +4123,7 @@ namespace ao::tui::test
     fixture.executor->drain();
     auto controller = fixture.makeEvents(library);
     fixture.hitRegions.playbackModeBox = {.x_min = 40, .x_max = 44, .y_min = 0, .y_max = 0};
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     REQUIRE(playback.snapshot().transport.ready);
 
     for (auto const choice : {PlaybackModeChoice{.shuffle = static_cast<rt::ShuffleMode>(2)},
@@ -4575,7 +4572,7 @@ namespace ao::tui::test
     library.moveTrackSelection(1);
     auto const marked = library.selectedTrackIds();
     auto const view = library.activeViewId();
-    auto const selection = fixture.runtimePtr->views().trackListState(view).selection;
+    auto const selection = fixture.runtime.views().trackListState(view).selection;
     fixture.shell.focusNavigation();
     REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("v")));
@@ -4583,7 +4580,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrackIds() == marked);
     CHECK(library.isVisualSelectionActive());
     CHECK(library.activeViewId() == view);
-    CHECK(fixture.runtimePtr->views().trackListState(view).selection == selection);
+    CHECK(fixture.runtime.views().trackListState(view).selection == selection);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("z")));
     CHECK(library.navigation().search().query() == "z");
@@ -4733,8 +4730,8 @@ namespace ao::tui::test
     for (std::int32_t index = 0; index < 4; ++index)
     {
       auto const parentId = fixture.addList(std::format("Parent {}", index));
-      REQUIRE(rt::test::runRuntimeTask(*fixture.runtimePtr,
-                                       fixture.runtimePtr->library().commands().createListAsync(
+      REQUIRE(rt::test::runRuntimeTask(fixture.runtime,
+                                       fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
                                          rt::ListDraft{.parentId = parentId, .name = "Needle"})));
     }
 

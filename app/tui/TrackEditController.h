@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/library/Credits.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <ftxui/component/event.hpp>
@@ -31,7 +32,6 @@ namespace ao::i18n
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
   class NotificationService;
   class TextOrderingPolicy;
 }
@@ -65,7 +65,7 @@ namespace ao::tui
     };
 
     TrackEditController(async::Runtime& runtime,
-                        rt::Library& library,
+                        uimodel::LibraryEditing editing,
                         rt::NotificationService& notifications,
                         i18n::MessageCatalog const& textCatalog,
                         Outputs outputs,

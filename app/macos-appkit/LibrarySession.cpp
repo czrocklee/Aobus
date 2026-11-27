@@ -16,6 +16,7 @@
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
@@ -39,6 +40,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -98,7 +100,7 @@ namespace ao::appkit
     std::function<void(DesktopInvalidation)> onInvalidated;
     std::unique_ptr<rt::TextOrderingPolicy> textOrderingPolicyPtr;
     std::unique_ptr<rt::CompletionAliasPolicy> completionAliasPolicyPtr;
-    std::optional<rt::AppRuntime> optRuntime;
+    std::optional<rt::AppRuntimeOwner> optRuntimeOwner;
     MainRunLoopExecutor* executor = nullptr;
     rt::ViewId viewId = rt::kInvalidViewId;
     std::shared_ptr<rt::TrackListProjection const> projectionPtr;
@@ -145,11 +147,11 @@ namespace ao::appkit
 
     void renderPresentation(uimodel::TrackPresentationPickerState const& pickerState)
     {
-      AO_INVARIANT(optRuntime);
+      AO_INVARIANT(optRuntimeOwner);
       state.presentation = pickerState;
       state.optListPresentationId.reset();
 
-      if (auto const viewRes = optRuntime->views().findTrackListState(pickerState.activeViewId); viewRes)
+      if (auto const viewRes = optRuntimeOwner->runtime().views().findTrackListState(pickerState.activeViewId); viewRes)
       {
         state.optListPresentationId = listPresentationsPtr->presentationIdForList(viewRes->listId);
       }
@@ -159,8 +161,8 @@ namespace ao::appkit
 
     void restorePresentationPreferences()
     {
-      AO_INVARIANT(optRuntime);
-      auto& runtime = *optRuntime;
+      AO_INVARIANT(optRuntimeOwner);
+      auto& runtime = optRuntimeOwner->runtime();
       presentationCatalogPtr = std::make_unique<uimodel::TrackPresentationCatalog>(runtime.workspace(), catalog);
       listPresentationsPtr =
         std::make_unique<uimodel::ListPresentations>(*presentationCatalogPtr, runtime.library().changes());
@@ -193,17 +195,18 @@ namespace ao::appkit
 
     rt::TrackPresentationSpec presentationForList(ListId const listId)
     {
-      AO_INVARIANT(optRuntime);
-      return listPresentationsPtr->presentationForList(listId, optRuntime->library());
+      AO_INVARIANT(optRuntimeOwner);
+      return listPresentationsPtr->presentationForList(listId, optRuntimeOwner->runtime().library());
     }
 
     // Storage stays alive through runtime shutdown and the final executor drain.
     static async::Task<void> scanAsync(Storage* storage, std::stop_token stopToken)
     {
-      AO_INVARIANT(storage->optRuntime);
-      auto& runtime = *storage->optRuntime;
+      AO_INVARIANT(storage->optRuntimeOwner);
+      auto& owner = *storage->optRuntimeOwner;
+      auto& runtime = owner.runtime();
       auto const outcome =
-        co_await uimodel::runLibraryScanAsync(&runtime.library().jobs(), uimodel::LibraryScanMode::Eager, stopToken);
+        co_await uimodel::runLibraryScanAsync(&owner.libraryJobs(), uimodel::LibraryScanMode::Eager, stopToken);
 
       co_await runtime.async().resumeOnCallbackExecutorAsync();
 
@@ -219,18 +222,25 @@ namespace ao::appkit
     }
   };
 
-  Result<std::unique_ptr<LibrarySession>> LibrarySession::create(std::filesystem::path const& root,
-                                                                 std::filesystem::path const& stateRoot,
-                                                                 bool restorePlayback,
-                                                                 i18n::MessageCatalog catalog,
-                                                                 std::function<void(DesktopInvalidation)> onInvalidated,
-                                                                 AudioProviderFactory createProviders)
+  Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
+    std::filesystem::path const& root,
+    std::filesystem::path const& stateRoot,
+    bool restorePlayback,
+    i18n::MessageCatalog catalog,
+    std::function<void(DesktopInvalidation)> onInvalidated,
+    AudioProviderFactory createProviders,
+    rt::AppRuntimeOwner::BindLibraryCommands bindLibraryCommands)
   {
     auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{std::move(catalog), std::move(onInvalidated)}};
 
     if (auto res = sessionPtr->initialize(root, stateRoot, restorePlayback, createProviders); !res)
     {
       return std::unexpected{res.error()};
+    }
+
+    if (bindLibraryCommands)
+    {
+      bindLibraryCommands(sessionPtr->_storagePtr->optRuntimeOwner->libraryCommands());
     }
 
     return sessionPtr;
@@ -260,7 +270,7 @@ namespace ao::appkit
 
     storage.textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
     storage.completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
-    auto runtimeRes = rt::AppRuntime::create({
+    auto runtimeRes = rt::AppRuntimeOwner::open({
       .executorPtr = std::move(executorPtr),
       .musicRoot = root,
       .databasePath = paths.databasePath(),
@@ -276,8 +286,8 @@ namespace ao::appkit
       return std::unexpected{runtimeRes.error()};
     }
 
-    storage.optRuntime.emplace(std::move(*runtimeRes));
-    auto& runtime = *storage.optRuntime;
+    auto& owner = storage.optRuntimeOwner.emplace(std::move(*runtimeRes));
+    auto& runtime = owner.runtime();
     storage.librarySub =
       runtime.library().changes().onChanged([this](auto const& changeSet) { onLibraryChanged(changeSet); });
 
@@ -310,7 +320,7 @@ namespace ao::appkit
     }
 
     storage.editorPtr =
-      std::make_unique<LibraryEditorModel>(runtime.library(),
+      std::make_unique<LibraryEditorModel>(uimodel::LibraryEditing{owner.libraryCommands()},
                                            runtime.async(),
                                            runtime.notifications(),
                                            storage.catalog,
@@ -371,13 +381,13 @@ namespace ao::appkit
 
           if (state.coverArtId != kInvalidResourceId)
           {
-            storage.playingCoverRequest =
-              storage.optRuntime->resourceBytes().request(state.coverArtId,
-                                                          [&storage](rt::ResourceBytes bytes)
-                                                          {
-                                                            storage.state.playingCover = std::move(bytes);
-                                                            storage.invalidate(DesktopInvalidation::Playback);
-                                                          });
+            storage.playingCoverRequest = storage.optRuntimeOwner->runtime().resourceBytes().request(
+              state.coverArtId,
+              [&storage](rt::ResourceBytes bytes)
+              {
+                storage.state.playingCover = std::move(bytes);
+                storage.invalidate(DesktopInvalidation::Playback);
+              });
           }
         }
       });
@@ -431,7 +441,7 @@ namespace ao::appkit
         storage.state.activity = state;
         storage.invalidate(DesktopInvalidation::Activity);
       },
-      uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()});
+      uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.jobProgress()});
     storage.presentationPickerPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
       runtime.views(),
       runtime.workspace(),
@@ -501,8 +511,8 @@ namespace ao::appkit
 
   rt::AppRuntime& LibrarySession::runtime() const noexcept
   {
-    AO_INVARIANT(_storagePtr->optRuntime);
-    return *_storagePtr->optRuntime;
+    AO_INVARIANT(_storagePtr->optRuntimeOwner);
+    return _storagePtr->optRuntimeOwner->runtime();
   }
   LibraryEditorModel& LibrarySession::editor() const noexcept
   {
@@ -866,7 +876,7 @@ namespace ao::appkit
   {
     auto& storage = *_storagePtr;
 
-    if (!storage.optRuntime)
+    if (!storage.optRuntimeOwner)
     {
       return;
     }
@@ -909,10 +919,10 @@ namespace ao::appkit
     storage.rows.reset(0, {});
     storage.projectionPtr.reset();
     // Authoring tasks can still hold the retired editor while the runtime stops and drains.
-    storage.optRuntime->shutdown();
+    storage.optRuntimeOwner->shutdown();
     storage.executor->finishClosing();
     storage.editorPtr.reset();
-    storage.optRuntime.reset();
+    storage.optRuntimeOwner.reset();
     storage.textOrderingPolicyPtr.reset();
     storage.completionAliasPolicyPtr.reset();
     storage.executor = nullptr;

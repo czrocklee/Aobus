@@ -68,6 +68,7 @@
 #include <format>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -442,7 +443,7 @@ namespace
 
       auto executorPtr = std::make_unique<ao::winui::DispatcherQueueExecutor>(_window.DispatcherQueue());
       auto* const executor = executorPtr.get();
-      auto runtimeRes = ao::rt::AppRuntime::create({
+      auto runtimeRes = ao::rt::AppRuntimeOwner::open({
         .executorPtr = std::move(executorPtr),
         .musicRoot = _inputs.fixture.parent_path(),
         .databasePath = _inputs.stateRoot / "database",
@@ -456,11 +457,11 @@ namespace
         return;
       }
 
-      _runtimePtr = std::make_unique<ao::rt::AppRuntime>(std::move(*runtimeRes));
+      auto& runtime = _optRuntimeOwner.emplace(std::move(*runtimeRes)).runtime();
       // This borrow is published only after the executor's owner is placed.
       _executor = executor;
-      _runtimePtr->sealPlaybackSessionPersistenceWrites();
-      auto& playback = _runtimePtr->playback();
+      runtime.sealPlaybackSessionPersistenceWrites();
+      auto& playback = runtime.playback();
       _toolTipPtr = std::make_unique<ao::winui::AudioPipelineToolTip>(
         ao::winui::AudioPipelineToolTipConfig{.anchor = _anchor, .textCatalog = *catalogRes}, playback);
       _referencePtr =
@@ -491,7 +492,7 @@ namespace
 
           enqueueDrive();
         });
-      auto viewRes = _runtimePtr->workspace().navigate({.target = ao::rt::GlobalViewKind::AllTracks});
+      auto viewRes = runtime.workspace().navigate({.target = ao::rt::GlobalViewKind::AllTracks});
 
       if (!viewRes)
       {
@@ -501,7 +502,7 @@ namespace
 
       _viewId = *viewRes;
       _phase = Phase::Ready;
-      _runtimePtr->addAudioProvider(std::make_unique<QualityProbeProvider>());
+      runtime.addAudioProvider(std::make_unique<QualityProbeProvider>());
       auto const device = QualityProbeProvider::device();
       playback.commands().setOutputDevice(device.backendId, device.id, ao::audio::ProfileId{ao::audio::kProfileShared});
       enqueueDrive();
@@ -578,10 +579,10 @@ namespace
 
           break;
         case Phase::Ready:
-          if (_runtimePtr->playback().snapshot().transport.ready)
+          if (_optRuntimeOwner->runtime().playback().snapshot().transport.ready)
           {
             _phase = Phase::Assessment;
-            auto startRes = _runtimePtr->playback().commands().startFromView(_viewId, _trackId);
+            auto startRes = _optRuntimeOwner->runtime().playback().commands().startFromView(_viewId, _trackId);
 
             if (!startRes)
             {
@@ -594,7 +595,7 @@ namespace
           if (_assessmentPublished && hasDecodedSource(_reference.audioPipeline.quality))
           {
             auto const& pipeline = _reference.audioPipeline;
-            auto const& snapshot = _runtimePtr->playback().snapshot();
+            auto const& snapshot = _optRuntimeOwner->runtime().playback().snapshot();
             check(snapshot.transport.nowPlaying.trackId == _trackId, "decoded publication belongs to the seeded track");
             check(pipeline.quality == snapshot.transport.quality, "independent VM observed the committed quality");
             check(std::ranges::none_of(pipeline.quality.assessments,
@@ -687,7 +688,7 @@ namespace
         if (_executor != nullptr)
         {
           _executor->beginClosing();
-          _runtimePtr->shutdown();      // Cancels preparation and joins all producers.
+          _optRuntimeOwner->shutdown(); // Cancels preparation and joins all producers.
           _executor->completeClosing(); // Settle admitted callbacks with consumers alive.
         }
 
@@ -699,7 +700,7 @@ namespace
         _snapshotSub.reset();
         _referencePtr.reset();
         _executor = nullptr;
-        _runtimePtr.reset();
+        _optRuntimeOwner.reset();
         _closedRevoker.revoke();
         _exitCode = !_failed && _observationsComplete ? 0 : 1;
         std::cerr << std::format(
@@ -735,8 +736,8 @@ namespace
     Window::Closed_revoker _closedRevoker{};
     // Explicit finish() closes/drains before destruction; declaration order also
     // keeps UI and runtime alive longer than their subscribing consumers.
-    std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
-    ao::winui::DispatcherQueueExecutor* _executor = nullptr; // Owned by _runtimePtr.
+    std::optional<ao::rt::AppRuntimeOwner> _optRuntimeOwner;
+    ao::winui::DispatcherQueueExecutor* _executor = nullptr; // Owned by the runtime.
     std::unique_ptr<ao::winui::AudioPipelineToolTip> _toolTipPtr;
     std::unique_ptr<ao::uimodel::NowPlayingViewModel> _referencePtr;
     ao::async::Subscription _snapshotSub;

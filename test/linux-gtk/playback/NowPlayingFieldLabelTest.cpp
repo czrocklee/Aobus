@@ -43,7 +43,7 @@ namespace ao::gtk::test
 {
   namespace
   {
-    TrackId addPlayableTrack(rt::AppRuntime& runtime, std::string title, std::string artist = {})
+    TrackId addPlayableTrack(rt::AppRuntimeOwner& owner, std::string title, std::string artist = {})
     {
       constexpr std::uint32_t kSampleRate = 48000;
       constexpr std::uint16_t kChannels = 2;
@@ -53,7 +53,7 @@ namespace ao::gtk::test
                                 .audioData = std::vector<std::uint8_t>(std::size_t{kSampleRate} * kChannels * 2U, 0)}),
         ".wav"};
       return addRuntimeTrack(
-        runtime,
+        owner,
         library::test::TrackSpec{.title = std::move(title), .artist = std::move(artist), .uri = media.path.string()});
     }
 
@@ -87,7 +87,7 @@ namespace ao::gtk::test
       CHECK_FALSE(gtkLabel->has_css_class("ao-clickable"));
       CHECK_FALSE(hasController<Gtk::GestureClick>(*gtkLabel));
 
-      auto const trackId = addPlayableTrack(runtime, "Test Song", "Test Artist");
+      auto const trackId = addPlayableTrack(fixture.owner(), "Test Song", "Test Artist");
       startPlayback(runtime, trackId);
       drainGtkEvents();
 
@@ -101,7 +101,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&artistLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto const trackId = addPlayableTrack(runtime, "Another Song", "Known Artist");
+      auto const trackId = addPlayableTrack(fixture.owner(), "Another Song", "Known Artist");
       startPlayback(runtime, trackId);
       drainGtkEvents();
 
@@ -117,7 +117,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&yearLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto const trackId = addPlayableTrack(runtime, "Dated Song");
+      auto const trackId = addPlayableTrack(fixture.owner(), "Dated Song");
       startPlayback(runtime, trackId);
       drainGtkEvents();
 
@@ -144,7 +144,7 @@ namespace ao::gtk::test
     auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
     REQUIRE(gtkLabel);
 
-    auto const trackId = addPlayableTrack(runtime, "Filtered Song", "Filter Artist");
+    auto const trackId = addPlayableTrack(fixture.owner(), "Filtered Song", "Filter Artist");
     startPlayback(runtime, trackId);
     drainGtkEvents();
 
@@ -178,7 +178,7 @@ namespace ao::gtk::test
     auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
     auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
 
-    auto const trackId = addPlayableTrack(runtime, "Reveal Song", "Reveal Artist");
+    auto const trackId = addPlayableTrack(fixture.owner(), "Reveal Song", "Reveal Artist");
     startPlayback(runtime, trackId);
     drainGtkEvents();
 
@@ -195,7 +195,7 @@ namespace ao::gtk::test
     auto fixture = layout::test::LayoutRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    auto const selectedId = addPlayableTrack(runtime, "Selected Song");
+    auto const selectedId = addPlayableTrack(fixture.owner(), "Selected Song");
     runtime.sources().reloadAllTracks();
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {selectedId}));
@@ -225,7 +225,7 @@ namespace ao::gtk::test
     SECTION("Restored Idle resumes the current subject rather than starting the selection")
     {
       rt::test::addReadyAudioProvider(runtime);
-      auto const currentId = addPlayableTrack(runtime, "Restored Song");
+      auto const currentId = addPlayableTrack(fixture.owner(), "Restored Song");
       startPlayback(runtime, currentId);
       REQUIRE(runtime.savePlaybackSession());
       playback.commands().stop();
@@ -244,7 +244,7 @@ namespace ao::gtk::test
     SECTION("Playing pauses and Paused resumes the current subject")
     {
       rt::test::addReadyAudioProvider(runtime);
-      auto const currentId = addPlayableTrack(runtime, "Current Song");
+      auto const currentId = addPlayableTrack(fixture.owner(), "Current Song");
       startPlayback(runtime, currentId);
       REQUIRE(runtime.views().setSelection(viewId, {selectedId}));
       REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);

@@ -310,10 +310,11 @@ namespace ao::rt
     }
   } // namespace
 
-  LibraryCommands::LibraryCommands(library::MusicLibrary& library,
+  LibraryCommands::LibraryCommands(Library const& reads,
+                                   library::MusicLibrary& library,
                                    LibraryWriteLane& writeLane,
                                    async::Runtime& asyncRuntime)
-    : _implPtr{std::make_shared<Impl>(library, writeLane, asyncRuntime)}
+    : _library{reads}, _implPtr{std::make_shared<Impl>(library, writeLane, asyncRuntime)}
   {
   }
 

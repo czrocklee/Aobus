@@ -10,26 +10,37 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
 namespace ao::rt::test
 {
-  struct WorkspaceRuntimeFixture final
+  struct WorkspaceListIds final
   {
+    ListId first;
+    ListId second;
+    ListId third;
+    ListId fourth;
+  };
+
+  class WorkspaceRuntimeFixture final
+  {
+  public:
     WorkspaceRuntimeFixture();
 
     AppRuntime& runtime() const noexcept;
+    LibraryCommands& commands() const noexcept;
+    LibraryJobs& jobs() const noexcept;
+    WorkspaceListIds listIds() const noexcept;
+    std::filesystem::path const& tempPath() const;
 
     ListId createList(std::string name) const;
 
-    // These fixture values are intentionally public as the tests' assertion surface.
-    ao::test::TempDir tempDir;
-    std::unique_ptr<AppRuntime> runtimePtr;
-    ListId firstListId;
-    ListId secondListId;
-    ListId thirdListId;
-    ListId fourthListId;
+  private:
+    ao::test::TempDir _tempDir;
+    std::unique_ptr<AppRuntimeOwner> _ownerPtr;
+    WorkspaceListIds _listIds;
   };
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request);

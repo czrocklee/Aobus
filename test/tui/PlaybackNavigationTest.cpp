@@ -64,7 +64,7 @@ namespace ao::tui::test
                                           async::Task<Result<Reply>> deletion,
                                           Inspect inspect)
     {
-      auto& runtime = *fixture.runtimePtr;
+      auto& runtime = fixture.runtime;
       auto& executor = *fixture.executor;
       executor.drain();
       auto const revision = runtime.library().snapshot().revision();
@@ -114,7 +114,7 @@ namespace ao::tui::test
     REQUIRE(library.applyFilter());
     library.toggleVisualSelection();
     auto const previousView = library.activeViewId();
-    auto const previousFilter = fixture.runtimePtr->views().trackListState(previousView).filterExpression;
+    auto const previousFilter = fixture.runtime.views().trackListState(previousView).filterExpression;
 
     REQUIRE(library.navigateToArtist(artist));
 
@@ -123,7 +123,7 @@ namespace ao::tui::test
     CHECK(library.tracks().front().id == target);
     CHECK_FALSE(library.isVisualSelectionActive());
     CHECK(library.markedIds().empty());
-    CHECK(fixture.runtimePtr->views().trackListState(previousView).filterExpression == previousFilter);
+    CHECK(fixture.runtime.views().trackListState(previousView).filterExpression == previousFilter);
     REQUIRE(library.navigateHistory(false));
     CHECK(library.activeViewId() == previousView);
     CHECK(library.filterDraft() == previousFilter);
@@ -144,7 +144,7 @@ namespace ao::tui::test
     library.setFilterDraft("First");
     REQUIRE(library.applyFilter());
     auto const previousView = library.activeViewId();
-    auto const previousFilter = fixture.runtimePtr->views().trackListState(previousView).filterExpression;
+    auto const previousFilter = fixture.runtime.views().trackListState(previousView).filterExpression;
 
     REQUIRE(library.revealAlbum(target));
 
@@ -166,14 +166,14 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     library.toggleVisualSelection();
-    auto const workspace = fixture.runtimePtr->workspace().snapshot();
+    auto const workspace = fixture.runtime.workspace().snapshot();
     auto const marks = library.markedIds();
 
     CHECK_FALSE(library.navigateToArtist(""));
     CHECK_FALSE(library.revealAlbum(kInvalidTrackId));
     CHECK_FALSE(library.revealAlbum(TrackId{999999}));
 
-    CHECK(fixture.runtimePtr->workspace().snapshot() == workspace);
+    CHECK(fixture.runtime.workspace().snapshot() == workspace);
     CHECK(library.isVisualSelectionActive());
     CHECK(library.markedIds() == marks);
   }
@@ -353,14 +353,14 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const target = library.tracks().front().id;
     REQUIRE(playback.commands().startFromView(library.activeViewId(), target));
     REQUIRE(fixture.tryWaitForPlayback(target));
     library.setFilterDraft("Second");
     REQUIRE(library.applyFilter());
     auto const previousView = library.activeViewId();
-    auto const previousFilter = fixture.runtimePtr->views().trackListState(previousView).filterExpression;
+    auto const previousFilter = fixture.runtime.views().trackListState(previousView).filterExpression;
     auto const rendered =
       renderPlaybackMetadata(playback.snapshot().transport, fixture.hitRegions.playbackMetadata, 140);
     INFO(rendered.text);
@@ -421,7 +421,7 @@ namespace ao::tui::test
     REQUIRE(library.tracks().size() == 2);
     auto const target = library.tracks().back().id;
     auto const sourceView = library.activeViewId();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     REQUIRE(playback.commands().startFromView(sourceView, target));
     REQUIRE(fixture.tryWaitForPlayback(target));
     REQUIRE(library.openList(rt::kAllTracksListId));
@@ -430,7 +430,7 @@ namespace ao::tui::test
     REQUIRE(library.tracks().size() == 1);
     REQUIRE(library.tracks().front().id == target);
     auto const browsingView = library.activeViewId();
-    auto const filter = fixture.runtimePtr->views().trackListState(browsingView).filterExpression;
+    auto const filter = fixture.runtime.views().trackListState(browsingView).filterExpression;
 
     auto const revealCurrent = [&]
     {
@@ -446,7 +446,7 @@ namespace ao::tui::test
 
     SECTION("Reopen a closed source with its saved presentation")
     {
-      REQUIRE(fixture.runtimePtr->workspace().closeView(sourceView));
+      REQUIRE(fixture.runtime.workspace().closeView(sourceView));
       revealCurrent();
       CHECK(library.activeViewId() != sourceView);
     }
@@ -474,7 +474,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
-    auto& runtime = *fixture.runtimePtr;
+    auto& runtime = fixture.runtime;
     REQUIRE(library.openList(source));
     REQUIRE(library.tracks().size() == 2);
     auto const target = library.tracks().back().id;
@@ -492,7 +492,7 @@ namespace ao::tui::test
 
     inspectBeforeDeletionPublication(
       fixture,
-      runtime.library().commands().deleteListAsync(source),
+      fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(source),
       [&]
       {
         REQUIRE_FALSE(runtime.library().snapshot().listNode(source));
@@ -529,7 +529,7 @@ namespace ao::tui::test
     auto const preferredList = fixture.addList("Preferred");
     auto const forwardList = fixture.addList("Forward destination");
     auto library = fixture.makeLibrary();
-    auto& runtime = *fixture.runtimePtr;
+    auto& runtime = fixture.runtime;
     REQUIRE(library.openList(preferredList));
     auto const preferredView = library.activeViewId();
     REQUIRE(library.tracks().size() == 2);
@@ -552,7 +552,7 @@ namespace ao::tui::test
     auto const before = runtime.workspace().snapshot();
 
     inspectBeforeDeletionPublication(fixture,
-                                     runtime.library().commands().deleteListAsync(preferredList),
+                                     fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(preferredList),
                                      [&]
                                      {
                                        auto const snapshot = runtime.library().snapshot();
@@ -586,7 +586,7 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto& runtime = *fixture.runtimePtr;
+    auto& runtime = fixture.runtime;
     auto const view = library.activeViewId();
     REQUIRE(library.tracks().size() == 2);
     auto const first = library.tracks().front().id;
@@ -611,7 +611,7 @@ namespace ao::tui::test
     auto sub = library.signalTrackCursorAvailable().connect([&](bool value) { available.push_back(value); });
     inspectBeforeDeletionPublication(
       fixture,
-      runtime.library().commands().deleteTrackAsync(target),
+      fixture.runtimeOwnerPtr->libraryCommands().deleteTrackAsync(target),
       [&]
       {
         REQUIRE_FALSE(runtime.library().snapshot().containsTrack(target));
@@ -643,14 +643,14 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const target = library.tracks().front().id;
     REQUIRE(playback.commands().startFromView(library.activeViewId(), target));
     REQUIRE(fixture.tryWaitForPlayback(target));
     auto const rendered =
       renderPlaybackMetadata(playback.snapshot().transport, fixture.hitRegions.playbackMetadata, 140);
     INFO(rendered.text);
-    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const before = fixture.runtime.workspace().snapshot();
 
     SECTION("A new playback subject invalidates all old links")
     {
@@ -671,7 +671,7 @@ namespace ao::tui::test
       REQUIRE_FALSE(box.IsEmpty());
       CHECK(events.tryHandleEvent(clickBox(box)));
       fixture.executor->drain();
-      CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+      CHECK(fixture.runtime.workspace().snapshot() == before);
     }
   }
 
@@ -681,14 +681,14 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
     fixture.addReadyAudioProvider();
-    auto& playback = fixture.runtimePtr->playback();
+    auto& playback = fixture.runtime.playback();
     auto const target = library.tracks().front().id;
     REQUIRE(playback.commands().startFromView(library.activeViewId(), target));
     REQUIRE(fixture.tryWaitForPlayback(target));
     auto const rendered =
       renderPlaybackMetadata(playback.snapshot().transport, fixture.hitRegions.playbackMetadata, 140);
     INFO(rendered.text);
-    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const before = fixture.runtime.workspace().snapshot();
     bool consumesPointer = false;
 
     SECTION("Quick Filter owns pointer input")
@@ -710,7 +710,7 @@ namespace ao::tui::test
       REQUIRE_FALSE(box.IsEmpty());
       CHECK(events.tryHandleEvent(clickBox(box)) == consumesPointer);
       fixture.executor->drain();
-      CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+      CHECK(fixture.runtime.workspace().snapshot() == before);
     }
   }
 } // namespace ao::tui::test

@@ -15,6 +15,7 @@ namespace ao::rt
 }
 namespace ao::uimodel
 {
+  class LibraryEditing;
   class PreparedLayout;
 }
 namespace ao::gtk
@@ -48,6 +49,7 @@ namespace ao::gtk::layout
      */
     static void registerStandardComponents(ComponentRegistry& registry,
                                            rt::AppRuntime& runtime,
+                                           uimodel::LibraryEditing editing,
                                            ShellLayoutCollaborators const& collaborators);
 
   private:

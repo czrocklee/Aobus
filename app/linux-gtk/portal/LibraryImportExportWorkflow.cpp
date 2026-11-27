@@ -13,7 +13,6 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTransfer.h>
@@ -51,12 +50,12 @@ namespace ao::gtk::portal
   } // namespace
 
   LibraryImportExportWorkflow::LibraryImportExportWorkflow(async::Runtime& asyncRuntime,
-                                                           rt::Library& library,
+                                                           rt::LibraryJobs& libraryJobs,
                                                            rt::NotificationService& notifications,
                                                            ImportExportCallbacks const& callbacks,
                                                            i18n::MessageCatalog textCatalog)
     : _asyncRuntime{asyncRuntime}
-    , _library{library}
+    , _libraryJobs{libraryJobs}
     , _notifications{notifications}
     , _callbacks{callbacks}
     , _textCatalog{std::move(textCatalog)}
@@ -118,7 +117,7 @@ namespace ao::gtk::portal
   {
     auto presentResult = _presentationCallbacks.guard([this](uimodel::LibraryScanOutcome outcome) mutable
                                                       { presentScanOutcome(outcome); });
-    auto* const jobs = &_library.jobs();
+    auto* const jobs = &_libraryJobs;
     auto outcome = co_await uimodel::runLibraryScanAsync(jobs, mode, stopToken);
     presentResult(std::move(outcome));
   }
@@ -150,7 +149,7 @@ namespace ao::gtk::portal
 
         setScanActive(false);
       });
-    auto* const jobs = &_library.jobs();
+    auto* const jobs = &_libraryJobs;
     auto res = co_await jobs->backfillAudioIdentityAsync(stopToken);
 
     if (!res)
@@ -182,7 +181,7 @@ namespace ao::gtk::portal
                             gtkText(_textCatalog, i18n::MessageId::LibraryExported),
                             rt::NotificationLifetime::transient());
       });
-    auto* const jobs = &_library.jobs();
+    auto* const jobs = &_libraryJobs;
     auto res = co_await jobs->exportLibraryAsync(std::move(exportPath), mode, stopToken);
     presentResult(std::move(res));
   }
@@ -235,7 +234,7 @@ namespace ao::gtk::portal
                                 applyPreparedImport(std::move(plan));
                               }));
       });
-    auto* const jobs = &_library.jobs();
+    auto* const jobs = &_libraryJobs;
     auto res = co_await jobs->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
     presentResult(std::move(res));
   }
@@ -269,7 +268,7 @@ namespace ao::gtk::portal
                             gtkText(_textCatalog, i18n::MessageId::LibraryImported),
                             rt::NotificationLifetime::transient());
       });
-    auto* const jobs = &_library.jobs();
+    auto* const jobs = &_libraryJobs;
     auto res = co_await jobs->applyLibraryImportPlanAsync(std::move(plan), stopToken);
     presentResult(std::move(res));
   }

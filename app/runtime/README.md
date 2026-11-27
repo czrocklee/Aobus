@@ -5,7 +5,7 @@ GTK, TUI, WinUI, AppKit, and CLI consume this layer directly or through UIModel;
 
 ## Work in this layer
 
-- Use `CoreRuntime` for the non-interactive library and command graph; `AppRuntime` adds interactive workspace and playback services.
+- Use `CoreRuntime` for the non-interactive library and command graph. Use `AppRuntimeOwner` to compose the interactive graph and borrow its services through `AppRuntime`.
 - Keep application truth here: library commands and publication, sources and projections, workspace/view state, playback, notifications, and managed application state.
 - Let composition roots supply platform paths, executors, and platform facilities. Runtime derives per-library locations but does not discover desktop state directories or run a frontend event loop.
 - Preserve stable placement and teardown ordering before adding a borrower or subscription. The [session lifecycle contract](../../doc/system/session-lifecycle.md) owns those requirements.

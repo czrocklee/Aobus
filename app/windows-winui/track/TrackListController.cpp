@@ -209,7 +209,7 @@ namespace ao::winui
 
   TrackListController::TrackListController(rt::ViewService& views,
                                            rt::WorkspaceService& workspace,
-                                           rt::Library& library,
+                                           rt::Library const& library,
                                            uimodel::TrackColumnLayouts& columnLayouts,
                                            uimodel::ListPresentations const& listPresentations,
                                            i18n::MessageCatalog textCatalog)

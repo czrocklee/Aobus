@@ -5,6 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <functional>
 #include <string>
@@ -39,6 +40,7 @@ namespace ao::gtk::layout
 
   void registerTrackDetailComponents(ComponentRegistry& registry,
                                      rt::AppRuntime& runtime,
+                                     uimodel::LibraryEditing editing,
                                      ResourceImageLoader* imageLoader,
                                      i18n::MessageCatalog const& textCatalog)
   {
@@ -46,18 +48,19 @@ namespace ao::gtk::layout
     registerTrackSelectionRegionComponent(registry);
     registerTrackCoverArtComponent(registry, imageLoader, textCatalog);
     registerTrackFieldGridComponent(
-      registry, runtime.async(), runtime.library(), runtime.completion(), runtime.notifications(), textCatalog);
+      registry, runtime.async(), editing, runtime.completion(), runtime.notifications(), textCatalog);
     registerTrackDetailUndoBarComponent(registry, runtime.async(), runtime.notifications(), textCatalog);
   }
 
   void registerTrackEditorComponents(ComponentRegistry& registry,
                                      rt::AppRuntime& runtime,
+                                     uimodel::LibraryEditing editing,
                                      TagEditController* tagEditController,
                                      i18n::MessageCatalog const& textCatalog)
   {
     registerTrackTagEditorComponent(registry,
                                     runtime.async(),
-                                    runtime.library(),
+                                    editing,
                                     runtime.notifications(),
                                     runtime.textOrderingPolicy(),
                                     tagEditController,

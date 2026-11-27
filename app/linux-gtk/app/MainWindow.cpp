@@ -53,6 +53,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
@@ -90,7 +91,11 @@ namespace ao::gtk
 {
   struct MainWindow::Impl final
   {
-    Impl(Gtk::Window& window, rt::AppRuntime& runtime, i18n::MessageCatalog catalog)
+    Impl(Gtk::Window& window,
+         rt::AppRuntime& runtime,
+         uimodel::LibraryEditing editing,
+         rt::LibraryJobs& libraryJobs,
+         i18n::MessageCatalog catalog)
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath(),
                          runtime.library().snapshot().libraryId()}
       , trackRowCache{runtime.library(), catalog}
@@ -117,7 +122,7 @@ namespace ao::gtk
       , trackColumnLayouts{runtime.library().changes()}
       , tagEditController{window,
                           runtime.async(),
-                          runtime.library(),
+                          editing,
                           runtime.completion(),
                           runtime.notifications(),
                           runtime.textOrderingPolicy(),
@@ -128,6 +133,7 @@ namespace ao::gtk
                           themeCoordinator}
       , listNavigationController{window,
                                  runtime,
+                                 editing,
                                  textCatalog,
                                  ListNavigationController::Callbacks{
                                    .onListSelected = [&runtime, this](ListId listId)
@@ -157,7 +163,7 @@ namespace ao::gtk
       , trackPageHost{
           stack,
           runtime.async(),
-          runtime.library(),
+          editing,
           runtime.playback(),
           runtime.views(),
           runtime.workspace(),
@@ -176,7 +182,7 @@ namespace ao::gtk
           }}
       , importExportCoordinator{window,
                                 runtime.async(),
-                                runtime.library(),
+                                libraryJobs,
                                 runtime.notifications(),
                                 textCatalog,
                                 portal::ImportExportCallbacks{
@@ -248,17 +254,22 @@ namespace ao::gtk
     async::Subscription trackColumnLayoutChangedSub;
   };
 
-  MainWindow::MainWindow(rt::AppRuntime& runtime,
+  MainWindow::MainWindow(rt::AppRuntimeOwner& runtimeOwner,
                          std::shared_ptr<AppConfigStore> configStorePtr,
                          std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                          i18n::MessageCatalog textCatalog,
                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
-    : _runtime{runtime}
+    : _runtime{runtimeOwner.runtime()}
     , _configStorePtr{std::move(configStorePtr)}
     , _textCatalog{std::move(textCatalog)}
-    , _implPtr{std::make_unique<Impl>(*this, _runtime, _textCatalog)}
+    , _implPtr{std::make_unique<Impl>(*this,
+                                      _runtime,
+                                      uimodel::LibraryEditing{runtimeOwner.libraryCommands()},
+                                      runtimeOwner.libraryJobs(),
+                                      _textCatalog)}
     , _menuControllerPtr{std::make_unique<MenuController>(_textCatalog)}
     , _shellLayout{_runtime,
+                   uimodel::LibraryEditing{runtimeOwner.libraryCommands()},
                    *this,
                    _configStorePtr,
                    std::move(shellLayoutStorePtr),

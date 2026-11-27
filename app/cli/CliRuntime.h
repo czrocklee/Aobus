@@ -26,6 +26,7 @@ namespace ao::rt
 {
   class CoreRuntime;
   class Library;
+  class LibraryJobs;
 }
 
 namespace ao::cli
@@ -67,9 +68,9 @@ namespace ao::cli
 
     rt::CoreRuntime& core();
     library::MusicLibrary const& musicLibrary();
-    rt::Library& library();
+    rt::Library const& library();
     // On first open, require an initialized library database rather than creating one.
-    rt::Library& existingLibrary();
+    rt::LibraryJobs& existingLibraryJobs();
 
     // Pumps the owner loop; a task submitted after stop is rejected with async::OperationCancelled.
     void runTask(async::Task<void> task);

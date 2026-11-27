@@ -50,12 +50,12 @@ namespace ao::rt::test
       LibraryImportPlan preview(std::filesystem::path const& path)
       {
         return ao::test::requireValue(
-          runtime.runTask(runtime.library().jobs().prepareLibraryImportAsync(path, ImportMode::Restore)));
+          runtime.runTask(runtime.jobs().prepareLibraryImportAsync(path, ImportMode::Restore)));
       }
 
       Result<ImportReport> apply(LibraryImportPlan plan)
       {
-        return runtime.runTask(runtime.library().jobs().applyLibraryImportPlanAsync(std::move(plan)));
+        return runtime.runTask(runtime.jobs().applyLibraryImportPlanAsync(std::move(plan)));
       }
 
       library::MusicLibrary storage;

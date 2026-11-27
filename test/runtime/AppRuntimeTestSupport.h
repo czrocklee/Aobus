@@ -53,16 +53,16 @@ namespace ao::rt::test
   void addReadyAudioProvider(AppRuntime& runtime);
   void addReadyAudioProvider(AppRuntime& runtime, audio::BackendProvider::Status status);
 
-  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                          std::unique_ptr<async::Executor> executorPtr,
-                                          ConfigStore* playbackSessionConfigStore = nullptr,
-                                          async::Sleeper* sleeper = nullptr,
-                                          TextOrderingPolicy const* textOrderingPolicy = nullptr);
+  std::unique_ptr<AppRuntimeOwner> makeRuntime(ao::test::TempDir const& tempDir,
+                                               std::unique_ptr<async::Executor> executorPtr,
+                                               ConfigStore* playbackSessionConfigStore = nullptr,
+                                               async::Sleeper* sleeper = nullptr,
+                                               TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
   // State-only helper. Tests that can produce asynchronous callbacks must use
   // makeRuntime and provide an executor with the required scheduling model.
-  std::unique_ptr<AppRuntime> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,
-                                                   ConfigStore* playbackSessionConfigStore = nullptr);
+  std::unique_ptr<AppRuntimeOwner> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,
+                                                        ConfigStore* playbackSessionConfigStore = nullptr);
 
   void settleRuntimeCallbacks(AppRuntime& runtime);
 

@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <cstdint>
 #include <memory>
@@ -22,7 +23,6 @@ namespace ao::i18n
 
 namespace ao::rt
 {
-  class Library;
   class NotificationService;
   class ViewService;
 }
@@ -51,7 +51,7 @@ namespace ao::tui
   {
   public:
     ListOrderController(async::Runtime& runtime,
-                        rt::Library& library,
+                        uimodel::LibraryEditing editing,
                         rt::ViewService& views,
                         rt::NotificationService& notifications,
                         i18n::MessageCatalog const& textCatalog);

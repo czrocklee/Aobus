@@ -50,6 +50,10 @@ class UimodelOrganizationTest(unittest.TestCase):
                 self.assertIn("Outside.cpp", result.errors[0].path)
                 (self.roots[name] / "Outside.cpp").unlink()
 
+    def test_library_editing_exception_does_not_admit_list_editors_at_library_root(self):
+        self.put("source", "library/ListEditor.cpp", "")
+        self.assertFalse(self.audit().ok)
+
     def test_narrow_suffixes_are_the_organization_audit_scope(self):
         # The organization audit scans .h/.hpp/.cpp only; a violating .mm file
         # is the neutrality kind's contract, not this one.

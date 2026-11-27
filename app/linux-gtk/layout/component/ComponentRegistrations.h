@@ -23,7 +23,6 @@ namespace ao::rt
   class CompletionService;
   class LibraryJobs;
   class LibraryChanges;
-  class Library;
   class NotificationService;
   class PlaybackService;
   class TrackSourceCache;
@@ -34,6 +33,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  class LibraryEditing;
   class ListPresentations;
   class OutputDeviceIntent;
   class PlaybackActions;
@@ -90,10 +90,12 @@ namespace ao::gtk::layout
                                i18n::MessageCatalog const& textCatalog);
   void registerTrackDetailComponents(ComponentRegistry& registry,
                                      rt::AppRuntime& runtime,
+                                     uimodel::LibraryEditing editing,
                                      ResourceImageLoader* imageLoader,
                                      i18n::MessageCatalog const& textCatalog);
   void registerTrackEditorComponents(ComponentRegistry& registry,
                                      rt::AppRuntime& runtime,
+                                     uimodel::LibraryEditing editing,
                                      TagEditController* tagEditController,
                                      i18n::MessageCatalog const& textCatalog);
 
@@ -167,7 +169,7 @@ namespace ao::gtk::layout
                                          i18n::MessageCatalog const& textCatalog);
   void registerActivityStatusComponent(ComponentRegistry& registry,
                                        rt::NotificationService& notifications,
-                                       rt::LibraryJobs& libraryJobs,
+                                       rt::LibraryJobs const& libraryJobs,
                                        i18n::MessageCatalog const& textCatalog);
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,
@@ -200,7 +202,7 @@ namespace ao::gtk::layout
                                       i18n::MessageCatalog const& textCatalog);
   void registerTrackFieldGridComponent(ComponentRegistry& registry,
                                        async::Runtime& asyncRuntime,
-                                       rt::Library& library,
+                                       uimodel::LibraryEditing editing,
                                        rt::CompletionService& completion,
                                        rt::NotificationService& notifications,
                                        i18n::MessageCatalog const& textCatalog);
@@ -210,7 +212,7 @@ namespace ao::gtk::layout
                                            i18n::MessageCatalog const& textCatalog);
   void registerTrackTagEditorComponent(ComponentRegistry& registry,
                                        async::Runtime& asyncRuntime,
-                                       rt::Library& library,
+                                       uimodel::LibraryEditing editing,
                                        rt::NotificationService& notifications,
                                        rt::TextOrderingPolicy const* textOrderingPolicy,
                                        TagEditController* tagEditController,

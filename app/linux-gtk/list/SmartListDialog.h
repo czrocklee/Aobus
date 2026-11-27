@@ -62,7 +62,7 @@ namespace ao::gtk
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    rt::Library& library,
+                    rt::Library const& library,
                     rt::ViewService& views,
                     rt::TrackSourceCache& sources,
                     rt::CompletionService& completion,
@@ -148,7 +148,7 @@ namespace ao::gtk
     sigc::scoped_connection _previewRefreshConnection;
 
     // Preview infrastructure
-    rt::Library& _library;
+    rt::Library const& _library;
     rt::ViewService& _views;
     rt::TrackSourceCache& _sources;
     i18n::MessageCatalog _textCatalog;

@@ -24,6 +24,7 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class AppRuntimeOwner;
   class PlaybackService;
 }
 
@@ -55,7 +56,8 @@ namespace ao::gtk
       Retired,
     };
 
-    explicit MainWindow(rt::AppRuntime& runtime,
+    /// Borrows services from one runtime graph, which must outlive the window.
+    explicit MainWindow(rt::AppRuntimeOwner& runtimeOwner,
                         std::shared_ptr<AppConfigStore> configStorePtr,
                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                         i18n::MessageCatalog textCatalog,

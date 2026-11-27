@@ -55,7 +55,8 @@ namespace ao::gtk::layout::editor::test
       {
         LayoutRuntime::registerStandardComponents(
           registry,
-          *runtimePtr,
+          ownerPtr->runtime(),
+          uimodel::LibraryEditing{ownerPtr->libraryCommands()},
           ShellLayoutCollaborators{
             .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
         actionRegistry.tryRegisterAction(
@@ -67,7 +68,7 @@ namespace ao::gtk::layout::editor::test
 
       Glib::RefPtr<Gtk::Application> appPtr = Gtk::Application::create("io.github.aobus.layout_editor_session_test");
       ao::test::TempDir tempDir{};
-      std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+      std::unique_ptr<rt::AppRuntimeOwner> ownerPtr = ao::gtk::test::makeRuntime(tempDir);
       i18n::MessageCatalog textCatalog = ao::test::englishMessageCatalog();
       ComponentRegistry registry{};
       ActionRegistry actionRegistry{registry.schema()};

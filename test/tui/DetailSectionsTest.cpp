@@ -260,7 +260,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto events = fixture.makeEvents(library);
-    fixture.runtimePtr->notifications().post(
+    fixture.runtime.notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
     fixture.shell.focusDetail();
     fixture.hitRegions.activityStatusBox = {.x_min = 120, .x_max = 139, .y_min = 5, .y_max = 5};
@@ -307,7 +307,7 @@ namespace ao::tui::test
   TEST_CASE("DetailSections - full hints reserve the standard activity width at the boundary")
   {
     auto fixture = EventControllerFixture{};
-    fixture.runtimePtr->notifications().post(
+    fixture.runtime.notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
     fixture.shell.focusDetail();
 

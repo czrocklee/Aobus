@@ -23,7 +23,6 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -84,7 +83,7 @@ namespace ao::gtk::layout::test
     auto runtimeFixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = runtimeFixture.runtime();
     auto const listId = ao::test::requireValue(ao::gtk::test::runGtkTask(
-      runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Selected List"})));
+      runtime, runtimeFixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Selected List"})));
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
     auto windowFixture = ao::gtk::test::GtkWindowFixture{};
     auto& window = windowFixture.window();
@@ -93,6 +92,7 @@ namespace ao::gtk::layout::test
     bool selectionRequested = false;
     auto navigation = ListNavigationController{window,
                                                runtime,
+                                               runtimeFixture.editing(),
                                                ao::test::englishMessageCatalog(),
                                                {.onListSelected =
                                                   [&](ListId)

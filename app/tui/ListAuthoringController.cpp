@@ -30,6 +30,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
@@ -99,7 +100,7 @@ namespace ao::tui
      * local expression, exactly what saving would evaluate, so the status,
      * diagnostic, and sample rows all describe the definition being drafted.
      */
-    ListPreview computeListPreview(rt::Library& library,
+    ListPreview computeListPreview(rt::Library const& library,
                                    rt::ViewService& views,
                                    rt::TrackSourceCache& sources,
                                    i18n::MessageCatalog const& textCatalog,
@@ -160,7 +161,7 @@ namespace ao::tui
   struct ListAuthoringController::State final
   {
     State(async::Runtime& runtimeIn,
-          rt::Library& libraryIn,
+          uimodel::LibraryEditing editingIn,
           rt::ViewService& viewsIn,
           rt::TrackSourceCache& sourcesIn,
           rt::CompletionService& completionIn,
@@ -168,7 +169,7 @@ namespace ao::tui
           i18n::MessageCatalog const& textCatalogIn,
           Outputs outputsIn)
       : runtime{runtimeIn}
-      , library{libraryIn}
+      , editing{editingIn}
       , views{viewsIn}
       , sources{sourcesIn}
       , completion{completionIn}
@@ -207,8 +208,8 @@ namespace ao::tui
     void refreshPreviewFor(SmartListEditor& editor)
     {
       auto const draft = editor.draft();
-      auto preview =
-        computeListPreview(library, views, sources, textCatalog, editor.parentListId(), draft.name, draft.expression);
+      auto preview = computeListPreview(
+        editing.library(), views, sources, textCatalog, editor.parentListId(), draft.name, draft.expression);
       editor.applyPreview(std::move(preview.viewState), std::move(preview.tracks));
     }
 
@@ -242,7 +243,7 @@ namespace ao::tui
       // the preview will use, so both halves of the effective filter agree.
       auto parentExpression = std::string{};
 
-      if (auto const optParent = library.snapshot().listNode(baseline.parentId); optParent)
+      if (auto const optParent = editing.library().snapshot().listNode(baseline.parentId); optParent)
       {
         parentExpression = optParent->expression;
       }
@@ -447,7 +448,7 @@ namespace ao::tui
     }
 
     async::Runtime& runtime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::ViewService& views;
     rt::TrackSourceCache& sources;
     rt::CompletionService& completion;
@@ -470,7 +471,7 @@ namespace ao::tui
   };
 
   ListAuthoringController::ListAuthoringController(async::Runtime& runtime,
-                                                   rt::Library& library,
+                                                   uimodel::LibraryEditing editing,
                                                    rt::ViewService& views,
                                                    rt::TrackSourceCache& sources,
                                                    rt::CompletionService& completion,
@@ -478,7 +479,7 @@ namespace ao::tui
                                                    i18n::MessageCatalog const& textCatalog,
                                                    Outputs outputs)
     : _statePtr{std::make_shared<
-        State>(runtime, library, views, sources, completion, notifications, textCatalog, std::move(outputs))}
+        State>(runtime, editing, views, sources, completion, notifications, textCatalog, std::move(outputs))}
   {
   }
 
@@ -532,7 +533,7 @@ namespace ao::tui
       return false;
     }
 
-    auto const snapshot = state.library.snapshot();
+    auto const snapshot = state.editing.library().snapshot();
 
     if (auto const optNode = snapshot.listNode(targetListId); optNode)
     {
@@ -560,7 +561,7 @@ namespace ao::tui
       return false;
     }
 
-    auto const snapshot = state.library.snapshot();
+    auto const snapshot = state.editing.library().snapshot();
     auto const actions = uimodel::describeListActions(targetListId, hasListChildren(snapshot, targetListId));
 
     if (!actions.canDelete && !actions.canDeleteSubtree)
@@ -572,7 +573,7 @@ namespace ao::tui
     // A List with descendants is deleted as its subtree; the preview and the
     // confirmation both describe exactly that scope.
     auto const includeDescendants = actions.canDeleteSubtree;
-    auto previewTask = uimodel::previewListDeletionAsync(&state.library, targetListId, includeDescendants);
+    auto previewTask = uimodel::previewListDeletionAsync(state.editing, targetListId, includeDescendants);
 
     // The confirmation owns input from this moment, not from the preview's
     // arrival: a key typed while the runtime is still answering can neither
@@ -701,7 +702,7 @@ namespace ao::tui
     // The task is built here, from the draft the editor just reported, so
     // the coroutine that awaits it never has to reach for an editor that the
     // editor's own closure may already have released.
-    auto submission = uimodel::saveListAsync(&state.library, editor.draft());
+    auto submission = uimodel::saveListAsync(state.editing, editor.draft());
     editor.setStatus(ListEditorStatus::Submitting);
     state.submissionPending = true;
     state.requestRefresh();
@@ -793,7 +794,7 @@ namespace ao::tui
 
       // The task is built before the in-flight flag is armed, so a refused
       // spawn can never leave a pending write nobody settles.
-      auto deletion = uimodel::deleteListAsync(&state.library, listId, includeDescendants, options);
+      auto deletion = uimodel::deleteListAsync(state.editing, listId, includeDescendants, options);
       confirmation.deleting = true;
       state.submissionPending = true;
       state.requestRefresh();

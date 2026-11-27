@@ -4,8 +4,6 @@
 #pragma once
 
 #include "test/TestFixtureSupport.h"
-#include "test/runtime/AppRuntimeTestSupport.h"
-#include "test/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
@@ -15,28 +13,37 @@
 #include <memory>
 #include <string_view>
 
+namespace ao::library::test
+{
+  struct TrackSpec;
+}
+
 namespace ao::rt::test
 {
-  struct PlaybackUiFixture final
+  class QueuedExecutor;
+
+  class PlaybackUiFixture final
   {
+  public:
     PlaybackUiFixture();
 
     AppRuntime& runtime() const noexcept;
+    QueuedExecutor& executor() const noexcept;
+    ViewId viewId() const noexcept;
 
     void makePlaybackReady() const;
 
+    TrackId addTrack(library::test::TrackSpec const& spec);
     TrackId addPlayableTrack(std::string_view title);
 
     Result<> playFromView(TrackId trackId);
 
-    bool tryWaitForPlayback(TrackId trackId);
+    bool tryWaitForPlayback(TrackId trackId, PlaybackPositionRevision previousRevision) const;
 
-    // These fixture values are intentionally public as the tests' assertion surface.
-    ao::test::TempDir tempDir;
-    std::unique_ptr<QueuedExecutor> executorOwnerPtr;
-    QueuedExecutor* executor = nullptr;
-    std::unique_ptr<AppRuntime> runtimePtr;
-    ViewId viewId{kInvalidViewId};
-    PlaybackPositionRevision observedPositionRevision{};
+  private:
+    ao::test::TempDir _tempDir;
+    QueuedExecutor* _executor = nullptr;
+    std::unique_ptr<AppRuntimeOwner> _ownerPtr;
+    ViewId _viewId{kInvalidViewId};
   };
 } // namespace ao::rt::test

@@ -313,6 +313,14 @@ class CompletionAuditTest(unittest.TestCase):
             audit, "app/runtime/library/Lookalike.cpp", "library.writeTransaction();", "library.readTransaction();"
         )
 
+    def test_frontend_core_rejects_the_library_command_type_and_header(self):
+        audit = "ao_application_architecture_audit"
+        path = "app/tui/Commands.cpp"
+        self.assert_audit(audit, path, "rt::LibraryCommands& writer;", "rt::Library const& reader;")
+        self.assert_audit(
+            audit, path, "#include <ao/rt/library/LibraryCommands.h>", "#include <ao/rt/library/Library.h>"
+        )
+
     def test_disabled_gtk_probe_does_not_disable_cross_frontend_architecture_policy(self):
         path = self.put("app/linux-gtk/Probe.cpp", "TrackFieldGridOperationProbe probe;")
         enabled = guardrails.run(self.root, self.output, "linux")

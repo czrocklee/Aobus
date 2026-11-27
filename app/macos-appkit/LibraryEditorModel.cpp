@@ -39,12 +39,12 @@
 
 namespace ao::appkit
 {
-  LibraryEditorModel::LibraryEditorModel(rt::Library& library,
+  LibraryEditorModel::LibraryEditorModel(uimodel::LibraryEditing editing,
                                          async::Runtime& asyncRuntime,
                                          rt::NotificationService& notifications,
                                          i18n::MessageCatalog catalog,
                                          std::function<void()> onChange)
-    : _library{library}
+    : _editing{editing}
     , _asyncRuntime{asyncRuntime}
     , _notifications{notifications}
     , _catalog{std::move(catalog)}
@@ -94,9 +94,9 @@ namespace ao::appkit
     auto tags = std::vector<std::string>{};
 
     {
-      auto snapshot = _library.snapshot();
+      auto snapshot = _editing.library().snapshot();
 
-      auto sessionRes = uimodel::prepareTrackProperties(_library, snapshot, ids, spec, baseline);
+      auto sessionRes = uimodel::prepareTrackProperties(_editing, snapshot, ids, spec, baseline);
 
       if (!sessionRes)
       {
@@ -165,7 +165,7 @@ namespace ao::appkit
 
     if (listId != kInvalidListId)
     {
-      auto const optList = _library.snapshot().listNode(listId);
+      auto const optList = _editing.library().snapshot().listNode(listId);
 
       if (!optList)
       {
@@ -211,7 +211,7 @@ namespace ao::appkit
       return res;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, ids);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_editing, ids);
 
     if (!sessionRes)
     {
@@ -612,7 +612,7 @@ namespace ao::appkit
 
   async::Task<void> LibraryEditorModel::saveListAsync(LibraryEditorModel* owner, rt::ListDraft draft)
   {
-    auto res = co_await uimodel::saveListAsync(&owner->_library, std::move(draft));
+    auto res = co_await uimodel::saveListAsync(owner->_editing, std::move(draft));
     co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)
@@ -640,8 +640,8 @@ namespace ao::appkit
 
   async::Task<void> LibraryEditorModel::deleteListAsync(LibraryEditorModel* owner, ListId listId, bool preview)
   {
-    auto res = co_await (preview ? uimodel::previewListDeletionAsync(&owner->_library, listId, true)
-                                 : uimodel::deleteListAsync(&owner->_library, listId, true));
+    auto res = co_await (preview ? uimodel::previewListDeletionAsync(owner->_editing, listId, true)
+                                 : uimodel::deleteListAsync(owner->_editing, listId, true));
     co_await owner->_asyncRuntime.resumeOnCallbackExecutorAsync();
 
     if (!owner->_closing)

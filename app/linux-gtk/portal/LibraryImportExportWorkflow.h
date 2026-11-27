@@ -20,7 +20,7 @@
 
 namespace ao::rt
 {
-  class Library;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -45,14 +45,14 @@ namespace ao::gtk::portal
   {
   public:
     LibraryImportExportWorkflow(async::Runtime& asyncRuntime,
-                                rt::Library& library,
+                                rt::LibraryJobs& libraryJobs,
                                 rt::NotificationService& notifications,
                                 ImportExportCallbacks const& callbacks,
                                 i18n::MessageCatalog textCatalog);
     // The callbacks are borrowed for the workflow's whole life, so a temporary
     // would leave _callbacks dangling before the first operation starts.
     LibraryImportExportWorkflow(async::Runtime&,
-                                rt::Library&,
+                                rt::LibraryJobs&,
                                 rt::NotificationService&,
                                 ImportExportCallbacks&&,
                                 i18n::MessageCatalog) = delete;
@@ -87,7 +87,7 @@ namespace ao::gtk::portal
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);
 
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    rt::LibraryJobs& _libraryJobs;
     rt::NotificationService& _notifications;
     // Borrowed so callback updates made by the owning coordinator remain visible
     // to operations started after construction.

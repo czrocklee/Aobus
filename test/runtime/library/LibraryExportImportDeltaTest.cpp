@@ -29,6 +29,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
@@ -143,10 +144,9 @@ namespace ao::rt::test
                                               ImportMode mode)
     {
       auto& runtime = core.async();
-      auto& runtimeLibrary = core.library();
+      auto& jobs = core.libraryJobs();
       INFO("Preparing library import");
-      auto planRes = runQueuedTask(
-        runtime, executor, runtimeLibrary.jobs().prepareLibraryImportAsync(path, mode), kImportTaskTimeout);
+      auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(path, mode), kImportTaskTimeout);
 
       if (!planRes)
       {
@@ -155,7 +155,7 @@ namespace ao::rt::test
 
       INFO("Applying prepared library import");
       return runQueuedTask(
-        runtime, executor, runtimeLibrary.jobs().applyLibraryImportPlanAsync(std::move(*planRes)), kImportTaskTimeout);
+        runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)), kImportTaskTimeout);
     }
   } // namespace
 
@@ -172,7 +172,7 @@ namespace ao::rt::test
         std::move(executorPtr), temp.path(), temp.path(), {}, library::test::kTestMusicLibraryMapBytes));
       optFuture.emplace(core.async().spawn(
         flagCompletionAsync(completedPtr,
-                            core.library().jobs().prepareLibraryImportAsync(
+                            core.libraryJobs().prepareLibraryImportAsync(
                               std::filesystem::path{temp.path()} / "absent.yaml", ImportMode::Merge))));
       executor.checkQueued();
       CHECK_FALSE(completedPtr->load());
@@ -184,7 +184,7 @@ namespace ao::rt::test
     REQUIRE(optFuture);
     CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
     auto reopened = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    CHECK(Library::prepare(reopened));
+    CHECK(library::WritableMusicLibrary::acquire(reopened));
   }
 
   TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks")

@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/node.hpp>
@@ -39,7 +40,6 @@ namespace ao::i18n
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
   class NotificationService;
   class TrackSourceCache;
   class ViewService;
@@ -103,7 +103,7 @@ namespace ao::tui
     };
 
     ListAuthoringController(async::Runtime& runtime,
-                            rt::Library& library,
+                            uimodel::LibraryEditing editing,
                             rt::ViewService& views,
                             rt::TrackSourceCache& sources,
                             rt::CompletionService& completion,

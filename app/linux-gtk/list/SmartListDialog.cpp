@@ -134,7 +134,7 @@ namespace ao::gtk
   } // namespace
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   rt::Library& library,
+                                   rt::Library const& library,
                                    rt::ViewService& views,
                                    rt::TrackSourceCache& sources,
                                    rt::CompletionService& completion,

@@ -188,13 +188,14 @@ namespace ao::systemmedia::test
   {
     auto bus = PrivateBus{};
     auto fixture = rt::test::PlaybackUiFixture{};
+    auto& executor = fixture.executor();
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
     auto actions =
       uimodel::PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     auto bridge = MprisBridge{
-      *fixture.executor,
+      executor,
       playback,
       actions,
       {},
@@ -203,7 +204,7 @@ namespace ao::systemmedia::test
     fixture.makePlaybackReady();
     REQUIRE(playback.snapshot().transport.ready);
     bridge.start();
-    REQUIRE(fixture.executor->tryDrainUntil([&bridge] { return bridge.isActive(); }));
+    REQUIRE(executor.tryDrainUntil([&bridge] { return bridge.isActive(); }));
     auto const destination = std::string{bridge.busName()};
     auto client = BusClient{bus.address()};
     auto logPtr = std::make_shared<WireLog>();
@@ -212,16 +213,14 @@ namespace ao::systemmedia::test
     // The filter sees each reply before the call completes, so Get also
     // establishes that all earlier signals from this connection arrived.
     auto const getProperty = [&](char const* name, ::GVariantType const* type)
-    { return readPlayerProperty(client, destination, *fixture.executor, name, type); };
+    { return readPlayerProperty(client, destination, executor, name, type); };
 
     SECTION("Volume changes arrive in order")
     {
       playback.commands().setVolume(0.25F);
-      REQUIRE(
-        fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.25F; }));
+      REQUIRE(executor.tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.25F; }));
       playback.commands().setVolume(0.75F);
-      REQUIRE(
-        fixture.executor->tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.75F; }));
+      REQUIRE(executor.tryDrainUntil([&playback] { return playback.snapshot().transport.volume.level == 0.75F; }));
       auto const volumePtr = getProperty("Volume", G_VARIANT_TYPE_DOUBLE);
       CHECK(::g_variant_get_double(volumePtr.get()) == Catch::Approx{0.75});
 
@@ -237,13 +236,13 @@ namespace ao::systemmedia::test
     SECTION("CanPlay follows an actionable focused selection")
     {
       auto const trackId = fixture.addPlayableTrack("Selected Track");
-      REQUIRE(runtime.views().setSelection(fixture.viewId, {trackId}));
+      REQUIRE(runtime.views().setSelection(fixture.viewId(), {trackId}));
       auto const availablePtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);
       CHECK(::g_variant_get_boolean(availablePtr.get()) == TRUE);
 
       SECTION("Clearing only the selection removes CanPlay")
       {
-        REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+        REQUIRE(runtime.views().setSelection(fixture.viewId(), {}));
         CHECK(playback.snapshot().transport.ready);
       }
 
@@ -252,7 +251,7 @@ namespace ao::systemmedia::test
         playback.commands().setOutputDevice(audio::OutputDeviceSelection{.backendId = audio::BackendId{"usb"},
                                                                          .deviceId = audio::DeviceId{"missing"},
                                                                          .profileId = audio::kProfileShared});
-        REQUIRE(fixture.executor->tryDrainUntil([&playback] { return !playback.snapshot().transport.ready; }));
+        REQUIRE(executor.tryDrainUntil([&playback] { return !playback.snapshot().transport.ready; }));
       }
 
       auto const unavailablePtr = getProperty("CanPlay", G_VARIANT_TYPE_BOOLEAN);

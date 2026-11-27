@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <giomm/simpleactiongroup.h>
@@ -27,7 +28,6 @@
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
   class NotificationService;
   class TextOrderingPolicy;
 }
@@ -65,7 +65,7 @@ namespace ao::gtk
 
     TagEditController(Gtk::Window& parent,
                       async::Runtime& asyncRuntime,
-                      rt::Library& library,
+                      uimodel::LibraryEditing editing,
                       rt::CompletionService& completion,
                       rt::NotificationService& notifications,
                       rt::TextOrderingPolicy const* textOrderingPolicy,
@@ -108,7 +108,7 @@ namespace ao::gtk
 
     Callbacks _callbacks;
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     rt::CompletionService& _completion;
     rt::NotificationService& _notifications;
     rt::TextOrderingPolicy const* _textOrderingPolicy;

@@ -34,13 +34,14 @@ namespace ao::i18n
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
+  class LibraryChanges;
+  class LibraryJobs;
   class NotificationService;
   class PlaybackService;
   class ResourceByteMemoryCache;
   class ViewService;
   class WorkspaceService;
-}
+} // namespace ao::rt
 namespace ao::uimodel
 {
   class ListPresentations;
@@ -94,7 +95,8 @@ namespace ao::winui::layout
   void registerStatusComponents(ComponentRegistry& registry,
                                 rt::ViewService& views,
                                 rt::NotificationService& notifications,
-                                rt::Library& library,
+                                rt::LibraryJobs const& libraryJobs,
+                                rt::LibraryChanges const& changes,
                                 TrackListController& trackList,
                                 i18n::MessageCatalog textCatalog,
                                 async::Signal<ShellState>& shellStateChanged,

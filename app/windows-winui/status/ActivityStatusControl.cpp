@@ -8,7 +8,6 @@
 #include "platform/WinRtStringResources.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryJobs.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -143,7 +142,7 @@ namespace ao::winui
 
   ActivityStatusControl::ActivityStatusControl(ActivityStatusControlConfig config,
                                                rt::NotificationService& notifications,
-                                               rt::LibraryJobs& libraryJobs)
+                                               rt::LibraryJobs const& libraryJobs)
     : _root{std::move(config.root)}
     , _detailButton{std::move(config.detailButton)}
     , _spinner{std::move(config.spinner)}

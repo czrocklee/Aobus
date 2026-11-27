@@ -72,6 +72,7 @@ The shared UIModel neutrality audit in [`guardrails.py`](../../script/ao/portal/
 - `field` owns shared track-field display formatting.
 - `layout` owns the neutral layout document and schema, component state, and shell session.
 - `presentation` owns the cross-feature immutable authored-copy catalog; feature-specific projections still live with their feature capsule.
+- `library/LibraryEditing` is the shared grant for track and List authoring; feature-specific sessions and drafts stay below their respective folders.
 - `library/list` owns list-tree, saved-List authoring, and order policy.
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.
 - `library/track` owns track filtering, edit decoding, patch construction, and stable-target authoring sessions, including saved-List membership edits.

@@ -17,6 +17,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -223,7 +224,8 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes, executor};
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(commandsFixture.editTags(std::array{trackId}, tag, {}));
-    auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
+    auto sessionRes =
+      ListMembershipAuthoringSession::begin(LibraryEditing{commandsFixture.commands()}, std::array{trackId});
     REQUIRE(sessionRes);
 
     auto const res = commandsFixture.runTask(sessionRes->removeFromListAsync(listId));
@@ -259,7 +261,8 @@ namespace ao::uimodel::test
     auto executor = rt::test::ManualExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor, storage.library());
     auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes, executor};
-    auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
+    auto sessionRes =
+      ListMembershipAuthoringSession::begin(LibraryEditing{commandsFixture.commands()}, std::array{trackId});
     REQUIRE(sessionRes);
 
     auto const res = commandsFixture.runTask(sessionRes->addToListAsync(listId));
@@ -300,8 +303,8 @@ namespace ao::uimodel::test
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = [&]
     {
-      auto source =
-        ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
+      auto source = ao::test::requireValue(
+        ListMembershipAuthoringSession::begin(LibraryEditing{commandsFixture.commands()}, std::array{trackId}));
       auto moved = std::move(source);
       auto task = moved.addToListAsync(listId);
       auto pending = commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(completedPtr, std::move(task)));
@@ -317,8 +320,8 @@ namespace ao::uimodel::test
     CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}) ==
           std::vector<std::string>{"road-trip"});
 
-    auto cleanupSession =
-      ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
+    auto cleanupSession = ao::test::requireValue(
+      ListMembershipAuthoringSession::begin(LibraryEditing{commandsFixture.commands()}, std::array{trackId}));
     auto const cleanupRes = commandsFixture.runTask(cleanupSession.removeFromListAsync(listId));
     REQUIRE(cleanupRes);
     CHECK(cleanupRes->status == rt::AuthoringStatus::Applied);

@@ -140,7 +140,7 @@ namespace ao::winui
       attempt.dialogPtr = std::make_unique<TrackPropertiesCoordinator>(TrackPropertiesCoordinatorConfig{
         .xamlRoot = std::move(root),
         .asyncRuntime = config.asyncRuntime,
-        .library = config.library,
+        .editing = config.editing,
         .workspace = config.workspace,
         .completion = config.completion,
         .textCatalog = config.textCatalog,

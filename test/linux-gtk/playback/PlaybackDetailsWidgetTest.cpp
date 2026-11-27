@@ -56,7 +56,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(
-      runtime, library::test::TrackSpec{.title = "Active details", .artist = "Artist", .uri = fixturePath});
+      fixture.owner(), library::test::TrackSpec{.title = "Active details", .artist = "Artist", .uri = fixturePath});
     runtime.sources().reloadAllTracks();
     auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(viewRes);

@@ -105,8 +105,9 @@ The shared layer retains values, not a process-lifetime owner:
 
 Frontend composition roots retain their toolkit-specific queued/running/exiting
 phases and perform checkpoints, dialogs, graph release, and process exit.
-`PlaybackSessionPersistence` inside `AppRuntime` retains the authoritative
-`Dormant`, `Observing`, `WriteSealed`, `Retired`, and `Shutdown` lifecycle.
+The graph owned by `AppRuntimeOwner` contains `PlaybackSessionPersistence`,
+which retains the authoritative `Dormant`, `Observing`, `WriteSealed`,
+`Retired`, and `Shutdown` lifecycle.
 
 There is deliberately no shared `LibraryProcessSwitch` stateful service or
 teardown token. A GTK main-loop return proves destruction of its scoped graph;
@@ -117,9 +118,9 @@ turns after sheet, menu and callback-executor activity has returned. Service
 scheduling remains active while the window is hidden; rendering timers do not
 own Quit or library-switch progress. Each
 frontend owns its release proof; no common teardown token is used.
-There is also no second persistence-gate owner above `AppRuntime`: frontends
-decide when the selected root is durable, while runtime persistence alone owns
-write sealing and terminal retirement.
+There is no second persistence gate in the frontends. They decide when the
+selected root is durable, while runtime persistence alone owns write sealing
+and terminal retirement.
 
 ## Commands and transitions
 
@@ -221,10 +222,11 @@ For AppKit, the prior durable root is the desktop-settings value retained after
 that rollback; it does not select the active target session's per-library
 store.
 
-GTK and WinUI inject an application-global playback store into `AppRuntime`.
-AppKit supplies its per-library runtime workspace store and no playback-store
-override, so the runtime's default store selection applies. The exact AppKit
-store, playback payload, and lifecycle semantics belong to the
+GTK and WinUI pass an application-global playback store as a borrowed override
+to `AppRuntimeOwner::open()`. AppKit transfers ownership of its per-library
+workspace store and provides no override, so playback persistence borrows the
+workspace store. The exact AppKit store, playback payload, and lifecycle
+semantics belong to the
 [playback session persistence specification](playback/session-persistence.md).
 
 ## Frontend observations

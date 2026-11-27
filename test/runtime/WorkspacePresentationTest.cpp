@@ -25,7 +25,7 @@ namespace ao::rt::test
     auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
-      .target = fixture.firstListId,
+      .target = fixture.listIds().first,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::NewViewDefault,
@@ -42,15 +42,15 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
     auto songs = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
     auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
-    auto const firstViewId = requireNavigation(runtime, fixture.firstListId);
+    auto const firstViewId = requireNavigation(runtime, fixture.listIds().first);
     REQUIRE(runtime.workspace().setActivePresentation(songs));
     auto const duration = TrackColumnSort{TrackField::Duration, false};
     REQUIRE(runtime.views().setColumnSort(firstViewId, duration));
     songs.optColumnSort = duration;
-    requireNavigation(runtime, fixture.secondListId);
+    requireNavigation(runtime, fixture.listIds().second);
 
     auto const reusedViewId = ao::test::requireValue(runtime.workspace().navigate({
-      .target = fixture.firstListId,
+      .target = fixture.listIds().first,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::NewViewDefault,
@@ -62,7 +62,8 @@ namespace ao::rt::test
     CHECK(runtime.views().trackListState(reusedViewId).presentation == normalizeTrackPresentationSpec(songs));
 
     requireBackNavigation(runtime);
-    CHECK(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId == fixture.secondListId);
+    CHECK(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId ==
+          fixture.listIds().second);
     requireForwardNavigation(runtime);
     auto const replayedState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(replayedState.id == firstViewId);
@@ -78,7 +79,7 @@ namespace ao::rt::test
     auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigate({
       .target =
         FilteredListTarget{
-          .listId = fixture.firstListId,
+          .listId = fixture.listIds().first,
           .filterExpression = "$title ~ \"Needle\"",
         },
       .optPresentation =
@@ -89,7 +90,7 @@ namespace ao::rt::test
     }));
 
     auto const plainViewId = ao::test::requireValue(runtime.workspace().navigate({
-      .target = fixture.firstListId,
+      .target = fixture.listIds().first,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::NewViewDefault,
@@ -111,10 +112,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
-    auto const firstViewId = requireNavigation(runtime, fixture.firstListId);
+    auto const firstViewId = requireNavigation(runtime, fixture.listIds().first);
 
     auto const reusedViewId = ao::test::requireValue(runtime.workspace().navigate({
-      .target = fixture.firstListId,
+      .target = fixture.listIds().first,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::Override,
@@ -131,7 +132,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
 
     REQUIRE(runtime.workspace().setActivePresentation(builtinTrackPresentationPreset(BuiltinPreset::Albums).spec));
 
@@ -157,7 +158,7 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
 
     auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
 
     REQUIRE(runtime.workspace().setActivePresentation(albums));
     auto const beforeRepeated = runtime.workspace().snapshot();
@@ -174,7 +175,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
 
     auto const& albums = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
     REQUIRE_FALSE(runtime.workspace().canGoBack());
@@ -190,7 +191,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
     auto const spec = ao::test::requireValue(runtime.workspace().setActivePresentation(BuiltinPreset::Albums));
 
     CHECK(spec.isPreset(BuiltinPreset::Albums));
@@ -204,7 +205,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& workspace = runtime.workspace();
-    auto const viewId = requireNavigation(runtime, fixture.firstListId);
+    auto const viewId = requireNavigation(runtime, fixture.listIds().first);
     auto presetId = TrackPresetId{};
 
     SECTION("built-in preset")
@@ -246,7 +247,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& workspace = runtime.workspace();
-    auto const viewId = requireNavigation(runtime, fixture.firstListId);
+    auto const viewId = requireNavigation(runtime, fixture.listIds().first);
     auto const before = workspace.snapshot();
     auto const original = runtime.views().trackListState(viewId).presentation;
     auto invalid = original;
@@ -264,7 +265,7 @@ namespace ao::rt::test
     SECTION("opening a new view with an explicit presentation")
     {
       auto const res = workspace.navigate({
-        .target = fixture.secondListId,
+        .target = fixture.listIds().second,
         .optPresentation = NavigationPresentation{.spec = invalid},
       });
       REQUIRE_FALSE(res);
@@ -283,7 +284,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
     auto const res = runtime.workspace().setActivePresentation(CustomPresetId{42});
 
     REQUIRE_FALSE(res);
@@ -337,7 +338,7 @@ namespace ao::rt::test
     REQUIRE(presets.size() == 1);
     CHECK(presets[0].spec.groupBy == TrackGroupKey::Work);
 
-    requireNavigation(runtime, fixture.firstListId);
+    requireNavigation(runtime, fixture.listIds().first);
     auto const presentation = ao::test::requireValue(runtime.workspace().setActivePresentation(CustomPresetId{0}));
     CHECK(presentation.groupBy == TrackGroupKey::Work);
 

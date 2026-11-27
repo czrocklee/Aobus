@@ -6,7 +6,6 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "status/ActivityStatusWidget.h"
-#include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -68,7 +67,7 @@ namespace ao::gtk::layout
     {
     public:
       ActivityStatusComponent(rt::NotificationService& notifications,
-                              rt::LibraryJobs& libraryJobs,
+                              rt::LibraryJobs const& libraryJobs,
                               i18n::MessageCatalog const& textCatalog,
                               LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
@@ -89,7 +88,7 @@ namespace ao::gtk::layout
 
   void registerActivityStatusComponent(ComponentRegistry& registry,
                                        rt::NotificationService& notifications,
-                                       rt::LibraryJobs& libraryJobs,
+                                       rt::LibraryJobs const& libraryJobs,
                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerSharedComponent(

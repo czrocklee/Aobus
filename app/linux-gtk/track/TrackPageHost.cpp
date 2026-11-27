@@ -24,6 +24,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -46,7 +47,7 @@ namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                async::Runtime& asyncRuntime,
-                               rt::Library& library,
+                               uimodel::LibraryEditing editing,
                                rt::PlaybackService& playback,
                                rt::ViewService& views,
                                rt::WorkspaceService& workspace,
@@ -59,7 +60,7 @@ namespace ao::gtk
                                std::function<void(Error const&)> onSourceRevealFailed)
     : _stack{stack}
     , _asyncRuntime{asyncRuntime}
-    , _library{library}
+    , _editing{editing}
     , _playback{playback}
     , _views{views}
     , _workspace{workspace}
@@ -449,7 +450,7 @@ namespace ao::gtk
                                                         _columnLayouts,
                                                         _textCatalog,
                                                         _asyncRuntime,
-                                                        _library,
+                                                        _editing,
                                                         _views,
                                                         _thumbnailLoader,
                                                         foundStateRes->presentation,
@@ -468,7 +469,7 @@ namespace ao::gtk
 
     if (!rt::isVirtualListId(listId))
     {
-      auto scope = _library.snapshot();
+      auto scope = _editing.library().snapshot();
 
       if (auto optNode = scope.listNode(listId); optNode)
       {

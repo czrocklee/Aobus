@@ -8,7 +8,6 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -37,7 +36,7 @@ namespace ao::uimodel::test
     {
       auto snapshot = fixture.library().snapshot();
       baselineRevision = snapshot.revision();
-      auto sessionRes = prepareTrackProperties(fixture.library(), snapshot, targetIds, spec, form);
+      auto sessionRes = prepareTrackProperties(fixture.editing(), snapshot, targetIds, spec, form);
       REQUIRE(sessionRes);
       return std::move(*sessionRes);
     }();
@@ -62,7 +61,7 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = fixture.library().snapshot();
-      auto sessionRes = prepareTrackProperties(fixture.library(), snapshot, fixture.trackIds(), spec, form);
+      auto sessionRes = prepareTrackProperties(fixture.editing(), snapshot, fixture.trackIds(), spec, form);
       REQUIRE(sessionRes);
       return std::move(*sessionRes);
     }();
@@ -89,7 +88,7 @@ namespace ao::uimodel::test
     CHECK(fixture.title(fixture.trackIds().front()) == "Committed");
     CHECK(form.rowView(rt::TrackField::Title).text == "Old Title");
 
-    auto otherRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto otherRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(otherRes);
     auto const otherSubmitRes = fixture.runTask(otherRes->submitMetadataAsync(rt::MetadataPatch{.optTitle = "Newer"}));
     REQUIRE(otherSubmitRes);
@@ -118,9 +117,9 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = fixture.library().snapshot();
-      auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds, snapshot);
+      auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), targetIds, snapshot);
       REQUIRE(sessionRes);
-      auto otherRes = TrackAuthoringSession::begin(fixture.library(), std::array{fixture.trackIds().back()});
+      auto otherRes = TrackAuthoringSession::begin(fixture.editing(), std::array{fixture.trackIds().back()});
       REQUIRE(otherRes);
       auto const submittedRes = fixture.runTask(otherRes->submitMetadataAsync(rt::MetadataPatch{.optTitle = "Other"}));
       REQUIRE(submittedRes);
@@ -152,7 +151,7 @@ namespace ao::uimodel::test
     REQUIRE(fixture.trackIds().front() == foreign.trackIds().front());
     REQUIRE(snapshot.revision() == fixture.library().authoringAvailability().libraryRevision);
 
-    auto const sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds(), snapshot);
+    auto const sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds(), snapshot);
 
     REQUIRE_FALSE(sessionRes);
     CHECK(sessionRes.error().code == Error::Code::InvalidInput);
@@ -164,7 +163,7 @@ namespace ao::uimodel::test
     auto fixture = TrackAuthoringFixture{1};
     auto snapshot = fixture.library().snapshot();
     auto const revision = snapshot.revision();
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds(), snapshot);
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds(), snapshot);
     REQUIRE(sessionRes);
     auto const submitRes = fixture.runTask(sessionRes->submitMetadataAsync(rt::MetadataPatch{.optTitle = "Newer"}));
     REQUIRE(submitRes);
@@ -178,7 +177,7 @@ namespace ao::uimodel::test
     auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
     REQUIRE(loadTrackPropertiesFormBaseline(snapshot, fixture.trackIds(), spec, form));
     form.setEditValue(rt::TrackField::Title, std::string{"Unsaved draft"});
-    auto const rejectedRes = prepareTrackProperties(fixture.library(), snapshot, fixture.trackIds(), spec, form);
+    auto const rejectedRes = prepareTrackProperties(fixture.editing(), snapshot, fixture.trackIds(), spec, form);
 
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::InvalidState);

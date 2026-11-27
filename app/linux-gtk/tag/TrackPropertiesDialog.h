@@ -42,12 +42,16 @@ namespace Gtk
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
 }
 
 namespace ao::async
 {
   class Runtime;
+}
+
+namespace ao::uimodel
+{
+  class LibraryEditing;
 }
 
 namespace ao::gtk
@@ -59,7 +63,7 @@ namespace ao::gtk
   public:
     TrackPropertiesDialog(Gtk::Window& parent,
                           async::Runtime& asyncRuntime,
-                          rt::Library& library,
+                          uimodel::LibraryEditing editing,
                           rt::CompletionService& completion,
                           i18n::MessageCatalog textCatalog,
                           std::span<TrackId const> trackIds);
@@ -96,7 +100,7 @@ namespace ao::gtk
     void buildUi();
     void buildMetadataTab();
     void buildPropertiesTab();
-    Result<> prepareEditing(std::span<TrackId const> trackIds);
+    Result<> prepareEditing(uimodel::LibraryEditing editing, std::span<TrackId const> trackIds);
     void applyLoadedFields();
     void handleSaveClicked();
     void setInteractionState(InteractionState state);
@@ -114,7 +118,6 @@ namespace ao::gtk
     void applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view);
     void setWidgetValue(Gtk::Widget* widget, std::string_view value);
 
-    rt::Library& _library;
     async::Runtime& _asyncRuntime;
     rt::CompletionService& _completion;
     i18n::MessageCatalog _textCatalog;

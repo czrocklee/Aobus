@@ -14,7 +14,6 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -44,6 +43,11 @@ namespace ao::uimodel::test
       rt::test::QueuedExecutor executor;
       rt::LibraryChanges changes{rt::test::makeLibraryChanges(executor, storage.library())};
       rt::test::LibraryCommandsFixture commandsFixture{storage.library(), changes, executor};
+
+      auto runScan(LibraryScanMode const mode, std::stop_token const stopToken = {})
+      {
+        return commandsFixture.runTask(runLibraryScanWorkflowAsync(&commandsFixture.jobs(), mode, stopToken));
+      }
     };
   } // namespace
 
@@ -111,10 +115,7 @@ namespace ao::uimodel::test
   {
     auto fixture = LibraryScanWorkflowFixture{};
 
-    auto const res = rt::test::runQueuedTask(
-      fixture.commandsFixture.runtime(),
-      fixture.executor,
-      runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::Eager));
+    auto const res = fixture.runScan(LibraryScanMode::Eager);
 
     REQUIRE(res);
     CHECK(res->disposition == LibraryScanPlanDisposition::UpToDate);
@@ -132,10 +133,7 @@ namespace ao::uimodel::test
     auto const symlink =
       ao::test::SymlinkFixture{outsideFile, fixture.storage.root() / "alias.flac", ao::test::SymlinkType::File};
 
-    auto const res = rt::test::runQueuedTask(
-      fixture.commandsFixture.runtime(),
-      fixture.executor,
-      runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::Eager));
+    auto const res = fixture.runScan(LibraryScanMode::Eager);
 
     auto const expectedSummary = LibraryScanPlanSummary{.errorCount = 1};
     auto const expectedIssues = std::vector<LibraryScanIssue>{{
@@ -155,10 +153,7 @@ namespace ao::uimodel::test
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("basic_metadata.flac"), fixture.storage.root() / "song.flac");
 
-    auto const res = rt::test::runQueuedTask(
-      fixture.commandsFixture.runtime(),
-      fixture.executor,
-      runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::Eager));
+    auto const res = fixture.runScan(LibraryScanMode::Eager);
 
     auto const expectedSummary = LibraryScanPlanSummary{.newCount = 1};
     REQUIRE(res);
@@ -191,10 +186,7 @@ namespace ao::uimodel::test
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("basic_metadata.flac"), fixture.storage.root() / "song.flac");
 
-    auto const res = rt::test::runQueuedTask(
-      fixture.commandsFixture.runtime(),
-      fixture.executor,
-      runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::FastBootstrap));
+    auto const res = fixture.runScan(LibraryScanMode::FastBootstrap);
 
     auto const expectedSummary = LibraryScanPlanSummary{.newCount = 1};
     REQUIRE(res);
@@ -233,14 +225,7 @@ namespace ao::uimodel::test
       SKIP("The temporary music directory is case-sensitive");
     }
 
-    auto const scan = [&fixture]
-    {
-      return rt::test::runQueuedTask(
-        fixture.commandsFixture.runtime(),
-        fixture.executor,
-        runLibraryScanWorkflowAsync(&fixture.commandsFixture.library().jobs(), LibraryScanMode::FastBootstrap));
-    };
-    auto const first = scan();
+    auto const first = fixture.runScan(LibraryScanMode::FastBootstrap);
     REQUIRE(first);
     REQUIRE(first->optApplyResult);
     REQUIRE(first->optApplyResult->insertedIds.size() == 1);
@@ -248,7 +233,7 @@ namespace ao::uimodel::test
     std::filesystem::rename(oldPath, intermediate);
     std::filesystem::rename(intermediate, newPath);
 
-    auto const renamed = scan();
+    auto const renamed = fixture.runScan(LibraryScanMode::FastBootstrap);
     REQUIRE(renamed);
     CHECK(renamed->disposition == LibraryScanPlanDisposition::Actionable);
     CHECK(renamed->summary == LibraryScanPlanSummary{.movedCount = 1});
@@ -268,9 +253,7 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{storage, changes, executor};
 
     auto const res =
-      rt::test::runQueuedTask(commandsFixture.runtime(),
-                              executor,
-                              runLibraryScanWorkflowAsync(&commandsFixture.library().jobs(), LibraryScanMode::Eager));
+      commandsFixture.runTask(runLibraryScanWorkflowAsync(&commandsFixture.jobs(), LibraryScanMode::Eager));
 
     REQUIRE_FALSE(res);
     CHECK(res.error().stage == LibraryScanWorkflowStage::Planning);
@@ -295,12 +278,7 @@ namespace ao::uimodel::test
     auto stopSource = std::stop_source{};
     REQUIRE(stopSource.request_stop());
 
-    CHECK_THROWS_AS(rt::test::runQueuedTask(
-                      fixture.commandsFixture.runtime(),
-                      fixture.executor,
-                      runLibraryScanWorkflowAsync(
-                        &fixture.commandsFixture.library().jobs(), LibraryScanMode::Eager, stopSource.get_token())),
-                    async::OperationCancelled);
+    CHECK_THROWS_AS(fixture.runScan(LibraryScanMode::Eager, stopSource.get_token()), async::OperationCancelled);
 
     auto transaction = fixture.storage.library().readTransaction();
     CHECK_FALSE(fixture.storage.library().manifest().reader(transaction).get("song.flac"));
@@ -313,7 +291,7 @@ namespace ao::uimodel::test
     auto fixture = LibraryScanWorkflowFixture{};
     std::filesystem::copy_file(
       audio::test::requireAudioFixture("basic_metadata.flac"), fixture.storage.root() / "song.flac");
-    auto& jobs = fixture.commandsFixture.library().jobs();
+    auto& jobs = fixture.commandsFixture.jobs();
     auto activePlanRes = rt::LibraryScan{fixture.storage.library()}.buildPlan();
     REQUIRE(activePlanRes);
     auto applyEntered = rt::test::AsyncTestState<bool>::create(false);
@@ -333,8 +311,7 @@ namespace ao::uimodel::test
 
     REQUIRE(fixture.executor.tryDrainUntil([applyEntered] { return applyEntered.load(); }));
 
-    auto const res = rt::test::runQueuedTask(
-      fixture.commandsFixture.runtime(), fixture.executor, runLibraryScanWorkflowAsync(&jobs, LibraryScanMode::Eager));
+    auto const res = fixture.runScan(LibraryScanMode::Eager);
 
     auto const expectedSummary = LibraryScanPlanSummary{.newCount = 1};
     REQUIRE_FALSE(res);

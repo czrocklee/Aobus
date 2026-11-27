@@ -48,7 +48,7 @@ namespace ao::winui
   public:
     ActivityStatusControl(ActivityStatusControlConfig config,
                           rt::NotificationService& notifications,
-                          rt::LibraryJobs& libraryJobs);
+                          rt::LibraryJobs const& libraryJobs);
     ~ActivityStatusControl();
 
     ActivityStatusControl(ActivityStatusControl const&) = delete;

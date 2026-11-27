@@ -102,10 +102,11 @@ namespace
     static constexpr auto kDeadline =
       std::chrono::steady_clock::time_point{} + ao::uimodel::kActivityStatusDefaultAutoDismissTimeout;
 
-    InfoDeadlineObservation(ao::rt::AppRuntime& runtime,
+    InfoDeadlineObservation(ao::async::Runtime& runtime,
+                            ao::rt::LibraryJobs const& jobProgress,
                             DispatcherQueueTimer nativeTimer,
                             ao::i18n::MessageCatalog textCatalog)
-      : notifications{runtime.async()}
+      : notifications{runtime}
       , timer{std::move(nativeTimer)}
       , control{{.root = root,
                  .detailButton = detail,
@@ -118,7 +119,7 @@ namespace
                  .clock = [this] { return now; },
                  .autoDismissTimer = timer},
                 notifications,
-                runtime.library().jobs()}
+                jobProgress}
     {
     }
 
@@ -315,7 +316,7 @@ namespace
       std::filesystem::create_directories(_scratch);
       auto executorPtr = std::make_unique<ao::winui::DispatcherQueueExecutor>(_window.DispatcherQueue());
       auto* executorBorrow = executorPtr.get();
-      auto runtimeRes = ao::rt::AppRuntime::create({
+      auto runtimeRes = ao::rt::AppRuntimeOwner::open({
         .executorPtr = std::move(executorPtr),
         .musicRoot = _scratch,
         .databasePath = _scratch / "database",
@@ -330,20 +331,20 @@ namespace
         return;
       }
 
-      _runtimePtr = std::make_unique<ao::rt::AppRuntime>(std::move(*runtimeRes));
+      auto& runtime = _optRuntimeOwner.emplace(std::move(*runtimeRes)).runtime();
       _executor = executorBorrow;
 
       // The production status registration covers the whole status family; the
       // track controller exists only to satisfy that public registration and
       // is torn down after the strip retires.
-      _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
+      auto const& changes = runtime.library().changes();
+      _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(changes);
       _presentationCatalogPtr =
-        std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *controllerCatalogRes);
-      _listPresentationsPtr =
-        std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
-      _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
-                                                                       _runtimePtr->workspace(),
-                                                                       _runtimePtr->library(),
+        std::make_unique<ao::uimodel::TrackPresentationCatalog>(runtime.workspace(), *controllerCatalogRes);
+      _listPresentationsPtr = std::make_unique<ao::uimodel::ListPresentations>(*_presentationCatalogPtr, changes);
+      _trackListPtr = std::make_unique<ao::winui::TrackListController>(runtime.views(),
+                                                                       runtime.workspace(),
+                                                                       runtime.library(),
                                                                        *_columnLayoutsPtr,
                                                                        *_listPresentationsPtr,
                                                                        std::move(*controllerCatalogRes));
@@ -351,9 +352,10 @@ namespace
       _schemaPtr = std::make_unique<ao::uimodel::LayoutSchema>(ao::winui::layoutSchema());
       _registryPtr = std::make_unique<ao::winui::layout::ComponentRegistry>(*_schemaPtr, _actions);
       ao::winui::layout::registerStatusComponents(*_registryPtr,
-                                                  _runtimePtr->views(),
-                                                  _runtimePtr->notifications(),
-                                                  _runtimePtr->library(),
+                                                  runtime.views(),
+                                                  runtime.notifications(),
+                                                  runtime.jobProgress(),
+                                                  changes,
                                                   *_trackListPtr,
                                                   std::move(*statusCatalogRes),
                                                   _shellStateChanged,
@@ -649,13 +651,14 @@ namespace
       check(!_detail.Flyout(), "rejected Invoke cannot attach an empty popup");
     }
 
+    ao::rt::NotificationService& notifications() noexcept { return _optRuntimeOwner->runtime().notifications(); }
+
     void emptyIdle()
     {
       scenario("empty idle is named and visible but not invokable");
       checkAdmission(L"Notifications", false);
       checkRejectedInvoke();
-      _runtimePtr->notifications().post(
-        ao::rt::NotificationSeverity::Info, "Probe info", ao::rt::NotificationLifetime::history());
+      notifications().post(ao::rt::NotificationSeverity::Info, "Probe info", ao::rt::NotificationLifetime::history());
       enqueue(&WinUiActivityStatusProbeApplication::info);
     }
 
@@ -664,7 +667,7 @@ namespace
       scenario("ordinary Info has no enabled empty popup");
       checkAdmission(L"Probe info", false);
       checkRejectedInvoke();
-      _runtimePtr->notifications().post(
+      notifications().post(
         ao::rt::NotificationSeverity::Warning, "Probe warning", ao::rt::NotificationLifetime::history());
       enqueue(&WinUiActivityStatusProbeApplication::warning);
     }
@@ -746,8 +749,7 @@ namespace
     {
       scenario("hidden compact warning remains accessible from the idle entry");
       checkAdmission(L"Notifications", true);
-      check(
-        _runtimePtr->notifications().feed().entries.size() == 2, "hiding compact text preserves the notification feed");
+      check(notifications().feed().entries.size() == 2, "hiding compact text preserves the notification feed");
       openDetails(&WinUiActivityStatusProbeApplication::retainedOpened);
     }
 
@@ -795,8 +797,7 @@ namespace
       checkAdmission(L"Notifications", false);
       checkRejectedInvoke();
       check(!_flyout.IsOpen(), "hiding the last detail closes the existing popup");
-      check(_runtimePtr->notifications().feed().entries.size() == 2,
-            "hiding a detail does not remove runtime notification history");
+      check(notifications().feed().entries.size() == 2, "hiding a detail does not remove runtime notification history");
       enqueue(&WinUiActivityStatusProbeApplication::startInfoDeadlineObservation);
     }
 
@@ -824,8 +825,9 @@ namespace
         return;
       }
 
+      auto& runtime = _optRuntimeOwner->runtime();
       _infoDeadlinePtr = std::make_unique<InfoDeadlineObservation>(
-        *_runtimePtr, _window.DispatcherQueue().CreateTimer(), std::move(*textCatalogRes));
+        runtime.async(), runtime.jobProgress(), _window.DispatcherQueue().CreateTimer(), std::move(*textCatalogRes));
       auto& observation = *_infoDeadlinePtr;
       observation.notifications.createOrUpdate(
         observation.reportKey, {.message = "Background started", .lifetime = ao::rt::NotificationLifetime::history()});
@@ -885,10 +887,9 @@ namespace
 
     void updateBackgroundInfo()
     {
-      _runtimePtr->notifications().createOrUpdate(
-        ao::rt::NotificationReportKey{"probe.background"},
-        {.message = std::format("Background update {}", ++_backgroundUpdateCount),
-         .lifetime = ao::rt::NotificationLifetime::history()});
+      notifications().createOrUpdate(ao::rt::NotificationReportKey{"probe.background"},
+                                     {.message = std::format("Background update {}", ++_backgroundUpdateCount),
+                                      .lifetime = ao::rt::NotificationLifetime::history()});
     }
 
     void observeRetainedInfoExpiry()
@@ -923,7 +924,7 @@ namespace
       // tick must not dismiss the replacement before its own lifetime ends.
       auto const earliestExpiry =
         std::chrono::steady_clock::now() + ao::uimodel::kActivityStatusDefaultAutoDismissTimeout;
-      _runtimePtr->notifications().post(
+      notifications().post(
         ao::rt::NotificationSeverity::Info, "Replacement history info", ao::rt::NotificationLifetime::history());
       checkAdmission(L"Replacement history info", false);
       _optLabelChangedToken = _label.RegisterPropertyChangedCallback(
@@ -963,7 +964,7 @@ namespace
       checkAdmission(L"Notifications", false);
       check(_label.Text().empty() && _dismiss.Visibility() == Visibility::Collapsed,
             "the native dispatcher cleared the compact Info and its dismiss action");
-      auto const feed = _runtimePtr->notifications().feed();
+      auto const feed = notifications().feed();
       auto const retained = std::ranges::find(feed.entries,
                                               ao::rt::NotificationMessage{std::string{"Replacement history info"}},
                                               &ao::rt::NotificationEntry::message);
@@ -976,7 +977,7 @@ namespace
     void reopenForRetirement()
     {
       scenario("new details restore the action after the last detail was hidden");
-      _runtimePtr->notifications().post(
+      notifications().post(
         ao::rt::NotificationSeverity::Info, "Probe retirement info", ao::rt::NotificationLifetime::pinned());
       checkAdmission(L"Probe retirement info", true);
       openDetails(&WinUiActivityStatusProbeApplication::retirementOpened);
@@ -988,7 +989,7 @@ namespace
       checkNotificationContent(L"Probe retirement info");
       // Arm a fresh expiry while the already-open popup remains available
       // through the pinned detail. Teardown need not race the popup opening.
-      _runtimePtr->notifications().post(
+      notifications().post(
         ao::rt::NotificationSeverity::Info, "Pending retirement info", ao::rt::NotificationLifetime::history());
       checkAdmission(L"Pending retirement info", true);
       _closed = _flyout.Closed(winrt::auto_revoke,
@@ -1036,11 +1037,11 @@ namespace
       if (_executor != nullptr)
       {
         _executor->beginClosing();
-        _runtimePtr->shutdown();
+        _optRuntimeOwner->shutdown();
         _executor->completeClosing();
       }
 
-      _runtimePtr.reset();
+      _optRuntimeOwner.reset();
       _executor = nullptr;
       _registryPtr.reset();
       _schemaPtr.reset();
@@ -1108,7 +1109,7 @@ namespace
     Media::CompositionTarget::Rendering_revoker _rendering{};
     Controls::Primitives::FlyoutBase::Opened_revoker _opened{};
     Controls::Primitives::FlyoutBase::Closed_revoker _closed{};
-    std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
+    std::optional<ao::rt::AppRuntimeOwner> _optRuntimeOwner;
     // Borrowed from the runtime after it reaches final storage.
     ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;

@@ -88,6 +88,7 @@ namespace ao::gtk::test
       std::optional<audio::OutputDeviceSelection> optOutputSelectionRequested;
       ShellLayoutController controller{
         runtimeFixture.runtime(),
+        runtimeFixture.editing(),
         window,
         configStorePtr,
         storePtr,
@@ -739,7 +740,8 @@ namespace ao::gtk::test
 
     rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
+    auto const trackId = addRuntimeTrack(
+      fixture.runtimeFixture.owner(), library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
     runtime.sources().reloadAllTracks();
     auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(viewRes);
@@ -936,6 +938,7 @@ namespace ao::gtk::test
     {
       auto controller =
         ShellLayoutController{runtime,
+                              fixture.editing(),
                               window,
                               std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
                               std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
@@ -986,6 +989,7 @@ namespace ao::gtk::test
     {
       auto controller =
         ShellLayoutController{runtime,
+                              fixture.editing(),
                               window,
                               std::move(configStorePtr),
                               std::move(layoutStorePtr),
@@ -1020,6 +1024,7 @@ namespace ao::gtk::test
     {
       auto controller =
         ShellLayoutController{runtime,
+                              fixture.editing(),
                               window,
                               std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
                               std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
@@ -1063,6 +1068,7 @@ namespace ao::gtk::test
     {
       auto controller =
         ShellLayoutController{runtime,
+                              fixture.editing(),
                               window,
                               std::move(configStorePtr),
                               std::move(layoutStorePtr),

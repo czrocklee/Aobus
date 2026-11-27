@@ -27,6 +27,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
@@ -64,10 +65,11 @@ namespace ao::tui::test
       ao::test::TempDir tempDir{};
       std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr{std::make_unique<rt::test::ControlledSleeper>()};
       rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr{
+      std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr{
         rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor), nullptr, sleeperPtr.get())};
-      uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-      uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
+      rt::AppRuntime& runtime = runtimeOwnerPtr->runtime();
+      uimodel::TrackPresentationCatalog presentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+      uimodel::ListPresentations listPresentations{presentationCatalog, runtime.library().changes()};
       std::size_t refreshCount = 0;
       std::size_t settledCount = 0;
       std::vector<ListId> openedLists{};
@@ -75,12 +77,12 @@ namespace ao::tui::test
       ListAuthoringController makeController()
       {
         return ListAuthoringController{
-          runtimePtr->async(),
-          runtimePtr->library(),
-          runtimePtr->views(),
-          runtimePtr->sources(),
-          runtimePtr->completion(),
-          runtimePtr->notifications(),
+          runtime.async(),
+          uimodel::LibraryEditing{runtimeOwnerPtr->libraryCommands()},
+          runtime.views(),
+          runtime.sources(),
+          runtime.completion(),
+          runtime.notifications(),
           ao::test::englishMessageCatalog(),
           ListAuthoringController::Outputs{
             .requestRefresh = [this] { ++refreshCount; },
@@ -91,30 +93,30 @@ namespace ao::tui::test
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
-        return rt::test::addRuntimeTrack(*runtimePtr, spec);
+        return rt::test::addRuntimeTrack(*runtimeOwnerPtr, spec);
       }
 
       ListId addList(std::string name, std::string expression = {}) const
       {
         return ao::test::requireValue(
-          rt::test::runRuntimeTask(*runtimePtr,
-                                   runtimePtr->library().commands().createListAsync(
+          rt::test::runRuntimeTask(runtime,
+                                   runtimeOwnerPtr->libraryCommands().createListAsync(
                                      rt::ListDraft{.name = std::move(name), .expression = std::move(expression)})));
       }
 
       std::optional<rt::ListNode> listNode(ListId const listId) const
       {
-        return runtimePtr->library().snapshot().listNode(listId);
+        return runtime.library().snapshot().listNode(listId);
       }
 
       std::string lastMessage() const
       {
-        auto const feed = runtimePtr->notifications().feed();
+        auto const feed = runtime.notifications().feed();
         REQUIRE_FALSE(feed.entries.empty());
         return std::get<std::string>(feed.entries.back().message);
       }
 
-      bool hasNotifications() const { return !runtimePtr->notifications().feed().entries.empty(); }
+      bool hasNotifications() const { return !runtime.notifications().feed().entries.empty(); }
     };
 
     void typeText(ListAuthoringController& controller, std::string_view const text)
@@ -333,8 +335,8 @@ namespace ao::tui::test
     fixture.addTrack({.title = "Local show", .uri = "local-show.flac", .tags = {"live"}});
     auto const parentId = fixture.addList("Tours", "#tour");
     auto const childId = ao::test::requireValue(
-      rt::test::runRuntimeTask(*fixture.runtimePtr,
-                               fixture.runtimePtr->library().commands().createListAsync(
+      rt::test::runRuntimeTask(fixture.runtime,
+                               fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
                                  rt::ListDraft{.parentId = parentId, .name = "Roadsongs", .expression = "#live"})));
     auto controller = fixture.makeController();
 
@@ -388,7 +390,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.settledCount == 1);
 
-    auto const optNode = fixture.runtimePtr->library().snapshot().lists();
+    auto const optNode = fixture.runtime.library().snapshot().lists();
     REQUIRE_FALSE(optNode.empty());
 
     auto savedIt = std::ranges::find_if(optNode, [](rt::ListNode const& node) { return node.name == "Queen set"; });
@@ -443,7 +445,7 @@ namespace ao::tui::test
     CHECK(changeCount == 0);
 
     // Editing rewrote exactly one List; no sibling appeared beside it.
-    CHECK(fixture.runtimePtr->library().snapshot().lists().size() == 1);
+    CHECK(fixture.runtime.library().snapshot().lists().size() == 1);
   }
 
   TEST_CASE("ListAuthoringController - an edit never rewrites the stored presentation preference")
@@ -507,7 +509,7 @@ namespace ao::tui::test
 
     // The target disappears while its editor is open; the retry then fails.
     std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(listId, rt::DeleteListOptions{})));
+      fixture.runtime, fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(listId, rt::DeleteListOptions{})));
 
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
     REQUIRE(controller.hasPendingSubmission());
@@ -576,8 +578,7 @@ namespace ao::tui::test
     focusField(controller, 2);
     typeText(controller, "#rock");
     std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr,
-      fixture.runtimePtr->library().commands().deleteListAsync(parentId, rt::DeleteListOptions{})));
+      fixture.runtime, fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(parentId, rt::DeleteListOptions{})));
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
 
     CHECK_FALSE(controller.hasPendingSubmission());
@@ -595,7 +596,7 @@ namespace ao::tui::test
     CHECK_FALSE(state.previewVisible);
     CHECK(state.previewStatusText.empty());
     CHECK(state.errorVisible);
-    auto const sourceRes = fixture.runtimePtr->sources().acquire(parentId);
+    auto const sourceRes = fixture.runtime.sources().acquire(parentId);
     REQUIRE_FALSE(sourceRes);
     auto const unavailable = i18n::requiredFormat(ao::test::englishMessageCatalog(),
                                                   i18n::MessageId::SmartListPreviewUnavailable,
@@ -604,7 +605,7 @@ namespace ao::tui::test
     auto const rendered = renderElement(controller.activeModal(100, 40), 100, 40);
     CHECK(findTextCells(rendered.screen, unavailable));
     CHECK_FALSE(findTextCells(rendered.screen, "First - Artist (Album)"));
-    CHECK(fixture.runtimePtr->library().snapshot().lists().empty());
+    CHECK(fixture.runtime.library().snapshot().lists().empty());
   }
 
   TEST_CASE("ListAuthoringController - a submitted save outlives the editor it came from", "[concurrency]")
@@ -628,7 +629,7 @@ namespace ao::tui::test
     // Retirement suppresses late presentation, exactly as it does for scans.
     CHECK_FALSE(fixture.hasNotifications());
 
-    auto const lists = fixture.runtimePtr->library().snapshot().lists();
+    auto const lists = fixture.runtime.library().snapshot().lists();
     REQUIRE(lists.size() == 1);
     CHECK(lists.front().name == "Outliving");
   }
@@ -722,7 +723,7 @@ namespace ao::tui::test
     auto const parentId = fixture.addList("Tours");
     auto const childDraft = rt::ListDraft{.parentId = parentId, .name = "2026"};
     auto const childId = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().createListAsync(childDraft)));
+      fixture.runtime, fixture.runtimeOwnerPtr->libraryCommands().createListAsync(childDraft)));
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryDelete(parentId));
@@ -774,7 +775,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK_FALSE(fixture.listNode(listId).has_value());
-    auto const spec = rt::test::runtimeTrackSpec(*fixture.runtimePtr, trackId);
+    auto const spec = rt::test::runtimeTrackSpec(fixture.runtime, trackId);
     CHECK(spec.tags.empty());
   }
 
@@ -833,7 +834,7 @@ namespace ao::tui::test
     {
       auto const childDraft = rt::ListDraft{.parentId = parentId, .name = std::format("Stop {:02d}", index)};
       std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
-        *fixture.runtimePtr, fixture.runtimePtr->library().commands().createListAsync(childDraft)));
+        fixture.runtime, fixture.runtimeOwnerPtr->libraryCommands().createListAsync(childDraft)));
     }
 
     auto controller = fixture.makeController();
@@ -908,8 +909,8 @@ namespace ao::tui::test
     auto const keptId = fixture.addList("Kept");
     auto controller = fixture.makeController();
     std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr,
-      fixture.runtimePtr->library().commands().deleteListAsync(vanishingId, rt::DeleteListOptions{})));
+      fixture.runtime,
+      fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(vanishingId, rt::DeleteListOptions{})));
 
     // The waiting question is drawn with its cancel chip, then closes on its
     // own when the preview fails, without any event reaching it.
@@ -947,7 +948,7 @@ namespace ao::tui::test
 
     // The target disappears between the command and its preview.
     std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(listId, rt::DeleteListOptions{})));
+      fixture.runtime, fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(listId, rt::DeleteListOptions{})));
 
     REQUIRE(controller.tryDelete(listId));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.isActive(); }));
@@ -1075,7 +1076,7 @@ namespace ao::tui::test
     REQUIRE(controller.hasPendingSubmission());
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
-    auto const lists = fixture.runtimePtr->library().snapshot().lists();
+    auto const lists = fixture.runtime.library().snapshot().lists();
     REQUIRE(lists.size() == 1);
     CHECK(lists.front().name == "Corrected");
     CHECK(lists.front().expression == "#rock");
@@ -1092,7 +1093,7 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
-    auto const lists = fixture.runtimePtr->library().snapshot().lists();
+    auto const lists = fixture.runtime.library().snapshot().lists();
     auto const freshIt = std::ranges::find_if(lists, [](rt::ListNode const& node) { return node.name == "Fresh"; });
     REQUIRE(freshIt != lists.end());
     CHECK(fixture.openedLists == std::vector<ListId>{freshIt->id});

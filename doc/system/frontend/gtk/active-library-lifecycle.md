@@ -35,7 +35,7 @@ persistence payload semantics.
 
 ## GTK state and invariants
 
-A process owns at most one active `MainWindow`/`AppRuntime` pair. It also owns
+A process owns at most one active `MainWindow`/`AppRuntimeOwner` pair. It also owns
 application-global stores, one window phase (`Constructed`, `Prepared`,
 `Active`, or `Retired`), one playback-admission state
 (`AwaitingRootCommit`, `Ready`, or `Sealed`), and at most one restart request
@@ -103,7 +103,7 @@ a writer, construct the runtime, or activate a window is reported as successor
 startup failure without substituting the durable or empty root.
 
 GTK creates a main-context executor, per-library workspace store, and
-`AppRuntime`, injects the process-global playback store, registers audio
+`AppRuntimeOwner`, injects the process-global playback store, registers audio
 providers, and only then constructs `MainWindow`. A shared C++ owner retains the
 window and runtime together rather than attaching runtime ownership to native GObject data.
 

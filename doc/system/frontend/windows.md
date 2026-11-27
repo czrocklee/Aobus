@@ -231,7 +231,7 @@ Track-property drafts and dialog state are not persisted; accepted metadata, cus
 The global `desktop` group and the two per-library presentation groups have separate writers and save boundaries. Each presentation store saves only its own group in `winui_layout.yaml`, preserving siblings; a desktop-settings checkpoint does not atomically commit all three groups. `windows-theme.yaml` remains independent.
 `LibrarySession` restores the per-library workspace before controllers bind and checkpoints it with Windows settings changes and at shutdown.
 The [workspace checkpoint](../workspace/session.md) captures each view's exact presentation, including its sort.
-The process-global `windows-playback.yaml` store is injected into `AppRuntime`, independently from desktop settings. Its ordinary restore, successor durability gate, and parent retirement follow [desktop library lifecycle](../desktop-library-lifecycle.md). After a failed selected-root commit, later ordinary Windows settings checkpoints retain the prior root rather than retrying the failed target.
+`LibrarySession` owns the process-global `windows-playback.yaml` store separately from desktop settings and passes it to `AppRuntimeOwner::open()` as a borrowed playback-store override. Its ordinary restore, successor durability gate, and parent retirement follow [desktop library lifecycle](../desktop-library-lifecycle.md). After a failed selected-root commit, later ordinary Windows settings checkpoints retain the prior root rather than retrying the failed target.
 Exact paths, fields, defaults, validation, and versioning are defined by the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Frontend observations

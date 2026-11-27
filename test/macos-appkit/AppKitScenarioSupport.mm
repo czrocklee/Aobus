@@ -12,6 +12,7 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/utility/Path.h>
 
@@ -625,10 +626,18 @@ namespace ao::appkit::test
 
     auto catalogRes = i18n::MessageCatalog::create("en");
     AO_INVARIANT(catalogRes);
+    rt::LibraryCommands* commandsBorrow = nullptr;
     auto sessionRes = LibrarySession::create(
-      musicRoot, stateRoot, false, std::move(*catalogRes), [](DesktopInvalidation) {}, createProviders);
+      musicRoot,
+      stateRoot,
+      false,
+      std::move(*catalogRes),
+      [](DesktopInvalidation) {},
+      createProviders,
+      [&commandsBorrow](rt::LibraryCommands& commands) { commandsBorrow = &commands; });
     AO_INVARIANT(sessionRes, "The native fixture must acquire its isolated library");
     _sessionPtr = std::move(*sessionRes);
+    _libraryCommands = commandsBorrow;
 
     if (optOutput)
     {
@@ -656,13 +665,32 @@ namespace ao::appkit::test
 
   SessionFixture::~SessionFixture()
   {
-    requireWaitUntil([&] { return _sessionPtr->canClose(); }, "Native fixture work must settle before closing");
-    _sessionPtr->close();
-    _sessionPtr.reset();
+    if (_sessionPtr)
+    {
+      requireWaitUntil([&] { return _sessionPtr->canClose(); }, "Native fixture work must settle before closing");
+      close();
+    }
   }
 
   LibrarySession& SessionFixture::session()
   {
+    AO_INVARIANT(_sessionPtr);
     return *_sessionPtr;
+  }
+
+  rt::LibraryCommands& SessionFixture::libraryCommands() const noexcept
+  {
+    AO_INVARIANT(_sessionPtr && _libraryCommands != nullptr);
+    return *_libraryCommands;
+  }
+
+  void SessionFixture::close() noexcept
+  {
+    _libraryCommands = nullptr;
+
+    if (auto sessionPtr = std::exchange(_sessionPtr, nullptr))
+    {
+      sessionPtr->close();
+    }
   }
 } // namespace ao::appkit::test

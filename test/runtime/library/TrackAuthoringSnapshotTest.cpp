@@ -176,7 +176,7 @@ namespace ao::rt::test
     auto snapshot = fixture.library().snapshot();
     REQUIRE(fixture.library().bindTrackTargets(std::array{trackId}, snapshot));
 
-    fixture.library().beginClosing();
+    fixture.beginClosing();
     auto const boundRes = fixture.library().bindTrackTargets(std::array{trackId}, snapshot);
 
     REQUIRE_FALSE(boundRes);

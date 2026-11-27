@@ -123,7 +123,7 @@ namespace ao::gtk::portal
 
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    async::Runtime& asyncRuntime,
-                                                   rt::Library& library,
+                                                   rt::LibraryJobs& libraryJobs,
                                                    rt::NotificationService& notifications,
                                                    i18n::MessageCatalog textCatalog,
                                                    ImportExportCallbacks callbacks,
@@ -132,7 +132,7 @@ namespace ao::gtk::portal
     , _callbacks{std::move(callbacks)}
     , _themeCoordinator{themeCoordinator}
     , _textCatalog{textCatalog}
-    , _workflow{asyncRuntime, library, notifications, _callbacks, textCatalog}
+    , _workflow{asyncRuntime, libraryJobs, notifications, _callbacks, textCatalog}
     , _fileDialogCancellablePtr{Gio::Cancellable::create()}
     , _callbackScope{[cancellablePtr = _fileDialogCancellablePtr] { cancellablePtr->cancel(); }}
   {

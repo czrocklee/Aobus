@@ -39,8 +39,6 @@ namespace ao::rt
   class LibraryJobs final
   {
   public:
-    ~LibraryJobs();
-
     // Returning a Result, including an error Result, resumes the caller on the callback executor.
     // Unexpected exceptions may still propagate from the executor where they occur; UI callers should
     // present them through a boundary that returns to the callback executor first.
@@ -89,10 +87,11 @@ namespace ao::rt
 
   private:
     LibraryJobs(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryWriteLane& writeLane);
+    ~LibraryJobs();
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
 
-    friend class Library;
+    friend class LibraryOwner;
   };
 } // namespace ao::rt

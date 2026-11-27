@@ -48,6 +48,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutValidation.h>
 #include <ao/uimodel/layout/shell/LayoutSession.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandText.h>
@@ -207,6 +208,7 @@ namespace ao::gtk
     }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
+                                               uimodel::LibraryEditing editing,
                                                Gtk::Window& window,
                                                std::shared_ptr<AppConfigStore> configStorePtr,
                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
@@ -235,7 +237,7 @@ namespace ao::gtk
                        _queuedOpenEditorConnection.disconnect();
                      }}
   {
-    layout::LayoutRuntime::registerStandardComponents(_registry, _runtime, collaborators);
+    layout::LayoutRuntime::registerStandardComponents(_registry, _runtime, editing, collaborators);
 
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,

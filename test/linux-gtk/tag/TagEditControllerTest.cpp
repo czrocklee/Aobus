@@ -137,7 +137,7 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller = TagEditController{window,
                                         fixture.runtime().async(),
-                                        fixture.runtime().library(),
+                                        fixture.editing(),
                                         fixture.runtime().completion(),
                                         fixture.runtime().notifications(),
                                         fixture.runtime().textOrderingPolicy(),
@@ -201,7 +201,7 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller = TagEditController{window,
                                         fixture.runtime().async(),
-                                        fixture.runtime().library(),
+                                        fixture.editing(),
                                         fixture.runtime().completion(),
                                         fixture.runtime().notifications(),
                                         fixture.runtime().textOrderingPolicy(),
@@ -253,7 +253,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     auto window = Gtk::Window{};
@@ -264,7 +264,7 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller = TagEditController{window,
                                         runtime.async(),
-                                        runtime.library(),
+                                        fixture.editing(),
                                         runtime.completion(),
                                         runtime.notifications(),
                                         runtime.textOrderingPolicy(),
@@ -307,7 +307,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     auto window = Gtk::Window{};
@@ -318,7 +318,7 @@ namespace ao::gtk::test
     auto controller =
       TagEditController{window,
                         runtime.async(),
-                        runtime.library(),
+                        fixture.editing(),
                         runtime.completion(),
                         runtime.notifications(),
                         runtime.textOrderingPolicy(),
@@ -347,11 +347,12 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto const writableId =
       ao::test::requireValue(runGtkTask(runtime,
-                                        runtime.library().commands().createListAsync(
+                                        fixture.owner().libraryCommands().createListAsync(
                                           rt::ListDraft{.name = "Road Trip", .expression = R"(#"旅程 \"A\"\\B")"})));
-    auto const computedId = ao::test::requireValue(runGtkTask(
-      runtime,
-      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
+    auto const computedId =
+      ao::test::requireValue(runGtkTask(runtime,
+                                        fixture.owner().libraryCommands().createListAsync(
+                                          rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
@@ -362,7 +363,7 @@ namespace ao::gtk::test
                                        columnLayouts,
                                        ao::test::englishMessageCatalog(),
                                        runtime.async(),
-                                       runtime.library(),
+                                       fixture.editing(),
                                        runtime.views(),
                                        thumbnailLoader};
     auto window = Gtk::Window{};
@@ -374,7 +375,7 @@ namespace ao::gtk::test
     auto controller =
       TagEditController{window,
                         runtime.async(),
-                        runtime.library(),
+                        fixture.editing(),
                         runtime.completion(),
                         runtime.notifications(),
                         runtime.textOrderingPolicy(),
@@ -405,7 +406,7 @@ namespace ao::gtk::test
                                       columnLayouts,
                                       ao::test::englishMessageCatalog(),
                                       runtime.async(),
-                                      runtime.library(),
+                                      fixture.editing(),
                                       runtime.views(),
                                       thumbnailLoader};
     window.unset_child();
@@ -431,7 +432,7 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = "$year >= 2020"},
@@ -453,7 +454,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader,
                               manual,
@@ -477,7 +478,7 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller = TagEditController{window,
                                         runtime.async(),
-                                        runtime.library(),
+                                        fixture.editing(),
                                         runtime.completion(),
                                         runtime.notifications(),
                                         runtime.textOrderingPolicy(),

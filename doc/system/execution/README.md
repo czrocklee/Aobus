@@ -156,7 +156,7 @@ have joined:
 1. Interactive owners stop accepting new lifecycle and frontend work, then
    retire frontend adapters, subscriptions, callback generations, and native
    targets.
-2. `AppRuntime` stops playback-session scheduling and quiesces audio and device
+2. `AppRuntimeOwner` stops playback-session scheduling and quiesces audio and device
    callback producers before shutting down its core.
 3. `CoreRuntime` seals library command and publication admission while callback
    delivery is still available.
@@ -168,7 +168,7 @@ have joined:
 6. The registered fatal sink is removed only after worker, audio, device, and
    frontend callback producers have quiesced and before logger destruction.
 
-`AppRuntime::shutdown()` and `CoreRuntime::shutdown()` are idempotent. A
+`AppRuntimeOwner::shutdown()` and `CoreRuntime::shutdown()` are idempotent. A
 non-returning blocking operation can extend the join even after cancellation
 has made its result inadmissible. The [session lifecycle](../session-lifecycle.md)
 owns final object placement and frontend-specific teardown.

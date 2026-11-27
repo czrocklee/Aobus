@@ -88,13 +88,14 @@ namespace ao::winui::test
     {
       auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
       auto& executor = *executorPtr;
-      auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
-      auto checkpoint = WorkspaceSortCheckpoint{executor, runtimePtr->workspace(), runtimePtr->workspaceConfigStore()};
-      auto const viewId = navigateToAllTracks(*runtimePtr);
+      auto ownerPtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+      auto& runtime = ownerPtr->runtime();
+      auto checkpoint = WorkspaceSortCheckpoint{executor, runtime.workspace(), runtime.workspaceConfigStore()};
+      auto const viewId = navigateToAllTracks(runtime);
 
-      REQUIRE(runtimePtr->views().setColumnSort(viewId, secondSort));
+      REQUIRE(runtime.views().setColumnSort(viewId, secondSort));
       checkpoint.request();
-      REQUIRE(runtimePtr->views().setColumnSort(viewId, firstSort));
+      REQUIRE(runtime.views().setColumnSort(viewId, firstSort));
       auto const queuedBefore = executor.queuedCount();
       checkpoint.request();
 
@@ -105,7 +106,7 @@ namespace ao::winui::test
       auto const firstSaved = ao::test::readFile(firstCheckpointPath);
       REQUIRE_FALSE(firstSaved.empty());
 
-      REQUIRE(runtimePtr->views().setColumnSort(viewId, secondSort));
+      REQUIRE(runtime.views().setColumnSort(viewId, secondSort));
       checkpoint.request();
       CHECK(ao::test::readFile(workspacePath) == firstSaved);
       executor.runUntilIdle();
@@ -116,12 +117,13 @@ namespace ao::winui::test
     auto const checkSavedSort = [&](std::filesystem::path const& path, rt::TrackColumnSort const sort)
     {
       INFO(path.filename().string());
-      auto restoredRuntimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto restoredOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = restoredOwnerPtr->runtime();
       auto store = rt::ConfigStore{path};
-      REQUIRE(restoredRuntimePtr->workspace().restoreSession(store));
-      auto const viewId = restoredRuntimePtr->workspace().snapshot().activeViewId;
+      REQUIRE(runtime.workspace().restoreSession(store));
+      auto const viewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
-      auto const restored = restoredRuntimePtr->views().trackListState(viewId);
+      auto const restored = runtime.views().trackListState(viewId);
       auto expected = rt::defaultTrackPresentationSpec();
       expected.optColumnSort = sort;
       CHECK(restored.presentation == expected);
@@ -147,12 +149,13 @@ namespace ao::winui::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto& executor = *executorPtr;
-    auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
-    auto& workspace = runtimePtr->workspace();
-    auto& store = runtimePtr->workspaceConfigStore();
+    auto ownerPtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    auto& workspace = runtime.workspace();
+    auto& store = runtime.workspaceConfigStore();
     auto checkpoint = WorkspaceSortCheckpoint{executor, workspace, store};
-    auto const viewId = navigateToAllTracks(*runtimePtr);
-    REQUIRE(runtimePtr->views().setColumnSort(viewId, {.column = rt::TrackField::Title}));
+    auto const viewId = navigateToAllTracks(runtime);
+    REQUIRE(runtime.views().setColumnSort(viewId, {.column = rt::TrackField::Title}));
     checkpoint.request();
 
     // Mirror session retirement: disarm the queued task, then save while the old workspace is live.
@@ -162,7 +165,7 @@ namespace ao::winui::test
     auto const saved = ao::test::readFile(workspacePath);
     REQUIRE_FALSE(saved.empty());
 
-    REQUIRE(runtimePtr->views().setColumnSort(viewId, {.column = rt::TrackField::Title, .ascending = false}));
+    REQUIRE(runtime.views().setColumnSort(viewId, {.column = rt::TrackField::Title, .ascending = false}));
     executor.runUntilIdle();
     CHECK(ao::test::readFile(workspacePath) == saved);
   }
@@ -174,20 +177,21 @@ namespace ao::winui::test
 
     // One runtime at a time per library directory; the restore side runs after this scope.
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      REQUIRE(navigateToAllTracks(*runtimePtr) != rt::kInvalidViewId);
+      auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      REQUIRE(navigateToAllTracks(runtime) != rt::kInvalidViewId);
 
       auto workspaceStore = rt::ConfigStore{tempDir.path() / "workspace.yaml"};
       auto settingsStore = rt::ConfigStore{tempDir.path() / "settings.yaml"};
-      requirePersisted(runtimePtr->workspace(), workspaceStore, settingsStore, candidate);
+      requirePersisted(runtime.workspace(), workspaceStore, settingsStore, candidate);
     }
 
     // Fresh stores verify the exact persisted state rather than the return value.
-    auto restoredRuntimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto restoredOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = restoredOwnerPtr->runtime();
     auto reopenWorkspaceStore = rt::ConfigStore{tempDir.path() / "workspace.yaml"};
-    REQUIRE(restoredRuntimePtr->workspace().restoreSession(reopenWorkspaceStore));
-    auto const restored =
-      restoredRuntimePtr->views().trackListState(restoredRuntimePtr->workspace().snapshot().activeViewId);
+    REQUIRE(runtime.workspace().restoreSession(reopenWorkspaceStore));
+    auto const restored = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(restored.listId == ListId{rt::kAllTracksListId});
 
     auto reopenSettingsStore = rt::ConfigStore{tempDir.path() / "settings.yaml"};
@@ -201,7 +205,7 @@ namespace ao::winui::test
   TEST_CASE("SettingsPersistence - keeps the desktop result when the workspace checkpoint store fails")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
 
     // A directory at the store path makes every workspace write fail.
     auto const blockedWorkspacePath = tempDir.path() / "blocked-workspace.yaml";
@@ -210,7 +214,7 @@ namespace ao::winui::test
     auto settingsStore = rt::ConfigStore{tempDir.path() / "settings.yaml"};
 
     auto const candidate = candidateSettings();
-    requirePersisted(runtimePtr->workspace(), blockedWorkspaceStore, settingsStore, candidate);
+    requirePersisted(ownerPtr->runtime().workspace(), blockedWorkspaceStore, settingsStore, candidate);
 
     auto reopenSettingsStore = rt::ConfigStore{tempDir.path() / "settings.yaml"};
     auto reloaded = DesktopSettings{};
@@ -226,34 +230,35 @@ namespace ao::winui::test
 
     // One runtime at a time per library directory; the restore side runs after this scope.
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      REQUIRE(navigateToAllTracks(*runtimePtr) != rt::kInvalidViewId);
+      auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      REQUIRE(navigateToAllTracks(runtime) != rt::kInvalidViewId);
 
       auto workspaceStore = rt::ConfigStore{tempDir.path() / "workspace.yaml"};
       auto const blockedSettingsPath = tempDir.path() / "blocked-settings.yaml";
       REQUIRE(std::filesystem::create_directory(blockedSettingsPath));
       auto blockedSettingsStore = rt::ConfigStore{blockedSettingsPath};
 
-      auto const failedRes = persistDesktopSettingsCandidate(
-        runtimePtr->workspace(), workspaceStore, blockedSettingsStore, candidateSettings());
+      auto const failedRes =
+        persistDesktopSettingsCandidate(runtime.workspace(), workspaceStore, blockedSettingsStore, candidateSettings());
 
       REQUIRE_FALSE(failedRes);
       CHECK(failedRes.error().code == Error::Code::IoError);
     }
 
     // The workspace checkpoint that ran before the failed desktop save stays written.
-    auto restoredRuntimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto restoredOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = restoredOwnerPtr->runtime();
     auto reopenWorkspaceStore = rt::ConfigStore{tempDir.path() / "workspace.yaml"};
-    REQUIRE(restoredRuntimePtr->workspace().restoreSession(reopenWorkspaceStore));
-    auto const restored =
-      restoredRuntimePtr->views().trackListState(restoredRuntimePtr->workspace().snapshot().activeViewId);
+    REQUIRE(runtime.workspace().restoreSession(reopenWorkspaceStore));
+    auto const restored = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(restored.listId == ListId{rt::kAllTracksListId});
   }
 
   TEST_CASE("SettingsPersistence - reports the desktop failure when both stores fail")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
 
     auto const blockedWorkspacePath = tempDir.path() / "blocked-workspace.yaml";
     auto const blockedSettingsPath = tempDir.path() / "blocked-settings.yaml";
@@ -263,7 +268,7 @@ namespace ao::winui::test
     auto blockedSettingsStore = rt::ConfigStore{blockedSettingsPath};
 
     auto const failedRes = persistDesktopSettingsCandidate(
-      runtimePtr->workspace(), blockedWorkspaceStore, blockedSettingsStore, candidateSettings());
+      ownerPtr->runtime().workspace(), blockedWorkspaceStore, blockedSettingsStore, candidateSettings());
 
     REQUIRE_FALSE(failedRes);
     CHECK(failedRes.error().code == Error::Code::IoError);

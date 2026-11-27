@@ -177,8 +177,8 @@ namespace ao::rt::test
     auto probe = RestoreStopProbe{.point = stopPoint, .databasePath = storage.databasePath().native()};
     auto runtimeFixture = LibraryCommandsFixture{storage, changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& library = runtimeFixture.library();
-    auto& jobs = library.jobs();
+    auto const& library = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(path, ImportMode::Restore));
     REQUIRE(planRes);
     auto const initialRevision = storage.libraryRevision(storage.readTransaction());

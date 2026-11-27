@@ -13,6 +13,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <cstdint>
@@ -29,15 +30,16 @@ namespace ao::uimodel
 {
   struct TrackAuthoringSession::State final
   {
-    State(rt::Library& libraryValue, rt::BoundTrackTargets targetsValue)
-      : library{libraryValue}, targets{std::move(targetsValue)}
+    State(LibraryEditing const editingValue, rt::BoundTrackTargets targetsValue)
+      : editing{editingValue}, targets{std::move(targetsValue)}
     {
+      auto const& library = editing.library();
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
         [this](rt::LibraryAuthoringAvailability const& availability) { handleAvailability(availability); });
       handleAvailability(library.authoringAvailability());
     }
 
-    bool isBindingCurrent() const { return targets.matches(library.authoringAvailability()); }
+    bool isBindingCurrent() const { return targets.matches(editing.library().authoringAvailability()); }
 
     void invalidate(rt::AuthoringStatus const nextStatus)
     {
@@ -157,7 +159,7 @@ namespace ao::uimodel
       }
     }
 
-    rt::Library& library;
+    LibraryEditing editing;
     rt::BoundTrackTargets targets;
     bool current = true;
     bool submitting = false;
@@ -167,30 +169,31 @@ namespace ao::uimodel
     mutable async::Signal<> invalidated;
   };
 
-  Result<TrackAuthoringSession> TrackAuthoringSession::begin(rt::Library& library, std::span<TrackId const> targetIds)
+  Result<TrackAuthoringSession> TrackAuthoringSession::begin(LibraryEditing const editing,
+                                                             std::span<TrackId const> targetIds)
   {
-    auto targetsRes = library.bindTrackTargets(targetIds);
+    auto targetsRes = editing.library().bindTrackTargets(targetIds);
 
     if (!targetsRes)
     {
       return std::unexpected{targetsRes.error()};
     }
 
-    return TrackAuthoringSession{std::make_shared<State>(library, std::move(*targetsRes))};
+    return TrackAuthoringSession{std::make_shared<State>(editing, std::move(*targetsRes))};
   }
 
-  Result<TrackAuthoringSession> TrackAuthoringSession::begin(rt::Library& library,
+  Result<TrackAuthoringSession> TrackAuthoringSession::begin(LibraryEditing const editing,
                                                              std::span<TrackId const> targetIds,
                                                              rt::LibrarySnapshot const& snapshot)
   {
-    auto targetsRes = library.bindTrackTargets(targetIds, snapshot);
+    auto targetsRes = editing.library().bindTrackTargets(targetIds, snapshot);
 
     if (!targetsRes)
     {
       return std::unexpected{targetsRes.error()};
     }
 
-    return TrackAuthoringSession{std::make_shared<State>(library, std::move(*targetsRes))};
+    return TrackAuthoringSession{std::make_shared<State>(editing, std::move(*targetsRes))};
   }
 
   TrackAuthoringSession::TrackAuthoringSession(std::shared_ptr<State> statePtr)
@@ -227,7 +230,7 @@ namespace ao::uimodel
     return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackMetadataReply>, TrackMetadataSubmitResult>(
       _statePtr,
       [patch = std::move(patch)](State& state) mutable
-      { return state.library.commands().updateMetadataAsync(state.targets, std::move(patch)); });
+      { return state.editing._commands.get().updateMetadataAsync(state.targets, std::move(patch)); });
   }
 
   async::Task<Result<TrackTagSubmitResult>> TrackAuthoringSession::submitTagsAsync(
@@ -237,7 +240,10 @@ namespace ao::uimodel
     return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::EditTrackTagsReply>, TrackTagSubmitResult>(
       _statePtr,
       [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](State& state) mutable
-      { return state.library.commands().editTagsAsync(state.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
+      {
+        return state.editing._commands.get().editTagsAsync(
+          state.targets, std::move(tagsToAdd), std::move(tagsToRemove));
+      });
   }
 
   async::Task<Result<TrackPropertiesSubmitResult>> TrackAuthoringSession::submitPropertiesAsync(
@@ -247,6 +253,6 @@ namespace ao::uimodel
                                      TrackPropertiesSubmitResult>(
       _statePtr,
       [patch = std::move(patch)](State& state) mutable
-      { return state.library.commands().updatePropertiesAsync(state.targets, std::move(patch)); });
+      { return state.editing._commands.get().updatePropertiesAsync(state.targets, std::move(patch)); });
   }
 } // namespace ao::uimodel

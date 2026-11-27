@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
+#include "runtime/library/LibraryOwner.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
@@ -11,9 +12,9 @@
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -220,16 +221,17 @@ namespace ao::uimodel::test
     auto runtime = async::Runtime{executor, 1};
     auto notifications = rt::NotificationService{runtime};
     auto changes = rt::test::makeLibraryChanges(executor);
-    auto runtimeLibrary =
-      rt::Library{runtime, ao::test::requireValue(rt::Library::prepare(libraryFixture.library())), changes};
+    auto libraryOwner = rt::LibraryOwner{
+      runtime, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto const stopRuntime = gsl_lite::finally(
       [&]
       {
+        libraryOwner.beginClosing();
         runtime.requestStop();
         runtime.join();
         executor.drain();
       });
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = libraryOwner.libraryJobs();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{

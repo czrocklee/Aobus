@@ -18,7 +18,7 @@ id: architecture.playback
 
 This page explains how interactive playback is divided across application runtime, Core audio, UIModel, and frontends. It identifies the state authorities, dependency direction, execution domains, and lifetime order. The linked topic contracts own detailed command, cursor, decoder, PCM, quality, and persistence behavior.
 
-Interactive playback is composed by `AppRuntime`, which owns a `CoreRuntime` beneath the playback graph. A `CoreRuntime` used by the batch CLI does not by itself create the interactive playback stack.
+Interactive playback is composed by `AppRuntimeOwner`, which owns a `CoreRuntime` beneath the playback graph. A `CoreRuntime` used by the batch CLI does not by itself create the interactive playback stack.
 
 ## Ownership model
 
@@ -29,7 +29,9 @@ frontend widgets and platform adapters
        UIModel playback models
                  |
                  v
-              AppRuntime
+       AppRuntime (service borrow) -----> PlaybackService
+
+AppRuntimeOwner owns the graph:
                  |
                  +-- PlaybackService       public command, snapshot, and event boundary
                  |      |
@@ -99,7 +101,7 @@ The payload contains application listening intent, not projection rows, prepared
 
 UIModel turns runtime snapshots and commands into reusable availability and presentation state. It owns shared output selection presentation, quality formatting, and Soul aura/motion policy, but it does not construct or control Player, Engine, decoders, backends, sources, or persistence.
 
-Frontend composition obtains the platform provider set from Core audio and transfers ownership into `AppRuntime`. Linux prefers PipeWire then ALSA; Windows supplies WASAPI; macOS supplies Core Audio. Frontends issue runtime/UIModel commands and adapt presentation to their toolkit; they do not calculate succession or quality severity.
+Frontend composition obtains the platform provider set from Core audio and transfers ownership into the graph owned by `AppRuntimeOwner`. Linux prefers PipeWire then ALSA; Windows supplies WASAPI; macOS supplies Core Audio. Frontends issue runtime/UIModel commands and adapt presentation to their toolkit; they do not calculate succession or quality severity.
 
 ## Cross-boundary protocols
 

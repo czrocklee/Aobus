@@ -33,9 +33,9 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -102,7 +102,10 @@ namespace winrt::Aobus::implementation
     shutdown();
   }
 
-  void MainWindow::initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart)
+  void MainWindow::initialize(ao::winui::LibrarySession& session,
+                              ao::uimodel::LibraryEditing editing,
+                              ao::rt::LibraryJobs& jobs,
+                              RestartLibraryCallback requestRestart)
   {
     _session = &session;
     _requestRestart = std::move(requestRestart);
@@ -178,7 +181,7 @@ namespace winrt::Aobus::implementation
       std::make_unique<ao::winui::TrackPropertiesPresenter>(ao::winui::TrackPropertiesPresenterConfig{
         .xamlRoot = currentRoot,
         .asyncRuntime = runtime.async(),
-        .library = runtime.library(),
+        .editing = editing,
         .workspace = runtime.workspace(),
         .completion = runtime.completion(),
         .textCatalog = session.textCatalog(),
@@ -188,7 +191,7 @@ namespace winrt::Aobus::implementation
       std::make_unique<ao::winui::ListAuthoringCoordinator>(ao::winui::ListAuthoringCoordinatorConfig{
         .xamlRoot = currentRoot,
         .asyncRuntime = runtime.async(),
-        .library = runtime.library(),
+        .editing = editing,
         .views = runtime.views(),
         .sources = runtime.sources(),
         .notifications = runtime.notifications(),
@@ -204,7 +207,7 @@ namespace winrt::Aobus::implementation
         .xamlRoot = currentRoot,
         .windowId = AppWindow().Id(),
         .asyncRuntime = runtime.async(),
-        .jobs = runtime.library().jobs(),
+        .jobs = jobs,
         .notifications = runtime.notifications(),
         .textCatalog = session.textCatalog(),
         .reportStatus = reportStatus,
@@ -878,12 +881,19 @@ namespace ao::winui
     }
   } // namespace
 
+  void LibrarySession::initializeWindow(MainWindow& window,
+                                        compat::MoveOnlyFunction<Result<>(std::filesystem::path)> requestRestart)
+  {
+    auto& owner = runtimeOwner();
+    window.initialize(
+      *this, uimodel::LibraryEditing{owner.libraryCommands()}, owner.libraryJobs(), std::move(requestRestart));
+  }
+
   void LibraryWindowSession::createAndInitializeMainWindow(RestartRequest&& requestRestart)
   {
     // Store the window first so the session can retire it if initialization fails.
     _window = winrt::make<MainWindow>();
-    auto& frame = mainWindowImplementation(_window);
-    frame.initialize(*_sessionPtr, std::move(requestRestart));
+    _sessionPtr->initializeWindow(mainWindowImplementation(_window), std::move(requestRestart));
   }
 
   Result<> LibraryWindowSession::activateMainWindowAdapters()

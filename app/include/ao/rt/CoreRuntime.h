@@ -34,6 +34,8 @@ namespace ao::rt
   class CompletionAliasPolicy;
   class CompletionService;
   class Library;
+  class LibraryCommands;
+  class LibraryJobs;
   class TrackSourceCache;
   class NotificationService;
   class TextOrderingPolicy;
@@ -77,7 +79,8 @@ namespace ao::rt
 
     library::MusicLibrary const& musicLibrary() const noexcept;
     Library const& library() const noexcept;
-    Library& library() noexcept;
+    LibraryCommands& libraryCommands() noexcept;
+    LibraryJobs& libraryJobs() noexcept;
 
     std::filesystem::path const& musicRoot() const noexcept;
     std::filesystem::path const& databasePath() const noexcept;

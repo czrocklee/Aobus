@@ -258,7 +258,7 @@ namespace ao::gtk
                                uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
                                async::Runtime& asyncRuntime,
-                               rt::Library& library,
+                               uimodel::LibraryEditing editing,
                                rt::ViewService& views,
                                ResourceImageLoader& thumbnailLoader,
                                rt::TrackPresentationSpec const& presentation,
@@ -272,7 +272,7 @@ namespace ao::gtk
     , _columnLayouts{columnLayouts}
     , _textCatalog{std::move(textCatalog)}
     , _asyncRuntime{asyncRuntime}
-    , _library{library}
+    , _editing{editing}
     , _views{views}
     , _thumbnailLoader{thumbnailLoader}
     , _selectionModelPtr{Gtk::MultiSelection::create(_modelPtr)}
@@ -557,10 +557,10 @@ namespace ao::gtk
     {
       return buildColumnFactory(
         field,
-        [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
+        [editing = _editing](Glib::RefPtr<TrackRowObject> const& rowPtr)
         {
           auto const trackIds = std::array{rowPtr->trackId()};
-          return uimodel::TrackAuthoringSession::begin(_library, trackIds);
+          return uimodel::TrackAuthoringSession::begin(editing, trackIds);
         },
         std::bind_front(&TrackViewPage::commitMetadataChange, this),
         *_modelPtr,
@@ -676,7 +676,7 @@ namespace ao::gtk
     auto const stateRes = _views.findTrackListState(_viewId);
     auto const sourceStateRes = _views.listSourceState(_viewId);
     auto const savedList = stateRes && !rt::isVirtualListId(stateRes->listId);
-    auto const authoring = _library.authoringAvailability();
+    auto const authoring = _editing.library().authoringAvailability();
     auto const shouldExplain =
       savedList && (capabilities.canAuthorOrder || stateRes->presentation.isPreset(rt::BuiltinPreset::ListOrder) ||
                     authoring.state == rt::LibraryAuthoringState::Maintenance || stateRes->optFilterError ||
@@ -704,7 +704,7 @@ namespace ao::gtk
 
     _orderDragControllerPtr = std::make_unique<TrackOrderDragController>(
       _asyncRuntime,
-      _library,
+      _editing,
       _views,
       _viewId,
       _textCatalog,
@@ -733,12 +733,12 @@ namespace ao::gtk
     return uimodel::describeViewListOrderCapabilities(_textCatalog,
                                                       *stateRes,
                                                       sourceStateRes.value_or(rt::TrackSourceState::Invalidated),
-                                                      _library.authoringAvailability());
+                                                      _editing.library().authoringAvailability());
   }
 
   void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
   {
-    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_library, _views, _viewId, _textCatalog);
+    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_editing, _views, _viewId, _textCatalog);
 
     if (!sessionRes)
     {

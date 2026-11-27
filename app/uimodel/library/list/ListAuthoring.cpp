@@ -10,8 +10,8 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/WritableTagList.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <cstddef>
 #include <expected>
@@ -106,9 +106,15 @@ namespace ao::uimodel
     return description;
   }
 
-  async::Task<Result<ListId>> saveListAsync(rt::Library* const library, rt::ListDraft draft)
+  // Only this List workflow can unwrap the grant; its async API stays out of the shared grant header.
+  struct ListAuthoringAccess final
   {
-    auto& commands = library->commands();
+    static rt::LibraryCommands& commands(LibraryEditing editing) noexcept { return editing._commands.get(); }
+  };
+
+  async::Task<Result<ListId>> saveListAsync(LibraryEditing const editing, rt::ListDraft draft)
+  {
+    auto& commands = ListAuthoringAccess::commands(editing);
 
     if (draft.listId == kInvalidListId)
     {
@@ -125,11 +131,11 @@ namespace ao::uimodel
     co_return listId;
   }
 
-  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletionAsync(rt::Library* const library,
+  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletionAsync(LibraryEditing const editing,
                                                                            ListId const listId,
                                                                            bool const includeDescendants)
   {
-    auto& commands = library->commands();
+    auto& commands = ListAuthoringAccess::commands(editing);
 
     if (includeDescendants)
     {
@@ -146,12 +152,12 @@ namespace ao::uimodel
     co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*res)}};
   }
 
-  async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(rt::Library* const library,
+  async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(LibraryEditing const editing,
                                                                   ListId const listId,
                                                                   bool const includeDescendants,
                                                                   rt::DeleteListOptions const options)
   {
-    auto& commands = library->commands();
+    auto& commands = ListAuthoringAccess::commands(editing);
 
     if (includeDescendants)
     {

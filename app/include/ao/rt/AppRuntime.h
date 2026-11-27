@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 
 namespace ao::audio
@@ -28,8 +29,9 @@ namespace ao::rt
   class CompletionAliasPolicy;
   class CompletionService;
   class ConfigStore;
-  class CoreRuntime;
   class Library;
+  class LibraryCommands;
+  class LibraryJobs;
   class NotificationService;
   class PlaybackService;
   class ResourceByteMemoryCache;
@@ -69,23 +71,17 @@ namespace ao::rt
     ListId sourceListId = kInvalidListId;
   };
 
+  /// Borrowed interactive services. Library editing and maintenance are granted separately at composition.
   class AppRuntime final
   {
   public:
-    /// Returns a move-only value with a pinned implementation graph. Complete
-    /// frontend placement before registering providers or publishing facade borrows.
-    static Result<AppRuntime> create(AppRuntimeDependencies dependencies);
-    ~AppRuntime();
-
-    void shutdown() noexcept;
-
     AppRuntime(AppRuntime const&) = delete;
     AppRuntime& operator=(AppRuntime const&) = delete;
-    AppRuntime(AppRuntime&& other) noexcept;
+    AppRuntime(AppRuntime&&) = delete;
     AppRuntime& operator=(AppRuntime&&) = delete;
 
     Library const& library() const noexcept;
-    Library& library() noexcept;
+    LibraryJobs const& jobProgress() const noexcept;
     async::Runtime& async() noexcept;
     TrackSourceCache& sources() noexcept;
     NotificationService& notifications() noexcept;
@@ -118,11 +114,38 @@ namespace ao::rt
     void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
 
   private:
+    friend class AppRuntimeOwner;
     struct Impl;
-    AppRuntime(CoreRuntime&& core,
-               std::unique_ptr<ConfigStore> workspaceConfigStorePtr,
-               ConfigStore* playbackSessionConfigStore);
-    // Impl pins CoreRuntime before every interactive borrower and destroys Core last.
-    std::unique_ptr<Impl> _implPtr;
+    explicit AppRuntime(Impl& impl) noexcept
+      : _impl{impl}
+    {
+    }
+    ~AppRuntime() = default;
+    Impl& _impl;
+  };
+
+  /// The composition root owns this handle. Its service and capability borrows stay at fixed addresses across moves.
+  class AppRuntimeOwner final
+  {
+  public:
+    /// Session factories can distribute commands at composition without publishing this owner or its jobs.
+    using BindLibraryCommands = std::function<void(LibraryCommands&)>;
+
+    static Result<AppRuntimeOwner> open(AppRuntimeDependencies dependencies);
+    ~AppRuntimeOwner();
+    AppRuntimeOwner(AppRuntimeOwner const&) = delete;
+    AppRuntimeOwner& operator=(AppRuntimeOwner const&) = delete;
+    AppRuntimeOwner(AppRuntimeOwner&&) noexcept;
+    AppRuntimeOwner& operator=(AppRuntimeOwner&&) = delete;
+
+    // Keep the named owner (or its Result) alive for the duration of every borrow.
+    AppRuntime& runtime() & noexcept;
+    LibraryCommands& libraryCommands() & noexcept;
+    LibraryJobs& libraryJobs() & noexcept;
+    void shutdown() noexcept;
+
+  private:
+    explicit AppRuntimeOwner(std::unique_ptr<AppRuntime::Impl> implPtr);
+    std::unique_ptr<AppRuntime::Impl> _implPtr;
   };
 } // namespace ao::rt

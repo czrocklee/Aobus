@@ -93,4 +93,5 @@ dependency and lifetime set is visible at compile time.
 
 ## Supersession
 
-None.
+The ownership-specific description of `AppRuntime` as the composition root is
+superseded by the [interactive session lifecycle contract](../system/session-lifecycle.md#interactive-runtime-composition): `AppRuntimeOwner` owns the graph and exposes `AppRuntime` as a service borrow. The broader decision to use composition rather than inheritance remains in effect.
