@@ -116,8 +116,9 @@ Callers that mix explicit integer-key creation with append in one writer must no
 
 ### Environment and database opening
 
-`Environment::open` applies a nonzero pinned map size and the maximum-database and maximum-reader options before opening the requested path, then prepares a writable environment's data file, then uses the supplied flags and mode for the native environment open, and finally applies the capacity policy while nothing has yet been handed out.
-Failure at environment creation, option application, data-file preparation, path opening, or capacity application returns a recoverable `Result` error and closes any partially created native handle.
+`Environment::open` applies a nonzero pinned map size and the maximum-database and maximum-reader options before opening the requested path. It prepares a writable environment's data file and opens the native environment with the supplied flags and mode.
+Before returning a writable environment, it applies the capacity policy and calls `mdb_reader_check` once so LMDB can release reader slots left by exited processes. The adapter does not request this check on read-only opens or when beginning transactions.
+If any open step fails, the adapter returns a recoverable `Result` error and closes any partially created native handle.
 
 Three separate figures describe an environment's storage and this specification keeps them apart.
 **Map capacity** is how much the environment may grow into before a mutation runs out of room, and it also bounds the address space the mapping reserves.
@@ -369,6 +370,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
   and the library fatal subprocess scenarios under
   [`test/fatal/`](../../../test/fatal) use the governed read-fault seam to
   protect admission, writer-root, and post-open ownership respectively.
+- [`MetadataStoreTest.cpp`](../../../test/library/MetadataStoreTest.cpp) checks that a read-only adapter open leaves an abandoned reader slot in place and that a writable library open reclaims it without disturbing a live snapshot in another process.
 - [`LibraryProbeTest.cpp`](../../../test/library/LibraryProbeTest.cpp) and its library fatal subprocess scenarios protect adapter call-order contracts that require process isolation, including rejection of an empty lower-bound target, of a read-only transaction that ends, by destruction or replacement, with an iterator still open, and of writer, write-backed reader, and commit use off the write transaction's creating thread.
 
 ## Related documents

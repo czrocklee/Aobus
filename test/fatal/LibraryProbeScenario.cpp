@@ -8,6 +8,7 @@
 #include "lib/lmdb/detail/ReadFaultInjection.h"
 #include "lib/lmdb/detail/TransactionFailure.h"
 #include "lib/lmdb/detail/UnvalidatedDatabase.h"
+#include "test/library/MusicLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -19,6 +20,7 @@
 #include <ao/library/ListWriter.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
@@ -27,18 +29,24 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Path.h>
+#include <ao/utility/Raii.h>
 
 #include <lmdb.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <future>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <print>
 #include <semaphore>
 #include <span>
 #include <stdexcept>
@@ -279,6 +287,213 @@ namespace ao::library::test
       }
 
       return 3;
+    }
+
+    struct ReaderTableObservation final
+    {
+      std::size_t occupied = 0;
+      std::int32_t staleCleared = 0;
+    };
+
+    auto openReaderTable(std::filesystem::path const& databasePath, std::uint32_t const flags)
+    {
+      MDB_env* environment = nullptr;
+      auto status = ::mdb_env_create(&environment);
+      auto environmentPtr = utility::makeUniquePtr<::mdb_env_close>(environment);
+
+      if (status == MDB_SUCCESS)
+      {
+        auto const utf8Path = utility::pathToUtf8(databasePath);
+        status = ::mdb_env_open(environmentPtr.get(), utf8Path.c_str(), flags, 0644);
+      }
+
+      if (status != MDB_SUCCESS)
+      {
+        std::println(stderr, "Could not open the native reader table: {}", ::mdb_strerror(status));
+        environmentPtr.reset();
+      }
+
+      return environmentPtr;
+    }
+
+    std::int32_t runAbandonReader(std::string_view const scratchName)
+    {
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const libraryRes = openTestMusicLibrary(scratchPath, scratchPath / "db");
+
+      if (!libraryRes)
+      {
+        std::println(stderr, "Could not open the library to abandon a reader: {}", libraryRes.error().message);
+        return 3;
+      }
+
+      auto witnessPtr = openReaderTable(scratchPath / "reader-witness", MDB_RDONLY | MDB_NOTLS);
+
+      if (!witnessPtr)
+      {
+        return 3;
+      }
+
+      [[maybe_unused]] auto const read = libraryRes->readTransaction();
+      MDB_txn* witnessRead = nullptr;
+
+      if (auto const status = ::mdb_txn_begin(witnessPtr.get(), nullptr, MDB_RDONLY, &witnessRead);
+          status != MDB_SUCCESS)
+      {
+        std::println(stderr, "Could not begin the witness read: {}", ::mdb_strerror(status));
+        return 3;
+      }
+
+      std::_Exit(0); // Abandon one slot in each independent environment.
+    }
+
+    std::optional<ReaderTableObservation> observeReaders(std::filesystem::path const& databasePath,
+                                                         bool const checkForStale = false)
+    {
+      auto environmentPtr = openReaderTable(databasePath, MDB_RDONLY | MDB_NOTLS);
+
+      if (!environmentPtr)
+      {
+        return std::nullopt;
+      }
+
+      // LMDB 1.0 reports a header (or empty-table notice), then one message per
+      // occupied slot. Count messages without depending on PID formatting.
+      std::size_t messageCount = 0;
+      auto const countMessage = [](char const*, void* context) noexcept
+      {
+        ++*static_cast<std::size_t*>(context);
+        return 0;
+      };
+      auto const status = ::mdb_reader_list(environmentPtr.get(), countMessage, &messageCount);
+
+      if (status < 0 || messageCount == 0)
+      {
+        std::println(stderr, "Could not list the native reader table: status={}, messages={}", status, messageCount);
+        return std::nullopt;
+      }
+
+      auto table = ReaderTableObservation{.occupied = messageCount - 1};
+
+      // The initial observation must not clean up the slot we want open() to reclaim.
+      if (checkForStale)
+      {
+        auto const checkStatus = ::mdb_reader_check(environmentPtr.get(), &table.staleCleared);
+
+        if (checkStatus != MDB_SUCCESS)
+        {
+          std::println(stderr, "Could not check the native reader table: {}", ::mdb_strerror(checkStatus));
+          return std::nullopt;
+        }
+      }
+
+      return table;
+    }
+
+    bool tryReapWitnessReader(MDB_env& witness)
+    {
+      // Process exit can precede the point at which LMDB recognizes its PID as dead on Windows.
+      // Only a successful reap in the independent table qualifies the target's single open.
+      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+
+      while (std::chrono::steady_clock::now() < deadline)
+      {
+        std::int32_t cleared = 0;
+
+        if (auto const status = ::mdb_reader_check(&witness, &cleared); status != MDB_SUCCESS)
+        {
+          std::println(stderr, "Witness reader check failed: {}", ::mdb_strerror(status));
+          return false;
+        }
+
+        if (cleared != 0)
+        {
+          return cleared == 1;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      }
+
+      return false;
+    }
+
+    std::int32_t runReopenAfterAbandonedReader(std::string_view const scratchName)
+    {
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const databasePath = scratchPath / "db";
+      auto const witnessPath = scratchPath / "reader-witness";
+      std::filesystem::create_directory(witnessPath);
+      auto witnessPtr = openReaderTable(witnessPath, MDB_NOTLS);
+
+      if (!witnessPtr)
+      {
+        return 3;
+      }
+
+      // The parent launches the reader only once this opener has its own PID and holds
+      // the witness table open. It removes the gate after reaping the reader.
+      auto const gate = scratchPath / "opener-ready";
+      std::filesystem::create_directory(gate);
+      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{140};
+
+      while (std::filesystem::exists(gate))
+      {
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+          std::fputs("Timed out waiting for the parent to reap the reader\n", stderr);
+          return 3;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      }
+
+      if (!tryReapWitnessReader(*witnessPtr))
+      {
+        std::fputs("LMDB could not reclaim the exited reader in the independent witness table\n", stderr);
+        return 3;
+      }
+
+      auto const optBefore = observeReaders(databasePath);
+
+      if (!optBefore)
+      {
+        return 3;
+      }
+
+      if (auto const readOnlyRes =
+            lmdb::Environment::open(databasePath, {.flags = lmdb::kEnvReadOnly | lmdb::kEnvNoTls});
+          !readOnlyRes)
+      {
+        std::println(stderr, "Could not open the read-only environment: {}", readOnlyRes.error().message);
+        return 3;
+      }
+
+      auto const optAfterReadOnly = observeReaders(databasePath);
+
+      if (!optAfterReadOnly)
+      {
+        return 3;
+      }
+
+      if (auto const libraryRes = openTestMusicLibrary(scratchPath, databasePath); !libraryRes)
+      {
+        std::println(stderr, "Could not reopen the library: {}", libraryRes.error().message);
+        return 3;
+      }
+
+      // The observer owns no snapshot and opens only after MusicLibrary closes.
+      auto const optAfter = observeReaders(databasePath, true);
+
+      if (!optAfter)
+      {
+        return 3;
+      }
+
+      return writeObservation(std::format("occupied-before={} after-read-only={} after-writable={} stale-left={}",
+                                          optBefore->occupied,
+                                          optAfterReadOnly->occupied,
+                                          optAfter->occupied,
+                                          optAfter->staleCleared));
     }
 
     std::int32_t runCrossLibraryFact(std::string_view const scratchName, std::string_view const scenario)
@@ -1888,6 +2103,16 @@ namespace ao::library::test
     if (name == "fresh-reader-capacity-exhaustion")
     {
       return runFreshReaderCapacityExhaustion(scratchName);
+    }
+
+    if (name == "abandon-reader" && !scratchName.empty())
+    {
+      return runAbandonReader(scratchName);
+    }
+
+    if (name == "reopen-after-abandoned-reader" && !scratchName.empty())
+    {
+      return runReopenAfterAbandonedReader(scratchName);
     }
 
     if (name == "cross-library-write-revision" || name == "cross-library-operation-metadata")

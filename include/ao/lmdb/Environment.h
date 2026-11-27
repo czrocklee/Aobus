@@ -38,9 +38,10 @@ namespace ao::lmdb
    * environment cannot make, and the data file is left exactly as it is: an
    * absent one is not created and no write permission on it is requested.
    *
-   * This is not a promise that nothing is written. LMDB still maintains the
-   * reader table in the lock file, except on a read-only filesystem where it
-   * uses no locks at all.
+   * The adapter skips its stale-reader check on a read-only open. This is not
+   * a promise that nothing is written: LMDB still maintains the reader table
+   * in the lock file, except on a read-only filesystem where it uses no locks
+   * at all.
    */
   inline constexpr std::uint32_t kEnvReadOnly = 0x20000U;
   /**

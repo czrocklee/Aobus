@@ -4,7 +4,9 @@
 #include "test/TestFixtureSupport.h"
 #include "test/fatal/ProbeProcess.h"
 #include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
+#include "test/lmdb/LmdbProbeScratch.h"
 #include "test/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -17,11 +19,14 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
+#include <future>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -170,6 +175,73 @@ namespace ao::library::test
 
     auto read = library.readTransaction();
     CHECK(library.libraryRevision(read) == 2);
+  }
+
+  TEST_CASE("MusicLibrary - open reclaims an abandoned reader while preserving a live snapshot", "[concurrency]")
+  {
+    auto const temp = ao::test::LmdbProbeScratch{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const originalId = addTrack(library, TrackSpec{.title = "Original", .uri = "original.flac"});
+    auto const snapshot = library.readTransaction();
+    auto const laterId = addTrack(library, TrackSpec{.title = "Later", .uri = "later.flac"});
+
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+    auto const scratchName = temp.path().filename().string();
+    auto const gate = temp.path() / "opener-ready";
+    // Both probes are direct children, reaped before the scratch directories are reclaimed.
+    auto opener = std::async(std::launch::async,
+                             ao::test::runProbeProcess,
+                             executablePath,
+                             "reopen-after-abandoned-reader:" + scratchName,
+                             std::chrono::seconds{160});
+
+    while (!std::filesystem::exists(gate))
+    {
+      if (opener.wait_for(std::chrono::milliseconds{10}) == std::future_status::ready)
+      {
+        auto const failed = opener.get();
+        CAPTURE(failed.started,
+                failed.timedOut,
+                failed.exited,
+                failed.exitCode,
+                failed.signaled,
+                failed.signalNumber,
+                failed.launchError,
+                failed.standardOutput,
+                failed.standardError);
+        FAIL("Opener did not signal readiness");
+      }
+    }
+
+    auto const reader =
+      ao::test::runProbeProcess(executablePath, "abandon-reader:" + scratchName, std::chrono::seconds{15});
+    std::filesystem::remove(gate);
+    CAPTURE(
+      reader.exitCode, reader.signaled, reader.signalNumber, reader.timedOut, reader.launchError, reader.standardError);
+    REQUIRE(reader.hasSuccessfulExit());
+    auto const result = opener.get();
+    CAPTURE(result.exitCode,
+            result.signaled,
+            result.signalNumber,
+            result.timedOut,
+            result.launchError,
+            result.standardOutput,
+            result.standardError);
+    REQUIRE(result.hasSuccessfulExit());
+    CHECK(result.standardOutput == "occupied-before=2 after-read-only=2 after-writable=1 stale-left=0");
+
+    CHECK(library.libraryRevision(snapshot) == 1);
+    auto const optOriginal = library.tracks().reader(snapshot).get(originalId);
+    REQUIRE(optOriginal);
+    CHECK(optOriginal->metadata().title() == "Original");
+    CHECK_FALSE(library.tracks().reader(snapshot).get(laterId));
+
+    auto const fresh = library.readTransaction();
+    CHECK(library.libraryRevision(fresh) == 2);
+    auto const optLater = library.tracks().reader(fresh).get(laterId);
+    REQUIRE(optLater);
+    CHECK(optLater->metadata().title() == "Later");
   }
 
   TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission", "[concurrency]")
