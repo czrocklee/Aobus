@@ -3,12 +3,15 @@
 
 #include <ao/utility/Uuid.h>
 
+#include "Hex.h"
+
 #include <array>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
-#include <format>
+#include <numeric>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -28,6 +31,8 @@ namespace ao::utility
                                                                       kUuidTimeHighByteCount,
                                                                       kUuidClockSeqByteCount,
                                                                       kUuidNodeByteCount});
+    static_assert(std::accumulate(kUuidGroupByteCounts.begin(), kUuidGroupByteCounts.end(), std::size_t{}) ==
+                  kUuidByteCount);
     constexpr auto kUuidHyphenCount = kUuidGroupByteCounts.size() - 1;
     constexpr auto kUuidTextLength = (kUuidByteCount * kHexCharsPerByte) + kUuidHyphenCount;
   } // namespace
@@ -36,20 +41,17 @@ namespace ao::utility
   {
     auto result = std::string{};
     result.reserve(kUuidTextLength);
-    std::size_t byteIndex = 0;
+    auto remaining = std::span<std::byte const>{id};
 
-    for (std::size_t groupIndex = 0; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
+    for (auto const count : kUuidGroupByteCounts)
     {
-      if (groupIndex > 0)
+      if (!result.empty())
       {
         result.push_back('-');
       }
 
-      for (std::size_t groupByte = 0; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
-      {
-        result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
-        ++byteIndex;
-      }
+      detail::appendLowerHex(result, remaining.first(count));
+      remaining = remaining.subspan(count);
     }
 
     return result;

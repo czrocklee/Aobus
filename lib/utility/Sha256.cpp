@@ -3,11 +3,12 @@
 
 #include <ao/utility/Sha256.h>
 
+#include "Hex.h"
+
 #include <boost/hash2/sha2.hpp>
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -17,21 +18,17 @@ namespace ao::utility
 {
   namespace
   {
-    constexpr auto kHexDigits = std::string_view{"0123456789abcdef"};
-    constexpr std::uint32_t kNibbleShift = 4U;
-    constexpr std::uint32_t kLowNibbleMask = 0x0FU;
-
     std::optional<std::byte> parseHexBytePair(char const high, char const low) noexcept
     {
-      auto const highIndex = kHexDigits.find(high);
-      auto const lowIndex = kHexDigits.find(low);
+      auto const highIndex = detail::kLowerHexDigits.find(high);
+      auto const lowIndex = detail::kLowerHexDigits.find(low);
 
       if (highIndex == std::string_view::npos || lowIndex == std::string_view::npos)
       {
         return std::nullopt;
       }
 
-      return static_cast<std::byte>((highIndex << kNibbleShift) | lowIndex);
+      return static_cast<std::byte>((highIndex << detail::kNibbleBits) | lowIndex);
     }
   } // namespace
 
@@ -56,17 +53,7 @@ namespace ao::utility
 
   std::string sha256Hex(Sha256Digest const& digest)
   {
-    auto text = std::string{};
-    text.reserve(Sha256Digest::kHexLength);
-
-    for (auto const value : digest.bytes)
-    {
-      auto const raw = std::to_integer<std::uint32_t>(value);
-      text.push_back(kHexDigits[raw >> kNibbleShift]);
-      text.push_back(kHexDigits[raw & kLowNibbleMask]);
-    }
-
-    return text;
+    return detail::lowerHex(digest.bytes);
   }
 
   std::optional<Sha256Digest> parseSha256Hex(std::string_view const text) noexcept

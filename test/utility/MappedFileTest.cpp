@@ -1,139 +1,91 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/utility/MappedFile.h>
 
 #include "test/TestFixtureSupport.h"
+#include <ao/Error.h>
+#include <ao/utility/ByteView.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <fstream>
 #include <ios>
-#include <string_view>
 #include <utility>
 
 namespace ao::utility::test
 {
-  TEST_CASE("MappedFile - maps files and reports failed mappings")
+  TEST_CASE("MappedFile - mappings can be closed, replaced, or transferred")
   {
-    auto const tempDir = ao::test::TempDir{};
-    auto const testFilePath = tempDir.path() / "test.bin";
-    auto const testContent = std::string_view{"Hello, MappedFile!"};
+    auto const temp = ao::test::TempDir{};
+    auto const first = temp.path() / "first.bin";
+    auto const second = temp.path() / "second.bin";
+    REQUIRE((std::ofstream{first, std::ios::binary} << "first").good());
+    REQUIRE((std::ofstream{second, std::ios::binary} << "second").good());
+
+    auto source = MappedFile{};
+    CHECK_FALSE(source.isMapped());
+    CHECK(source.bytes().empty());
+    REQUIRE(source.map(first));
+    CHECK(source.isMapped());
+    CHECK(bytes::stringView(source.bytes()) == "first");
+
+    auto const reuseSource = [&]
     {
-      auto ofs = std::ofstream{testFilePath, std::ios::binary};
-      REQUIRE(ofs);
-      ofs.write(testContent.data(), static_cast<std::streamsize>(testContent.size()));
-      REQUIRE(ofs.good());
-    }
+      REQUIRE_FALSE(source.isMapped());
+      CHECK(source.bytes().empty());
+      REQUIRE(source.map(second));
+      CHECK(bytes::stringView(source.bytes()) == "second");
+    };
 
-    SECTION("Maps successfully and reads correct bytes")
+    SECTION("explicit close")
     {
-      auto mappedFile = MappedFile{};
-
-      CHECK(mappedFile.isMapped() == false);
-      CHECK(mappedFile.bytes().empty() == true);
-
-      auto const res = mappedFile.map(testFilePath);
-      CHECK(res.has_value());
-      CHECK(mappedFile.isMapped() == true);
-
-      auto const bytes = mappedFile.bytes();
-      REQUIRE(bytes.size() == testContent.size());
-
-      auto const mappedStr = std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()};
-      CHECK(mappedStr == testContent);
-
-      // Unmap
-      mappedFile.unmap();
-      CHECK(mappedFile.isMapped() == false);
-      CHECK(mappedFile.bytes().empty() == true);
-    }
-
-    SECTION("Mapping failure for non-existent file")
-    {
-      auto mappedFile = MappedFile{};
-      auto const res = mappedFile.map(tempDir.path() / "non_existent.bin");
-
-      CHECK(!res.has_value());
-      CHECK(mappedFile.isMapped() == false);
-      CHECK(mappedFile.bytes().empty() == true);
-    }
-
-    SECTION("Move construction leaves the source safe and reusable")
-    {
-      auto source = MappedFile{};
-      REQUIRE(source.map(testFilePath));
-
-      auto moved = MappedFile{std::move(source)};
-      REQUIRE(moved.isMapped());
-      auto const movedBytes = moved.bytes();
-      REQUIRE(movedBytes.size() == testContent.size());
-      CHECK(std::string_view{reinterpret_cast<char const*>(movedBytes.data()), movedBytes.size()} == testContent);
-
-      // NOLINTNEXTLINE(bugprone-use-after-move): Moved-from behavior is the contract under test.
-      CHECK(source.isMapped() == false);
-      CHECK(source.bytes().empty() == true);
       source.unmap();
-      CHECK(source.isMapped() == false);
-
-      REQUIRE(source.map(testFilePath));
-      CHECK(source.isMapped() == true);
-      auto const reusedBytes = source.bytes();
-      REQUIRE(reusedBytes.size() == testContent.size());
-      CHECK(std::string_view{reinterpret_cast<char const*>(reusedBytes.data()), reusedBytes.size()} == testContent);
+      reuseSource();
     }
 
-    SECTION("Move assignment leaves the source safe and reusable")
+    SECTION("failed remap discards the old mapping")
     {
-      auto source = MappedFile{};
-      REQUIRE(source.map(testFilePath));
-      auto target = MappedFile{};
-      REQUIRE(target.map(testFilePath));
+      auto const res = source.map(temp.path() / "missing.bin");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+      reuseSource();
+    }
 
-      target = std::move(source);
+    SECTION("an empty file cannot provide a mapped region")
+    {
+      auto const empty = temp.path() / "empty.bin";
+      REQUIRE(std::ofstream{empty, std::ios::binary}.good());
+      auto const res = source.map(empty);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+      reuseSource();
+    }
+
+    SECTION("transfer to a new or previously mapped file")
+    {
+      auto const borrow = source.bytes();
+      auto const replace = GENERATE(false, true);
+      CAPTURE(replace);
+      auto target = [&]
+      {
+        if (!replace)
+        {
+          return MappedFile{std::move(source)};
+        }
+
+        auto previous = MappedFile{};
+        REQUIRE(previous.map(second));
+        previous = std::move(source);
+        return previous;
+      }();
+      reuseSource();
       REQUIRE(target.isMapped());
-      auto const targetBytes = target.bytes();
-      REQUIRE(targetBytes.size() == testContent.size());
-      CHECK(std::string_view{reinterpret_cast<char const*>(targetBytes.data()), targetBytes.size()} == testContent);
-
-      // NOLINTNEXTLINE(bugprone-use-after-move): Moved-from behavior is the contract under test.
-      CHECK(source.isMapped() == false);
-      CHECK(source.bytes().empty() == true);
-      source.unmap();
-      CHECK(source.isMapped() == false);
-
-      REQUIRE(source.map(testFilePath));
-      CHECK(source.isMapped() == true);
-      auto const reusedBytes = source.bytes();
-      REQUIRE(reusedBytes.size() == testContent.size());
-      CHECK(std::string_view{reinterpret_cast<char const*>(reusedBytes.data()), reusedBytes.size()} == testContent);
+      REQUIRE(target.bytes().data() == borrow.data());
+      CHECK(bytes::stringView(target.bytes()) == "first");
+      CHECK(bytes::stringView(borrow) == "first");
     }
-  }
-
-  TEST_CASE("MappedFile - a failed remap leaves the previous mapping closed")
-  {
-    auto const tempDir = ao::test::TempDir{};
-    auto const path = tempDir.path() / "present.bin";
-    {
-      auto output = std::ofstream{path, std::ios::binary};
-      REQUIRE(output);
-      output << "before";
-      REQUIRE(output.good());
-    }
-
-    auto mappedFile = MappedFile{};
-    REQUIRE(mappedFile.map(path));
-    REQUIRE(mappedFile.isMapped());
-
-    auto const res = mappedFile.map(tempDir.path() / "missing.bin");
-    REQUIRE_FALSE(res);
-    CHECK_FALSE(mappedFile.isMapped());
-    CHECK(mappedFile.bytes().empty());
-
-    // map() unmaps first; a later successful map must still be possible.
-    REQUIRE(mappedFile.map(path));
-    auto const bytes = mappedFile.bytes();
-    REQUIRE(bytes.size() == 6);
-    CHECK(std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()} == "before");
   }
 } // namespace ao::utility::test

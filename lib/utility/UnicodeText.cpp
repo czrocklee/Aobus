@@ -369,18 +369,13 @@ namespace ao::utility
       return std::unexpected{normalizedRes.error()};
     }
 
-    auto const normalizedLengthRes = checkedIcuLength(*normalizedRes);
-
-    if (!normalizedLengthRes)
-    {
-      return std::unexpected{normalizedLengthRes.error()};
-    }
-
+    // normalizeValidatedUtf8Nfc limits both the input and its normalized result to ICU's width.
+    auto const normalizedLength = static_cast<std::int32_t>(normalizedRes->size());
     auto folded = std::string{};
-    auto sink = icu::StringByteSink<std::string>{&folded, *normalizedLengthRes};
+    auto sink = icu::StringByteSink<std::string>{&folded, normalizedLength};
     UErrorCode status = U_ZERO_ERROR;
     icu::CaseMap::utf8Fold(
-      U_FOLD_CASE_DEFAULT, icu::StringPiece{normalizedRes->data(), *normalizedLengthRes}, sink, nullptr, status);
+      U_FOLD_CASE_DEFAULT, icu::StringPiece{normalizedRes->data(), normalizedLength}, sink, nullptr, status);
 
     if (U_FAILURE(status) != 0)
     {

@@ -17,6 +17,7 @@
 #include <ao/rt/completion/VocabularyRanking.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
@@ -40,16 +41,8 @@ namespace ao::rt
 {
   namespace
   {
-    struct TransparentStringHash final
-    {
-      using is_transparent = void;
-
-      std::size_t operator()(std::string_view value) const { return std::hash<std::string_view>{}(value); }
-      std::size_t operator()(std::string const& value) const { return (*this)(std::string_view{value}); }
-    };
-
     using OwnedValueFrequencies =
-      boost::unordered_flat_map<std::string, std::uint32_t, TransparentStringHash, std::equal_to<>>;
+      boost::unordered_flat_map<std::string, std::uint32_t, utility::TransparentStringHash, std::equal_to<>>;
 
     void addValue(OwnedValueFrequencies& counts, std::string_view value, std::uint32_t frequency = 1)
     {
@@ -597,7 +590,7 @@ namespace ao::rt
     };
 
     using OwnedAggregateValues =
-      boost::unordered_flat_map<std::string, AggregateValue, TransparentStringHash, std::equal_to<>>;
+      boost::unordered_flat_map<std::string, AggregateValue, utility::TransparentStringHash, std::equal_to<>>;
 
     auto const& tagFrequencies = vocabularyCache(Vocabulary::Tags).frequencies;
     std::size_t entryCount = _aggregateIncludesTags ? tagFrequencies.size() : 0;

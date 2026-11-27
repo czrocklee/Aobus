@@ -33,20 +33,6 @@ namespace ao::utility::test
           "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
   }
 
-  TEST_CASE("sha256Hex - one lower-case fixed-width spelling per digest")
-  {
-    auto const digest = computeSha256(bytes::view(std::string_view{"abc"}));
-    auto const text = sha256Hex(digest);
-
-    CHECK(text.size() == Sha256Digest::kHexLength);
-    CHECK(text == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-
-    for (auto const character : text)
-    {
-      CHECK(((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')));
-    }
-  }
-
   TEST_CASE("parseSha256Hex - accepts only the form sha256Hex produces")
   {
     auto const digest = computeSha256(bytes::view(std::string_view{"abc"}));

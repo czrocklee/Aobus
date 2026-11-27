@@ -47,13 +47,14 @@ namespace ao::utility::test
       auto const record = LayoutRecord{.a = 1, .b = 2};
       auto arr = std::to_array<LayoutRecord>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
       auto vec = std::vector{std::byte{1}, std::byte{2}};
-      auto const vecConst = std::vector{std::byte{1}, std::byte{2}};
 
       auto v1 = bytes::view(static_cast<void const*>(str.data()), str.size());
       CHECK(v1.size() == 5);
 
       auto v2 = bytes::view(static_cast<void*>(vec.data()), vec.size());
-      CHECK(v2.size() == 2);
+      REQUIRE(v2.size() == 2);
+      v2.front() = std::byte{3};
+      CHECK(vec.front() == std::byte{3});
 
       auto v3 = bytes::view(vec.data(), vec.size());
       CHECK(v3.size() == 2);
@@ -63,6 +64,7 @@ namespace ao::utility::test
 
       auto v5 = bytes::view(std::span<LayoutRecord>{arr});
       CHECK(v5.size() == 2 * sizeof(LayoutRecord));
+      CHECK(v5.data() == bytes::view(arr.front()).data());
 
       auto v6 = bytes::view(record);
       CHECK(v6.size() == sizeof(LayoutRecord));
@@ -121,20 +123,16 @@ namespace ao::utility::test
 
       CHECK(layout::size32(span) == static_cast<std::uint32_t>(sizeof(LayoutRecord)));
 
-      auto* mutableView = layout::viewMutable<LayoutRecord>(spanMut);
-      mutableView->b = 20;
-      CHECK(record.b == 20);
-
       auto arr = std::to_array<LayoutRecord>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
       auto arrSpan = bytes::view(std::span<LayoutRecord>{arr});
       auto arrSpanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(arr.data()), 2 * sizeof(LayoutRecord)};
 
       auto varr = layout::viewArray<LayoutRecord>(arrSpan);
-      CHECK(varr.size() == 2);
+      REQUIRE(varr.size() == 2);
       CHECK(varr[1].a == 3);
 
       auto varrMut = layout::viewArrayMutable<LayoutRecord>(arrSpanMut);
-      CHECK(varrMut.size() == 2);
+      REQUIRE(varrMut.size() == 2);
       varrMut[1].a = 5;
       CHECK(arr[1].a == 5);
 

@@ -53,6 +53,18 @@ namespace ao::utility::test
     CHECK(toAsciiUpper(utf8Byte) == utf8Byte);
   }
 
+  TEST_CASE("String - ASCII case comparison requires equal bytes outside ASCII letters")
+  {
+    CHECK(isEqualIgnoringAsciiCase({}, ""));
+    CHECK_FALSE(isEqualIgnoringAsciiCase("mix", "fix"));
+    CHECK(isEqualIgnoringAsciiCase(std::string_view{"a\0B", 3}, std::string_view{"A\0b", 3}));
+    CHECK_FALSE(isEqualIgnoringAsciiCase(std::string_view{"a\0B", 3}, std::string_view{"A\0c", 3}));
+    CHECK(isEqualIgnoringAsciiCase("DJ-Mix", "dj-mIX"));
+    CHECK_FALSE(isEqualIgnoringAsciiCase("DJ-mix", "DJ"));
+    CHECK(isEqualIgnoringAsciiCase("Björk", "BJöRK"));
+    CHECK_FALSE(isEqualIgnoringAsciiCase("Björk", "BJÖRK"));
+  }
+
   TEST_CASE("String - ASCII transforms preserve UTF-8 bytes")
   {
     auto const text = std::string{" \tDVO\xC5\x98\xC3\x81K \n"};

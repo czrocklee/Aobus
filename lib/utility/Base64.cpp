@@ -84,7 +84,6 @@ namespace ao::utility
     std::int32_t bits = 0;
     std::size_t symbolCount = 0;
     std::size_t paddingCount = 0;
-    bool sawPadding = false;
 
     for (auto const charVal : base64)
     {
@@ -95,7 +94,6 @@ namespace ao::utility
 
       if (charVal == '=')
       {
-        sawPadding = true;
         ++paddingCount;
 
         if (paddingCount > 2)
@@ -106,18 +104,16 @@ namespace ao::utility
         continue;
       }
 
-      if (sawPadding)
+      if (paddingCount != 0)
       {
         return std::nullopt;
       }
 
-      // The index is a uint8_t (0-255) and the table has 256 entries, so the
-      // lookup is always in bounds; operator[] avoids a redundant bounds check.
       auto const decodedValue = kDecodingTable[static_cast<std::uint8_t>(charVal)];
 
       if (decodedValue == -1)
       {
-        return std::nullopt; // Invalid character
+        return std::nullopt;
       }
 
       buffer = (buffer << kBase64BitsPerChar) | static_cast<std::uint32_t>(decodedValue);
@@ -137,24 +133,10 @@ namespace ao::utility
       return std::nullopt;
     }
 
-    if (paddingCount != 0)
+    // Padding is optional; when present it must complete the final quartet.
+    if (paddingCount != 0 && (symbolCount + paddingCount) % kBase64EncodedChunkSize != 0)
     {
-      auto const remainder = symbolCount % kBase64EncodedChunkSize;
-      std::size_t expectedPadding = 0;
-
-      if (remainder == 2)
-      {
-        expectedPadding = 2;
-      }
-      else if (remainder == 3)
-      {
-        expectedPadding = 1;
-      }
-
-      if ((symbolCount + paddingCount) % kBase64EncodedChunkSize != 0 || paddingCount != expectedPadding)
-      {
-        return std::nullopt;
-      }
+      return std::nullopt;
     }
 
     return result;

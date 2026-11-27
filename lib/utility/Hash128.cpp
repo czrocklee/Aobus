@@ -3,23 +3,14 @@
 
 #include <ao/utility/Hash128.h>
 
-#include <cstddef>
-#include <cstdint>
-#include <format>
+#include "Hex.h"
+
 #include <string>
 
 namespace ao::utility
 {
   std::string hash128Hex(Hash128 const& hash)
   {
-    auto result = std::string{};
-    result.reserve(hash.bytes.size() * 2U);
-
-    for (std::byte const byte : hash.bytes)
-    {
-      result += std::format("{:02x}", static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(byte)));
-    }
-
-    return result;
+    return detail::lowerHex(hash.bytes);
   }
 } // namespace ao::utility

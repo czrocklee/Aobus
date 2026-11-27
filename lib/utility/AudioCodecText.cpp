@@ -4,9 +4,9 @@
 #include <ao/AudioCodecText.h>
 
 #include <ao/AudioCodec.h>
+#include <ao/utility/String.h>
 
 #include <array>
-#include <cstddef>
 #include <optional>
 #include <string_view>
 
@@ -28,29 +28,6 @@ namespace ao
       {.codec = AudioCodec::Mp3, .name = "MP3"},
       {.codec = AudioCodec::Opus, .name = "Opus"},
     });
-
-    constexpr char toUpperAscii(char ch) noexcept
-    {
-      return ch >= 'a' && ch <= 'z' ? static_cast<char>(ch - 'a' + 'A') : ch;
-    }
-
-    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
-    {
-      if (lhs.size() != rhs.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < lhs.size(); ++index)
-      {
-        if (toUpperAscii(lhs[index]) != toUpperAscii(rhs[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
   } // namespace
 
   std::string_view audioCodecName(AudioCodec codec) noexcept
@@ -68,14 +45,14 @@ namespace ao
 
   std::optional<AudioCodec> parseAudioCodecName(std::string_view name) noexcept
   {
-    if (isEqualIgnoringAsciiCase(name, "UNKNOWN"))
+    if (utility::isEqualIgnoringAsciiCase(name, "UNKNOWN"))
     {
       return AudioCodec::Unknown;
     }
 
     for (auto const& entry : kAudioCodecNames)
     {
-      if (isEqualIgnoringAsciiCase(name, entry.name))
+      if (utility::isEqualIgnoringAsciiCase(name, entry.name))
       {
         return entry.codec;
       }

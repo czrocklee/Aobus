@@ -34,7 +34,8 @@ namespace ao::utility
 
   namespace bytes
   {
-    // ByteView centralizes audited byte-layout reinterpretation for callers.
+    // Views borrow their source. Keep the backing storage alive and its range valid
+    // through the last access; binding a temporary owner does not extend its lifetime.
     inline bool isAligned(void const* ptr, std::size_t alignment) noexcept
     {
       return detail::isAligned(ptr, alignment);
@@ -59,22 +60,19 @@ namespace ao::utility
     inline std::span<std::byte const> view(T const* ptr, std::size_t count = 1) noexcept
     {
       detail::requireTrivialLayout<T>();
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)};
+      return std::as_bytes(std::span{ptr, count});
     }
 
     template<typename T, std::size_t Extent>
     inline std::span<std::byte const> view(std::span<T, Extent> values) noexcept
     {
       detail::requireTrivialLayout<std::remove_const_t<T>>();
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return {reinterpret_cast<std::byte const*>(values.data()), values.size_bytes()};
+      return std::as_bytes(values);
     }
 
     template<typename T>
     inline std::span<std::byte const> view(T const& value) noexcept
     {
-      detail::requireTrivialLayout<T>();
       return view(std::addressof(value));
     }
 
@@ -98,8 +96,8 @@ namespace ao::utility
 
     /**
      * Always-checked typed view over raw bytes. Unlike layout::view<T>, invalid
-     * bounds or alignment return nullptr instead of violating a contract, so this
-     * is safe for untrusted / attacker-controlled input.
+     * bounds or alignment return nullptr. A non-null result does not validate
+     * object representation, field values, or the lifetime of the backing storage.
      */
     template<typename T>
     inline T const* tryLayout(std::span<std::byte const> span) noexcept
