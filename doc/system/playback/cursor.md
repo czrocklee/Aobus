@@ -170,8 +170,8 @@ Runtime shutdown may destroy the graph without publishing a user-visible invalid
 
 Shuffle forward selection is random and memoryless across accepted transitions, but its pending candidate is sticky while it remains eligible.
 Unrelated projection changes do not reroll it.
-Departure, a relevant repeat/shuffle mode change, explicit invalidation, or a current preparation/playback failure rerolls it.
-A cancelled, superseded, or stale lookahead completion does not mutate the sticky candidate.
+Departure, a relevant repeat/shuffle mode change, and explicit invalidation can change it.
+[Failure recovery](#failure-and-cancellation) can also reroll it; a cancelled, superseded, or stale lookahead completion cannot.
 
 A Bound current is excluded from the forward candidate set; a Gap current excludes nothing.
 When no alternative exists, repeat-all may select the sole projected Bound current.
@@ -196,13 +196,13 @@ Prepared next is a best-effort audio commitment, not a transaction with live mem
 Every active or retired commitment carries a nonzero opaque token, an issuance generation, a successor `TrackId`, and its own Bound or Gap anchor.
 Projection batches maintain each commitment independently with the same anchor rules as the current subject.
 
-The resolved successor determines the active commitment.
-If the successor changes, transport replaces lookahead; output-device changes and final seek may replace it with a new token even when the successor TrackId is unchanged.
+The resolved successor determines which track may be prepared, but a successor can remain resolved without an active commitment.
+Succession reconciles lookahead when the successor changes; output-device changes and final seek may replace it with a new token even when the successor TrackId is unchanged.
 
 Replacement and cancellation follow proof rather than timing assumptions:
 
 - an exact disarm acknowledgement removes that token immediately;
-- an unacknowledged replaced token becomes retired because its transition may already be queued;
+- an unacknowledged replaced token becomes retired because its transition may already be queued; a later failure for that token cannot disarm its replacement;
 - a cancellation barrier removes only commitments whose issuance generation it proves unreachable;
 - an exact active or retired winner supplies its maintained anchor and closes the whole competing-token window;
 - an unknown non-null token is stale and must not be reclassified as an explicit start.
@@ -242,10 +242,34 @@ The same rule applies to fresh launch and persisted-session restoration; restore
 Navigation and recoverable current-track open/decode failure walk candidates in the requested direction against the latest live projection.
 Each candidate is resolved immediately before its attempt.
 Shuffle-forward failure excludes attempted candidates before rerolling; shuffle-previous failure continues through popped history rather than falling through to sequential previous.
-Current shuffle lookahead preparation failure silently excludes that candidate from the preparation attempt chain, rerolls, and prepares another eligible successor.
-The chain attempts at most three candidates; a non-shuffle failure, exhausted chain, or absence of another eligible candidate leaves recovery to the normal boundary path.
-Lookahead cancellation, supersession, and `Conflict` completion clear only matching pending preparation state and never reroll.
-Acceptance and completion carry a weak reference to the pending lookahead object and may mutate succession only while that exact object remains current.
+
+Before a token is installed, a lookahead staging failure may silently reroll
+and try another eligible candidate when shuffle determines the successor.
+Each shuffle lookahead retry chain allows at most three preparation attempts
+and excludes candidates that failed staging within that chain.
+An unavailable output or released stream can prevent admission without the
+candidate having failed. Cancellation, supersession, and `Conflict` completion
+clear only matching pending preparation state and never reroll. Acceptance and
+completion carry a weak reference to the pending lookahead object and may
+mutate succession only while that exact object remains current.
+
+After installation, a recoverable `Decode` failure for the active prepared
+token on the still-current predecessor occurrence drops the commitment without
+interrupting the predecessor or counting toward the current-track recovery limit
+or grouped skip report. Succession does not prepare that track again with the
+same effective `audio::PlaybackInput` during that occurrence. Display-only
+metadata changes, lookahead refreshes, and seeks within the occurrence do not
+clear this suppression. It does not carry over to a different input (for
+example, after relinking) or a new predecessor occurrence. The suppression
+applies only to lookahead: natural EOF and explicit play still follow their
+normal start paths. If the prepared track has already become current when its
+decode fails, the failure follows current-track recovery instead.
+
+An armed `Decode` failure can continue the same shuffle retry chain. If a
+search in that chain finds no eligible alternative, succession keeps the
+current foreground candidate. In a new chain with only staging failures, an
+unsuccessful search leaves the next shuffle resolution free to redraw, even
+if an earlier chain left an input suppressed.
 
 Three consecutive unplayable candidates terminate transport and succession.
 The terminal report counts all three failures. The grouped skip report includes
@@ -301,11 +325,8 @@ A device-list change alone does not establish a hold. Seeking within the open
 track, pausing and resuming it, or switching to an available output without
 interrupting the occurrence does not by itself reset the streak.
 
-A failure after source invalidation, or any non-recoverable device or route
-failure, stops without a recovery walk. Prepared-successor failure is accepted
-only for a token owned by the current session. It removes that commitment and
-re-prepares from current live policy when possible, without counting toward the
-current-source recovery limit or skip report.
+A current-track failure after source invalidation, or any non-recoverable
+device or route failure, stops without a recovery walk.
 
 Stopping, explicit session replacement, and cancellation barriers retire prepared correlations according to their proof generation.
 Queued callbacks from a replaced session cannot become explicit succession transitions.
@@ -358,6 +379,11 @@ Observers are observational and do not choose succession policy.
   proves live membership and repeat behavior;
   [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/runtime/PlaybackSuccessionAdvanceTest.cpp)
   proves prepared transitions.
+- [`PlaybackSuccessionPreparedFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionPreparedFailureTest.cpp)
+  checks suppression across an in-track Final seek, foreground starts, and a
+  new predecessor occurrence.
+  [`PlaybackPreparedAlternativeTest.cpp`](../../../test/runtime/PlaybackPreparedAlternativeTest.cpp)
+  checks shuffle exhaustion and the distinction between relinking and changing a title.
 - [`PlaybackSuccessionEmptyTrackTest.cpp`](../../../test/runtime/PlaybackSuccessionEmptyTrackTest.cpp)
   checks normal completion, explicit retry, and reaching a playable successor
   after empty tracks. [`PlaybackEmptyProjectionTest.cpp`](../../../test/runtime/PlaybackEmptyProjectionTest.cpp)

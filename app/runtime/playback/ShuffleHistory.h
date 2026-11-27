@@ -29,6 +29,12 @@ namespace ao::rt
       Restart,
     };
 
+    enum class OnExhaustion : std::uint8_t
+    {
+      DiscardCandidate,
+      KeepCandidate,
+    };
+
     explicit ShuffleHistory(CandidateChooser candidateChooser);
 
     /**
@@ -43,6 +49,14 @@ namespace ao::rt
                                             bool currentIsBound,
                                             bool repeatAll,
                                             std::span<TrackId const> excludedTrackIds = {});
+
+    /** Draws afresh even if the sticky candidate is eligible; only an empty search uses onExhaustion. */
+    std::optional<TrackId> rerollForwardCandidate(std::span<TrackId const> projection,
+                                                  TrackId currentTrackId,
+                                                  bool currentIsBound,
+                                                  bool repeatAll,
+                                                  std::span<TrackId const> excludedTrackIds,
+                                                  OnExhaustion onExhaustion);
 
     /** Draws from a nonempty domain supplied by a caller that owns its eligibility checks. */
     TrackId chooseCandidate(std::span<TrackId const> candidates);

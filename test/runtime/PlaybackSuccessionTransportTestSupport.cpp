@@ -9,6 +9,7 @@
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/audio/EngineTestSupport.h"
 #include "test/audio/ScriptedDecoderSession.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include "test/runtime/PlaybackTestSupport.h"
 #include <ao/AudioCodec.h>
@@ -17,6 +18,7 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/rt/ListMutation.h>
@@ -193,8 +195,10 @@ namespace ao::rt::test::playback_succession
 
   namespace
   {
-    audio::DecoderFactoryFn makeActivationProbedDecoderFactory(std::shared_ptr<DecoderActivationProbe> probePtr,
-                                                               PlaybackSuccessionTransportFixtureConfig config)
+    audio::DecoderFactoryFn makeActivationProbedDecoderFactory(
+      std::shared_ptr<DecoderActivationProbe> probePtr,
+      std::shared_ptr<std::atomic<std::size_t>> retiredStagedPtr,
+      PlaybackSuccessionTransportFixtureConfig config)
     {
       // Validate on the test thread, before any decoder worker owns the script.
       if (config.stagedFailureGate != nullptr || !config.stagedFailureGateSequence.empty())
@@ -208,9 +212,10 @@ namespace ao::rt::test::playback_succession
         }
       }
 
-      return [probePtr = std::move(probePtr), config = std::move(config)](
-               std::filesystem::path const& path,
-               std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
+      return
+        [probePtr = std::move(probePtr), retiredStagedPtr = std::move(retiredStagedPtr), config = std::move(config)](
+          std::filesystem::path const& path,
+          std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
       {
         auto const blocks =
           config.blockingGatePtr &&
@@ -276,6 +281,10 @@ namespace ao::rt::test::playback_succession
           config.blockingGatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
           decoderPtr->setDestroyCounter(config.blockingGatePtr->destroyedPtr);
         }
+        else if (failureGate != nullptr)
+        {
+          decoderPtr->setDestroyCounter(retiredStagedPtr);
+        }
 
         if (blocks && config.failBlockedPreparation)
         {
@@ -322,8 +331,9 @@ namespace ao::rt::test::playback_succession
 
   PlaybackSuccessionTransportFixture::PlaybackSuccessionTransportFixture(
     PlaybackSuccessionTransportFixtureConfig config)
-    : decoderProbePtr{std::make_shared<DecoderActivationProbe>()}
-    , transport{makeActivationProbedDecoderFactory(decoderProbePtr, std::move(config))}
+    : retiredStagedDecodersPtr{std::make_shared<std::atomic<std::size_t>>(0)}
+    , decoderProbePtr{std::make_shared<DecoderActivationProbe>()}
+    , transport{makeActivationProbedDecoderFactory(decoderProbePtr, retiredStagedDecodersPtr, std::move(config))}
     , asyncRuntime{transport.executor, 1, &sleeper}
     , changes{transport.executor, 0, "test-library"}
     , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}
@@ -441,6 +451,33 @@ namespace ao::rt::test::playback_succession
     }
 
     return {};
+  }
+
+  std::size_t PlaybackSuccessionTransportFixture::retiredStagedDecoders() const
+  {
+    return retiredStagedDecodersPtr->load();
+  }
+
+  void PlaybackSuccessionTransportFixture::settlePreparedFailure(std::size_t const expectedRetirements)
+  {
+    // Destruction witnesses Engine disarming the failed source, not yet its owner-thread recovery.
+    REQUIRE(transport.executor.tryDrainUntil([&] { return retiredStagedDecoders() >= expectedRetirements; }));
+    REQUIRE_FALSE(transport.onGraphChangedCb);
+    REQUIRE(transport.renderTarget != nullptr);
+    // This route-ready marker shares Engine's FIFO with the source error. Its first graph subscription
+    // witnesses delivery on the owner after recovery, without changing the selected output or playback.
+    transport.renderTarget->handleRouteReady("mock_anchor");
+    REQUIRE(transport.executor.tryDrainUntil([&] { return static_cast<bool>(transport.onGraphChangedCb); }));
+    settleLookaheadPreparation();
+  }
+
+  void PlaybackSuccessionTransportFixture::settleLookaheadPreparation()
+  {
+    // Lookahead inspects on the sole Player worker, selects the format on the owner, then prepares
+    // on the worker and adopts on the owner. Fence both hops before asserting no extra output open.
+    auto& runtime = transport.asyncRuntime;
+    runQueuedTask(runtime, transport.executor, runtime.resumeOnCallbackExecutorAsync());
+    runQueuedTask(runtime, transport.executor, runtime.resumeOnCallbackExecutorAsync());
   }
 
   std::size_t PlaybackSuccessionTransportFixture::decoderActivationCount(TrackId const trackId) const

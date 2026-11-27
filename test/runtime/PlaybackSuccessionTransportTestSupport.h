@@ -17,6 +17,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -153,6 +154,12 @@ namespace ao::rt::test::playback_succession
     std::size_t decoderActivationCount(TrackId trackId) const;
     bool tryWaitForDecoderActivationAfter(TrackId trackId, std::size_t previousCount);
 
+    std::size_t retiredStagedDecoders() const;
+    // Once per fixture: after the gated prepared read is released, before rendering to EOF or issuing commands.
+    void settlePreparedFailure(std::size_t expectedRetirements = 1);
+    void settleLookaheadPreparation();
+
+    std::shared_ptr<std::atomic<std::size_t>> retiredStagedDecodersPtr;
     std::shared_ptr<DecoderActivationProbe> decoderProbePtr;
     PlaybackTransportFixture<QueuedExecutor> transport;
     ControlledSleeper sleeper;

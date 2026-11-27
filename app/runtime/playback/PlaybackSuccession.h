@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
@@ -67,6 +68,8 @@ namespace ao::rt
   class PlaybackSuccession final
   {
   public:
+    using ShuffleChooserFactory = compat::MoveOnlyFunction<ShuffleHistory::CandidateChooser()>;
+
     struct ShuffleModeChanged final
     {
       ShuffleMode mode = ShuffleMode::Off;
@@ -83,7 +86,8 @@ namespace ao::rt
                        library::MusicLibrary const& library,
                        PlaybackTransport& transport,
                        NotificationService& notifications,
-                       async::Runtime& asyncRuntime);
+                       async::Runtime& asyncRuntime,
+                       ShuffleChooserFactory shuffleChooserFactory = {});
     ~PlaybackSuccession();
 
     PlaybackSuccession(PlaybackSuccession const&) = delete;

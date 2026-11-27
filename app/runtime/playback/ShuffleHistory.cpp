@@ -71,10 +71,9 @@ namespace ao::rt
       return _optForwardCandidate;
     }
 
-    _optForwardCandidate.reset();
-
     if (candidates.empty())
     {
+      _optForwardCandidate.reset();
       return std::nullopt;
     }
 
@@ -84,6 +83,24 @@ namespace ao::rt
 
     _optForwardCandidate = selected;
     return selected;
+  }
+
+  std::optional<TrackId> ShuffleHistory::rerollForwardCandidate(std::span<TrackId const> const projection,
+                                                                TrackId const currentTrackId,
+                                                                bool const currentIsBound,
+                                                                bool const repeatAll,
+                                                                std::span<TrackId const> const excludedTrackIds,
+                                                                OnExhaustion const onExhaustion)
+  {
+    auto const optPrevious = std::exchange(_optForwardCandidate, std::nullopt);
+    auto const optSelected = forwardCandidate(projection, currentTrackId, currentIsBound, repeatAll, excludedTrackIds);
+
+    if (!optSelected && onExhaustion == OnExhaustion::KeepCandidate)
+    {
+      _optForwardCandidate = optPrevious;
+    }
+
+    return optSelected;
   }
 
   TrackId ShuffleHistory::chooseCandidate(std::span<TrackId const> const candidates)

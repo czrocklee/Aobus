@@ -80,7 +80,8 @@ namespace ao::rt
     PreparedNextRegistry& preparedNextRegistry() noexcept { return _preparedNextRegistry; }
     PreparedNextRegistry const& preparedNextRegistry() const noexcept { return _preparedNextRegistry; }
     ShuffleHistory& shuffleHistory() noexcept { return _shuffleHistory; }
-    std::optional<TrackId> rerollShuffleForward(std::span<TrackId const> excludedTrackIds);
+    std::optional<TrackId> rerollShuffleForward(std::span<TrackId const> excludedTrackIds,
+                                                ShuffleHistory::OnExhaustion onExhaustion);
 
     // Public snapshot access is also the private cursor-policy implementation.
     // NOLINTNEXTLINE(misc-override-with-different-visibility)
