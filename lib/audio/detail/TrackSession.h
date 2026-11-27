@@ -41,14 +41,12 @@ namespace ao::audio::detail
     struct OpenedTrack
     {
       std::shared_ptr<PcmSource> sourcePtr;
-      PcmFormat backendFormat;
       DecodedStreamInfo info;
     };
 
     struct PreparedTrack
     {
       std::unique_ptr<StreamingSource> sourcePtr;
-      PcmFormat backendFormat;
       DecodedStreamInfo info;
     };
 

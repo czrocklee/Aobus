@@ -550,7 +550,7 @@ namespace ao::audio
     // thread (initial publish) and the event thread (after a splice) and read
     // only by the control thread (setNext gate).
     mutable std::mutex transitionMutex;
-    std::optional<PcmFormat> optCurrentBackendFormat;
+    // Preparation guarantees the decoder's output format matches its admitted PCM mode.
     std::optional<DecodedStreamInfo> optCurrentStreamInfo;
     // A direct endpoint's admitted precision remains a bound for every source
     // using this open, even when its client container is wider.
@@ -709,11 +709,10 @@ namespace ao::audio
       return (node != nullptr && timeline.activeNode() == node) ? node : nullptr;
     }
 
-    bool matchesCurrentTransition(std::optional<PcmFormat> const& optBackendFormat,
-                                  std::optional<DecodedStreamInfo> const& optStreamInfo) const
+    bool matchesCurrentTransition(std::optional<DecodedStreamInfo> const& optStreamInfo) const
     {
       auto const lock = std::scoped_lock{transitionMutex};
-      return optCurrentBackendFormat == optBackendFormat && optCurrentStreamInfo == optStreamInfo;
+      return optCurrentStreamInfo == optStreamInfo;
     }
 
     // Requires controlMutex. This is the sole lookahead replacement operation:
@@ -721,12 +720,11 @@ namespace ao::audio
     // visible to the control side, refreshes transition evidence, and only then
     // publishes a new owner/cursor pair.
     bool tryReplacePreparedNext(std::unique_ptr<TrackNode> nodePtr,
-                                std::optional<PcmFormat> const& optExpectedBackendFormat,
                                 std::optional<DecodedStreamInfo> const& optExpectedStreamInfo)
     {
       clearPreparedNext();
 
-      if (!matchesCurrentTransition(optExpectedBackendFormat, optExpectedStreamInfo))
+      if (!matchesCurrentTransition(optExpectedStreamInfo))
       {
         return false;
       }
@@ -743,7 +741,6 @@ namespace ao::audio
     {
       {
         auto const lock = std::scoped_lock{transitionMutex};
-        optCurrentBackendFormat.reset();
         optCurrentStreamInfo.reset();
         optCurrentEndpoint.reset();
       }
@@ -802,7 +799,6 @@ namespace ao::audio
     void publishCurrentTransitionState(TrackNode const& session, std::optional<ConfirmedEndpoint> optEndpoint)
     {
       auto const lock = std::scoped_lock{transitionMutex};
-      optCurrentBackendFormat = session.backendFormat;
       optCurrentStreamInfo = session.info;
       optCurrentEndpoint = std::move(optEndpoint);
     }
@@ -925,7 +921,7 @@ namespace ao::audio
         case RtSignalKind::Spliced:
           return processSpliceAdvancedSignal(takeSplicedNode(signal.splicedNode), signal.generation);
         case RtSignalKind::Drained:
-          return processDrainCompleteSignal(signal.generation, signal.drainEpoch, signal.playbackGeneration);
+          return completeDrain(signal.generation, signal.drainEpoch, signal.playbackGeneration);
       }
 
       return {};
@@ -1233,7 +1229,10 @@ namespace ao::audio
       return notifications;
     }
 
-    Notifications processPlaybackEvent(DrainCompleteEvent const& event) { return processDrainCompleteEvent(event); }
+    Notifications processPlaybackEvent(DrainCompleteEvent const& event)
+    {
+      return completeDrain(event.generation, event.drainEpoch, event.playbackGeneration);
+    }
 
     Notifications processPlaybackEvent(RouteReadyEvent const& event) { return processRouteReadyEvent(event); }
 
@@ -1378,12 +1377,10 @@ namespace ao::audio
         auto const& info = session->info;
         optCurrentItem = session->item;
         status.duration = info.duration;
-        status.elapsed = std::chrono::milliseconds{0};
         status.statusText.clear();
         status.transport = Transport::Playing;
         routeTracker.setDecoder(info);
         routeTracker.setEngineFormat(info.outputFormat);
-        status.routeState = routeTracker.state();
 
         trackAdvanced = onTrackAdvanced;
         stateChanged = onStateChanged;
@@ -1396,7 +1393,6 @@ namespace ao::audio
       // against the track that is now playing.
       {
         auto const lock = std::scoped_lock{transitionMutex};
-        optCurrentBackendFormat = session->backendFormat;
         optCurrentStreamInfo = session->info;
       }
 
@@ -1412,13 +1408,6 @@ namespace ao::audio
       appendStateChangedNotification(notifications, std::move(stateChanged));
       appendRouteNotification(notifications, std::move(routeChanged), std::move(routeSnapshot));
       return notifications;
-    }
-
-    Notifications processDrainCompleteSignal(std::uint64_t generation,
-                                             std::uint64_t signalDrainEpoch,
-                                             std::uint64_t playbackGeneration)
-    {
-      return completeDrain(generation, signalDrainEpoch, playbackGeneration);
     }
 
     // ── Playback Event Reducers ────────────────────────────────────
@@ -1577,11 +1566,6 @@ namespace ao::audio
       return notifications;
     }
 
-    Notifications processDrainCompleteEvent(DrainCompleteEvent const& event)
-    {
-      return completeDrain(event.generation, event.drainEpoch, event.playbackGeneration);
-    }
-
     Notifications processRouteReadyEvent(RouteReadyEvent const& event)
     {
       auto notifications = Notifications{};
@@ -1615,7 +1599,6 @@ namespace ao::audio
         }
 
         routeTracker.setEngineFormat(event.format);
-        status.routeState.engineOutputFormat = event.format;
         pendingNotifications = capturePendingRouteNotifications(event.playbackGeneration);
       }
 
@@ -1699,7 +1682,6 @@ namespace ao::audio
     {
       return TrackNode{.item = item,
                        .sourcePtr = std::move(session.sourcePtr),
-                       .backendFormat = session.backendFormat,
                        .info = session.info,
                        .sourceGeneration = sourceGeneration,
                        .playbackGeneration = playbackGeneration};
@@ -1733,11 +1715,8 @@ namespace ao::audio
       auto const lock = std::scoped_lock{stateMutex};
       optCurrentItem = session.item;
       status.duration = session.info.duration;
-      status.elapsed = std::chrono::milliseconds{0};
-      accumulatedFrames.store(0, std::memory_order_relaxed);
       routeTracker.setDecoder(session.info);
       routeTracker.setEngineFormat(session.info.outputFormat);
-      status.routeState = routeTracker.state();
       engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);
       engineFrameBytes.store(
         static_cast<std::uint32_t>(frameBytes(session.info.outputFormat)), std::memory_order_relaxed);
@@ -1762,7 +1741,6 @@ namespace ao::audio
     void setBackendUnlocked(std::unique_ptr<Backend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
     void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset, PlaybackStartMode mode);
-    std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
     enum class PositioningOrigin : std::uint8_t
@@ -1776,26 +1754,21 @@ namespace ao::audio
     bool trySettlePositioningFromCommand(PositioningOrigin origin = PositioningOrigin::OtherCommand);
     void stopPlaybackUnlocked();
     void stopUnlocked();
-    Result<bool> startInspectedPlaybackUnlocked(
-      PlaybackItem const& item,
-      detail::TrackSession::Inspection const& inspection,
-      std::chrono::milliseconds initialOffset,
-      std::uint64_t playbackGeneration,
-      std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack = {});
+    bool tryStartInspectedPlaybackUnlocked(PlaybackItem const& item,
+                                           detail::TrackSession::Inspection const& inspection,
+                                           std::chrono::milliseconds initialOffset,
+                                           std::uint64_t playbackGeneration,
+                                           std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack = {});
     bool trySeekUnlocked(std::chrono::milliseconds offset, std::optional<PlaybackItemId> optExpectedItemId);
     Result<> setVolumeUnlocked(float volume);
     Result<> setMutedUnlocked(bool muted);
 
-    // Marks an accepted playback-start attempt failed with Error transport
-    // state and the caller-selected failure kind and recoverability. Caller
-    // must hold controlMutex and stateMutex and own any side cleanup (render
-    // target teardown, transition reset) before invoking.
-    void markPlaybackStartFailureUnlocked(Notifications& notifications,
-                                          PlaybackItem const& item,
-                                          std::uint64_t playbackGeneration,
-                                          PlaybackFailureKind kind,
-                                          Error error,
-                                          bool recoverable);
+    // Retires an accepted but failed playback start under controlMutex.
+    void failPlaybackStartUnlocked(PlaybackItem const& item,
+                                   std::uint64_t playbackGeneration,
+                                   PlaybackFailureKind kind,
+                                   Error error,
+                                   bool recoverable);
   };
 
   struct Engine::PreparedPlaybackStart::Impl final
@@ -1827,7 +1800,6 @@ namespace ao::audio
     std::uint64_t basePlaybackGeneration = 0;
     std::uint64_t outputRouteRevision = 0;
     Purpose purpose = Purpose::ExplicitStart;
-    std::optional<PcmFormat> optCurrentBackendFormat;
     std::optional<DecodedStreamInfo> optCurrentStreamInfo;
     std::optional<ConfirmedEndpoint> optCurrentEndpoint;
     std::optional<detail::TrackSession::Inspection> optInspection;
@@ -1920,13 +1892,8 @@ namespace ao::audio
 
     if (_implPtr->purpose == Purpose::GaplessLookahead)
     {
-      if (!_implPtr->optCurrentBackendFormat)
-      {
-        _implPtr->logicalDrainFallback = true;
-        return {};
-      }
-
-      auto const& currentFormat = *_implPtr->optCurrentBackendFormat;
+      AO_INVARIANT(_implPtr->optCurrentStreamInfo, "Lookahead preparation has no current stream info");
+      auto const& currentFormat = _implPtr->optCurrentStreamInfo->outputFormat;
       auto const nextFormat = pcmFormat(sourceFormat, currentFormat.encoding);
       auto const nextMode = OpenedPcmMode{.clientFormat = nextFormat, .optEndpoint = _implPtr->optCurrentEndpoint};
       auto const reuseLossless = engine._implPtr->backendPtr->canReuseFormat(currentFormat, nextFormat) &&
@@ -2060,26 +2027,38 @@ namespace ao::audio
     }
   }
 
-  void Engine::Impl::markPlaybackStartFailureUnlocked(Notifications& notifications,
-                                                      PlaybackItem const& item,
-                                                      std::uint64_t const playbackGeneration,
-                                                      PlaybackFailureKind const kind,
-                                                      Error error,
-                                                      bool const recoverable)
+  void Engine::Impl::failPlaybackStartUnlocked(PlaybackItem const& item,
+                                               std::uint64_t const playbackGeneration,
+                                               PlaybackFailureKind const kind,
+                                               Error error,
+                                               bool const recoverable)
   {
-    resetPlaybackStatePreservingOutput();
-    status.transport = Transport::Error;
-    status.statusText = error.message;
-    appendTerminalFailureNotification(notifications,
-                                      onPlaybackFailure,
-                                      PlaybackFailure{
-                                        .kind = kind,
-                                        .itemId = item.id,
-                                        .input = item.input,
-                                        .generation = playbackGeneration,
-                                        .error = std::move(error),
-                                        .recoverable = recoverable,
-                                      });
+    retireRenderTarget();
+    closeBackendPlayback();
+    resetTransitionState();
+
+    auto notifications = Notifications{};
+    {
+      auto const lock = std::scoped_lock{stateMutex};
+      resetPlaybackStatePreservingOutput();
+      status.transport = Transport::Error;
+      status.statusText = error.message;
+      appendTerminalFailureNotification(notifications,
+                                        onPlaybackFailure,
+                                        PlaybackFailure{
+                                          .kind = kind,
+                                          .itemId = item.id,
+                                          .input = item.input,
+                                          .generation = playbackGeneration,
+                                          .error = std::move(error),
+                                          .recoverable = recoverable,
+                                        });
+    }
+
+    if (!notifications.empty())
+    {
+      enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+    }
   }
 
   void Engine::Impl::playUnlocked(PlaybackItem const& item,
@@ -2127,10 +2106,10 @@ namespace ao::audio
 
     auto const playbackGeneration = reservePlaybackGeneration();
     acceptPlaybackGeneration(playbackGeneration);
-    std::ignore = startInspectedPlaybackUnlocked(item, *inspectionRes, initialOffset, playbackGeneration);
+    std::ignore = tryStartInspectedPlaybackUnlocked(item, *inspectionRes, initialOffset, playbackGeneration);
   }
 
-  Result<bool> Engine::Impl::startInspectedPlaybackUnlocked(
+  bool Engine::Impl::tryStartInspectedPlaybackUnlocked(
     PlaybackItem const& item,
     detail::TrackSession::Inspection const& inspection,
     std::chrono::milliseconds const initialOffset,
@@ -2166,59 +2145,28 @@ namespace ao::audio
 
     if (!openedModeRes)
     {
-      auto const& failure = openedModeRes.error();
-      auto const& error = failure.error;
+      auto& failure = openedModeRes.error();
       bool const incompatible = failure.cause == BackendOpenFailure::Cause::TrackRouteIncompatible;
-      retireRenderTarget();
-      closeBackendPlayback();
-      resetTransitionState();
-      auto notifications = Notifications{};
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-        markPlaybackStartFailureUnlocked(
-          notifications,
-          item,
-          playbackGeneration,
-          incompatible ? PlaybackFailureKind::TrackOpen : PlaybackFailureKind::RouteActivation,
-          error,
-          incompatible);
-      }
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return std::unexpected{error};
+      failPlaybackStartUnlocked(item,
+                                playbackGeneration,
+                                incompatible ? PlaybackFailureKind::TrackOpen : PlaybackFailureKind::RouteActivation,
+                                std::move(failure.error),
+                                incompatible);
+      return false;
     }
 
-    if (auto const validatedRes = detail::validateOpenedMode(inspection.info.sourceFormat, *openedModeRes);
-        !validatedRes)
+    if (auto validatedRes = detail::validateOpenedMode(inspection.info.sourceFormat, *openedModeRes); !validatedRes)
     {
-      auto const& error = validatedRes.error();
-      retireRenderTarget();
-      closeBackendPlayback();
-      resetTransitionState();
-      auto notifications = Notifications{};
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-        markPlaybackStartFailureUnlocked(
-          notifications, item, playbackGeneration, PlaybackFailureKind::RouteActivation, error, false);
-      }
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return std::unexpected{error};
+      failPlaybackStartUnlocked(
+        item, playbackGeneration, PlaybackFailureKind::RouteActivation, std::move(validatedRes).error(), false);
+      return false;
     }
 
     auto const& clientFormat = openedModeRes->clientFormat;
 
     auto openedTrackRes = [&] -> Result<TrackNode>
     {
-      if (optPreparedTrack && isSamePcmMode(optPreparedTrack->backendFormat, clientFormat))
+      if (optPreparedTrack && isSamePcmMode(optPreparedTrack->info.outputFormat, clientFormat))
       {
         auto session = activateTrack(std::move(*optPreparedTrack), sourceGeneration, playbackGeneration);
         optPreparedTrack.reset();
@@ -2232,23 +2180,9 @@ namespace ao::audio
 
     if (!openedTrackRes)
     {
-      auto const& error = openedTrackRes.error();
-      retireRenderTarget();
-      closeBackendPlayback();
-      resetTransitionState();
-      auto notifications = Notifications{};
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-        markPlaybackStartFailureUnlocked(
-          notifications, item, playbackGeneration, PlaybackFailureKind::TrackOpen, error, true);
-      }
-
-      if (!notifications.empty())
-      {
-        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-      }
-
-      return std::unexpected{error};
+      failPlaybackStartUnlocked(
+        item, playbackGeneration, PlaybackFailureKind::TrackOpen, std::move(openedTrackRes).error(), true);
+      return false;
     }
 
     publishCurrentTransitionState(*openedTrackRes, openedModeRes->optEndpoint);
@@ -2259,7 +2193,6 @@ namespace ao::audio
     auto const controls = observeBackendControls();
     {
       auto const lock = std::scoped_lock{stateMutex};
-      status.elapsed = initialOffset;
       status.transport = Transport::Buffering;
       applyBackendControls(controls);
     }
@@ -2268,11 +2201,6 @@ namespace ao::audio
     auto const origin = initialOffset == std::chrono::milliseconds{0} ? PositioningOrigin::ZeroOffsetStart
                                                                       : PositioningOrigin::OtherCommand;
     return trySettlePositioningFromCommand(origin);
-  }
-
-  std::optional<Engine::PlaybackItemId> Engine::Impl::clearNextUnlocked()
-  {
-    return clearPreparedNext();
   }
 
   void Engine::Impl::pauseUnlocked()
@@ -2451,7 +2379,6 @@ namespace ao::audio
       auto const lock = std::scoped_lock{stateMutex};
       auto const paused = (status.transport == Transport::Paused);
       status.transport = Transport::Buffering;
-      status.elapsed = offset;
       auto const sr = engineSampleRate.load(std::memory_order_relaxed);
       accumulatedFrames.store(durationToSamples(offset, sr), std::memory_order_relaxed);
       status.statusText.clear();
@@ -2649,9 +2576,8 @@ namespace ao::audio
     if (purpose == Purpose::GaplessLookahead)
     {
       auto const transitionLock = std::scoped_lock{engine._implPtr->transitionMutex};
-      preparationImplPtr->optCurrentBackendFormat = engine._implPtr->optCurrentBackendFormat;
 
-      if (!engine._implPtr->optCurrentBackendFormat || !engine._implPtr->optCurrentStreamInfo)
+      if (!engine._implPtr->optCurrentStreamInfo)
       {
         return makeError(Error::Code::InvalidState, "No active playback to prepare next track");
       }
@@ -2729,11 +2655,9 @@ namespace ao::audio
 
     auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
 
-    AO_INVARIANT(preparationImpl->optCurrentBackendFormat, "Lookahead preparation has no current backend format");
-
-    auto const& currentBackendFormat = *preparationImpl->optCurrentBackendFormat;
-    auto const currentMatches = engine._implPtr->matchesCurrentTransition(
-      preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo);
+    AO_INVARIANT(preparationImpl->optCurrentStreamInfo, "Lookahead preparation has no current stream info");
+    auto const& currentFormat = preparationImpl->optCurrentStreamInfo->outputFormat;
+    auto const currentMatches = engine._implPtr->matchesCurrentTransition(preparationImpl->optCurrentStreamInfo);
 
     if (!consumedPreparation.matchesControlContext(engine, currentGeneration) || !currentMatches)
     {
@@ -2749,12 +2673,12 @@ namespace ao::audio
     if (preparationImpl->optPreparedTrack)
     {
       auto const& preparedTrack = *preparationImpl->optPreparedTrack;
-      auto const nextMode =
-        OpenedPcmMode{.clientFormat = preparedTrack.backendFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
+      auto const nextMode = OpenedPcmMode{
+        .clientFormat = preparedTrack.info.outputFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
       // Successful zero-offset preroll has no render consumer yet. Drained means clean EOF with no PCM to splice;
       // leave it to the ordinary boundary start instead of announcing a gapless winner.
       capable = !preparedTrack.sourcePtr->isDrained() && Engine::Impl::isGaplessCapable(preparedTrack.info) &&
-                engine._implPtr->backendPtr->canReuseFormat(currentBackendFormat, preparedTrack.backendFormat) &&
+                engine._implPtr->backendPtr->canReuseFormat(currentFormat, nextMode.clientFormat) &&
                 detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value();
 
       if (capable)
@@ -2770,8 +2694,7 @@ namespace ao::audio
       }
     }
 
-    if (!engine._implPtr->tryReplacePreparedNext(
-          std::move(nodePtr), preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo))
+    if (!engine._implPtr->tryReplacePreparedNext(std::move(nodePtr), preparationImpl->optCurrentStreamInfo))
     {
       return makeError(Error::Code::Conflict, "Playback changed while adopting lookahead preparation");
     }
@@ -2859,12 +2782,11 @@ namespace ao::audio
         .generation = candidateGeneration,
         .cancellationBarrier = PreparedCancellationBarrier{.generation = candidateGeneration},
       };
-      auto startedRes = _implPtr->startInspectedPlaybackUnlocked(preparedImpl->item,
-                                                                 preparedImpl->inspection,
-                                                                 preparedImpl->initialOffset,
-                                                                 candidateGeneration,
-                                                                 std::move(preparedImpl->optPreparedTrack));
-      receipt.playbackStarted = startedRes.value_or(false);
+      receipt.playbackStarted = _implPtr->tryStartInspectedPlaybackUnlocked(preparedImpl->item,
+                                                                            preparedImpl->inspection,
+                                                                            preparedImpl->initialOffset,
+                                                                            candidateGeneration,
+                                                                            std::move(preparedImpl->optPreparedTrack));
 
       stagedStart._implPtr.reset();
     }
@@ -3074,7 +2996,7 @@ namespace ao::audio
       return std::nullopt;
     }
 
-    return _implPtr->clearNextUnlocked();
+    return _implPtr->clearPreparedNext();
   }
 
   void Engine::pause()

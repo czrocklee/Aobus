@@ -428,7 +428,7 @@ Asynchronous Player events arrive on a later executor turn.
 Lower signal handlers defer owner destruction until publication returns; public playback observers cannot re-enter lower control because their commands execute in a later service turn.
 
 Production hosts supply a real owner-thread executor.
-GTK and TUI marshal through their toolkit loops, while CLI drives `LoopExecutor`; a foreign Player callback therefore cannot enter executor-affine service state inline on its producer thread.
+GTK, TUI, WinUI, and AppKit marshal through their frontend loops, while CLI drives `LoopExecutor`. A foreign Player callback cannot enter executor-affine service state inline on its producer thread.
 
 ### Backend lifetime and properties
 

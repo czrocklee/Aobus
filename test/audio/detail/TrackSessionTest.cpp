@@ -165,7 +165,6 @@ namespace ao::audio::detail::test
 
     REQUIRE(preparedRes);
     CHECK(preparedRes->info == finalInfo);
-    CHECK(preparedRes->backendFormat == outputFormat);
   }
 
   TEST_CASE("TrackSession - an expensive initial offset is not decoded until activation", "[concurrency]")
@@ -261,13 +260,11 @@ namespace ao::audio::detail::test
 
     REQUIRE(preparedRes);
     CHECK(preparedRes->info == info);
-    CHECK(preparedRes->backendFormat == backendFormat);
     CHECK(preparedRes->sourcePtr);
 
     auto const opened = TrackSession::activate(std::move(*preparedRes), {});
 
     CHECK(opened.info == info);
-    CHECK(opened.backendFormat == backendFormat);
     CHECK(opened.sourcePtr);
   }
 } // namespace ao::audio::detail::test

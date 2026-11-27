@@ -3,114 +3,39 @@
 
 #include "lib/audio/NullBackend.h"
 #include "test/audio/AudioFixtureDirectory.h"
-#include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Transport.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <memory>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <utility>
 
 namespace ao::audio::test
 {
-  namespace
-  {
-    class RouteStateObserver final
-    {
-    public:
-      void observe(AudioRouteFormatState const& state)
-      {
-        auto lock = std::scoped_lock{_mutex};
-        _optLastState = state;
-
-        if (state.sourceFormat.sampleRate != 0)
-        {
-          _optReadyState = state;
-          _cv.notify_all();
-        }
-      }
-
-      std::optional<AudioRouteFormatState> waitForReady(std::chrono::milliseconds timeout)
-      {
-        auto lock = std::unique_lock{_mutex};
-        _cv.wait_for(lock, timeout, [this] { return _optReadyState != std::nullopt; });
-        return _optReadyState;
-      }
-
-      std::string describeLastState() const
-      {
-        auto lock = std::scoped_lock{_mutex};
-
-        if (!_optLastState)
-        {
-          return "Route state was not observed";
-        }
-
-        return "Last route state: source sample rate=" + std::to_string(_optLastState->sourceFormat.sampleRate) +
-               ", source channels=" + std::to_string(_optLastState->sourceFormat.channels) +
-               ", engine sample rate=" + std::to_string(_optLastState->engineOutputFormat.sampleRate) +
-               ", engine channels=" + std::to_string(_optLastState->engineOutputFormat.channels);
-      }
-
-    private:
-      mutable std::mutex _mutex;
-      std::condition_variable _cv;
-      std::optional<AudioRouteFormatState> _optLastState;
-      std::optional<AudioRouteFormatState> _optReadyState;
-    };
-  } // namespace
-
-  TEST_CASE("Engine - graph integrity")
+  TEST_CASE("Engine - null output publishes decoded formats without a native route anchor")
   {
     auto const testFile = audioFixtureDirectory() / "basic_metadata.flac";
 
     INFO("Required audio fixture: " << testFile);
     REQUIRE(std::filesystem::is_regular_file(testFile));
 
-    auto backendPtr = std::make_unique<NullBackend>();
-    auto const device = Device{.id = DeviceId{"null"},
-                               .displayName = "Null",
-                               .description = "Null",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
+    auto engine = Engine{std::make_unique<NullBackend>(), {.id = DeviceId{"null"}, .backendId = kBackendNone}};
+    engine.play({.id = Engine::PlaybackItemId{1}, .input = PlaybackInput{.filePath = testFile.string()}});
+    REQUIRE(engine.transport() == Transport::Playing);
 
-    auto routeState = RouteStateObserver{};
-    auto engine = Engine{std::move(backendPtr), device};
-
-    auto const descriptor = PlaybackInput{.filePath = testFile.string()};
-    auto const item = Engine::PlaybackItem{.id = Engine::PlaybackItemId{1}, .input = descriptor};
-    engine.setOnRouteChanged([&routeState](Engine::RouteStatus const& route) { routeState.observe(route.state); });
-
-    engine.play(item);
-    routeState.observe(engine.status().routeState);
-
-    auto const optRouteState = routeState.waitForReady(std::chrono::seconds{1});
-    INFO("Expected route state with decoder source format after 1s; " << routeState.describeLastState());
-    REQUIRE(optRouteState);
-
-    SECTION("AudioRouteFormatState has decoder source format")
-    {
-      CHECK(optRouteState->sourceFormat.sampleRate == 44100);
-      CHECK(optRouteState->sourceFormat.channels == 2);
-      CHECK(optRouteState->sourceFormat.precisionBits == 16);
-    }
-
-    SECTION("AudioRouteFormatState has engine output format")
-    {
-      CHECK(optRouteState->engineOutputFormat.sampleRate == 44100);
-      CHECK(optRouteState->engineOutputFormat.channels == 2);
-    }
-
-    engine.stop();
+    auto const route = engine.routeStatus();
+    CHECK(route.generation == engine.playbackGeneration());
+    CHECK_FALSE(route.optAnchor);
+    CHECK(route.state.sourceFormat.sampleRate == 44100);
+    CHECK(route.state.sourceFormat.channels == 2);
+    CHECK(route.state.sourceFormat.precisionBits == 16);
+    CHECK(route.state.engineOutputFormat.sampleRate == 44100);
+    CHECK(route.state.engineOutputFormat.channels == 2);
+    CHECK(route.state.engineOutputFormat == route.state.decoderOutputFormat);
   }
 } // namespace ao::audio::test

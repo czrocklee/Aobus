@@ -6,7 +6,6 @@
 #include "../PcmSource.h"
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/PcmFormat.h>
 
 #include <atomic>
 #include <cstdint>
@@ -19,7 +18,6 @@ namespace ao::audio::detail
   {
     Engine::PlaybackItem item;
     std::shared_ptr<PcmSource> sourcePtr;
-    PcmFormat backendFormat;
     DecodedStreamInfo info;
     std::uint64_t sourceGeneration = 0;
     std::uint64_t playbackGeneration = 0;

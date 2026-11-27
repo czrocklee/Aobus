@@ -14,6 +14,7 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
@@ -213,7 +214,13 @@ namespace ao::audio::test
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
     REQUIRE(engine.status().transport == Transport::Playing);
-    REQUIRE(backend->target() != nullptr);
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+    auto output = std::vector<std::byte>(1764); // 10 ms of stereo S16 at 44.1 kHz.
+    auto const rendered = target->renderPcm(output);
+    REQUIRE(rendered.bytesWritten == output.size());
+    target->handlePositionAdvanced(rendered.positionFrames);
+    REQUIRE(engine.status().elapsed == std::chrono::milliseconds{10});
 
     auto const candidateItem = makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"});
     auto candidateRes = engine.stagePlayback(candidateItem);
@@ -229,6 +236,7 @@ namespace ao::audio::test
 
     auto const failure = requireFailure(failureFuture);
     CHECK(failure.itemId == candidateItem.id);
+    CHECK(failure.generation == committedRes->generation);
     CHECK(failure.kind == Engine::PlaybackFailureKind::RouteActivation);
     auto const snap = engine.status();
     CHECK(snap.transport == Transport::Error);

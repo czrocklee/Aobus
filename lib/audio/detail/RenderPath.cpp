@@ -28,10 +28,9 @@ namespace ao::audio::detail
   RenderPcmResult RenderProgress::result(std::atomic<std::uint32_t> const& engineFrameBytes,
                                          bool drained) const noexcept
   {
-    auto frameCount = [&engineFrameBytes](std::size_t bytes) noexcept
+    auto const bytesPerFrame = engineFrameBytes.load(std::memory_order_relaxed);
+    auto frameCount = [bytesPerFrame](std::size_t bytes) noexcept
     {
-      auto const bytesPerFrame = engineFrameBytes.load(std::memory_order_relaxed);
-
       if (bytesPerFrame == 0U)
       {
         return std::uint32_t{0};
