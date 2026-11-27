@@ -99,6 +99,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::findLabelByText;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
+  using ao::gtk::test::GtkRuntimeFixture;
   using ao::gtk::test::measureWidget;
 
   namespace
@@ -435,8 +436,7 @@ namespace ao::gtk::layout::test
     auto& bar = compPtr->widget();
     CHECK_FALSE(bar.get_visible());
 
-    auto sessionPtr =
-      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{undoTrackId}));
     undoController.presentCustomMetadataDeletedUndo("Mood", "Energetic", std::move(sessionPtr));
     drainGtkEvents();
 
@@ -451,7 +451,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(bar.get_visible());
 
     auto rejectedSessionPtr =
-      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{undoTrackId}));
     undoController.presentCustomMetadataDeletedUndo(
       "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(rejectedSessionPtr));
     auto* const undoButton = findWidgetByClass<Gtk::Button>(bar, "ao-undo-button");
@@ -580,7 +580,7 @@ namespace ao::gtk::layout::test
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Tags added 1 for 1 track");
 
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     auto const secondAddition = std::array{std::string{"Second"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
 
@@ -602,8 +602,8 @@ namespace ao::gtk::layout::test
     CHECK(trackSpecFor(runtime, firstTrackId).tags == expectedTags);
     drainGtkEvents();
 
-    REQUIRE(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Invalidate Second"})));
+    REQUIRE(runGtkTask(
+      runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Invalidate Second"})));
     auto const notificationCount = runtime.notifications().feed().entries.size();
     auto const retryAddition = std::array{std::string{"Retry"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{retryAddition}, std::span<std::string const>{});
@@ -649,18 +649,17 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_undo_test",
+    auto fixture = GtkRuntimeFixture{
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo Target"}); }};
     auto& runtime = fixture.runtime();
     auto undoController = TrackDetailUndoController{};
-    auto sessionPtr =
-      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
 
     undoController.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
-    REQUIRE(runGtkTask(fixture.runtime(), undoController.undoAsync()));
+    REQUIRE(runGtkTask(runtime, undoController.undoAsync()));
 
     auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
@@ -670,9 +669,9 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - clears pending undo after timeout")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_undo_timeout_test",
+    auto fixture = GtkRuntimeFixture{
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo timeout target"}); }};
     auto timeoutCallback = sigc::slot<bool()>{};
@@ -682,8 +681,7 @@ namespace ao::gtk::layout::test
                                                   timeoutCallback = std::move(callback);
                                                   return sigc::connection{};
                                                 }};
-    auto sessionPtr =
-      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
 
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
     REQUIRE(controller.pendingCustomMetadataUndo());
@@ -696,15 +694,15 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - an intervening commit makes undo stale")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_undo_test",
-                                        [&trackId](library::MusicLibrary& musicLibrary)
-                                        {
-                                          trackId = library::test::addTrackWithUniqueFixtureUri(
-                                            musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
-                                        }};
+    auto fixture = GtkRuntimeFixture{[&trackId](library::MusicLibrary& musicLibrary)
+                                     {
+                                       trackId = library::test::addTrackWithUniqueFixtureUri(
+                                         musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
+                                     }};
     auto& runtime = fixture.runtime();
-    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
     auto deletePatch = rt::MetadataPatch{};
     deletePatch.customUpdates["Mood"] = std::nullopt;
     auto deleteRes = runGtkTask(runtime, sessionPtr.submitMetadataAsync(deletePatch));
@@ -713,7 +711,7 @@ namespace ao::gtk::layout::test
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK_FALSE(controller.pendingCustomMetadataUndo()->session.isCurrent());
 
@@ -727,13 +725,12 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_rejected_undo_test",
+    auto fixture = GtkRuntimeFixture{
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Rejected undo target"}); }};
-    auto sessionPtr =
-      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
     auto controller = TrackDetailUndoController{};
     std::size_t changedCount = 0;
     auto changedConnection = controller.signalChanged().connect([&changedCount] { ++changedCount; });
@@ -752,18 +749,18 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - publication may destroy the controller before undo settles", "[concurrency]")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{
-      "io.github.aobus.detail_undo_teardown_test",
+    auto fixture = GtkRuntimeFixture{
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Undo teardown target"}); }};
     auto& runtime = fixture.runtime();
     auto controllerPtr = std::make_unique<TrackDetailUndoController>();
-    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
     controllerPtr->presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
     bool controllerDestroyed = false;
     auto changedSubscription = runtime.library().changes().onChanged(
-      [&](rt::LibraryChangeSet const&)
+      [&controllerPtr, &controllerDestroyed](rt::LibraryChangeSet const&)
       {
         controllerPtr.reset();
         controllerDestroyed = true;
@@ -806,7 +803,7 @@ namespace ao::gtk::layout::test
 
     emitClicked(titleEditor->editButton());
     REQUIRE(titleEditor->isEditing());
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     drainGtkEvents();
 
     CHECK_FALSE(titleEditor->isEditing());
@@ -843,7 +840,7 @@ namespace ao::gtk::layout::test
     moodEditor->startEditing();
     REQUIRE(moodEditor->isEditing());
     moodEditor->entry().set_text("Dark");
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
 
     REQUIRE(tryPumpGtkEventsUntil([moodEditor] { return !moodEditor->isEditing(); }));
 
@@ -1048,23 +1045,24 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - an invalidated session cannot displace or resurrect an undo opportunity")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto trackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_offer_test",
-                                        [&trackId](library::MusicLibrary& musicLibrary)
-                                        { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {}); }};
+    auto fixture = GtkRuntimeFixture{[&trackId](library::MusicLibrary& musicLibrary)
+                                     { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {}); }};
     auto& runtime = fixture.runtime();
     auto undoController = TrackDetailUndoController{};
     std::size_t commitCounter = 0;
 
     auto const makeStaleSession = [&] -> TrackAuthoringSession
     {
-      auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+      auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
       auto patch = rt::MetadataPatch{};
       patch.customUpdates["Mood"] = std::string{"Committed by the older operation "} + std::to_string(commitCounter++);
       auto replyRes = runGtkTask(runtime, sessionPtr.submitMetadataAsync(patch));
       REQUIRE(replyRes);
       REQUIRE(replyRes->status == rt::AuthoringStatus::Applied);
-      REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+      REQUIRE(
+        runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
       REQUIRE_FALSE(sessionPtr.isCurrent());
       return sessionPtr;
     };
@@ -1074,7 +1072,7 @@ namespace ao::gtk::layout::test
       auto staleSession = makeStaleSession();
 
       auto currentSessionPtr =
-        ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+        ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
       undoController.presentCustomMetadataDeletedUndo("Mood", "Newer", std::move(currentSessionPtr));
       REQUIRE(undoController.pendingCustomMetadataUndo());
       CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
@@ -1089,7 +1087,7 @@ namespace ao::gtk::layout::test
       auto staleCreditSession = makeStaleSession();
 
       auto currentSessionPtr =
-        ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+        ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), std::array{trackId}));
       undoController.presentCustomMetadataDeletedUndo("Mood", "Newer", std::move(currentSessionPtr));
       REQUIRE(undoController.pendingCustomMetadataUndo());
       CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
@@ -1418,7 +1416,7 @@ namespace ao::gtk::layout::test
     auto tagEditCallbacks = TagEditController::Callbacks{};
     auto tagEditController = TagEditController{window,
                                                runtime.async(),
-                                               runtime.library(),
+                                               fixture.editing(),
                                                runtime.completion(),
                                                runtime.notifications(),
                                                runtime.textOrderingPolicy(),
@@ -1427,11 +1425,11 @@ namespace ao::gtk::layout::test
                                                themeCoordinator};
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{
-      window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
+      window, runtime, fixture.editing(), ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto pageHost = TrackPageHost{stack,
                                   runtime.async(),
-                                  runtime.library(),
+                                  fixture.editing(),
                                   runtime.playback(),
                                   runtime.views(),
                                   runtime.workspace(),
@@ -1458,6 +1456,7 @@ namespace ao::gtk::layout::test
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry,
                                               runtime,
+                                              fixture.editing(),
                                               ShellLayoutCollaborators{
                                                 .textCatalog = ao::test::englishMessageCatalog(),
                                                 .trackPageHost = &pageHost,

@@ -10,34 +10,56 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <string>
 #include <utility>
 
 namespace ao::rt::test
 {
   WorkspaceRuntimeFixture::WorkspaceRuntimeFixture()
-    : runtimePtr{makeStateOnlyRuntime(tempDir)}
-    , firstListId{createList("First")}
-    , secondListId{createList("Second")}
-    , thirdListId{createList("Third")}
-    , fourthListId{createList("Fourth")}
+    : _ownerPtr{makeStateOnlyRuntime(_tempDir)}
+    , _listIds{
+        .first = createList("First"),
+        .second = createList("Second"),
+        .third = createList("Third"),
+        .fourth = createList("Fourth"),
+      }
   {
   }
 
   AppRuntime& WorkspaceRuntimeFixture::runtime() const noexcept
   {
-    return *runtimePtr;
+    return _ownerPtr->runtime();
+  }
+
+  LibraryCommands& WorkspaceRuntimeFixture::commands() const noexcept
+  {
+    return _ownerPtr->libraryCommands();
+  }
+
+  LibraryJobs& WorkspaceRuntimeFixture::jobs() const noexcept
+  {
+    return _ownerPtr->libraryJobs();
+  }
+
+  WorkspaceListIds WorkspaceRuntimeFixture::listIds() const noexcept
+  {
+    return _listIds;
+  }
+
+  std::filesystem::path const& WorkspaceRuntimeFixture::tempPath() const
+  {
+    return _tempDir.path();
   }
 
   ListId WorkspaceRuntimeFixture::createList(std::string name) const
   {
     return ao::test::requireValue(
-      runRuntimeTask(runtime(), runtime().library().commands().createListAsync(ListDraft{.name = std::move(name)})));
+      runRuntimeTask(runtime(), commands().createListAsync(ListDraft{.name = std::move(name)})));
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)

@@ -19,9 +19,9 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
@@ -101,48 +101,50 @@ namespace ao::tui::test
     {
       ao::test::TempDir tempDir{};
       rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
+      std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr{
+        rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
+      rt::AppRuntime& runtime = runtimeOwnerPtr->runtime();
       std::size_t refreshCount = 0;
       std::size_t settledCount = 0;
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
-        return rt::test::addRuntimeTrack(*runtimePtr, spec);
+        return rt::test::addRuntimeTrack(*runtimeOwnerPtr, spec);
       }
 
       TrackEditController makeController()
       {
-        return TrackEditController{runtimePtr->async(),
-                                   runtimePtr->library(),
-                                   runtimePtr->notifications(),
+        return TrackEditController{runtime.async(),
+                                   uimodel::LibraryEditing{runtimeOwnerPtr->libraryCommands()},
+                                   runtime.notifications(),
                                    ao::test::englishMessageCatalog(),
                                    TrackEditController::Outputs{
                                      .requestRefresh = [this] { ++refreshCount; },
                                      .notifySubmittedWriteSettled = [this] { ++settledCount; },
                                    },
-                                   runtimePtr->completion(),
-                                   runtimePtr->textOrderingPolicy()};
+                                   runtime.completion(),
+                                   runtime.textOrderingPolicy()};
       }
 
       /// Commits an unrelated change, which invalidates every open binding.
       void commitUnrelatedChange() const
       {
         REQUIRE(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
+          runtime, runtimeOwnerPtr->libraryCommands().createListAsync(rt::ListDraft{.name = "Other"})));
       }
 
       std::string lastMessage() const
       {
-        auto const feed = runtimePtr->notifications().feed();
+        auto const feed = runtime.notifications().feed();
         REQUIRE_FALSE(feed.entries.empty());
         return std::get<std::string>(feed.entries.back().message);
       }
 
-      bool hasNotifications() const { return !runtimePtr->notifications().feed().entries.empty(); }
+      bool hasNotifications() const { return !runtime.notifications().feed().entries.empty(); }
 
       library::test::TrackSpec trackSpec(TrackId const trackId) const
       {
-        return rt::test::runtimeTrackSpec(*runtimePtr, trackId);
+        return rt::test::runtimeTrackSpec(runtime, trackId);
       }
     };
 
@@ -332,7 +334,7 @@ namespace ao::tui::test
     auto const id = fixture.addTrack({.title = "Present", .uri = "present.flac"});
     auto controller = fixture.makeController();
     auto const refreshCount = fixture.refreshCount;
-    auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
+    auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
 
     for (auto const scope : {std::bitset<library::kCreditKindCount>{},
                              uimodel::trackCreditScope(K::Conductor) | uimodel::trackCreditScope(K::Soloist)})
@@ -342,7 +344,7 @@ namespace ao::tui::test
       CHECK_FALSE(controller.isActive());
       CHECK_FALSE(controller.hasPendingSubmission());
       CHECK(fixture.refreshCount == refreshCount);
-      CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
+      CHECK(fixture.runtime.notifications().feed().entries.size() == notificationCount);
       CHECK(fixture.trackSpec(id).title == "Present");
     }
   }
@@ -356,7 +358,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
     CHECK_FALSE(controller.hasPendingSubmission());
     CHECK(fixture.refreshCount == 0);
-    REQUIRE(fixture.runtimePtr->notifications().feed().entries.size() == 1);
+    REQUIRE(fixture.runtime.notifications().feed().entries.size() == 1);
     CHECK(fixture.lastMessage() == "No track is selected");
   }
 
@@ -370,7 +372,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
     CHECK_FALSE(controller.hasPendingSubmission());
     CHECK(fixture.refreshCount == 0);
-    REQUIRE(fixture.runtimePtr->notifications().feed().entries.size() == 1);
+    REQUIRE(fixture.runtime.notifications().feed().entries.size() == 1);
     CHECK(fixture.lastMessage().starts_with("The complete selection could not be opened"));
     CHECK(fixture.trackSpec(id).title == "Present");
   }
@@ -388,7 +390,7 @@ namespace ao::tui::test
     REQUIRE(editor != nullptr);
     REQUIRE(editor->isDirty());
     auto const refreshCount = fixture.refreshCount;
-    auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
+    auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
 
     for (auto const scope : {uimodel::allTrackCreditKinds(),
                              uimodel::trackCreditScope(K::Soloist),
@@ -404,7 +406,7 @@ namespace ao::tui::test
       CHECK(editor->buildPatch().metadata.optAlbum == "Draft");
       CHECK_FALSE(controller.hasPendingSubmission());
       CHECK(fixture.refreshCount == refreshCount);
-      CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
+      CHECK(fixture.runtime.notifications().feed().entries.size() == notificationCount);
     }
 
     CHECK(fixture.trackSpec(first).album == "Old");

@@ -10,6 +10,7 @@
 #include <ao/library/Credits.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
@@ -36,7 +37,6 @@ namespace ao::async
 }
 namespace ao::rt
 {
-  class Library;
   class CompletionService;
   class NotificationService;
 }
@@ -56,7 +56,7 @@ namespace ao::gtk::layout
   {
   public:
     TrackCreditsEditor(async::Runtime& asyncRuntime,
-                       rt::Library& library,
+                       uimodel::LibraryEditing editing,
                        rt::CompletionService& completion,
                        rt::NotificationService& notifications,
                        i18n::MessageCatalog textCatalog,
@@ -118,11 +118,16 @@ namespace ao::gtk::layout
     Result<PreparedEdit> prepareEditing() const;
     void reportError(std::string const& message);
 
-    // Optional detail-only services; absent in a Properties child.
-    async::Runtime* _async = nullptr;
-    rt::Library* _library = nullptr;
+    struct DetailEditing final
+    {
+      async::Runtime& runtime;
+      uimodel::LibraryEditing editing;
+      rt::NotificationService& notifications;
+    };
+
+    // A Properties child stages changes in the parent form instead.
+    std::optional<DetailEditing> _optDetailEditing;
     rt::CompletionService& _completion;
-    rt::NotificationService* _notifications = nullptr;
     i18n::MessageCatalog _textCatalog;
     TrackDetailScope* _scope = nullptr;
     TrackDetailUndoController* _undo = nullptr;

@@ -49,7 +49,7 @@ namespace ao::gtk
       APP_LOG_WARN("Aobus caches no cover art this session: {}", cacheDirRes.error().message);
     }
 
-    auto runtimeRes = rt::AppRuntime::create(
+    auto runtimeRes = rt::AppRuntimeOwner::open(
       rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                  .musicRoot = std::move(paths.musicRoot),
                                  .databasePath = std::move(paths.databasePath),
@@ -64,25 +64,25 @@ namespace ao::gtk
       return makeError(runtimeRes.error().code, "Failed to open library: " + runtimeRes.error().message);
     }
 
-    auto appRuntimePtr = std::make_unique<rt::AppRuntime>(std::move(*runtimeRes));
-
-    for (auto& providerPtr : audio::createPlatformBackendProviders())
-    {
-      appRuntimePtr->addAudioProvider(std::move(providerPtr));
-    }
-
     struct WindowOwner final
     {
       // Reverse destruction retires the window, runtime, then the borrowed store.
       std::shared_ptr<AppConfigStore> configStorePtr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr;
+      rt::AppRuntimeOwner runtimeOwner;
       std::unique_ptr<MainWindow> windowPtr;
     };
 
-    auto mainWindowPtr = std::make_unique<MainWindow>(
-      *appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr);
-    auto ownerPtr =
-      std::make_shared<WindowOwner>(std::move(appConfigStorePtr), std::move(appRuntimePtr), std::move(mainWindowPtr));
+    auto ownerPtr = std::make_shared<WindowOwner>(std::move(appConfigStorePtr), std::move(*runtimeRes), nullptr);
+    auto& runtimeOwner = ownerPtr->runtimeOwner;
+    auto& runtime = runtimeOwner.runtime();
+
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      runtime.addAudioProvider(std::move(providerPtr));
+    }
+
+    ownerPtr->windowPtr = std::make_unique<MainWindow>(
+      runtimeOwner, ownerPtr->configStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr);
     // RefPtr aliases shared_ptr. Own the unmanaged C++ wrapper, not merely a
     // GObject reference: C finalization alone does not destroy its observers.
     auto windowPtr = Glib::RefPtr<MainWindow>{ownerPtr, ownerPtr->windowPtr.get()};

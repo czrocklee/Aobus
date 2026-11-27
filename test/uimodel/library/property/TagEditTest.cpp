@@ -32,7 +32,7 @@ namespace ao::uimodel::test
   {
     TrackAuthoringSession beginSession(TrackAuthoringFixture& fixture, std::span<TrackId const> trackIds)
     {
-      auto res = TrackAuthoringSession::begin(fixture.library(), trackIds);
+      auto res = TrackAuthoringSession::begin(fixture.editing(), trackIds);
       REQUIRE(res);
       return std::move(*res);
     }
@@ -67,7 +67,7 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = fixture.library().snapshot();
-      auto boundRes = TrackAuthoringSession::begin(fixture.library(), ids, snapshot);
+      auto boundRes = TrackAuthoringSession::begin(fixture.editing(), ids, snapshot);
       REQUIRE(boundRes);
       baseline = snapshot.selectionTags(boundRes->targetIds());
       return std::move(*boundRes);
@@ -138,7 +138,7 @@ namespace ao::uimodel::test
     SECTION("an intervening commit reports the edit as stale")
     {
       auto session = beginSession(fixture, std::array{trackId});
-      REQUIRE(fixture.runTask(fixture.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+      REQUIRE(fixture.runTask(fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
 
       auto const res = fixture.runTask(applyTagEditAsync(session, textCatalog, {"Tag1"}, {}));
 
@@ -151,7 +151,7 @@ namespace ao::uimodel::test
     SECTION("closed runtime authoring reports the edit as unavailable")
     {
       auto session = beginSession(fixture, std::array{trackId});
-      fixture.library().beginClosing();
+      fixture.beginClosing();
 
       auto const res = fixture.runTask(applyTagEditAsync(session, textCatalog, {"Tag1"}, {}));
 
@@ -180,7 +180,7 @@ namespace ao::uimodel::test
       auto session = beginSession(fixture, std::array{trackId});
       auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto createFuture = fixture.runtime().spawn(rt::test::flagCompletionAsync(
-        createCompletedPtr, fixture.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+        createCompletedPtr, fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
       REQUIRE(fixture.executor().tryWaitUntilQueued());
 
       auto editCompletedPtr = std::make_shared<std::atomic_bool>(false);

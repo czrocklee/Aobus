@@ -126,7 +126,7 @@ namespace ao::rt
   } // namespace
 
   PlaybackSessionPersistence::PlaybackSessionPersistence(ConfigStore& config,
-                                                         Library& library,
+                                                         Library const& library,
                                                          PlaybackSuccession& succession,
                                                          PlaybackTransport& playbackTransport,
                                                          PlaybackService& playback,

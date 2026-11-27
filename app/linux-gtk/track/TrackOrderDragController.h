@@ -21,13 +21,17 @@ namespace Gtk
 
 namespace ao::rt
 {
-  class Library;
   class ViewService;
 }
 
 namespace ao::async
 {
   class Runtime;
+}
+
+namespace ao::uimodel
+{
+  class LibraryEditing;
 }
 
 namespace ao::gtk
@@ -47,7 +51,7 @@ namespace ao::gtk
     };
 
     TrackOrderDragController(async::Runtime& asyncRuntime,
-                             rt::Library& library,
+                             uimodel::LibraryEditing editing,
                              rt::ViewService& views,
                              rt::ViewId viewId,
                              i18n::MessageCatalog const& textCatalog,

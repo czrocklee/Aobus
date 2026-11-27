@@ -65,13 +65,13 @@ namespace ao::gtk::test
 {
   namespace
   {
-    ListId createList(rt::AppRuntime& runtime,
+    ListId createList(GtkRuntimeFixture& fixture,
                       std::string const& name,
                       ListId parentId = kInvalidListId,
                       std::string expression = {})
     {
-      return ao::test::requireValue(runGtkTask(runtime,
-                                               uimodel::saveListAsync(&runtime.library(),
+      return ao::test::requireValue(runGtkTask(fixture.runtime(),
+                                               uimodel::saveListAsync(fixture.editing(),
                                                                       rt::ListDraft{
                                                                         .parentId = parentId,
                                                                         .name = name,
@@ -79,9 +79,9 @@ namespace ao::gtk::test
                                                                       })));
     }
 
-    void deleteList(rt::AppRuntime& runtime, ListId const listId)
+    void deleteList(GtkRuntimeFixture& fixture, ListId const listId)
     {
-      REQUIRE(runGtkTask(runtime, uimodel::deleteListAsync(&runtime.library(), listId, false)));
+      REQUIRE(runGtkTask(fixture.runtime(), uimodel::deleteListAsync(fixture.editing(), listId, false)));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -189,6 +189,7 @@ namespace ao::gtk::test
       ListNavigationController controller{
         window,
         runtimeFixture.runtime(),
+        runtimeFixture.editing(),
         ao::test::englishMessageCatalog(),
         {.onListSelected =
            [this](ListId id)
@@ -275,7 +276,7 @@ namespace ao::gtk::test
   {
     auto state = NavigationFixture{};
 
-    auto const testListId = createList(state.runtimeFixture.runtime(), "Select Target");
+    auto const testListId = createList(state.runtimeFixture, "Select Target");
 
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
@@ -292,7 +293,7 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree selects the active workspace list restored before the navigation model exists")
     {
-      auto const restoredListId = createList(state.runtimeFixture.runtime(), "Restored Selection");
+      auto const restoredListId = createList(state.runtimeFixture, "Restored Selection");
       REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = restoredListId}));
       drainGtkEvents();
 
@@ -325,8 +326,8 @@ namespace ao::gtk::test
     {
       auto state = NavigationFixture{};
 
-      auto const parentId = createList(state.runtimeFixture.runtime(), "Collapsed Parent");
-      auto const childId = createList(state.runtimeFixture.runtime(), "Nested Child", parentId);
+      auto const parentId = createList(state.runtimeFixture, "Collapsed Parent");
+      auto const childId = createList(state.runtimeFixture, "Nested Child", parentId);
 
       auto groupPtr = Gio::SimpleActionGroup::create();
       auto registration = state.controller.addActionsTo(*groupPtr);
@@ -362,10 +363,10 @@ namespace ao::gtk::test
     {
       auto state = NavigationFixture{};
 
-      auto const firstParentId = createList(state.runtimeFixture.runtime(), "First Parent");
-      auto const firstChildId = createList(state.runtimeFixture.runtime(), "First Child", firstParentId);
-      auto const secondParentId = createList(state.runtimeFixture.runtime(), "Second Parent");
-      auto const secondChildId = createList(state.runtimeFixture.runtime(), "Second Child", secondParentId);
+      auto const firstParentId = createList(state.runtimeFixture, "First Parent");
+      auto const firstChildId = createList(state.runtimeFixture, "First Child", firstParentId);
+      auto const secondParentId = createList(state.runtimeFixture, "Second Parent");
+      auto const secondChildId = createList(state.runtimeFixture, "Second Child", secondParentId);
 
       state.controller.rebuildTree(state.cache);
       drainGtkEvents();
@@ -390,9 +391,9 @@ namespace ao::gtk::test
     SECTION("workspace sync stays silent when ancestor expansion inserts rows above the selection")
     {
       auto state = NavigationFixture{};
-      auto const parentId = createList(state.runtimeFixture.runtime(), "Upper Parent");
-      auto const childId = createList(state.runtimeFixture.runtime(), "Upper Child", parentId);
-      auto const lowerRootId = createList(state.runtimeFixture.runtime(), "Lower Root");
+      auto const parentId = createList(state.runtimeFixture, "Upper Parent");
+      auto const childId = createList(state.runtimeFixture, "Upper Child", parentId);
+      auto const lowerRootId = createList(state.runtimeFixture, "Lower Root");
       state.controller.rebuildTree(state.cache);
       REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = lowerRootId}));
       drainGtkEvents();
@@ -423,9 +424,9 @@ namespace ao::gtk::test
     {
       auto state = NavigationFixture{};
 
-      auto const parentId = createList(state.runtimeFixture.runtime(), "Expanded Ancestor");
-      auto const childId = createList(state.runtimeFixture.runtime(), "Mid Collapsed Ancestor", parentId);
-      auto const grandchildId = createList(state.runtimeFixture.runtime(), "Deep Focus", childId);
+      auto const parentId = createList(state.runtimeFixture, "Expanded Ancestor");
+      auto const childId = createList(state.runtimeFixture, "Mid Collapsed Ancestor", parentId);
+      auto const grandchildId = createList(state.runtimeFixture, "Deep Focus", childId);
 
       state.controller.rebuildTree(state.cache);
       drainGtkEvents();
@@ -472,7 +473,7 @@ namespace ao::gtk::test
     CHECK_FALSE(deleteActionPtr->get_enabled());
     CHECK_FALSE(deleteSubtreeActionPtr->get_enabled());
 
-    auto const leafListId = createList(state.runtimeFixture.runtime(), "Leaf List");
+    auto const leafListId = createList(state.runtimeFixture, "Leaf List");
 
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
@@ -565,8 +566,8 @@ namespace ao::gtk::test
     REQUIRE(create->get_sensitive());
 
     // The writer would accept the rejected draft: the inherited diagnostic is a preview gate.
-    auto const previewRes =
-      runGtkTask(runtime, runtime.library().commands().previewCreateListAsync(std::move(rejectedDraft)));
+    auto const previewRes = runGtkTask(
+      runtime, state.runtimeFixture.owner().libraryCommands().previewCreateListAsync(std::move(rejectedDraft)));
     REQUIRE(previewRes);
     REQUIRE(findAppDialogByTitle("New List") == dialog);
     CHECK(dialog->get_visible());
@@ -600,8 +601,8 @@ namespace ao::gtk::test
   {
     auto state = NavigationFixture{};
 
-    auto const activeListId = createList(state.runtimeFixture.runtime(), "Active List");
-    auto const browsedListId = createList(state.runtimeFixture.runtime(), "Browsed List");
+    auto const activeListId = createList(state.runtimeFixture, "Active List");
+    auto const browsedListId = createList(state.runtimeFixture, "Browsed List");
     state.controller.rebuildTree(state.cache);
     REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = activeListId}));
     drainGtkEvents();
@@ -676,8 +677,8 @@ namespace ao::gtk::test
 
     SECTION("a newer successful selection supersedes an earlier failed one")
     {
-      auto const rejectedListId = createList(state.runtimeFixture.runtime(), "Rejected Target");
-      auto const acceptedListId = createList(state.runtimeFixture.runtime(), "Accepted Target");
+      auto const rejectedListId = createList(state.runtimeFixture, "Rejected Target");
+      auto const acceptedListId = createList(state.runtimeFixture, "Accepted Target");
 
       state.controller.rebuildTree(state.cache);
       drainGtkEvents();
@@ -703,8 +704,8 @@ namespace ao::gtk::test
 
     SECTION("an authoritative workspace selection supersedes an earlier failed one")
     {
-      auto const rejectedListId = createList(state.runtimeFixture.runtime(), "Rejected Target");
-      auto const navigatedListId = createList(state.runtimeFixture.runtime(), "Navigated Target");
+      auto const rejectedListId = createList(state.runtimeFixture, "Rejected Target");
+      auto const navigatedListId = createList(state.runtimeFixture, "Navigated Target");
 
       state.controller.rebuildTree(state.cache);
       drainGtkEvents();
@@ -733,7 +734,7 @@ namespace ao::gtk::test
 
     SECTION("closing the last workspace view discards an earlier failed selection")
     {
-      auto const rejectedListId = createList(state.runtimeFixture.runtime(), "Rejected Target");
+      auto const rejectedListId = createList(state.runtimeFixture, "Rejected Target");
       auto const activeViewId =
         ao::test::requireValue(state.runtimeFixture.runtime().workspace().navigate({.target = rt::kAllTracksListId}));
       state.controller.rebuildTree(state.cache);
@@ -761,7 +762,7 @@ namespace ao::gtk::test
   TEST_CASE("ListNavigationController - edit saves the seeded presentation preference unchanged")
   {
     auto state = NavigationFixture{};
-    auto const listId = createList(state.runtimeFixture.runtime(), "Seeded Name");
+    auto const listId = createList(state.runtimeFixture, "Seeded Name");
     auto groupPtr = Gio::SimpleActionGroup::create();
     auto registration = state.controller.addActionsTo(*groupPtr);
     auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
@@ -848,7 +849,7 @@ namespace ao::gtk::test
   {
     auto state = NavigationFixture{};
 
-    auto const listId = createList(state.runtimeFixture.runtime(), "Old Name");
+    auto const listId = createList(state.runtimeFixture, "Old Name");
     auto groupPtr = Gio::SimpleActionGroup::create();
     auto registration = state.controller.addActionsTo(*groupPtr);
     auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
@@ -888,7 +889,7 @@ namespace ao::gtk::test
     auto registration = state.controller.addActionsTo(*groupPtr);
     auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
     REQUIRE(editActionPtr);
-    auto const listId = createList(state.runtimeFixture.runtime(), "Draft to Preserve");
+    auto const listId = createList(state.runtimeFixture, "Draft to Preserve");
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
     state.controller.select(listId);
@@ -904,7 +905,7 @@ namespace ao::gtk::test
     auto* const saveButton = findButtonByLabel(*dialog, "Save");
     REQUIRE(errorLabel != nullptr);
     REQUIRE(saveButton != nullptr);
-    deleteList(state.runtimeFixture.runtime(), listId);
+    deleteList(state.runtimeFixture, listId);
     REQUIRE(saveButton->get_sensitive());
 
     auto const missingListError = [&]
@@ -952,7 +953,7 @@ namespace ao::gtk::test
     REQUIRE(deleteActionPtr);
 
     auto& runtime = state.runtimeFixture.runtime();
-    auto const listId = createList(state.runtimeFixture.runtime(), "Delete Target");
+    auto const listId = createList(state.runtimeFixture, "Delete Target");
 
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
@@ -999,9 +1000,9 @@ namespace ao::gtk::test
     REQUIRE(deleteSubtreeActionPtr);
 
     auto& runtime = state.runtimeFixture.runtime();
-    auto const parentId = createList(state.runtimeFixture.runtime(), "Delete Tree");
-    auto const childId = createList(state.runtimeFixture.runtime(), "Delete Child", parentId);
-    auto const grandchildId = createList(state.runtimeFixture.runtime(), "Delete Grandchild", childId);
+    auto const parentId = createList(state.runtimeFixture, "Delete Tree");
+    auto const childId = createList(state.runtimeFixture, "Delete Child", parentId);
+    auto const grandchildId = createList(state.runtimeFixture, "Delete Grandchild", childId);
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
     state.controller.select(parentId);
@@ -1048,14 +1049,14 @@ namespace ao::gtk::test
     auto registration = state.controller.addActionsTo(*groupPtr);
     auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
     REQUIRE(deleteActionPtr);
-    auto const listId = createList(state.runtimeFixture.runtime(), "Stale Delete Target");
+    auto const listId = createList(state.runtimeFixture, "Stale Delete Target");
     state.controller.rebuildTree(state.cache);
     drainGtkEvents();
     state.controller.select(listId);
     drainGtkEvents();
     REQUIRE(state.selectedId == listId);
     REQUIRE(selectedNavigationListId(state.controller) == listId);
-    deleteList(state.runtimeFixture.runtime(), listId);
+    deleteList(state.runtimeFixture, listId);
 
     deleteActionPtr->activate();
 
@@ -1085,8 +1086,8 @@ namespace ao::gtk::test
 
     {
       auto themeCoordinator = ThemeCoordinator{};
-      auto controller =
-        ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+      auto controller = ListNavigationController{
+        window, fixture.runtime(), fixture.editing(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
       auto widgetRetirement = retireNavigationWidgets(window);
       auto registration = controller.addActionsTo(*actionGroupPtr);
       retainedActionPtr = simpleAction(*actionGroupPtr, "list-new-smart-list");
@@ -1120,8 +1121,8 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller =
-      ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = ListNavigationController{
+      window, fixture.runtime(), fixture.editing(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
     window.set_child(controller.widget());
     auto widgetRetirement = retireNavigationWidgets(window);
 
@@ -1170,15 +1171,15 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller =
-      ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = ListNavigationController{
+      window, fixture.runtime(), fixture.editing(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
     window.set_child(controller.widget());
     auto widgetRetirement = retireNavigationWidgets(window);
     auto groupPtr = Gio::SimpleActionGroup::create();
     auto registration = controller.addActionsTo(*groupPtr);
     auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
     REQUIRE(deleteActionPtr);
-    auto const listId = createList(fixture.runtime(), "Road Trip", kInvalidListId, R"(#"road-trip")");
+    auto const listId = createList(fixture, "Road Trip", kInvalidListId, R"(#"road-trip")");
 
     controller.rebuildTree(cache);
     drainGtkEvents();
@@ -1213,7 +1214,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto const listId = createList(fixture.runtime(), "Retired Selection Source");
+    auto const listId = createList(fixture, "Retired Selection Source");
     auto selectedIds = std::vector<ListId>{};
     auto panel = ListNavigationPanel{
       ao::test::englishMessageCatalog(),
@@ -1281,12 +1282,12 @@ namespace ao::gtk::test
     host.present();
     CHECK(visibleSeparatorCount() == 0);
 
-    auto const listId = createList(fixture.runtime(), "Separated List");
+    auto const listId = createList(fixture, "Separated List");
     panel.rebuildTree(fixture.runtime().library());
     host.drain();
     CHECK(visibleSeparatorCount() == 1);
 
-    deleteList(fixture.runtime(), listId);
+    deleteList(fixture, listId);
     panel.rebuildTree(fixture.runtime().library());
     host.drain();
     CHECK(visibleSeparatorCount() == 0);

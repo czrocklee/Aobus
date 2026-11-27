@@ -10,6 +10,7 @@
 #include "i18n/GtkText.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -22,6 +23,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -99,17 +101,15 @@ namespace ao::gtk::layout
   };
 
   TrackCreditsEditor::TrackCreditsEditor(async::Runtime& asyncRuntime,
-                                         rt::Library& library,
+                                         uimodel::LibraryEditing editing,
                                          rt::CompletionService& completion,
                                          rt::NotificationService& notifications,
                                          i18n::MessageCatalog textCatalog,
                                          TrackDetailScope* scope,
                                          TrackDetailUndoController* undo)
     : Gtk::Widget{}
-    , _async{&asyncRuntime}
-    , _library{&library}
+    , _optDetailEditing{DetailEditing{.runtime = asyncRuntime, .editing = editing, .notifications = notifications}}
     , _completion{completion}
-    , _notifications{&notifications}
     , _textCatalog{std::move(textCatalog)}
     , _scope{scope}
     , _undo{undo}
@@ -346,8 +346,10 @@ namespace ao::gtk::layout
 
   Result<TrackCreditsEditor::PreparedEdit> TrackCreditsEditor::prepareEditing() const
   {
-    auto snapshot = _library->snapshot();
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(*_library, _snapshot.trackIds, snapshot);
+    AO_EXPECTS(_optDetailEditing);
+    auto const& editing = _optDetailEditing.value().editing;
+    auto snapshot = editing.library().snapshot();
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(editing, _snapshot.trackIds, snapshot);
 
     if (!sessionRes)
     {
@@ -518,6 +520,8 @@ namespace ao::gtk::layout
       return;
     }
 
+    AO_EXPECTS(_optDetailEditing);
+    auto const& detailEditing = _optDetailEditing.value();
     auto& boundSession = *_optSession;
     auto const kinds = draft().scope();
     auto const generation = _generation;
@@ -530,12 +534,13 @@ namespace ao::gtk::layout
     _submitting = true;
     refreshValidation();
     spawnUiTask(
-      *_async,
+      detailEditing.runtime,
       _tasks,
       *this,
       "credits update",
       std::move(submission),
-      [generation,
+      [&notifications = detailEditing.notifications,
+       generation,
        kinds,
        trackIds = std::move(trackIds),
        optUndoEntries = std::move(optUndoEntries),
@@ -557,9 +562,9 @@ namespace ao::gtk::layout
         if (replyRes && replyRes->status == rt::AuthoringStatus::Busy)
         {
           owner->setSession(std::move(session));
-          owner->_notifications->post(rt::NotificationSeverity::Warning,
-                                      gtkText(owner->_textCatalog, MessageId::LibraryBusyTryAgain),
-                                      rt::NotificationLifetime::transient());
+          notifications.post(rt::NotificationSeverity::Warning,
+                             gtkText(owner->_textCatalog, MessageId::LibraryBusyTryAgain),
+                             rt::NotificationLifetime::transient());
           owner->refreshValidation();
           return;
         }
@@ -946,9 +951,10 @@ namespace ao::gtk::layout
 
   void TrackCreditsEditor::reportError(std::string const& message)
   {
-    if (_notifications != nullptr)
+    if (_optDetailEditing)
     {
-      _notifications->post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
+      _optDetailEditing->notifications.post(
+        rt::NotificationSeverity::Error, message, rt::NotificationLifetime::history());
     }
     else
     {

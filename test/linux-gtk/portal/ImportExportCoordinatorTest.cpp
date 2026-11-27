@@ -60,7 +60,7 @@ namespace ao::gtk::test
       auto const full = gtkText(textCatalog, i18n::MessageId::LibraryExportModeFull);
       auto coordinator = portal::ImportExportCoordinator{parent,
                                                          runtime.async(),
-                                                         runtime.library(),
+                                                         fixture.owner().libraryJobs(),
                                                          runtime.notifications(),
                                                          textCatalog,
                                                          portal::ImportExportCallbacks{},
@@ -138,7 +138,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto coordinator = portal::ImportExportCoordinator{parent,
                                                        runtime.async(),
-                                                       runtime.library(),
+                                                       fixture.owner().libraryJobs(),
                                                        runtime.notifications(),
                                                        ao::test::englishMessageCatalog(),
                                                        callbacks,
@@ -176,7 +176,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto coordinator = portal::ImportExportCoordinator{parent,
                                                        runtime.async(),
-                                                       runtime.library(),
+                                                       fixture.owner().libraryJobs(),
                                                        runtime.notifications(),
                                                        ao::test::englishMessageCatalog(),
                                                        portal::ImportExportCallbacks{},
@@ -220,7 +220,7 @@ library:
     auto& runtime = fixture.runtime();
     auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(parent,
                                                                             runtime.async(),
-                                                                            runtime.library(),
+                                                                            fixture.owner().libraryJobs(),
                                                                             runtime.notifications(),
                                                                             ao::test::englishMessageCatalog(),
                                                                             portal::ImportExportCallbacks{},

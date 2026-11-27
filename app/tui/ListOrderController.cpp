@@ -14,8 +14,8 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
@@ -31,7 +31,7 @@ namespace ao::tui
   struct ListOrderController::State final
   {
     async::Runtime& runtime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::ViewService& views;
     rt::NotificationService& notifications;
     i18n::MessageCatalog const& textCatalog;
@@ -133,13 +133,13 @@ namespace ao::tui
   };
 
   ListOrderController::ListOrderController(async::Runtime& runtime,
-                                           rt::Library& library,
+                                           uimodel::LibraryEditing editing,
                                            rt::ViewService& views,
                                            rt::NotificationService& notifications,
                                            i18n::MessageCatalog const& textCatalog)
     : _statePtr{std::make_shared<State>(State{
         .runtime = runtime,
-        .library = library,
+        .editing = editing,
         .views = views,
         .notifications = notifications,
         .textCatalog = textCatalog,
@@ -165,7 +165,7 @@ namespace ao::tui
       return;
     }
 
-    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(state.library, state.views, viewId, state.textCatalog);
+    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(state.editing, state.views, viewId, state.textCatalog);
 
     if (!sessionRes)
     {

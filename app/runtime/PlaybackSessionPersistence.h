@@ -30,7 +30,7 @@ namespace ao::rt
   {
   public:
     PlaybackSessionPersistence(ConfigStore& config,
-                               Library& library,
+                               Library const& library,
                                PlaybackSuccession& succession,
                                PlaybackTransport& playbackTransport,
                                PlaybackService& playback,
@@ -80,7 +80,7 @@ namespace ao::rt
                                                        std::stop_token stopToken);
 
     ConfigStore& _config;
-    Library& _library;
+    Library const& _library;
     utility::UuidBytes _libraryId{};
     PlaybackSuccession& _succession;
     PlaybackTransport& _playbackTransport;

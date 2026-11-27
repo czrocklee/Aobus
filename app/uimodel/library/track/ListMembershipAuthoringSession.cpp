@@ -15,6 +15,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <algorithm>
@@ -264,11 +265,12 @@ namespace ao::uimodel
     {
       if (operation == ListMembershipOperation::Add)
       {
-        return finishEditAsync(std::move(statePtr),
-                               listId,
-                               operation,
-                               [](State& state, ListId const targetListId)
-                               { return state.library.commands().addTracksToListAsync(targetListId, state.targets); });
+        return finishEditAsync(
+          std::move(statePtr),
+          listId,
+          operation,
+          [](State& state, ListId const targetListId)
+          { return state.editing._commands.get().addTracksToListAsync(targetListId, state.targets); });
       }
 
       return finishEditAsync(
@@ -276,10 +278,10 @@ namespace ao::uimodel
         listId,
         operation,
         [](State& state, ListId const targetListId)
-        { return state.library.commands().removeTracksFromListAsync(targetListId, state.targets); });
+        { return state.editing._commands.get().removeTracksFromListAsync(targetListId, state.targets); });
     }
 
-    rt::Library& library;
+    LibraryEditing editing;
     rt::BoundTrackTargets targets;
     bool submitting = false;
   };
@@ -317,10 +319,10 @@ namespace ao::uimodel
     return notification;
   }
 
-  Result<ListMembershipAuthoringSession> ListMembershipAuthoringSession::begin(rt::Library& library,
+  Result<ListMembershipAuthoringSession> ListMembershipAuthoringSession::begin(LibraryEditing const editing,
                                                                                std::span<TrackId const> const trackIds)
   {
-    auto targetsRes = library.bindTrackTargets(trackIds);
+    auto targetsRes = editing.library().bindTrackTargets(trackIds);
 
     if (!targetsRes)
     {
@@ -328,7 +330,7 @@ namespace ao::uimodel
     }
 
     return ListMembershipAuthoringSession{
-      std::make_shared<State>(State{.library = library, .targets = std::move(*targetsRes)})};
+      std::make_shared<State>(State{.editing = editing, .targets = std::move(*targetsRes)})};
   }
 
   ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::shared_ptr<State> statePtr)

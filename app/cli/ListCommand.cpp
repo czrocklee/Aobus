@@ -462,7 +462,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const res = cli.runTask(cli.library().commands().previewCreateListAsync(draft));
+        auto const res = cli.runTask(cli.core().libraryCommands().previewCreateListAsync(draft));
 
         if (!res)
         {
@@ -473,7 +473,7 @@ namespace ao::cli
         return;
       }
 
-      auto const res = cli.runTask(cli.library().commands().createListAsync(draft));
+      auto const res = cli.runTask(cli.core().libraryCommands().createListAsync(draft));
 
       if (!res)
       {
@@ -541,8 +541,8 @@ namespace ao::cli
         draft.parentId = ListId{*optParent};
       }
 
-      auto const res = cli.runTask(dryRun ? cli.library().commands().previewUpdateListAsync(draft)
-                                          : cli.library().commands().updateListAsync(draft));
+      auto const res = cli.runTask(dryRun ? cli.core().libraryCommands().previewUpdateListAsync(draft)
+                                          : cli.core().libraryCommands().updateListAsync(draft));
 
       if (!res)
       {
@@ -724,7 +724,7 @@ namespace ao::cli
       {
         if (add)
         {
-          auto res = cli.runTask(cli.library().commands().previewAddTracksToListAsync(listId, targets));
+          auto res = cli.runTask(cli.core().libraryCommands().previewAddTracksToListAsync(listId, targets));
 
           if (!res)
           {
@@ -745,7 +745,7 @@ namespace ao::cli
           return;
         }
 
-        auto res = cli.runTask(cli.library().commands().previewRemoveTracksFromListAsync(listId, targets));
+        auto res = cli.runTask(cli.core().libraryCommands().previewRemoveTracksFromListAsync(listId, targets));
 
         if (!res)
         {
@@ -777,7 +777,7 @@ namespace ao::cli
 
       if (add)
       {
-        auto res = cli.runTask(cli.library().commands().addTracksToListAsync(listId, *bindingRes));
+        auto res = cli.runTask(cli.core().libraryCommands().addTracksToListAsync(listId, *bindingRes));
 
         if (!res)
         {
@@ -807,7 +807,7 @@ namespace ao::cli
         return;
       }
 
-      auto res = cli.runTask(cli.library().commands().removeTracksFromListAsync(listId, *bindingRes));
+      auto res = cli.runTask(cli.core().libraryCommands().removeTracksFromListAsync(listId, *bindingRes));
 
       if (!res)
       {
@@ -889,7 +889,8 @@ namespace ao::cli
       auto const selectedTrackIds = trackIds(rawTrackIds);
       auto const optBeforeTrackId = optRawBeforeTrackId ? std::optional{TrackId{*optRawBeforeTrackId}} : std::nullopt;
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto res = cli.runTask(cli.library().commands().moveListOrderAsync(binding, selectedTrackIds, optBeforeTrackId));
+      auto res =
+        cli.runTask(cli.core().libraryCommands().moveListOrderAsync(binding, selectedTrackIds, optBeforeTrackId));
 
       if (!res)
       {
@@ -910,7 +911,7 @@ namespace ao::cli
     void resetListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto res = cli.runTask(cli.library().commands().resetListOrderAsync(binding));
+      auto res = cli.runTask(cli.core().libraryCommands().resetListOrderAsync(binding));
 
       if (!res)
       {
@@ -930,7 +931,7 @@ namespace ao::cli
     void forgetHiddenListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto res = cli.runTask(cli.library().commands().forgetHiddenListOrderAsync(binding));
+      auto res = cli.runTask(cli.core().libraryCommands().forgetHiddenListOrderAsync(binding));
 
       if (!res)
       {
@@ -1119,8 +1120,9 @@ namespace ao::cli
 
         if (deleteDescendants->count() > 0)
         {
-          auto const res = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAndDescendantsAsync(listId)
-                                              : cli.library().commands().deleteListAndDescendantsAsync(listId));
+          auto const res =
+            cli.runTask(dryRun ? cli.core().libraryCommands().previewDeleteListAndDescendantsAsync(listId)
+                               : cli.core().libraryCommands().deleteListAndDescendantsAsync(listId));
 
           if (!res)
           {
@@ -1131,8 +1133,8 @@ namespace ao::cli
           return;
         }
 
-        auto const res = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAsync(listId)
-                                            : cli.library().commands().deleteListAsync(listId));
+        auto const res = cli.runTask(dryRun ? cli.core().libraryCommands().previewDeleteListAsync(listId)
+                                            : cli.core().libraryCommands().deleteListAsync(listId));
 
         if (!res)
         {

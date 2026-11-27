@@ -226,7 +226,7 @@ namespace ao::rt::test
     }
 
     void measurePrimary(CreditsFixture& fixture,
-                        Library& library,
+                        Library const& library,
                         std::span<library::Credit const> const entries,
                         std::string const& dataset,
                         std::vector<Measurement>& measurements,

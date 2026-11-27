@@ -3,6 +3,7 @@
 
 #include <ao/rt/CoreRuntime.h>
 
+#include "library/LibraryOwner.h"
 #include "resource/ResourceByteReader.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -12,6 +13,7 @@
 #include <ao/async/Task.h>
 #include <ao/library/LibrarySchemaPolicy.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
@@ -47,7 +49,7 @@ namespace ao::rt
     async::Runtime asyncRuntime;
     library::MusicLibrary musicLibrary;
     LibraryChanges libraryChanges;
-    std::optional<Library> optLibrary;
+    std::optional<LibraryOwner> optLibrary;
     CompletionService completionService;
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
@@ -82,6 +84,12 @@ namespace ao::rt
     Impl& operator=(Impl&&) = delete;
 
     ~Impl() { shutdown(); }
+
+    LibraryOwner& libraryOwner() noexcept
+    {
+      AO_INVARIANT(optLibrary, "Core runtime library is not initialized");
+      return *optLibrary;
+    }
 
     void shutdown() noexcept
     {
@@ -138,14 +146,14 @@ namespace ao::rt
                                           sleeper,
                                           textOrderingPolicy,
                                           completionAliasPolicy);
-    auto preparedLibraryRes = Library::prepare(implPtr->musicLibrary);
+    auto writerRes = library::WritableMusicLibrary::acquire(implPtr->musicLibrary);
 
-    if (!preparedLibraryRes)
+    if (!writerRes)
     {
-      return std::unexpected{preparedLibraryRes.error()};
+      return std::unexpected{writerRes.error()};
     }
 
-    implPtr->optLibrary.emplace(implPtr->asyncRuntime, std::move(*preparedLibraryRes), implPtr->libraryChanges);
+    implPtr->optLibrary.emplace(implPtr->asyncRuntime, std::move(*writerRes), implPtr->libraryChanges);
     implPtr->trackSourceCache.reloadAllTracks();
     return CoreRuntime{std::move(implPtr)};
   }
@@ -172,14 +180,17 @@ namespace ao::rt
 
   Library const& CoreRuntime::library() const noexcept
   {
-    AO_INVARIANT(_implPtr->optLibrary, "Core runtime library is not initialized");
-    return _implPtr->optLibrary.value();
+    return _implPtr->libraryOwner().library();
   }
 
-  Library& CoreRuntime::library() noexcept
+  LibraryCommands& CoreRuntime::libraryCommands() noexcept
   {
-    AO_INVARIANT(_implPtr->optLibrary, "Core runtime library is not initialized");
-    return _implPtr->optLibrary.value();
+    return _implPtr->libraryOwner().libraryCommands();
+  }
+
+  LibraryJobs& CoreRuntime::libraryJobs() noexcept
+  {
+    return _implPtr->libraryOwner().libraryJobs();
   }
 
   std::filesystem::path const& CoreRuntime::musicRoot() const noexcept

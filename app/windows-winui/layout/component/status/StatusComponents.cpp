@@ -20,7 +20,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -108,7 +107,7 @@ namespace ao::winui::layout
     public:
       ActivityStatusComponent(ResourceDictionary const& resources,
                               rt::NotificationService& notifications,
-                              rt::LibraryJobs& libraryJobs,
+                              rt::LibraryJobs const& libraryJobs,
                               i18n::MessageCatalog const& textCatalog)
       {
         for (std::int32_t index = 0; index < 2; ++index)
@@ -395,7 +394,8 @@ namespace ao::winui::layout
   void registerStatusComponents(ComponentRegistry& registry,
                                 rt::ViewService& views,
                                 rt::NotificationService& notifications,
-                                rt::Library& library,
+                                rt::LibraryJobs const& libraryJobs,
+                                rt::LibraryChanges const& changes,
                                 TrackListController& trackList,
                                 i18n::MessageCatalog textCatalog,
                                 async::Signal<ShellState>& shellStateChanged,
@@ -403,7 +403,7 @@ namespace ao::winui::layout
   {
     registry.registerComponent(
       "status.activity",
-      [&notifications, &libraryJobs = library.jobs(), textCatalog](
+      [&notifications, &libraryJobs, textCatalog](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
       { return std::make_unique<ActivityStatusComponent>(ctx.resources, notifications, libraryJobs, textCatalog); });
 
@@ -418,7 +418,7 @@ namespace ao::winui::layout
 
     registry.registerComponent(
       "status.selectionInfo",
-      [&trackList, &views, &changes = library.changes(), textCatalog, &shellStateChanged](
+      [&trackList, &views, &changes, textCatalog, &shellStateChanged](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
       {
         return std::make_unique<SelectionInfoComponent>(

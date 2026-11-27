@@ -8,16 +8,12 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
-
-namespace ao::rt
-{
-  class Library;
-}
 
 namespace ao::uimodel
 {
@@ -56,11 +52,11 @@ namespace ao::uimodel
                                                bool includeDescendants);
 
   /** Narrow List CRUD functions shared by native authoring workflows. */
-  async::Task<Result<ListId>> saveListAsync(rt::Library* library, rt::ListDraft draft);
-  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletionAsync(rt::Library* library,
+  async::Task<Result<ListId>> saveListAsync(LibraryEditing editing, rt::ListDraft draft);
+  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletionAsync(LibraryEditing editing,
                                                                            ListId listId,
                                                                            bool includeDescendants);
-  async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(rt::Library* library,
+  async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(LibraryEditing editing,
                                                                   ListId listId,
                                                                   bool includeDescendants,
                                                                   rt::DeleteListOptions options = {});

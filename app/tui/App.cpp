@@ -79,6 +79,7 @@
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
@@ -1236,21 +1237,15 @@ namespace ao::tui
       { return trackEdit.hasPendingSubmission() || listAuthoring.hasPendingSubmission(); };
     }
 
-    /**
-     * @brief Builds the Saved-List authoring controller over its late-bound exit hook.
-     *
-     * The exit gate is constructed after this controller, so its settlement
-     * output reaches it through the same pointer indirection the track
-     * editor's settlement callback uses.
-     */
     ListAuthoringController makeListAuthoringController(rt::AppRuntime& appRuntime,
+                                                        uimodel::LibraryEditing editing,
                                                         i18n::MessageCatalog const& textCatalog,
                                                         std::function<void()> requestRefresh,
-                                                        ExitController*& activeExit,
+                                                        std::function<void()> notifySubmittedWriteSettled,
                                                         LibraryController& library)
     {
       return ListAuthoringController{appRuntime.async(),
-                                     appRuntime.library(),
+                                     editing,
                                      appRuntime.views(),
                                      appRuntime.sources(),
                                      appRuntime.completion(),
@@ -1258,14 +1253,7 @@ namespace ao::tui
                                      textCatalog,
                                      ListAuthoringController::Outputs{
                                        .requestRefresh = std::move(requestRefresh),
-                                       .notifySubmittedWriteSettled =
-                                         [&activeExit]
-                                       {
-                                         if (activeExit != nullptr)
-                                         {
-                                           activeExit->notifySubmittedWriteSettled();
-                                         }
-                                       },
+                                       .notifySubmittedWriteSettled = std::move(notifySubmittedWriteSettled),
                                        .openCreatedList =
                                          [&library](ListId const listId)
                                        {
@@ -1388,7 +1376,7 @@ namespace ao::tui
     auto coverDeliveryMode = coverDeliveryModeFor(options, preferences);
     auto keymap = uimodel::loadKeymap(*appConfigStorePtr, defaultKeymap());
     auto keymapPlan = KeymapPlan{keymap};
-    // Declared before AppRuntime so the executor's borrowed screen reference
+    // Declared before the runtime owner so the executor's borrowed screen reference
     // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(preferences.mouseEnabled);
@@ -1398,7 +1386,7 @@ namespace ao::tui
     screen.ForceHandleCtrlC(false);
     auto executorPtr = std::make_unique<Executor>(screen);
     auto* const executor = executorPtr.get();
-    auto runtimeRes = rt::AppRuntime::create(rt::AppRuntimeDependencies{
+    auto runtimeRes = rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
@@ -1414,7 +1402,9 @@ namespace ao::tui
       return 1;
     }
 
-    auto runtime = std::move(*runtimeRes);
+    auto runtimeOwner = std::move(*runtimeRes);
+    auto& runtime = runtimeOwner.runtime();
+    auto const editing = uimodel::LibraryEditing{runtimeOwner.libraryCommands()};
     runtime.setTextOrderingPolicy(textOrderingPolicyPtr);
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
@@ -1432,7 +1422,7 @@ namespace ao::tui
 
     // Declared before every frontend observer so reverse destruction retires
     // all callback targets before Runtime stops producers and its executor.
-    auto const runtimeShutdown = gsl_lite::finally([&runtime] { runtime.shutdown(); });
+    auto const runtimeShutdown = gsl_lite::finally([&runtimeOwner] { runtimeOwner.shutdown(); });
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
     auto shell = ShellInteractionModel{};
     auto layoutStateStore = LayoutStateStore{options.libraryRoot, runtime.library().snapshot().libraryId()};
@@ -1518,7 +1508,7 @@ namespace ao::tui
         activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
         requestRefresh();
       },
-      uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()}};
+      uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.jobProgress()}};
     runtime.notifications().post(rt::NotificationSeverity::Info,
                                  chromeText(textCatalog, i18n::MessageId::CommonReady),
                                  rt::NotificationLifetime::transient());
@@ -1546,29 +1536,31 @@ namespace ao::tui
         });
     };
     auto libraryScan =
-      LibraryScanController{runtime.async(), runtime.library().jobs(), runtime.notifications(), textCatalog};
+      LibraryScanController{runtime.async(), runtimeOwner.libraryJobs(), runtime.notifications(), textCatalog};
     auto listOrder =
-      ListOrderController{runtime.async(), runtime.library(), runtime.views(), runtime.notifications(), textCatalog};
+      ListOrderController{runtime.async(), editing, runtime.views(), runtime.notifications(), textCatalog};
     EventController* activeEvents = nullptr;
     ExitController* activeExit = nullptr;
+    // The exit gate is constructed after both editors and observes their pending writes.
+    auto const notifySubmittedWriteSettled = [&activeExit]
+    {
+      if (activeExit != nullptr)
+      {
+        activeExit->notifySubmittedWriteSettled();
+      }
+    };
     auto trackEdit = TrackEditController{runtime.async(),
-                                         runtime.library(),
+                                         editing,
                                          runtime.notifications(),
                                          textCatalog,
                                          TrackEditController::Outputs{
                                            .requestRefresh = requestRefresh,
-                                           .notifySubmittedWriteSettled =
-                                             [&activeExit]
-                                           {
-                                             if (activeExit != nullptr)
-                                             {
-                                               activeExit->notifySubmittedWriteSettled();
-                                             }
-                                           },
+                                           .notifySubmittedWriteSettled = notifySubmittedWriteSettled,
                                          },
                                          runtime.completion(),
                                          runtime.textOrderingPolicy()};
-    auto listAuthoring = makeListAuthoringController(runtime, textCatalog, requestRefresh, activeExit, library);
+    auto listAuthoring =
+      makeListAuthoringController(runtime, editing, textCatalog, requestRefresh, notifySubmittedWriteSettled, library);
     auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
     auto onSignalExit = std::function<void()>{};
     auto titlePreview = TerminalTitleFormatter{runtime.library()};

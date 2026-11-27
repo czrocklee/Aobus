@@ -25,6 +25,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/utility/StrongTypeFormatter.h>
@@ -69,12 +70,14 @@ namespace ao::gtk
 
   ListNavigationController::ListNavigationController(Gtk::Window& parent,
                                                      rt::AppRuntime& runtime,
+                                                     uimodel::LibraryEditing editing,
                                                      i18n::MessageCatalog textCatalog,
                                                      Callbacks callbacks,
                                                      ThemeCoordinator& themeCoordinator)
     : _parent{parent}
     , _callbacks{std::move(callbacks)}
     , _runtime{runtime}
+    , _editing{editing}
     , _textCatalog{std::move(textCatalog)}
     , _themeCoordinator{themeCoordinator}
   {
@@ -150,7 +153,7 @@ namespace ao::gtk
   {
     _dataProvider = &dataProvider;
 
-    _panelPtr->rebuildTree(_runtime.library());
+    _panelPtr->rebuildTree(_editing.library());
 
     if (_pendingSelectId != kInvalidListId)
     {
@@ -293,7 +296,7 @@ namespace ao::gtk
 
     auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
-                                                      _runtime.library(),
+                                                      _editing.library(),
                                                       _runtime.views(),
                                                       _runtime.sources(),
                                                       _runtime.completion(),
@@ -326,7 +329,7 @@ namespace ao::gtk
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
-                                                      _runtime.library(),
+                                                      _editing.library(),
                                                       _runtime.views(),
                                                       _runtime.sources(),
                                                       _runtime.completion(),
@@ -369,14 +372,14 @@ namespace ao::gtk
       return;
     }
 
-    auto scope = _runtime.library().snapshot();
+    auto scope = _editing.library().snapshot();
 
     if (auto const optNode = scope.listNode(listId); optNode)
     {
       auto const optPres =
         _callbacks.listPresentationCallback ? _callbacks.listPresentationCallback(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
-                                                        _runtime.library(),
+                                                        _editing.library(),
                                                         _runtime.views(),
                                                         _runtime.sources(),
                                                         _runtime.completion(),
@@ -432,7 +435,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "save list",
-                uimodel::saveListAsync(&_runtime.library(), std::move(draft)),
+                uimodel::saveListAsync(_editing, std::move(draft)),
                 [presentationId = std::move(presentationId), presentResult = std::move(presentResult)](
                   ListNavigationController* owner, Result<ListId> submittedRes) mutable
                 {
@@ -487,7 +490,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list deletion",
-                uimodel::previewListDeletionAsync(&_runtime.library(), listId, false),
+                uimodel::previewListDeletionAsync(_editing, listId, false),
                 [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
@@ -513,7 +516,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list subtree deletion",
-                uimodel::previewListDeletionAsync(&_runtime.library(), listId, true),
+                uimodel::previewListDeletionAsync(_editing, listId, true),
                 [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
@@ -604,7 +607,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 deleteDescendants ? "delete list subtree" : "delete list",
-                uimodel::deleteListAsync(&_runtime.library(), listId, deleteDescendants, options),
+                uimodel::deleteListAsync(_editing, listId, deleteDescendants, options),
                 std::move(complete));
   }
 

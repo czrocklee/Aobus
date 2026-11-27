@@ -230,14 +230,14 @@ namespace ao::cli
     return core().musicLibrary();
   }
 
-  rt::Library& CliRuntime::library()
+  rt::Library const& CliRuntime::library()
   {
     return core().library();
   }
 
-  rt::Library& CliRuntime::existingLibrary()
+  rt::LibraryJobs& CliRuntime::existingLibraryJobs()
   {
-    return openCore(library::LibrarySchemaPolicy::RequireExisting).library();
+    return openCore(library::LibrarySchemaPolicy::RequireExisting).libraryJobs();
   }
 
   void CliRuntime::runTask(async::Task<void> task)

@@ -515,7 +515,7 @@ namespace ao::tui::test
   TEST_CASE("PanelResize - mode status identifies its divider and keeps activity and exit keys visible")
   {
     auto fixture = EventControllerFixture{};
-    fixture.runtimePtr->notifications().post(
+    fixture.runtime.notifications().post(
       rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
 
     for (auto const* locale : {"en", "zh-Hant", "fr"})

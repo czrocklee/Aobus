@@ -28,6 +28,7 @@ namespace ao::async
 
 namespace ao::rt
 {
+  class Library;
   class LibraryWriteLane;
   struct MetadataPatch;
   struct UpdateTrackMetadataReply;
@@ -36,10 +37,11 @@ namespace ao::rt
   // effective mutator commits and publishes through the runtime writeLane.
   // There is no caller-visible transaction scope, so a sequence of calls is a
   // sequence of independent commits rather than one atomic unit.
-  class [[nodiscard]] LibraryCommands final
+  class LibraryCommands final
   {
   public:
-    ~LibraryCommands();
+    /// The read role for this exact writer; used for editor baselines and availability.
+    Library const& library() const noexcept { return _library; }
 
     // Metadata and tag authoring requires runtime-created target evidence.
     // Every target is revalidated in the committing transaction; stale or
@@ -106,11 +108,17 @@ namespace ao::rt
     LibraryCommands& operator=(LibraryCommands&&) = delete;
 
   private:
-    LibraryCommands(library::MusicLibrary& library, LibraryWriteLane& writeLane, async::Runtime& asyncRuntime);
+    LibraryCommands(Library const& reads,
+                    library::MusicLibrary& library,
+                    LibraryWriteLane& writeLane,
+                    async::Runtime& asyncRuntime);
+    ~LibraryCommands();
+
+    Library const& _library;
 
     struct Impl;
     std::shared_ptr<Impl> _implPtr;
 
-    friend class Library;
+    friend class LibraryOwner;
   };
 } // namespace ao::rt

@@ -56,16 +56,18 @@ namespace ao::tui::test
     struct LibraryControllerFixture final
     {
       ao::test::TempDir tempDir{};
-      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeStateOnlyRuntime(tempDir)};
-      uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-      uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
-      uimodel::TrackColumnLayouts columnLayouts{runtimePtr->library().changes()};
+      std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr{rt::test::makeStateOnlyRuntime(tempDir)};
+      uimodel::TrackPresentationCatalog presentationCatalog{runtime().workspace(), ao::test::englishMessageCatalog()};
+      uimodel::ListPresentations listPresentations{presentationCatalog, runtime().library().changes()};
+      uimodel::TrackColumnLayouts columnLayouts{runtime().library().changes()};
+
+      rt::AppRuntime& runtime() const noexcept { return runtimeOwnerPtr->runtime(); }
 
       LibraryController makeController()
       {
-        return LibraryController{runtimePtr->library(),
-                                 runtimePtr->views(),
-                                 runtimePtr->workspace(),
+        return LibraryController{runtime().library(),
+                                 runtime().views(),
+                                 runtime().workspace(),
                                  ao::test::englishMessageCatalog(),
                                  listPresentations,
                                  columnLayouts};
@@ -73,18 +75,18 @@ namespace ao::tui::test
 
       TrackId addTrack(std::string_view title) const
       {
-        return rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = std::string{title}});
+        return rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = std::string{title}});
       }
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
-        return rt::test::addRuntimeTrack(*runtimePtr, spec);
+        return rt::test::addRuntimeTrack(*runtimeOwnerPtr, spec);
       }
 
       ListId addList(std::string name) const
       {
         return ao::test::requireValue(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = std::move(name)})));
+          runtime(), runtimeOwnerPtr->libraryCommands().createListAsync(rt::ListDraft{.name = std::move(name)})));
       }
     };
 
@@ -101,7 +103,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     auto const umlaut = fixture.addTrack("ä");
     auto const zed = fixture.addTrack("z");
-    fixture.runtimePtr->setTextOrderingPolicy(
+    fixture.runtime().setTextOrderingPolicy(
       std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))});
     auto controller = fixture.makeController();
     REQUIRE(controller.setPresentation(rt::BuiltinPreset::Songs));
@@ -109,7 +111,7 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrackView().track->id == umlaut);
     controller.toggleFocusedMark();
     auto const viewId = controller.activeViewId();
-    fixture.runtimePtr->setTextOrderingPolicy(
+    fixture.runtime().setTextOrderingPolicy(
       std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("sv"))});
     controller.setTextCatalog(ao::test::messageCatalog("zh-Hans"));
     CHECK(controller.activeViewId() == viewId);
@@ -128,11 +130,11 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     REQUIRE(controller.activeViewId() != rt::kInvalidViewId);
-    auto const workspace = fixture.runtimePtr->workspace().snapshot();
+    auto const workspace = fixture.runtime().workspace().snapshot();
     REQUIRE(workspace.openViews.size() == 1);
     CHECK(workspace.activeViewId == controller.activeViewId());
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).listId == rt::kAllTracksListId);
-    CHECK_FALSE(fixture.runtimePtr->workspace().canGoBack());
+    CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).listId == rt::kAllTracksListId);
+    CHECK_FALSE(fixture.runtime().workspace().canGoBack());
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == trackId);
 
@@ -152,7 +154,7 @@ namespace ao::tui::test
     fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
     auto controller = fixture.makeController();
     auto const viewId = controller.activeViewId();
-    auto& views = fixture.runtimePtr->views();
+    auto& views = fixture.runtime().views();
     controller.setFilterDraft("Keep");
     requireAppliedFilter(controller);
     auto const before = views.trackListState(viewId);
@@ -291,13 +293,12 @@ namespace ao::tui::test
   TEST_CASE("LibraryController - fallback navigation uses the shared presentation recommendation")
   {
     auto fixture = LibraryControllerFixture{};
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
 
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
@@ -310,15 +311,14 @@ namespace ao::tui::test
   {
     auto fixture = LibraryControllerFixture{};
     auto const listId = fixture.addList("Albums");
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
     presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
     presentations.setPresentationIdForList(listId, rt::BuiltinPreset::Albums);
 
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
@@ -333,12 +333,11 @@ namespace ao::tui::test
   TEST_CASE("LibraryController - successful presentation selection records the list preference")
   {
     auto fixture = LibraryControllerFixture{};
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
@@ -352,13 +351,12 @@ namespace ao::tui::test
   TEST_CASE("LibraryController - failed presentation selection does not change the list preference")
   {
     auto fixture = LibraryControllerFixture{};
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
     presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Albums);
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
@@ -381,8 +379,8 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
     auto const textCatalog = ao::test::messageCatalog("zh-Hans");
     controller.setTextCatalog(textCatalog);
-    auto& workspace = fixture.runtimePtr->workspace();
-    auto& views = fixture.runtimePtr->views();
+    auto& workspace = fixture.runtime().workspace();
+    auto& views = fixture.runtime().views();
     auto const allTracksViewId = controller.activeViewId();
     REQUIRE(controller.openList(listId));
     auto const savedViewId = controller.activeViewId();
@@ -431,7 +429,7 @@ namespace ao::tui::test
   {
     auto fixture = LibraryControllerFixture{};
     auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
-    auto const activeViewId = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({
+    auto const activeViewId = ao::test::requireValue(fixture.runtime().workspace().navigate({
       .target = rt::GlobalViewKind::AllTracks,
       .optPresentation =
         rt::NavigationPresentation{
@@ -439,22 +437,21 @@ namespace ao::tui::test
           .spec = albums.spec,
         },
     }));
-    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto const workspaceBefore = fixture.runtime().workspace().snapshot();
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
     presentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Artists);
 
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
 
     CHECK(controller.activeViewId() == activeViewId);
     CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
-    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+    CHECK(fixture.runtime().workspace().snapshot() == workspaceBefore);
   }
 
   TEST_CASE("LibraryController - construction attaches the exact active workspace view")
@@ -464,12 +461,13 @@ namespace ao::tui::test
     auto secondTrackId = kInvalidTrackId;
 
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      firstTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "First"});
-      secondTrackId = rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Second"});
+      auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = runtimeOwnerPtr->runtime();
+      firstTrackId = rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "First"});
+      secondTrackId = rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "Second"});
       auto const& songs = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs);
       auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
-      REQUIRE(runtimePtr->workspace().navigate({
+      REQUIRE(runtime.workspace().navigate({
         .target =
           rt::FilteredListTarget{
             .listId = rt::kAllTracksListId,
@@ -481,7 +479,7 @@ namespace ao::tui::test
             .spec = songs.spec,
           },
       }));
-      REQUIRE(runtimePtr->workspace().navigate({
+      REQUIRE(runtime.workspace().navigate({
         .target =
           rt::FilteredListTarget{
             .listId = rt::kAllTracksListId,
@@ -493,31 +491,32 @@ namespace ao::tui::test
             .spec = albums.spec,
           },
       }));
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
-    rt::test::settleRuntimeCallbacks(*runtimePtr);
-    auto const before = runtimePtr->workspace().snapshot();
+    auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = runtimeOwnerPtr->runtime();
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(runtime);
+    auto const before = runtime.workspace().snapshot();
     REQUIRE(before.openViews.size() == 2);
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto const expectedActiveViewId = before.activeViewId;
-    auto const expectedState = runtimePtr->views().trackListState(expectedActiveViewId);
+    auto const expectedState = runtime.views().trackListState(expectedActiveViewId);
     REQUIRE(expectedState.filterExpression == "$title ~ \"Second\"");
 
     auto presentationCatalog =
-      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+      uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         listPresentations,
                                         columnLayouts};
 
     CHECK(controller.activeViewId() == expectedActiveViewId);
-    CHECK(runtimePtr->workspace().snapshot() == before);
+    CHECK(runtime.workspace().snapshot() == before);
     CHECK(controller.currentListId() == rt::kAllTracksListId);
     CHECK(controller.navigation().cursor() == rt::kAllTracksListId);
     CHECK(controller.filterDraft() == expectedState.filterExpression);
@@ -525,7 +524,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == secondTrackId);
     CHECK(controller.tracks()[0].id != firstTrackId);
-    auto const selection = runtimePtr->views().trackListState(expectedActiveViewId).selection;
+    auto const selection = runtime.views().trackListState(expectedActiveViewId).selection;
     REQUIRE(selection.size() == 1);
     CHECK(selection[0] == secondTrackId);
   }
@@ -535,10 +534,10 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     auto const titledId = fixture.addTrack("Tagged title");
     auto const untitledId = fixture.addTrack("");
-    auto const optExpectedTitled = fixture.runtimePtr->library().snapshot().trackRow(titledId);
+    auto const optExpectedTitled = fixture.runtime().library().snapshot().trackRow(titledId);
     REQUIRE(optExpectedTitled);
     REQUIRE(optExpectedTitled->optUriPath);
-    auto const optExpectedUntitled = fixture.runtimePtr->library().snapshot().trackRow(untitledId);
+    auto const optExpectedUntitled = fixture.runtime().library().snapshot().trackRow(untitledId);
     REQUIRE(optExpectedUntitled);
     REQUIRE(optExpectedUntitled->title.empty());
     REQUIRE(optExpectedUntitled->optUriPath);
@@ -564,7 +563,7 @@ namespace ao::tui::test
     auto pathSpec = rt::defaultTrackPresentationSpec();
     pathSpec.presetId = pathId;
     pathSpec.visibleFields = {rt::TrackField::Title, rt::TrackField::FilePath};
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(
+    REQUIRE(fixture.runtime().workspace().addCustomPreset(
       {.label = "With File Path", .optBasePresetId = rt::BuiltinPreset::Songs, .spec = pathSpec}));
     REQUIRE(controller.setPresentation(pathId));
     CHECK(controller.activeViewId() == viewId);
@@ -574,7 +573,7 @@ namespace ao::tui::test
     auto customSpec = rt::defaultTrackPresentationSpec();
     customSpec.presetId = artistId;
     customSpec.visibleFields = {rt::TrackField::Artist};
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(
+    REQUIRE(fixture.runtime().workspace().addCustomPreset(
       {.label = "Artist Only", .optBasePresetId = rt::BuiltinPreset::Songs, .spec = customSpec}));
     REQUIRE(controller.setPresentation(artistId));
     CHECK(controller.activePresentation().visibleFields == std::vector{rt::TrackField::Artist});
@@ -590,9 +589,9 @@ namespace ao::tui::test
     auto const untitledId = fixture.addTrack({.title = "", .artist = "Matched Artist"});
     auto const addList = [&](std::string name)
     {
-      return ao::test::requireValue(rt::test::runRuntimeTask(
-        *fixture.runtimePtr,
-        fixture.runtimePtr->library().commands().createListAsync({.name = std::move(name), .expression = "$artist?"})));
+      return ao::test::requireValue(rt::test::runRuntimeTask(fixture.runtime(),
+                                                             fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
+                                                               {.name = std::move(name), .expression = "$artist?"})));
     };
     auto const hiddenListId = addList("Hidden path");
     auto const visibleListId = addList("Visible path");
@@ -602,8 +601,8 @@ namespace ao::tui::test
       hiddenListId, {{.field = rt::TrackField::FilePath, .visibility = uimodel::TrackColumnVisibility::Hide}});
     fixture.columnLayouts.updateLayout(visibleListId, {{.field = rt::TrackField::FilePath, .weight = 1.0}});
 
-    auto const optExpectedTitled = fixture.runtimePtr->library().snapshot().trackRow(titledId);
-    auto const optExpectedUntitled = fixture.runtimePtr->library().snapshot().trackRow(untitledId);
+    auto const optExpectedTitled = fixture.runtime().library().snapshot().trackRow(titledId);
+    auto const optExpectedUntitled = fixture.runtime().library().snapshot().trackRow(untitledId);
     REQUIRE(optExpectedTitled);
     REQUIRE(optExpectedTitled->optUriPath);
     REQUIRE(optExpectedUntitled);
@@ -639,38 +638,41 @@ namespace ao::tui::test
     auto tempDir = ao::test::TempDir{};
 
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      REQUIRE(rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Present"}) != kInvalidTrackId);
-      REQUIRE(runtimePtr->workspace().navigate({
+      auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = runtimeOwnerPtr->runtime();
+      REQUIRE(rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "Present"}) !=
+              kInvalidTrackId);
+      REQUIRE(runtime.workspace().navigate({
         .target =
           rt::FilteredListTarget{
             .listId = rt::kAllTracksListId,
             .filterExpression = "$title ~ \"Absent\"",
           },
       }));
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
-    rt::test::settleRuntimeCallbacks(*runtimePtr);
-    auto const before = runtimePtr->workspace().snapshot();
+    auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = runtimeOwnerPtr->runtime();
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(runtime);
+    auto const before = runtime.workspace().snapshot();
     REQUIRE(before.openViews.size() == 1);
     auto const expectedActiveViewId = before.activeViewId;
 
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto presentationCatalog =
-      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+      uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         listPresentations,
                                         columnLayouts};
 
     CHECK(controller.activeViewId() == expectedActiveViewId);
-    CHECK(runtimePtr->workspace().snapshot() == before);
+    CHECK(runtime.workspace().snapshot() == before);
     CHECK(controller.filterDraft() == "$title ~ \"Absent\"");
     CHECK(controller.tracks().empty());
   }
@@ -687,15 +689,15 @@ namespace ao::tui::test
     CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(controller.tracks().size() == 1);
     auto const activeViewId = controller.activeViewId();
-    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
-    auto const viewBefore = fixture.runtimePtr->views().trackListState(activeViewId);
+    auto const workspaceBefore = fixture.runtime().workspace().snapshot();
+    auto const viewBefore = fixture.runtime().views().trackListState(activeViewId);
 
     CHECK(controller.reloadActiveList() == "Reloaded 1 track");
 
     CHECK(controller.activeViewId() == activeViewId);
-    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
-    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).filterExpression == viewBefore.filterExpression);
-    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).presentation == viewBefore.presentation);
+    CHECK(fixture.runtime().workspace().snapshot() == workspaceBefore);
+    CHECK(fixture.runtime().views().trackListState(activeViewId).filterExpression == viewBefore.filterExpression);
+    CHECK(fixture.runtime().views().trackListState(activeViewId).presentation == viewBefore.presentation);
     CHECK(controller.filterDraft() == "Needle");
     CHECK(controller.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     REQUIRE(controller.tracks().size() == 1);
@@ -715,7 +717,7 @@ namespace ao::tui::test
     REQUIRE(controller.trySetSelectedPresentation(selectedPresentation));
 
     fixture.addTrack("Added");
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
 
     CHECK(controller.navigation().cursor() == otherListId);
     CHECK(controller.selectedPresentation() == selectedPresentation);
@@ -729,9 +731,9 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     auto const unnamedId = fixture.addList("");
 
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::messageCatalog("de"),
                                         fixture.listPresentations,
                                         fixture.columnLayouts};
@@ -777,8 +779,8 @@ namespace ao::tui::test
     REQUIRE(controller.libraryEntries()[controller.selectedList()].id == selectedId);
 
     REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(removedId)));
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(removedId)));
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
 
     CHECK(controller.libraryEntries()[controller.selectedList()].id == selectedId);
     CHECK(controller.selectedList() == 1);
@@ -793,7 +795,7 @@ namespace ao::tui::test
     controller.setFilterDraft("Needle");
     REQUIRE(controller.applyFilter());
     auto const closedViewId = controller.activeViewId();
-    REQUIRE(fixture.runtimePtr->workspace().closeView(closedViewId));
+    REQUIRE(fixture.runtime().workspace().closeView(closedViewId));
 
     CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
 
@@ -801,7 +803,7 @@ namespace ao::tui::test
     CHECK(controller.currentListId() == rt::kAllTracksListId);
     CHECK(controller.filterDraft().empty());
     REQUIRE(controller.tracks().size() == 2);
-    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == controller.activeViewId());
+    CHECK(fixture.runtime().workspace().snapshot().activeViewId == controller.activeViewId());
   }
 
   TEST_CASE("LibraryController - list deletion recovers without observer-order assumptions")
@@ -809,15 +811,14 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
     auto const temporaryListId = fixture.addList("Temporary");
-    auto catalog =
-      uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
+    auto catalog = uimodel::TrackPresentationCatalog{fixture.runtime().workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, fixture.runtime().library().changes()};
     presentations.setPresentationIdForList(temporaryListId, rt::BuiltinPreset::Albums);
     fixture.columnLayouts.updateLayout(
       temporaryListId, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17, .weight = -1.0}});
-    auto controller = LibraryController{fixture.runtimePtr->library(),
-                                        fixture.runtimePtr->views(),
-                                        fixture.runtimePtr->workspace(),
+    auto controller = LibraryController{fixture.runtime().library(),
+                                        fixture.runtime().views(),
+                                        fixture.runtime().workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         fixture.columnLayouts};
@@ -828,12 +829,12 @@ namespace ao::tui::test
     REQUIRE(fixture.columnLayouts.snapshot().contains(temporaryListId));
 
     REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(temporaryListId)));
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteListAsync(temporaryListId)));
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
 
     CHECK(controller.activeViewId() == allTracksViewId);
     CHECK(controller.currentListId() == rt::kAllTracksListId);
-    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == allTracksViewId);
+    CHECK(fixture.runtime().workspace().snapshot().activeViewId == allTracksViewId);
     CHECK_FALSE(presentations.snapshot().contains(temporaryListId));
     CHECK_FALSE(fixture.columnLayouts.snapshot().contains(temporaryListId));
     REQUIRE(controller.tracks().size() == 1);
@@ -906,7 +907,7 @@ namespace ao::tui::test
     REQUIRE(selectedTrack == 1);
     REQUIRE(controller.markedIds().contains(firstTrackId));
     controller.setFilterDraft("Needle");
-    REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
+    REQUIRE(fixture.runtime().workspace().closeView(activeViewId));
 
     auto res = controller.applyFilter();
 
@@ -930,15 +931,15 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
     auto const activeViewId = controller.activeViewId();
-    auto const selectionBefore = fixture.runtimePtr->views().trackListState(activeViewId).selection;
+    auto const selectionBefore = fixture.runtime().views().trackListState(activeViewId).selection;
     REQUIRE(selectionBefore.size() == 1);
     CHECK(selectionBefore.front() == trackId);
     controller.setFilterDraft("not-present");
 
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 0 tracks");
     CHECK(controller.tracks().empty());
-    CHECK(fixture.runtimePtr->views().trackListState(activeViewId).selection.empty());
-    CHECK(fixture.runtimePtr->workspace().snapshot().activeViewId == activeViewId);
+    CHECK(fixture.runtime().views().trackListState(activeViewId).selection.empty());
+    CHECK(fixture.runtime().workspace().snapshot().activeViewId == activeViewId);
 
     auto selected = controller.selectedTrackView();
     CHECK(selected.track == nullptr);
@@ -974,11 +975,11 @@ namespace ao::tui::test
     controller.setFilterDraft("First");
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
     auto const filteredView = controller.activeViewId();
-    auto const expression = fixture.runtimePtr->views().trackListState(filteredView).filterExpression;
+    auto const expression = fixture.runtime().views().trackListState(filteredView).filterExpression;
     CHECK(ao::test::requireValue(controller.revealTrack(hiddenId)) == "Revealed Hidden");
     CHECK(controller.activeViewId() != filteredView);
     CHECK(controller.tracks()[controller.selectedTrack()].id == hiddenId);
-    CHECK(fixture.runtimePtr->views().trackListState(filteredView).filterExpression == expression);
+    CHECK(fixture.runtime().views().trackListState(filteredView).filterExpression == expression);
     REQUIRE(controller.navigateHistory(false));
     CHECK(controller.activeViewId() == filteredView);
     REQUIRE(controller.tracks().size() == 1);
@@ -995,7 +996,7 @@ namespace ao::tui::test
     auto const targetB = fixture.addTrack({.title = "Target in B", .artist = "Artist B"});
     auto const outside = fixture.addTrack({.title = "Outside both views", .artist = "Artist C"});
     auto controller = fixture.makeController();
-    auto& workspace = fixture.runtimePtr->workspace();
+    auto& workspace = fixture.runtime().workspace();
     auto const home = controller.activeViewId();
     auto expectedHome = home;
 
@@ -1042,7 +1043,7 @@ namespace ao::tui::test
 
     auto const destination = controller.activeViewId();
     CHECK(workspace.snapshot().activeViewId == destination);
-    auto const& views = fixture.runtimePtr->views();
+    auto const& views = fixture.runtime().views();
     CHECK(views.trackListState(viewB).filterExpression == filterB);
     CHECK(views.trackListState(destination).selection == std::vector{expectedTrack});
     auto const* selected = controller.selectedTrackView().track;
@@ -1075,7 +1076,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks().size() == 2);
     REQUIRE(controller.tracks().front().id == target);
     auto const viewId = controller.activeViewId();
-    auto& views = fixture.runtimePtr->views();
+    auto& views = fixture.runtime().views();
     std::int32_t expectedRow = 0;
 
     SECTION("A replaced projection makes a hidden track visible again")
@@ -1092,8 +1093,7 @@ namespace ao::tui::test
     {
       controller.setSelectedTrackIndex(1);
       controller.toggleFocusedMark();
-      REQUIRE(
-        fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
+      REQUIRE(fixture.runtime().workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
       expectedRow = 1;
     }
 
@@ -1150,13 +1150,15 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     CHECK(controller.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
-    CHECK(fixture.runtimePtr->views()
+    CHECK(fixture.runtime()
+            .views()
             .trackListState(controller.activeViewId())
             .presentation.isPreset(rt::BuiltinPreset::Albums));
     auto const missingRes = controller.setPresentationKey("missing-preset");
     REQUIRE_FALSE(missingRes);
     CHECK(missingRes.error().message == "Unknown view missing-preset");
-    CHECK(fixture.runtimePtr->views()
+    CHECK(fixture.runtime()
+            .views()
             .trackListState(controller.activeViewId())
             .presentation.isPreset(rt::BuiltinPreset::Albums));
   }
@@ -1168,26 +1170,28 @@ namespace ao::tui::test
     customSpec.presetId = rt::CustomPresetId{0xb};
 
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      REQUIRE(runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+      auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = runtimeOwnerPtr->runtime();
+      REQUIRE(runtime.workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
         .label = "Restored Custom",
         .optBasePresetId = rt::BuiltinPreset::Songs,
         .spec = customSpec,
       }));
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
-    rt::test::settleRuntimeCallbacks(*runtimePtr);
+    auto runtimeOwnerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = runtimeOwnerPtr->runtime();
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    rt::test::settleRuntimeCallbacks(runtime);
 
     auto presentationCatalog =
-      uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+      uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtime.library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         listPresentations,
                                         columnLayouts};
@@ -1209,12 +1213,12 @@ namespace ao::tui::test
     customSpec.presetId = customId;
     auto const beforePreset = controller.activePresentation().presetId;
     auto const initialCount = controller.presentationEntries().size();
-    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+    REQUIRE(fixture.runtime().workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
       .label = "Custom Songs",
       .optBasePresetId = rt::BuiltinPreset::Songs,
       .spec = customSpec,
     }));
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
 
     REQUIRE(controller.presentationEntries().size() == initialCount + 1);
     CHECK(controller.presentationEntries().back().id == "000000000000000c");
@@ -1229,7 +1233,7 @@ namespace ao::tui::test
       controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
 
     CHECK(controller.selectSelectedPresentation() == "View: 000000000000000c");
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.isPreset(customId));
+    CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).presentation.isPreset(customId));
     CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == rt::TrackPresetId{customId});
     CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationEntries().size()) - 1);
   }
@@ -1353,7 +1357,7 @@ namespace ao::tui::test
     auto const marksBefore = controller.markedIds();
     auto const selectionBefore = controller.selectedTrackIds();
     auto const visualBefore = controller.isVisualSelectionActive();
-    auto const publishedBefore = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    auto const publishedBefore = fixture.runtime().views().trackListState(controller.activeViewId()).selection;
     REQUIRE(publishedBefore == selectionBefore);
 
     for (std::int32_t attempt = 0; attempt < 2; ++attempt)
@@ -1366,7 +1370,7 @@ namespace ao::tui::test
       CHECK(controller.markedIds() == marksBefore);
       CHECK(controller.selectedTrackIds() == selectionBefore);
       CHECK(controller.isVisualSelectionActive() == visualBefore);
-      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection == publishedBefore);
+      CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).selection == publishedBefore);
     }
   }
 
@@ -1388,7 +1392,7 @@ namespace ao::tui::test
     REQUIRE(controller.jumpToAdjacentSection(delta) == "Section: Only Album");
     CHECK(controller.selectedTrack() == 1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+    CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).selection ==
           std::vector<TrackId>{secondId});
   }
 
@@ -1431,7 +1435,7 @@ namespace ao::tui::test
     CHECK(controller.selectedTrackView().track->id == thirdId);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
-    auto const& published = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    auto const& published = fixture.runtime().views().trackListState(controller.activeViewId()).selection;
     CHECK(published == std::vector<TrackId>{firstId, secondId});
   }
 
@@ -1480,7 +1484,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isVisualSelectionActive());
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
 
-    auto const& published = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    auto const& published = fixture.runtime().views().trackListState(controller.activeViewId()).selection;
     CHECK(published == std::vector<TrackId>{firstId});
   }
 
@@ -1612,7 +1616,7 @@ namespace ao::tui::test
 
     // Another shell can reorder the rows under the same filter expression, so
     // the kept focus has to follow its track rather than its row index.
-    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Artists));
+    REQUIRE(fixture.runtime().workspace().setActivePresentation(rt::BuiltinPreset::Artists));
     REQUIRE(controller.applyFilter());
 
     REQUIRE(controller.tracks()[2].id == bravoId);
@@ -1641,7 +1645,7 @@ namespace ao::tui::test
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
       controller.setFilterDraft("Alpha");
-      REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
+      REQUIRE(fixture.runtime().workspace().closeView(activeViewId));
       CHECK_FALSE(controller.applyFilter());
 
       CHECK(controller.isVisualSelectionActive());
@@ -1715,8 +1719,8 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
 
     REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(bravoId)));
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteTrackAsync(bravoId)));
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
 
     // The library observer already reloaded the view, so this is the state a
     // single reload leaves behind.
@@ -1744,8 +1748,8 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
     REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
-    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteTrackAsync(firstId)));
+    rt::test::settleRuntimeCallbacks(fixture.runtime());
     CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
 
     // Without its anchor the range cannot be extended or cancelled coherently,
@@ -1812,7 +1816,7 @@ namespace ao::tui::test
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == olderId);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{olderId, newerId});
-    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+    CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).selection ==
           std::vector<TrackId>{olderId, newerId});
   }
 
@@ -1831,24 +1835,24 @@ namespace ao::tui::test
     SECTION("deleting a marked track drops that mark")
     {
       REQUIRE(rt::test::runRuntimeTask(
-        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(secondId)));
-      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+        fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteTrackAsync(secondId)));
+      rt::test::settleRuntimeCallbacks(fixture.runtime());
       CHECK(controller.reloadActiveList() == "Reloaded 1 track");
       CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstId});
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
-      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+      CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).selection ==
             std::vector<TrackId>{firstId});
     }
 
     SECTION("deleting another marked track keeps the remaining mark")
     {
       REQUIRE(rt::test::runRuntimeTask(
-        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
-      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+        fixture.runtime(), fixture.runtimeOwnerPtr->libraryCommands().deleteTrackAsync(firstId)));
+      rt::test::settleRuntimeCallbacks(fixture.runtime());
       CHECK(controller.reloadActiveList() == "Reloaded 1 track");
       CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondId});
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
-      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+      CHECK(fixture.runtime().views().trackListState(controller.activeViewId()).selection ==
             std::vector<TrackId>{secondId});
     }
   }
@@ -1887,18 +1891,18 @@ namespace ao::tui::test
     REQUIRE(viewId != rt::kInvalidViewId);
     REQUIRE(marked == std::vector<TrackId>{firstId, secondId});
 
-    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
+    auto const workspaceBefore = fixture.runtime().workspace().snapshot();
     auto const openedRes = controller.openList(controller.currentListId());
     REQUIRE(openedRes);
     CHECK_FALSE(*openedRes);
-    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+    CHECK(fixture.runtime().workspace().snapshot() == workspaceBefore);
     CHECK(controller.filterDraft() == "$title?");
 
     CHECK(controller.activeViewId() == viewId);
     CHECK(controller.markedIds().contains(firstId));
     CHECK(controller.markedIds().contains(secondId));
     CHECK(controller.selectedTrackIds() == marked);
-    CHECK(fixture.runtimePtr->views().trackListState(viewId).selection == marked);
+    CHECK(fixture.runtime().views().trackListState(viewId).selection == marked);
     CHECK(controller.selectedTrack() == 1);
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == secondId);
@@ -1938,8 +1942,8 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Alpha");
     auto const emptyList = ao::test::requireValue(
-      rt::test::runRuntimeTask(*fixture.runtimePtr,
-                               fixture.runtimePtr->library().commands().createListAsync(
+      rt::test::runRuntimeTask(fixture.runtime(),
+                               fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
                                  rt::ListDraft{.name = "Empty", .expression = "$title ~ \"Missing\""})));
     auto listController = fixture.makeController();
 
@@ -1969,13 +1973,13 @@ namespace ao::tui::test
     auto const target = fixture.addTrack("Target");
     fixture.addTrack("Other");
     auto const sourceList = fixture.addList("Source");
-    auto const sourceView = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
+    auto const sourceView = ao::test::requireValue(fixture.runtime().workspace().navigate({.target = sourceList}));
     auto controller = fixture.makeController();
     controller.setFilterDraft("Other");
     REQUIRE(controller.applyFilter());
     auto const filteredView = controller.activeViewId();
-    auto const plainSource = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
-    REQUIRE(fixture.runtimePtr->workspace().focusView(filteredView));
+    auto const plainSource = ao::test::requireValue(fixture.runtime().workspace().navigate({.target = sourceList}));
+    REQUIRE(fixture.runtime().workspace().focusView(filteredView));
 
     SECTION("An existing source view is reused")
     {
@@ -1987,10 +1991,10 @@ namespace ao::tui::test
 
     SECTION("A closed source view falls back without changing the filtered view")
     {
-      REQUIRE(fixture.runtimePtr->workspace().closeView(plainSource));
+      REQUIRE(fixture.runtime().workspace().closeView(plainSource));
       CHECK(ao::test::requireValue(controller.revealTrack(target, plainSource, kInvalidListId)) == "Revealed Target");
       CHECK(controller.currentListId() == rt::kAllTracksListId);
-      CHECK_FALSE(fixture.runtimePtr->views().trackListState(sourceView).filterExpression.empty());
+      CHECK_FALSE(fixture.runtime().views().trackListState(sourceView).filterExpression.empty());
     }
   }
 
@@ -1999,7 +2003,7 @@ namespace ao::tui::test
     auto fixture = LibraryControllerFixture{};
     auto const firstId = fixture.addTrack("First");
     auto controller = fixture.makeController();
-    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const before = fixture.runtime().workspace().snapshot();
     auto const selected = controller.selectedTrackIds();
     REQUIRE(selected == std::vector{firstId});
 
@@ -2007,8 +2011,8 @@ namespace ao::tui::test
     controller.toggleVisualSelection();
     auto const rowsRevision = controller.trackRowsRevision();
     bool selectionChanged = false;
-    auto sub = fixture.runtimePtr->views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&)
-                                                              { selectionChanged = true; });
+    auto sub = fixture.runtime().views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&)
+                                                            { selectionChanged = true; });
 
     SECTION("Direct track lookup")
     {
@@ -2029,7 +2033,7 @@ namespace ao::tui::test
     CHECK(controller.filterDraft() == "unfinished");
     CHECK(controller.isVisualSelectionActive());
     CHECK(controller.trackRowsRevision() == rowsRevision);
-    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(fixture.runtime().workspace().snapshot() == before);
     CHECK(controller.activeViewId() == before.activeViewId);
     CHECK(controller.selectedTrackIds() == selected);
     REQUIRE(controller.tracks().size() == 1);
@@ -2042,11 +2046,11 @@ namespace ao::tui::test
     fixture.addTrack("Retained");
     auto controller = fixture.makeController();
     controller.toggleVisualSelection();
-    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const before = fixture.runtime().workspace().snapshot();
     auto const selected = controller.selectedTrackIds();
     auto const res = controller.openList(ListId{987654});
     REQUIRE_FALSE(res);
-    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(fixture.runtime().workspace().snapshot() == before);
     CHECK(controller.activeViewId() == before.activeViewId);
     CHECK(controller.selectedTrackIds() == selected);
     CHECK(controller.isVisualSelectionActive());

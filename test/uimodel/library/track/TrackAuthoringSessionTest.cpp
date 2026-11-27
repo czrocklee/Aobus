@@ -4,11 +4,14 @@
 #include "test/TestFixtureSupport.h"
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/uimodel/library/track/TrackAuthoringTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/uimodel/library/LibraryEditing.h>
+#include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -18,6 +21,7 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -25,11 +29,36 @@
 
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    template<typename Grant>
+    concept CanBeginTrackEdit =
+      requires(Grant& grant, std::span<TrackId const> ids) { TrackAuthoringSession::begin(grant, ids); };
+
+    template<typename Grant>
+    concept CanSaveList = requires(Grant& grant) { saveListAsync(grant, rt::ListDraft{}); };
+
+    template<typename Grant>
+    concept ExposesCommands =
+      requires(Grant& grant) { grant.commands(); } || requires(Grant& grant) { grant.libraryCommands(); };
+  } // namespace
+
+  TEST_CASE("LibraryEditing - read access alone cannot start a track edit or save a List")
+  {
+    STATIC_REQUIRE_FALSE(ExposesCommands<LibraryEditing>);
+    STATIC_REQUIRE(std::is_constructible_v<LibraryEditing, rt::LibraryCommands&>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<LibraryEditing, rt::Library&>);
+    STATIC_REQUIRE(CanBeginTrackEdit<LibraryEditing>);
+    STATIC_REQUIRE_FALSE(CanBeginTrackEdit<rt::Library>);
+    STATIC_REQUIRE(CanSaveList<LibraryEditing>);
+    STATIC_REQUIRE_FALSE(CanSaveList<rt::Library>);
+  }
+
   TEST_CASE("TrackAuthoringSession - owns stable targets and becomes stale after another commit")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0]};
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds);
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), targetIds);
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
 
@@ -52,7 +81,7 @@ namespace ao::uimodel::test
     CHECK(fixture.title(targetIds[0]) == "Applied");
     CHECK(fixture.title(targetIds[1]) == "Applied");
 
-    REQUIRE(fixture.runTask(fixture.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(fixture.runTask(fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     CHECK_FALSE(session.isCurrent());
     CHECK(invalidatedCount == 1);
 
@@ -68,7 +97,7 @@ namespace ao::uimodel::test
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0], fixture.trackIds()[1]};
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds);
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), targetIds);
 
     REQUIRE(sessionRes);
     CHECK(std::ranges::equal(sessionRes->targetIds(), targetIds));
@@ -78,7 +107,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackAuthoringSession - semantic no-op keeps the binding usable")
   {
     auto fixture = TrackAuthoringFixture{1};
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
     auto const revision = session.boundRevision();
@@ -100,7 +129,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackAuthoringSession - Properties submission advances one binding for metadata and tags")
   {
     auto fixture = TrackAuthoringFixture{1};
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
 
@@ -119,8 +148,8 @@ namespace ao::uimodel::test
   TEST_CASE("TrackAuthoringSession - a tag commit stales other sessions bound to the old revision")
   {
     auto fixture = TrackAuthoringFixture{1};
-    auto firstRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
-    auto secondRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto firstRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
+    auto secondRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(firstRes);
     REQUIRE(secondRes);
     auto first = std::move(*firstRes);
@@ -143,7 +172,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackAuthoringSession - Busy reconciles a revision delivered while submission is pending", "[concurrency]")
   {
     auto fixture = TrackAuthoringFixture{1};
-    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
     std::size_t invalidatedCount = 0;
@@ -151,7 +180,7 @@ namespace ao::uimodel::test
 
     auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto createFuture = fixture.runtime().spawn(rt::test::flagCompletionAsync(
-      createCompletedPtr, fixture.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+      createCompletedPtr, fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(fixture.executor().tryWaitUntilQueued());
 
     auto submitCompletedPtr = std::make_shared<std::atomic_bool>(false);
@@ -186,11 +215,11 @@ namespace ao::uimodel::test
     auto submitCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto futures = [&]
     {
-      auto source = ao::test::requireValue(TrackAuthoringSession::begin(fixture.library(), fixture.trackIds()));
+      auto source = ao::test::requireValue(TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds()));
       auto moved = std::move(source);
       invalidatedSubscription = moved.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
       auto createFuture = fixture.runtime().spawn(rt::test::flagCompletionAsync(
-        createCompletedPtr, fixture.library().commands().createListAsync(rt::ListDraft{.name = "Invalidate binding"})));
+        createCompletedPtr, fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "Invalidate binding"})));
       REQUIRE(fixture.executor().tryWaitUntilQueued());
       auto submitFuture = fixture.runtime().spawn(rt::test::flagCompletionAsync(
         submitCompletedPtr, moved.submitMetadataAsync(rt::MetadataPatch{.optTitle = "Must not apply"})));
@@ -206,7 +235,7 @@ namespace ao::uimodel::test
     CHECK(invalidatedCount == 1);
     CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
 
-    REQUIRE(fixture.runTask(fixture.library().commands().createListAsync(rt::ListDraft{.name = "After cleanup"})));
+    REQUIRE(fixture.runTask(fixture.libraryCommands().createListAsync(rt::ListDraft{.name = "After cleanup"})));
     CHECK(invalidatedCount == 1);
   }
 } // namespace ao::uimodel::test

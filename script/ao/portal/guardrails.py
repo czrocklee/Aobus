@@ -265,7 +265,7 @@ def audit_frontend(kind: str, root: Path | str | None) -> AuditResult:
 UIMODEL_LAYOUT = (
     r"^(FrameClock\.h|field/[^/]+\.(h|hpp|cpp)|input/[^/]+\.(h|hpp|cpp)|preference/[^/]+\.(h|hpp|cpp)|"
     r"presentation/[^/]+\.(h|hpp|cpp)|layout/(document|component|shell)/[^/]+\.(h|hpp|cpp)|"
-    r"library/(list|presentation|track|detail|property|task)/[^/]+\.(h|hpp|cpp)|"
+    r"library/LibraryEditing\.(h|cpp)|library/(list|presentation|track|detail|property|task)/[^/]+\.(h|hpp|cpp)|"
     r"playback/(command|now-playing|transport|seek|output|quality|soul)/[^/]+\.(h|hpp|cpp)|"
     r"status/activity/[^/]+\.(h|hpp|cpp))$"
 )

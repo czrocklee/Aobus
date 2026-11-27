@@ -67,7 +67,7 @@ namespace ao::tui
     }
   } // namespace
 
-  LibraryController::LibraryController(rt::Library& library,
+  LibraryController::LibraryController(rt::Library const& library,
                                        rt::ViewService& views,
                                        rt::WorkspaceService& workspace,
                                        i18n::MessageCatalog textCatalog,

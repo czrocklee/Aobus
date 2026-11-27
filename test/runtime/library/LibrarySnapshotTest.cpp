@@ -3,6 +3,7 @@
 
 #include <ao/rt/library/LibrarySnapshot.h>
 
+#include "runtime/library/LibraryOwner.h"
 #include "test/FilesystemTestSupport.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
@@ -29,6 +30,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
@@ -346,8 +348,9 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
     auto changes = makeStateOnlyLibraryChanges(ml);
-    auto runtimeLibrary = Library{asyncRuntime, ao::test::requireValue(Library::prepare(ml)), changes};
-    auto const reader = runtimeLibrary.snapshot();
+    auto owner =
+      LibraryOwner{asyncRuntime, ao::test::requireValue(library::WritableMusicLibrary::acquire(ml)), changes};
+    auto const reader = owner.library().snapshot();
 
     SECTION("An in-root alias yields the physical filename within the same snapshot")
     {
@@ -453,7 +456,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto changes = makeLibraryChanges(executor, storage);
     auto commands = LibraryCommandsFixture{storage, changes, executor};
-    auto& library = commands.library();
+    auto const& library = commands.library();
 
     auto const snapshot = library.snapshot();
     auto const revision = snapshot.revision();

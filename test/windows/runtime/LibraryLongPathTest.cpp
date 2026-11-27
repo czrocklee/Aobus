@@ -12,7 +12,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -218,7 +217,7 @@ namespace ao::rt::test
       auto storage = library::test::makeTestMusicLibrary(root, databasePath);
       auto changes = makeStateOnlyLibraryChanges(storage);
       auto commandsFixture = LibraryCommandsFixture{storage, changes};
-      auto& jobs = commandsFixture.library().jobs();
+      auto& jobs = commandsFixture.jobs();
       auto planRes = commandsFixture.runTask(jobs.buildScanPlanAsync());
       INFO((planRes ? "scan planned" : planRes.error().message));
       REQUIRE(planRes);
@@ -289,7 +288,7 @@ namespace ao::rt::test
     renameFixtureCase(originalIo, renamedIo);
     renameFixtureCase(originalSheet, originalSheet.parent_path() / "a.cue");
 
-    auto& jobs = commandsFixture.library().jobs();
+    auto& jobs = commandsFixture.jobs();
     auto planRes = commandsFixture.runTask(jobs.buildScanPlanAsync());
     INFO((planRes ? "renamed carrier scanned" : planRes.error().message));
     REQUIRE(planRes);
@@ -350,7 +349,7 @@ namespace ao::rt::test
     REQUIRE(createdRes);
     renameFixtureCase(original, renamed);
 
-    auto& jobs = commandsFixture.library().jobs();
+    auto& jobs = commandsFixture.jobs();
     auto planRes = commandsFixture.runTask(jobs.buildScanPlanAsync());
     REQUIRE(planRes);
     REQUIRE(planRes->size() == 1);

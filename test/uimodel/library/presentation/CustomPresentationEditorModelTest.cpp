@@ -276,14 +276,16 @@ namespace ao::uimodel::test
     auto tempDir = ao::test::TempDir{};
 
     {
-      auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-      REQUIRE(runtimePtr->workspace().addCustomPreset(preset));
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      REQUIRE(runtime.workspace().addCustomPreset(preset));
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
-    auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
-    REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
-    auto const restoredPresets = runtimePtr->workspace().customPresets();
+    auto ownerPtr = rt::test::makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    auto const restoredPresets = runtime.workspace().customPresets();
     REQUIRE(restoredPresets.size() == 1);
     CHECK(restoredPresets.front() == preset);
   }

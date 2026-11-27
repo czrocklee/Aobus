@@ -345,23 +345,22 @@ namespace
     return count;
   }
 
-  // The caller keeps the session and completion outputs alive through its
-  // bounded, fatal-on-timeout native main-loop wait. Binding and patch are
-  // owned by the coroutine. Its nonowning pointers are used only before the
-  // callback-executor completion publication; the caller reads the failure
-  // slot only after observing the atomic flag.
-  ao::async::Task<void> seedPerformanceMetadataSubmissionAsync(ao::appkit::LibrarySession* session,
+  // The caller keeps the runtime, commands and completion outputs alive through
+  // its bounded, fatal-on-timeout native main-loop wait. Binding and patch are
+  // owned by the coroutine. Borrows are used only before callback-executor
+  // completion publication; the caller reads failure only after the flag.
+  ao::async::Task<void> seedPerformanceMetadataSubmissionAsync(ao::async::Runtime* runtime,
+                                                               ao::rt::LibraryCommands* commands,
                                                                ao::rt::BoundTrackTargets binding,
                                                                ao::rt::MetadataPatch patch,
                                                                std::atomic<bool>* done,
                                                                std::optional<ao::Error>* failure)
   {
-    AO_INVARIANT(session != nullptr && done != nullptr && failure != nullptr,
-                 "the inspector performance seed requires its live session and completion outputs");
-    co_await session->runtime().async().resumeOnCallbackExecutorAsync();
-    auto res =
-      co_await session->runtime().library().commands().updateMetadataAsync(std::move(binding), std::move(patch));
-    co_await session->runtime().async().resumeOnCallbackExecutorAsync();
+    AO_INVARIANT(runtime != nullptr && commands != nullptr && done != nullptr && failure != nullptr,
+                 "the inspector performance seed requires its live runtime, commands and completion outputs");
+    co_await runtime->resumeOnCallbackExecutorAsync();
+    auto res = co_await commands->updateMetadataAsync(std::move(binding), std::move(patch));
+    co_await runtime->resumeOnCallbackExecutorAsync();
 
     if (!res)
     {
@@ -377,6 +376,7 @@ namespace
   }
 
   void exerciseInspector(ao::appkit::LibrarySession& session,
+                         ao::rt::LibraryCommands& commands,
                          NSWindow* window,
                          ao::TrackId const trackId,
                          std::filesystem::path const& stateRoot)
@@ -432,9 +432,10 @@ namespace
 
       auto done = std::atomic<bool>{false};
       auto optFailure = std::optional<ao::Error>{};
-      session.runtime().async().spawnLogged(
-        seedPerformanceMetadataSubmissionAsync(&session, std::move(*bindingRes), std::move(patch), &done, &optFailure),
-        "AppKit presentation inspector performance seed");
+      auto& runtime = session.runtime().async();
+      runtime.spawnLogged(seedPerformanceMetadataSubmissionAsync(
+                            &runtime, &commands, std::move(*bindingRes), std::move(patch), &done, &optFailure),
+                          "AppKit presentation inspector performance seed");
       ao::appkit::test::requireWaitUntil([&] { return done.load(); }, obligation);
       AO_INVARIANT(!optFailure, "{}: {}", obligation, optFailure->message);
     };
@@ -1515,7 +1516,7 @@ namespace ao::appkit::test
       dropListId = exerciseBrowserDrops(session, browser, browserDelegate, info, selectedId);
       exerciseBrowserSortAcrossNavigation(session, browser, dropListId);
       exerciseActivity(session, window, activityAnchor, stateRoot);
-      exerciseInspector(session, window, selectedId, stateRoot);
+      exerciseInspector(session, fixture.libraryCommands(), window, selectedId, stateRoot);
       exercisePlaybackPresentation(session, window, root, stateRoot);
       exerciseSelectedArtwork(session, window, selectedId);
       [browser detach];

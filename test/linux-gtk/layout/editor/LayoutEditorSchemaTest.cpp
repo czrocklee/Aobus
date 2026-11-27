@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/ShellLayoutCollaborators.h"
+#include "app/linux-gtk/layout/component/ComponentRegistrations.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorText.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -31,11 +32,12 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorSchema - schema entry validation covers all standard layout components")
   {
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto ownerPtr = ao::gtk::test::makeRuntime(tempDir);
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
       registry,
-      *runtimePtr,
+      ownerPtr->runtime(),
+      uimodel::LibraryEditing{ownerPtr->libraryCommands()},
       ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
@@ -304,14 +306,8 @@ namespace ao::gtk::layout::editor::test
 
   TEST_CASE("LayoutEditorSchema - registered property labels resolve through editor vocabulary")
   {
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(
-      registry,
-      *runtimePtr,
-      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
-                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    registerAbsoluteCanvasComponent(registry);
 
     auto const optCanvasSchema = registry.schema().component("absoluteCanvas");
     REQUIRE(optCanvasSchema);

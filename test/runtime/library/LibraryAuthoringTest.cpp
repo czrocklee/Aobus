@@ -3,6 +3,7 @@
 
 #include <ao/rt/library/LibraryAuthoring.h>
 
+#include "runtime/library/LibraryOwner.h"
 #include "runtime/library/LibraryWriteLane.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/MusicLibraryTestSupport.h"
@@ -67,19 +68,20 @@ namespace ao::rt::test
         auto readTransaction = _musicLibrary.readTransaction();
         auto const revision = _musicLibrary.libraryRevision(readTransaction);
         _changesPtr = std::make_unique<LibraryChanges>(_executor, revision, "test-library");
-        _optLibrary.emplace(_asyncRuntime, ao::test::requireValue(Library::prepare(_musicLibrary)), *_changesPtr);
+        _optOwner.emplace(
+          _asyncRuntime, ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)), *_changesPtr);
       }
 
       ~AuthoringFixture()
       {
-        if (_optLibrary)
+        if (_optOwner)
         {
-          _optLibrary->beginClosing();
+          _optOwner->beginClosing();
         }
 
         _asyncRuntime.requestStop();
         _asyncRuntime.join();
-        _optLibrary.reset();
+        _optOwner.reset();
         _changesPtr.reset();
       }
 
@@ -88,7 +90,8 @@ namespace ao::rt::test
       AuthoringFixture(AuthoringFixture&&) = delete;
       AuthoringFixture& operator=(AuthoringFixture&&) = delete;
 
-      Library& runtimeLibrary() { return *_optLibrary; }
+      Library const& runtimeLibrary() const { return _optOwner->library(); }
+      LibraryCommands& commands() { return _optOwner->libraryCommands(); }
       TrackId trackId() const noexcept { return _trackId; }
 
       template<typename T>
@@ -113,7 +116,7 @@ namespace ao::rt::test
       async::LoopExecutor _executor;
       async::Runtime _asyncRuntime;
       std::unique_ptr<LibraryChanges> _changesPtr;
-      std::optional<Library> _optLibrary;
+      std::optional<LibraryOwner> _optOwner;
     };
 
     class WriteLaneFixture final
@@ -279,7 +282,7 @@ namespace ao::rt::test
     auto const beforeAvailability = fixture.runtimeLibrary().authoringAvailability();
     auto patch = MetadataPatch{};
     patch.optTitle = "After";
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadataAsync(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.commands().updateMetadataAsync(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Applied);
@@ -302,13 +305,10 @@ namespace ao::rt::test
     auto optNestedTask = std::optional<async::Task<Result<ListId>>>{};
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
       [&](LibraryChangeSet const&) noexcept
-      {
-        optNestedTask.emplace(
-          fixture.runtimeLibrary().commands().createListAsync(ListDraft{.name = "Nested mutation"}));
-      });
+      { optNestedTask.emplace(fixture.commands().createListAsync(ListDraft{.name = "Nested mutation"})); });
 
-    auto authoringRes = fixture.runTask(
-      fixture.runtimeLibrary().commands().updateMetadataAsync(*boundRes, MetadataPatch{.optTitle = "After"}));
+    auto authoringRes =
+      fixture.runTask(fixture.commands().updateMetadataAsync(*boundRes, MetadataPatch{.optTitle = "After"}));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Applied);
@@ -452,7 +452,7 @@ namespace ao::rt::test
     auto patch = MetadataPatch{};
     patch.optTitle = "Before";
 
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadataAsync(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.commands().updateMetadataAsync(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::NoOp);
@@ -631,8 +631,7 @@ namespace ao::rt::test
     REQUIRE(foreignTargetsRes);
     auto const patch = MetadataPatch{.optTitle = "Should not apply"};
 
-    auto const authoringRes =
-      second.runTask(second.runtimeLibrary().commands().updateMetadataAsync(*foreignTargetsRes, patch));
+    auto const authoringRes = second.runTask(second.commands().updateMetadataAsync(*foreignTargetsRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Stale);
@@ -651,11 +650,11 @@ namespace ao::rt::test
     auto draft = ListDraft{
       .name = "Unrelated",
     };
-    REQUIRE(fixture.runTask(fixture.runtimeLibrary().commands().createListAsync(draft)));
+    REQUIRE(fixture.runTask(fixture.commands().createListAsync(draft)));
 
     auto patch = MetadataPatch{};
     patch.optTitle = "Should not apply";
-    auto authoringRes = fixture.runTask(fixture.runtimeLibrary().commands().updateMetadataAsync(*boundRes, patch));
+    auto authoringRes = fixture.runTask(fixture.commands().updateMetadataAsync(*boundRes, patch));
 
     REQUIRE(authoringRes);
     CHECK(authoringRes->status == AuthoringStatus::Stale);

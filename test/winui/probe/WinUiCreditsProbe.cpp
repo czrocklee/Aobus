@@ -11,6 +11,7 @@
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackDetailControl.h"
 #include "track/TrackPropertiesCoordinator.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
@@ -40,6 +41,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
@@ -187,7 +189,7 @@ namespace
       _window.Title(L"Aobus scoped Credits workflow probe");
       auto executorPtr = std::make_unique<ao::winui::DispatcherQueueExecutor>(_window.DispatcherQueue());
       auto* executor = executorPtr.get();
-      auto runtimeRes = ao::rt::AppRuntime::create({
+      auto runtimeRes = ao::rt::AppRuntimeOwner::open({
         .executorPtr = std::move(executorPtr),
         .musicRoot = _temp.path(),
         .databasePath = _temp.path() / "database",
@@ -200,10 +202,11 @@ namespace
         return;
       }
 
-      _runtimePtr = std::make_unique<ao::rt::AppRuntime>(std::move(*runtimeRes));
+      _runtimeOwnerPtr = std::make_unique<ao::rt::AppRuntimeOwner>(std::move(*runtimeRes));
+      _runtime = &_runtimeOwnerPtr->runtime();
       _runtimeExecutor = executor;
-      _baselineRevision = _runtimePtr->library().snapshot().revision();
-      _publicationSub = _runtimePtr->library().changes().onChanged(
+      _baselineRevision = _runtime->library().snapshot().revision();
+      _publicationSub = _runtime->library().changes().onChanged(
         [this](ao::rt::LibraryChangeSet const& change)
         {
           _publications.push_back(change);
@@ -528,12 +531,13 @@ namespace
       if (_runtimeExecutor != nullptr)
       {
         _runtimeExecutor->beginClosing();
-        _runtimePtr->shutdown();
+        _runtimeOwnerPtr->shutdown();
         _runtimeExecutor->completeClosing();
         _runtimeExecutor = nullptr;
       }
 
-      _runtimePtr.reset();
+      _runtime = nullptr;
+      _runtimeOwnerPtr.reset();
       ao::winui::resetResourceLanguage();
 
       if (_window)
@@ -684,7 +688,7 @@ namespace
 
       _controlPtr = std::make_unique<ao::winui::TrackCreditsEditorControl>(
         _model,
-        _runtimePtr->completion(),
+        _runtime->completion(),
         *_optCatalog,
         [this]
         {
@@ -825,7 +829,7 @@ namespace
 
     void checkStored(std::string const& title, std::vector<Credit> const& credits, std::uint64_t revisionDelta)
     {
-      auto snapshot = _runtimePtr->library().snapshot();
+      auto snapshot = _runtime->library().snapshot();
       check(snapshot.trackField(_trackId, ao::rt::TrackField::Title) == ao::rt::TrackFieldRawValue{title},
             "database title matches the accepted parent draft");
       check(snapshot.trackCredits(_trackId) == std::optional{credits},
@@ -999,7 +1003,7 @@ namespace
             openProperties(std::move(ids), scope);
           },
         },
-        _runtimePtr->workspace().detailProjection(ao::rt::ExplicitSelectionTarget{std::move(ids)}));
+        _runtime->workspace().detailProjection(ao::rt::ExplicitSelectionTarget{std::move(ids)}));
       _ready = [rows] { return rows.IsLoaded() && rows.ActualWidth() > 0.0; };
     }
 
@@ -1009,10 +1013,10 @@ namespace
       _coordinatorPtr =
         std::make_unique<ao::winui::TrackPropertiesCoordinator>(ao::winui::TrackPropertiesCoordinatorConfig{
           .xamlRoot = _scroll.XamlRoot(),
-          .asyncRuntime = _runtimePtr->async(),
-          .library = _runtimePtr->library(),
-          .workspace = _runtimePtr->workspace(),
-          .completion = _runtimePtr->completion(),
+          .asyncRuntime = _runtime->async(),
+          .editing = ao::uimodel::LibraryEditing{_runtimeOwnerPtr->libraryCommands()},
+          .workspace = _runtime->workspace(),
+          .completion = _runtime->completion(),
           .textCatalog = *_optCatalog,
           .trackIds = std::move(ids),
           .optCreditsScope = optScope,
@@ -1053,7 +1057,7 @@ namespace
                                                      std::stop_token stopToken)
     {
       auto res = co_await std::move(submission);
-      co_await owner->_runtimePtr->async().resumeOnCallbackExecutorAsync(stopToken);
+      co_await owner->_runtime->async().resumeOnCallbackExecutorAsync(stopToken);
 
       if (!owner->_finished)
       {
@@ -1067,7 +1071,7 @@ namespace
     void observeCommand(ao::async::Task<ao::Result<Reply>> submission, IsAccepted isAccepted, std::string_view context)
     {
       _externalCompleted = false;
-      _runtimePtr->async().spawnWithLifetime(
+      _runtime->async().spawnWithLifetime(
         _workflowTasks,
         [this, submission = std::move(submission), isAccepted = std::move(isAccepted)](
           std::stop_token stopToken) mutable
@@ -1078,7 +1082,7 @@ namespace
 
     void mutateExternally()
     {
-      auto bindingRes = _runtimePtr->library().bindTrackTargets(std::vector{_trackId});
+      auto bindingRes = _runtime->library().bindTrackTargets(std::vector{_trackId});
 
       if (!bindingRes)
       {
@@ -1086,7 +1090,7 @@ namespace
       }
 
       auto submission =
-        _runtimePtr->library().commands().updateMetadataAsync(std::move(*bindingRes), {.optTitle = "External title"});
+        _runtimeOwnerPtr->libraryCommands().updateMetadataAsync(std::move(*bindingRes), {.optTitle = "External title"});
       observeCommand(
         std::move(submission),
         [](auto const& reply) { return reply.status == ao::rt::AuthoringStatus::Applied; },
@@ -1096,7 +1100,7 @@ namespace
     void deleteCapturedTrack(ao::TrackId id)
     {
       observeCommand(
-        _runtimePtr->library().commands().deleteTrackAsync(id),
+        _runtimeOwnerPtr->libraryCommands().deleteTrackAsync(id),
         [id](auto const& reply) { return reply.trackId == id; },
         "Credits probe captured track deletion");
     }
@@ -1117,7 +1121,7 @@ namespace
       auto expected = expectRecorded ? std::vector{clearRecord(_outsideTrackId)}
                                      : std::vector{clearRecord(_emptyTrackId), clearRecord(_outsideTrackId)};
       observeCommand(
-        _runtimePtr->library().commands().previewUpdateMetadataAsync(
+        _runtimeOwnerPtr->libraryCommands().previewUpdateMetadataAsync(
           {_emptyTrackId, _outsideTrackId}, {.optTitle = ""}),
         [expected = std::move(expected)](auto const& reply) { return reply.changes == expected; },
         "Credits probe blank Title clear preview");
@@ -1740,7 +1744,7 @@ namespace
         {
           check(titleInput().IsEnabled() && titleInput().Text().empty() && !_workflowDialog.IsPrimaryButtonEnabled(),
                 "unchecking Clear restores the ordinary blank draft");
-          check(_runtimePtr->library().snapshot().revision() == _baselineRevision + 3 && _publications.size() == 3,
+          check(_runtime->library().snapshot().revision() == _baselineRevision + 3 && _publications.size() == 3,
                 "staging and withdrawing Title clear do not write");
           toggleFieldClear(ao::rt::TrackField::Title, true, 1);
         });
@@ -1749,7 +1753,7 @@ namespace
         [this]
         {
           releaseClosedDialog();
-          auto const snapshot = _runtimePtr->library().snapshot();
+          auto const snapshot = _runtime->library().snapshot();
           check(_publications.size() == 4 && _publications.back().tracksMutated == std::vector{_emptyTrackId} &&
                   snapshot.revision() == _baselineRevision + 4,
                 "Title clear commits once for the one bound track");
@@ -1899,7 +1903,7 @@ namespace
                      std::string const& outside,
                      std::uint64_t commits)
     {
-      auto snapshot = _runtimePtr->library().snapshot();
+      auto snapshot = _runtime->library().snapshot();
       check(snapshot.trackField(_trackId, ao::rt::TrackField::Album) == ao::rt::TrackFieldRawValue{first},
             "durable first album matches the captured edit");
       check(snapshot.trackField(_emptyTrackId, ao::rt::TrackField::Album) == ao::rt::TrackFieldRawValue{second},
@@ -1915,7 +1919,7 @@ namespace
       _steps.emplace_back(
         [this]
         {
-          _batchBaseline = _runtimePtr->library().snapshot().revision();
+          _batchBaseline = _runtime->library().snapshot().revision();
           _batchPublications = _publications.size();
           openProperties({_trackId, _emptyTrackId});
         });
@@ -1948,7 +1952,7 @@ namespace
 
           for (auto id : {_trackId, _emptyTrackId})
           {
-            check(_runtimePtr->library().snapshot().trackField(id, ao::rt::TrackField::Title) ==
+            check(_runtime->library().snapshot().trackField(id, ao::rt::TrackField::Title) ==
                     ao::rt::TrackFieldRawValue{std::string{"Only title"}},
                   "other field saved on both targets");
           }
@@ -2047,21 +2051,21 @@ namespace
 
           for (auto id : {_trackId, _emptyTrackId})
           {
-            auto snapshot = _runtimePtr->library().snapshot();
+            auto snapshot = _runtime->library().snapshot();
             check(
               snapshot.trackField(id, ao::rt::TrackField::Year) == ao::rt::TrackFieldRawValue{std::uint16_t{1997}} &&
                 snapshot.trackField(id, ao::rt::TrackField::Genre) == ao::rt::TrackFieldRawValue{std::string{"Jazz"}},
               "only the unrelated genre edit was saved on each original target");
           }
 
-          auto viewRes = _runtimePtr->workspace().navigate({.target = ao::rt::GlobalViewKind::AllTracks});
+          auto viewRes = _runtime->workspace().navigate({.target = ao::rt::GlobalViewKind::AllTracks});
 
-          if (!viewRes || !_runtimePtr->views().setSelection(*viewRes, {_trackId, _emptyTrackId}))
+          if (!viewRes || !_runtime->views().setSelection(*viewRes, {_trackId, _emptyTrackId}))
           {
             throw winrt::hresult_invalid_argument{L"Could not select the original two targets"};
           }
 
-          openProperties(_runtimePtr->views().trackListState(*viewRes).selection);
+          openProperties(_runtime->views().trackListState(*viewRes).selection);
         });
       _steps.emplace_back([this] { setText(albumInput(), L"Together"); });
       _steps.emplace_back([this] { setText(auxiliaryInput(MessageId::TrackFieldTags), L"The\u0301"); });
@@ -2155,8 +2159,8 @@ namespace
       _steps.emplace_back(
         [this]
         {
-          auto const view = _runtimePtr->workspace().snapshot().activeViewId;
-          check(static_cast<bool>(_runtimePtr->views().setSelection(view, {_outsideTrackId})),
+          auto const view = _runtime->workspace().snapshot().activeViewId;
+          check(static_cast<bool>(_runtime->views().setSelection(view, {_outsideTrackId})),
                 "live selection changed before Save");
           saveProperties();
         });
@@ -2167,7 +2171,7 @@ namespace
           checkAlbums("Together", "Together", "Outside album", 4);
 
           {
-            auto snapshot = _runtimePtr->library().snapshot();
+            auto snapshot = _runtime->library().snapshot();
 
             for (auto id : {_trackId, _emptyTrackId})
             {
@@ -2252,7 +2256,7 @@ namespace
         [this]
         {
           releaseClosedDialog();
-          auto snapshot = _runtimePtr->library().snapshot();
+          auto snapshot = _runtime->library().snapshot();
 
           for (auto id : {_trackId, _emptyTrackId})
           {
@@ -2328,7 +2332,7 @@ namespace
         [this]
         {
           releaseClosedDialog();
-          check(_runtimePtr->library().snapshot().trackField(_trackId, ao::rt::TrackField::Title) ==
+          check(_runtime->library().snapshot().trackField(_trackId, ao::rt::TrackField::Title) ==
                   ao::rt::TrackFieldRawValue{std::string{"External title"}},
                 "discarding a rejected write leaves the stored title unchanged");
         });
@@ -2352,7 +2356,7 @@ namespace
       _steps.emplace_back(
         [this, question]
         {
-          check(_externalAccepted && !_runtimePtr->library().snapshot().containsTrack(_emptyTrackId),
+          check(_externalAccepted && !_runtime->library().snapshot().containsTrack(_emptyTrackId),
                 "the external command removed one captured target");
           invoke(MessageId::WinUiTrackPropertiesReload);
           _ready = [this, question] { return isTextVisible(question); };
@@ -2372,7 +2376,7 @@ namespace
             return;
           }
 
-          auto const bindingRes = _runtimePtr->library().bindTrackTargets(std::array{_trackId, _emptyTrackId});
+          auto const bindingRes = _runtime->library().bindTrackTargets(std::array{_trackId, _emptyTrackId});
 
           if (bindingRes || bindingRes.error().code != ao::Error::Code::NotFound)
           {
@@ -2731,7 +2735,8 @@ namespace
     std::int32_t& _exitCode;
     TempRoot _temp;
     std::optional<ao::i18n::MessageCatalog> _optCatalog;
-    std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
+    std::unique_ptr<ao::rt::AppRuntimeOwner> _runtimeOwnerPtr;
+    ao::rt::AppRuntime* _runtime = nullptr;
     // Owned by AppRuntime, valid until completeClosing followed by runtime destruction.
     ao::winui::DispatcherQueueExecutor* _runtimeExecutor = nullptr;
     std::unique_ptr<ao::winui::TrackDetailControl> _detailPtr;

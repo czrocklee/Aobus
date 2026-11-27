@@ -33,6 +33,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -123,7 +124,13 @@ namespace ao::appkit::test
 
       LibrarySession& session() { return _sessionFixture.session(); }
 
+      void closeSession() noexcept { _sessionFixture.close(); }
+
       LibraryEditorModel& model() { return session().editor(); }
+
+      rt::LibraryCommands& libraryCommands() const noexcept { return _sessionFixture.libraryCommands(); }
+
+      uimodel::LibraryEditing editing() const noexcept { return uimodel::LibraryEditing{libraryCommands()}; }
 
       void retainMembershipModel(std::shared_ptr<LibraryEditorModel> modelPtr)
       {
@@ -441,11 +448,12 @@ namespace ao::appkit::test
         AO_INVARIANT(model.state().busy && session.canClose(), "Teardown must find a pending Properties submission");
       }
 
+      auto const catalog = session.catalog();
       // Queue a marker independently of the worker to check the real session's final drain.
       bool drained = false;
       session.runtime().async().callbackExecutor().defer([&drained] { drained = true; });
       AO_INVARIANT(!drained, "The marker must still be queued when the session closes");
-      session.close();
+      fixture.closeSession();
       AO_INVARIANT(drained, "Session close must drain the queued marker before returning");
 
       // Reopen the indexed library without the fixture's rescan, which is not part of this edit.
@@ -453,11 +461,11 @@ namespace ao::appkit::test
         musicRoot,
         stateRoot,
         false,
-        session.catalog(),
+        catalog,
         [](DesktopInvalidation) {},
         [] { return std::vector<std::unique_ptr<audio::BackendProvider>>{}; });
       AO_INVARIANT(reopenedRes, "The closed session's indexed library must reopen");
-      auto& reopenedLibrary = (*reopenedRes)->runtime().library();
+      auto const& reopenedLibrary = (*reopenedRes)->runtime().library();
       {
         auto const snapshot = reopenedLibrary.snapshot();
         auto const optSaved = snapshot.trackRow(target);
@@ -516,7 +524,7 @@ namespace ao::appkit::test
     void verifyPendingTagSave(EditorFixture& fixture, TrackId trackId)
     {
       auto& model = fixture.model();
-      auto& library = fixture.session().runtime().library();
+      auto const& library = fixture.session().runtime().library();
       auto const revision = library.snapshot().revision();
       requireAdmission(model.beginProperties(std::array{trackId}), "The pending-token Save draft must begin");
       fixture.present();
@@ -551,7 +559,7 @@ namespace ao::appkit::test
       bool callbacksOnMainThread = true;
       auto& session = fixture.session();
       auto& runtime = session.runtime();
-      auto model = LibraryEditorModel{runtime.library(),
+      auto model = LibraryEditorModel{fixture.editing(),
                                       runtime.async(),
                                       runtime.notifications(),
                                       session.catalog(),
@@ -586,7 +594,7 @@ namespace ao::appkit::test
     void verifyRejectedTitleRecovery(EditorFixture& fixture, TrackId trackId)
     {
       auto& model = fixture.model();
-      auto& library = fixture.session().runtime().library();
+      auto const& library = fixture.session().runtime().library();
       auto const revision = library.snapshot().revision();
       auto const optOriginal = library.snapshot().trackRow(trackId);
       AO_INVARIANT(optOriginal, "The rejected-write fixture requires a readable track");
@@ -635,7 +643,7 @@ namespace ao::appkit::test
       auto& session = fixture.session();
       auto& runtime = session.runtime();
       auto model =
-        LibraryEditorModel{runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {}};
+        LibraryEditorModel{fixture.editing(), runtime.async(), runtime.notifications(), session.catalog(), [] {}};
 
       // A full typed date through the shared Date editor parsing.
       requireAdmission(model.beginProperties(std::array{trackId}), "The recording-date property edit must begin");
@@ -897,7 +905,7 @@ namespace ao::appkit::test
     void verifyNativeCreditPreviews(EditorFixture& fixture, TrackId trackId, TrackId otherTrackId)
     {
       auto& model = fixture.model();
-      auto& library = fixture.session().runtime().library();
+      auto const& library = fixture.session().runtime().library();
       auto const storedCredits = [&]
       {
         auto const optCredits = library.snapshot().trackCredits(trackId);
@@ -1040,7 +1048,7 @@ namespace ao::appkit::test
                                      std::filesystem::path const& stateRoot)
     {
       auto& model = fixture.model();
-      auto& library = fixture.session().runtime().library();
+      auto const& library = fixture.session().runtime().library();
       auto const revision = [&] { return library.snapshot().revision(); };
       auto const storedCredits = [&](TrackId id)
       {
@@ -1442,7 +1450,7 @@ namespace ao::appkit::test
       editText(fixture.editor().window, @"credit-role-0", @"Retained stale role");
       auto& runtime = fixture.session().runtime();
       auto concurrent = LibraryEditorModel{
-        runtime.library(), runtime.async(), runtime.notifications(), fixture.session().catalog(), [] {}};
+        fixture.editing(), runtime.async(), runtime.notifications(), fixture.session().catalog(), [] {}};
       requireAdmission(concurrent.beginProperties(std::array{tracks[1]}), "Independent mutation must begin");
       auto const field = std::ranges::find(
         concurrent.state().fields, rt::TrackField::Genre, [](auto const& candidate) { return candidate.spec.field; });
@@ -1479,7 +1487,7 @@ namespace ao::appkit::test
     {
       auto& session = fixture.session();
       auto& model = fixture.model();
-      auto& library = session.runtime().library();
+      auto const& library = session.runtime().library();
       auto const targets = std::vector{tracks[0], tracks[1]};
       auto const albums = [&]
       {
@@ -1886,7 +1894,7 @@ namespace ao::appkit::test
 
       auto& runtime = session.runtime();
       auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(
-        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
+        fixture.editing(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(concurrentModelPtr->beginList(), "The concurrent list mutation must begin");
       concurrentModelPtr->editList("Authoring probe", "", "#aobus_authoring_probe");
       auto const listRevision = session.state().listRevision;
@@ -1954,7 +1962,7 @@ namespace ao::appkit::test
 
       auto& runtime = session.runtime();
       auto concurrentModelPtr = std::make_unique<LibraryEditorModel>(
-        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
+        fixture.editing(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(concurrentModelPtr->beginList(listId), "The stale close mutation must begin");
       concurrentModelPtr->editList("Authoring probe", "Stale close mutation", "#aobus_authoring_probe");
       concurrentModelPtr->save();
@@ -2624,7 +2632,7 @@ namespace ao::appkit::test
       // Live positive control on a separately owned model borrowing the same runtime.
       auto& runtime = session.runtime();
       auto controlPtr = std::make_shared<LibraryEditorModel>(
-        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
+        fixture.editing(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(
         controlPtr->beginMembership(std::array{tracks[0]}, probeListId, false), "The control membership must begin");
       requireWaitUntil([&] { return controlPtr->state().completed; }, "The control membership must complete");
@@ -2636,7 +2644,7 @@ namespace ao::appkit::test
 
       // A shutdown before the callback lands retires the completed edit: no post.
       auto retiredPtr = std::make_shared<LibraryEditorModel>(
-        runtime.library(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
+        fixture.editing(), runtime.async(), runtime.notifications(), session.catalog(), [] {});
       requireAdmission(
         retiredPtr->beginMembership(std::array{tracks[1]}, probeListId, true), "The retired membership must begin");
       retiredPtr->shutdown();
@@ -2650,7 +2658,7 @@ namespace ao::appkit::test
       // A reentrant shutdown from the completed change callback also suppresses the post.
       auto const reentrantBorrowPtr = std::make_shared<std::weak_ptr<LibraryEditorModel>>();
       auto const shutdownObservedPtr = std::make_shared<bool>(false);
-      auto reentrantPtr = std::make_shared<LibraryEditorModel>(runtime.library(),
+      auto reentrantPtr = std::make_shared<LibraryEditorModel>(fixture.editing(),
                                                                runtime.async(),
                                                                runtime.notifications(),
                                                                session.catalog(),
@@ -2698,8 +2706,8 @@ namespace ao::appkit::test
     void verifyNativeBlankTitleClear(EditorFixture& fixture)
     {
       auto& runtime = fixture.session().runtime();
-      auto& library = runtime.library();
-      auto& commands = library.commands();
+      auto const& library = runtime.library();
+      auto& commands = fixture.libraryCommands();
       auto& model = fixture.model();
       auto const importUntitled = [&](char const* name, std::size_t frameCount)
       {

@@ -20,6 +20,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -67,6 +68,7 @@ namespace ao::uimodel::test
         });
       }
 
+      LibraryEditing editing() { return LibraryEditing{runtime.commands()}; }
       std::vector<TrackId> storedOrder() const { return readStoredOrder(runtime.libraryFixture.library(), listId); }
 
       rt::test::ViewServiceFixture runtime;
@@ -102,6 +104,7 @@ namespace ao::uimodel::test
         return viewId;
       }
 
+      LibraryEditing editing() { return LibraryEditing{commandsFixture.commands()}; }
       std::vector<TrackId> storedOrder() const { return readStoredOrder(libraryFixture.library(), listId); }
 
       rt::test::MusicLibraryFixture libraryFixture;
@@ -122,7 +125,7 @@ namespace ao::uimodel::test
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
     auto sessionRes = ListOrderAuthoringSession::begin(
-      fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
+      fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto& session = *sessionRes;
 
@@ -141,7 +144,7 @@ namespace ao::uimodel::test
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
     auto sessionRes = ListOrderAuthoringSession::begin(
-      fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
+      fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto& session = *sessionRes;
 
@@ -167,7 +170,7 @@ namespace ao::uimodel::test
     {
       auto const viewId = fixture.open();
       auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
-        fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
+        fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(
         fixture.runtime.workspace.setActivePresentation(rt::defaultTrackPresentationSpec(), {.recordHistory = false}));
       fixture.runtime.drainCallbacks();
@@ -178,7 +181,7 @@ namespace ao::uimodel::test
     {
       auto const viewId = fixture.open();
       auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
-        fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
+        fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.service.setFilter(viewId, "true"));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(session.isCurrent());
@@ -188,7 +191,7 @@ namespace ao::uimodel::test
     {
       auto const viewId = fixture.open();
       auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
-        fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
+        fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.workspace.closeView(viewId));
       fixture.runtime.drainCallbacks();
       CHECK_FALSE(session.isCurrent());
@@ -204,7 +207,7 @@ namespace ao::uimodel::test
     REQUIRE_FALSE(missingViewRes);
 
     auto const sessionRes = ListOrderAuthoringSession::begin(
-      fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
+      fixture.editing(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
 
     REQUIRE_FALSE(sessionRes);
     CHECK(sessionRes.error().code == Error::Code::NotFound);
@@ -231,8 +234,8 @@ namespace ao::uimodel::test
     REQUIRE(fixture.executor.tryWaitUntilQueued());
     REQUIRE(fixture.commandsFixture.library().authoringAvailability().state == rt::LibraryAuthoringState::Available);
 
-    auto const sessionRes = ListOrderAuthoringSession::begin(
-      fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
+    auto const sessionRes =
+      ListOrderAuthoringSession::begin(fixture.editing(), fixture.service, viewId, ao::test::englishMessageCatalog());
 
     REQUIRE_FALSE(sessionRes);
     CHECK(sessionRes.error().code == Error::Code::InvalidState);
@@ -240,8 +243,8 @@ namespace ao::uimodel::test
 
     REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
     REQUIRE(future.get());
-    CHECK(ListOrderAuthoringSession::begin(
-      fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog()));
+    CHECK(
+      ListOrderAuthoringSession::begin(fixture.editing(), fixture.service, viewId, ao::test::englishMessageCatalog()));
   }
 
   TEST_CASE("ListOrderAuthoringSession - NoOp replays invalidation observed while submission is pending",
@@ -251,8 +254,8 @@ namespace ao::uimodel::test
     auto const viewId = fixture.open();
     auto const revision = fixture.commandsFixture.library().authoringAvailability().libraryRevision;
     REQUIRE(fixture.storedOrder().empty());
-    auto sessionRes = ListOrderAuthoringSession::begin(
-      fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
+    auto sessionRes =
+      ListOrderAuthoringSession::begin(fixture.editing(), fixture.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
     std::size_t invalidatedCount = 0;
@@ -291,7 +294,7 @@ namespace ao::uimodel::test
     auto future = [&]
     {
       auto source = ao::test::requireValue(ListOrderAuthoringSession::begin(
-        fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog()));
+        fixture.editing(), fixture.service, viewId, ao::test::englishMessageCatalog()));
       auto moved = std::move(source);
       invalidatedSubscription = moved.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
       auto pending =

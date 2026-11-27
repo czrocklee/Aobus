@@ -151,8 +151,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
-    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Haystack"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Haystack"});
     auto window = Gtk::Window{};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
@@ -179,7 +179,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Original"});
+    auto const trackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Original"});
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto dialog = SmartListDialog{window,
@@ -208,7 +208,7 @@ namespace ao::gtk::test
     REQUIRE(rowPtr);
     CHECK(rowPtr->fieldText(rt::TrackField::FilePath).empty());
 
-    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "Edited"; });
+    updateRuntimeTrack(fixture.owner(), trackId, [](library::test::TrackSpec& spec) { spec.title = "Edited"; });
 
     CHECK(previewRows(dialog)->get_n_items() == 1);
     auto* const editedLabel = findLabelByText(*preview, "Edited - Artist (Album)");
@@ -222,10 +222,10 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Needle"});
     auto const listId = ao::test::requireValue(runGtkTask(
       runtime,
-      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Empty List", .expression = "false"})));
+      fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Empty List", .expression = "false"})));
     auto const optNode = runtime.library().snapshot().listNode(listId);
     REQUIRE(optNode);
 
@@ -258,7 +258,7 @@ namespace ao::gtk::test
 
     for (std::size_t index = 0; index < 10; ++index)
     {
-      addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track " + std::to_string(index)});
+      addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Track " + std::to_string(index)});
     }
 
     auto window = Gtk::Window{};
@@ -292,7 +292,7 @@ namespace ao::gtk::test
     CHECK(errorLabel->get_text() == "Save failed");
 
     // A live append past the slice changes the total, not the sample size or save feedback.
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track 10"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Track 10"});
     drainGtkEvents();
     CHECK(previewModelPtr->get_n_items() == 10);
     CHECK(statusLabel->get_text() == "Preview: 10 of 11 matches");
@@ -300,7 +300,7 @@ namespace ao::gtk::test
     CHECK(errorLabel->get_text() == "Save failed");
 
     dialog.showError({});
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Track 11"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Track 11"});
     drainGtkEvents();
     CHECK(previewModelPtr->get_n_items() == 10);
     CHECK(statusLabel->get_text() == "Preview: 10 of 12 matches");
@@ -322,9 +322,9 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Needle"});
-    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Haystack"});
-    auto& commands = runtime.library().commands();
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Haystack"});
+    auto& commands = fixture.owner().libraryCommands();
     auto const parentListId = ao::test::requireValue(runGtkTask(
       runtime, commands.createListAsync(rt::ListDraft{.name = "Parent", .expression = R"($title = "Needle")"})));
 
@@ -383,7 +383,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Needle"});
     auto window = Gtk::Window{};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};

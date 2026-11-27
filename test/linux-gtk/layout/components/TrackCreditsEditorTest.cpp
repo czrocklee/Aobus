@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/component/track/TrackDetailUndo.h"
 #include "test/MessageCatalogTestSupport.h"
 #include "test/TestFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkLayoutTestSupport.h"
@@ -17,14 +18,18 @@
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Runtime.h>
 #include <ao/library/Credits.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
@@ -170,7 +175,7 @@ namespace ao::gtk::layout::test
     auto undo = TrackDetailUndoController{};
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -209,7 +214,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {first, second}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -261,7 +266,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {first}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -295,7 +300,7 @@ namespace ao::gtk::layout::test
                                             timeouts.push_back(std::move(callback));
                                             return sigc::connection{};
                                           }};
-    auto session = ao::test::requireValue(uimodel::TrackAuthoringSession::begin(runtime.library(), std::array{id}));
+    auto session = ao::test::requireValue(uimodel::TrackAuthoringSession::begin(fixture.editing(), std::array{id}));
     auto const publishedRevision = session.boundRevision() + 1;
     undo.presentCreditsClearedUndo(replacement({{"Restored", CreditKind::Performer, "Piano"}}), std::move(session));
     bool replayReturned = false;
@@ -308,7 +313,7 @@ namespace ao::gtk::layout::test
           return;
         }
 
-        auto replacementSessionRes = uimodel::TrackAuthoringSession::begin(runtime.library(), std::array{id});
+        auto replacementSessionRes = uimodel::TrackAuthoringSession::begin(fixture.editing(), std::array{id});
 
         if (replacementSessionRes)
         {
@@ -336,9 +341,8 @@ namespace ao::gtk::layout::test
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_undo_overlap_test",
                                         [&](library::MusicLibrary& storage)
                                         { id = library::test::addTrackWithUniqueFixtureUri(storage, {}); }};
-    auto& runtime = fixture.runtime();
     auto undo = TrackDetailUndoController{};
-    auto session = ao::test::requireValue(uimodel::TrackAuthoringSession::begin(runtime.library(), std::array{id}));
+    auto session = ao::test::requireValue(uimodel::TrackAuthoringSession::begin(fixture.editing(), std::array{id}));
     auto const revision = session.boundRevision();
     auto const kinds = uimodel::trackCreditScope(CreditKind::Conductor);
     REQUIRE(revision > 0);
@@ -367,7 +371,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {id}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -407,7 +411,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope({.trackIds = {id}});
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editorPtr = std::make_unique<TrackCreditsEditor>(runtime.async(),
-                                                          runtime.library(),
+                                                          fixture.editing(),
                                                           runtime.completion(),
                                                           runtime.notifications(),
                                                           ao::test::englishMessageCatalog(),
@@ -617,7 +621,7 @@ namespace ao::gtk::layout::test
     auto undo = TrackDetailUndoController{};
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -709,20 +713,20 @@ namespace ao::gtk::layout::test
     auto temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* executor = executorPtr.get();
-    auto runtimePtr = rt::test::makeRuntime(temp, std::move(executorPtr));
-    auto& runtime = *runtimePtr;
-    auto retireWork = utility::ScopedRegistration{[&runtime, executor]
+    auto ownerPtr = rt::test::makeRuntime(temp, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    auto retireWork = utility::ScopedRegistration{[&ownerPtr, executor]
                                                   {
-                                                    runtime.shutdown();
+                                                    ownerPtr->shutdown();
                                                     executor->runUntilIdle();
                                                   }};
     auto const before =
       std::vector<Credit>{{"First", CreditKind::Performer, "Piano"}, {"Second", CreditKind::Performer, "Voice"}};
-    auto const id = rt::test::addRuntimeTrack(runtime, {.credits = before});
+    auto const id = rt::test::addRuntimeTrack(*ownerPtr, {.credits = before});
     auto scope = FakeTrackDetailScope{detail(runtime, {id})};
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     uimodel::LibraryEditing{ownerPtr->libraryCommands()},
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -742,7 +746,7 @@ namespace ao::gtk::layout::test
     REQUIRE(executor->tryWaitUntilQueued());
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.async().spawn(rt::test::flagCompletionAsync(
-      completedPtr, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Competing change"})));
+      completedPtr, ownerPtr->libraryCommands().createListAsync(rt::ListDraft{.name = "Competing change"})));
     REQUIRE(executor->tryWaitUntilQueuedCount(2));
     REQUIRE(executor->tryRunOne());
     REQUIRE(executor->tryWaitUntilQueuedCount(2));
@@ -777,39 +781,42 @@ namespace ao::gtk::layout::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto temp = ao::test::TempDir{};
-    auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
-    auto* executor = executorPtr.get();
-    auto runtimePtr = rt::test::makeRuntime(temp, std::move(executorPtr));
-    auto& runtime = *runtimePtr;
-    auto retireWork = utility::ScopedRegistration{[&runtime, executor]
-                                                  {
-                                                    runtime.shutdown();
-                                                    executor->runUntilIdle();
-                                                  }};
+    auto storage = library::test::makeTestMusicLibrary(temp.path() / "music", temp.path() / "db");
+    auto executor = rt::test::ManualExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, storage);
+    auto commands = rt::test::LibraryCommandsFixture{storage, changes, executor};
+    auto& asyncRuntime = commands.runtime();
+    auto completion = rt::CompletionService{storage, changes};
+    auto notifications = rt::NotificationService{asyncRuntime};
     auto const before = std::vector<Credit>{{"Before", CreditKind::Performer, "Piano"}};
-    auto const id = rt::test::addRuntimeTrack(runtime, {.credits = before});
-    auto scope = FakeTrackDetailScope{detail(runtime, {id})};
+    auto const id = commands.addTrack({.credits = before});
+    auto retireWork = utility::ScopedRegistration{[&commands, &asyncRuntime, &executor]
+                                                  {
+                                                    commands.beginClosing();
+                                                    asyncRuntime.requestStop();
+                                                    asyncRuntime.join();
+                                                    executor.runUntilIdle();
+                                                  }};
+    auto const editing = uimodel::LibraryEditing{commands.commands()};
+    auto sections =
+      ao::test::requireValue(uimodel::loadTrackCreditsEditorBaseline(editing.library().snapshot(), std::array{id}));
+    auto scope = FakeTrackDetailScope{{.trackIds = {id}, .credits = std::move(sections)}};
     auto windowFixture = CreditsEditorWindowFixture{};
-    auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
-                                     runtime.completion(),
-                                     runtime.notifications(),
-                                     ao::test::englishMessageCatalog(),
-                                     &scope,
-                                     nullptr};
+    auto editor = TrackCreditsEditor{
+      asyncRuntime, editing, completion, notifications, ao::test::englishMessageCatalog(), &scope, nullptr};
     windowFixture.mount(editor);
     windowFixture.present();
     click(editor, "ao-credits-edit");
     entry(editor, "ao-credit-name").set_text("Draft");
-    executor->runUntilIdle();
+    executor.runUntilIdle();
 
     // Admit the commit, then close authoring before its write starts.
     emitClicked(button(editor, "ao-credits-commit"));
-    REQUIRE(executor->tryWaitUntilQueued());
-    runtime.library().beginClosing();
-    auto hasUnavailable = [&runtime]
+    REQUIRE(executor.tryWaitUntilQueued());
+    commands.beginClosing();
+    auto hasUnavailable = [&notifications]
     {
-      return std::ranges::any_of(runtime.notifications().feed().entries,
+      return std::ranges::any_of(notifications.feed().entries,
                                  [](auto const& notification)
                                  {
                                    auto const* text = std::get_if<std::string>(&notification.message);
@@ -817,9 +824,9 @@ namespace ao::gtk::layout::test
                                           *text == "Library editing is currently unavailable.";
                                  });
     };
-    REQUIRE(executor->tryDrainUntil(hasUnavailable));
+    REQUIRE(executor.tryDrainUntil(hasUnavailable));
     drainGtkEvents();
-    CHECK(credits(runtime, id) == before);
+    CHECK(editing.library().snapshot().trackCredits(id) == before);
     CHECK(entry(editor, "ao-credit-name").get_text() == "Draft");
     CHECK(entry(editor, "ao-credit-role").get_text() == "Piano");
     CHECK(button(editor, "ao-credits-cancel").get_sensitive());
@@ -835,18 +842,18 @@ namespace ao::gtk::layout::test
     auto temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* executor = executorPtr.get();
-    auto runtimePtr = rt::test::makeRuntime(temp, std::move(executorPtr));
-    auto& runtime = *runtimePtr;
-    auto retireWork = utility::ScopedRegistration{[&runtime, executor]
+    auto ownerPtr = rt::test::makeRuntime(temp, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    auto retireWork = utility::ScopedRegistration{[&ownerPtr, executor]
                                                   {
-                                                    runtime.shutdown();
+                                                    ownerPtr->shutdown();
                                                     executor->runUntilIdle();
                                                   }};
-    auto const id = rt::test::addRuntimeTrack(runtime, {.credits = {{"Before", CreditKind::Performer, "Piano"}}});
+    auto const id = rt::test::addRuntimeTrack(*ownerPtr, {.credits = {{"Before", CreditKind::Performer, "Piano"}}});
     auto scope = FakeTrackDetailScope{detail(runtime, {id})};
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editorPtr = std::make_unique<TrackCreditsEditor>(runtime.async(),
-                                                          runtime.library(),
+                                                          uimodel::LibraryEditing{ownerPtr->libraryCommands()},
                                                           runtime.completion(),
                                                           runtime.notifications(),
                                                           ao::test::englishMessageCatalog(),
@@ -896,7 +903,7 @@ namespace ao::gtk::layout::test
     auto undo = TrackDetailUndoController{};
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -945,7 +952,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {id}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::messageCatalog(locale),
@@ -1001,7 +1008,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {id}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -1037,7 +1044,7 @@ namespace ao::gtk::layout::test
     auto& scope = fixture.attachTrackDetailScope(detail(runtime, {id}));
     auto windowFixture = CreditsEditorWindowFixture{};
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::messageCatalog("de"),

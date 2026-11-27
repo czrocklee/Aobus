@@ -27,7 +27,9 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class AppRuntimeOwner;
   class Library;
+  class LibraryJobs;
 }
 
 namespace ao::async
@@ -40,14 +42,14 @@ namespace ao::rt::test
 {
   MetadataPatch metadataPatch(library::test::TrackSpec const& spec);
 
-  TrackId addRuntimeTrack(AppRuntime& runtime,
+  TrackId addRuntimeTrack(AppRuntimeOwner& owner,
                           library::test::TrackSpec const& spec,
                           compat::MoveOnlyFunction<void()> settlePublication = {});
 
   std::vector<TrackId> runtimeTrackIds(AppRuntime& runtime);
   library::test::TrackSpec runtimeTrackSpec(AppRuntime& runtime, TrackId trackId);
 
-  void updateRuntimeTrack(AppRuntime& runtime,
+  void updateRuntimeTrack(AppRuntimeOwner& owner,
                           TrackId trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater,
                           compat::MoveOnlyFunction<void()> settlePublication = {});
@@ -105,8 +107,9 @@ namespace ao::rt::test
     LibraryCommandsFixture(LibraryCommandsFixture&&) = delete;
     LibraryCommandsFixture& operator=(LibraryCommandsFixture&&) = delete;
 
-    Library& library();
+    Library const& library();
     LibraryCommands& commands();
+    LibraryJobs& jobs();
     async::Runtime& runtime();
 
     template<typename T>
@@ -115,6 +118,7 @@ namespace ao::rt::test
       return runTestTask(runtime(), runtime().callbackExecutor(), std::move(task));
     }
 
+    void beginClosing();
     void releaseLibrary();
     TrackId addTrack(library::test::TrackSpec const& spec);
     BoundTrackTargets bind(std::span<TrackId const> trackIds);

@@ -9,6 +9,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -41,7 +42,7 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = commands.library().snapshot();
-      auto sessionRes = TrackAuthoringSession::begin(commands.library(), ids, snapshot);
+      auto sessionRes = TrackAuthoringSession::begin(LibraryEditing{commands.commands()}, ids, snapshot);
       REQUIRE(sessionRes);
       REQUIRE(loadTrackPropertiesFormBaseline(snapshot, ids, spec, form));
       return std::move(*sessionRes);
@@ -245,7 +246,7 @@ namespace ao::uimodel::test
     auto session = [&]
     {
       auto snapshot = fixture.library().snapshot();
-      auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds(), snapshot);
+      auto sessionRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds(), snapshot);
       REQUIRE(sessionRes);
       REQUIRE(loadTrackPropertiesFormBaseline(snapshot, fixture.trackIds(), spec, form));
       return std::move(*sessionRes);
@@ -255,7 +256,7 @@ namespace ao::uimodel::test
     form.creditsEditor().updateName(0, "Draft");
     REQUIRE(form.acceptCreditsEdit());
     form.setEditValue(rt::TrackField::Title, std::string{"Draft title"});
-    auto otherRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    auto otherRes = TrackAuthoringSession::begin(fixture.editing(), fixture.trackIds());
     REQUIRE(otherRes);
     auto const otherSubmitRes = fixture.runTask(otherRes->submitMetadataAsync(
       rt::MetadataPatch{.optCredits = rt::CreditReplacement{

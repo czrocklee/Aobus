@@ -59,13 +59,13 @@ namespace ao::gtk::test
     // may name them.
     static_assert(std::is_constructible_v<portal::LibraryImportExportWorkflow,
                                           async::Runtime&,
-                                          rt::Library&,
+                                          rt::LibraryJobs&,
                                           rt::NotificationService&,
                                           portal::ImportExportCallbacks const&,
                                           i18n::MessageCatalog>);
     static_assert(!std::is_constructible_v<portal::LibraryImportExportWorkflow,
                                            async::Runtime&,
-                                           rt::Library&,
+                                           rt::LibraryJobs&,
                                            rt::NotificationService&,
                                            portal::ImportExportCallbacks&&,
                                            i18n::MessageCatalog>);
@@ -75,8 +75,11 @@ namespace ao::gtk::test
     {
       auto& runtime = fixture.runtime();
 
-      return portal::LibraryImportExportWorkflow{
-        runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog()};
+      return portal::LibraryImportExportWorkflow{runtime.async(),
+                                                 fixture.owner().libraryJobs(),
+                                                 runtime.notifications(),
+                                                 callbacks,
+                                                 ao::test::englishMessageCatalog()};
     }
 
     bool hasNotification(GtkRuntimeFixture& fixture, rt::NotificationSeverity severity, std::string_view message)
@@ -171,7 +174,7 @@ namespace ao::gtk::test
     auto workflow = makeWorkflow(fixture, callbacks);
 
     std::int32_t progressFinishedCount = 0;
-    auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
+    auto progressFinishedSub = fixture.runtime().jobProgress().onProgressFinished(
       [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
 
     workflow.scan();
@@ -203,10 +206,10 @@ namespace ao::gtk::test
     auto finishedEvents = std::vector<std::pair<rt::LibraryTaskProgressId, std::size_t>>{};
     auto changeEvents = std::vector<rt::LibraryChangeSet>{};
     auto optActiveDuringPlanning = std::optional<bool>{};
-    auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
+    auto progressFinishedSub = fixture.runtime().jobProgress().onProgressFinished(
       [&finishedEvents, &progressEvents](rt::LibraryTaskProgressFinished const& event) noexcept
       { finishedEvents.emplace_back(event.id, progressEvents.size()); });
-    auto progressSub = fixture.runtime().library().jobs().onProgress(
+    auto progressSub = fixture.runtime().jobProgress().onProgress(
       [&](rt::LibraryTaskProgressUpdated const& event)
       {
         progressEvents.push_back(event);
@@ -324,9 +327,9 @@ namespace ao::gtk::test
     auto optActiveAtHandoff = std::optional<bool>{};
     auto optActiveDuringBackfill = std::optional<bool>{};
     std::int32_t finishedCount = 0;
-    auto finishedSub = runtime.library().jobs().onProgressFinished(
+    auto finishedSub = runtime.jobProgress().onProgressFinished(
       [&finishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++finishedCount; });
-    auto progressSub = runtime.library().jobs().onProgress(
+    auto progressSub = runtime.jobProgress().onProgress(
       [&](rt::LibraryTaskProgressUpdated const& event)
       {
         if (event.kind == rt::LibraryTaskProgressKind::IndexingAudioIdentity && !optActiveDuringBackfill)
@@ -613,14 +616,17 @@ library:
     std::int32_t resetCount = 0;
     auto changeSub = runtime.library().changes().onChanged([&resetCount](rt::LibraryChangeSet const& changes) noexcept
                                                            { resetCount += changes.libraryReset ? 1 : 0; });
-    auto retireWork = utility::ScopedRegistration{[&runtime]
+    auto retireWork = utility::ScopedRegistration{[&fixture]
                                                   {
                                                     // Seal the write lane before stopping its worker pool.
-                                                    runtime.shutdown();
+                                                    fixture.owner().shutdown();
                                                     drainGtkEvents();
                                                   }};
-    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(
-      runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog());
+    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime.async(),
+                                                                             fixture.owner().libraryJobs(),
+                                                                             runtime.notifications(),
+                                                                             callbacks,
+                                                                             ao::test::englishMessageCatalog());
     workflowPtr->importFrom(importPath);
     REQUIRE(tryPumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
     REQUIRE(trackTitles(fixture).empty());
@@ -665,13 +671,14 @@ library:
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
     auto runtimePtr =
-      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+      std::make_unique<rt::AppRuntimeOwner>(ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = tempDir.path() / "music",
         .databasePath = tempDir.path() / "db",
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
       })));
+    auto& runtime = runtimePtr->runtime();
     auto confirmation = std::function<void(bool)>{};
     auto callbacks = portal::ImportExportCallbacks{
       .requestLibraryRestoreConfirmation = [&confirmation](
@@ -697,9 +704,9 @@ library:
                                                     runtimePtr->shutdown();
                                                     executor->runUntilIdle();
                                                   }};
-    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtimePtr->async(),
-                                                                             runtimePtr->library(),
-                                                                             runtimePtr->notifications(),
+    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime.async(),
+                                                                             runtimePtr->libraryJobs(),
+                                                                             runtime.notifications(),
                                                                              callbacks,
                                                                              ao::test::englishMessageCatalog());
     workflowPtr->importFrom(importPath);
@@ -712,7 +719,7 @@ library:
 
     executor->runUntilIdle();
     bool publishedReset = false;
-    auto changeSubscription = runtimePtr->library().changes().onChanged(
+    auto changeSubscription = runtime.library().changes().onChanged(
       [&publishedReset](rt::LibraryChangeSet const& changeSet) noexcept { publishedReset = changeSet.libraryReset; });
     confirmation(true);
 
@@ -724,9 +731,9 @@ library:
       REQUIRE(executor->tryRunOne());
     }
 
-    auto const trackIds = rt::test::runtimeTrackIds(*runtimePtr);
+    auto const trackIds = rt::test::runtimeTrackIds(runtime);
     REQUIRE(trackIds.size() == 1);
-    auto snapshot = runtimePtr->library().snapshot();
+    auto snapshot = runtime.library().snapshot();
     auto const optRestoredRow = snapshot.trackRow(trackIds.front());
     REQUIRE(optRestoredRow);
     CHECK(optRestoredRow->title == "Restored");
@@ -735,7 +742,7 @@ library:
     retireWork.reset();
 
     CHECK_FALSE(std::ranges::any_of(
-      runtimePtr->notifications().feed().entries,
+      runtime.notifications().feed().entries,
       [](auto const& entry) { return std::get<std::string>(entry.message) == "Library imported successfully"; }));
   }
 
@@ -763,13 +770,14 @@ library:
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
     auto runtimePtr =
-      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+      std::make_unique<rt::AppRuntimeOwner>(ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = tempDir.path() / "music",
         .databasePath = tempDir.path() / "db",
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
       })));
+    auto& runtime = runtimePtr->runtime();
 
     auto callbacks = portal::ImportExportCallbacks{};
     auto const importPath = tempDir.path() / "missing-import.yaml";
@@ -780,9 +788,9 @@ library:
                                                   }};
 
     {
-      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtimePtr->async(),
-                                                                               runtimePtr->library(),
-                                                                               runtimePtr->notifications(),
+      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime.async(),
+                                                                               runtimePtr->libraryJobs(),
+                                                                               runtime.notifications(),
                                                                                callbacks,
                                                                                ao::test::englishMessageCatalog());
       workflowPtr->importFrom(importPath);
@@ -796,6 +804,6 @@ library:
 
     retireWork.reset();
 
-    CHECK(runtimePtr->notifications().feed().entries.empty());
+    CHECK(runtime.notifications().feed().entries.empty());
   }
 } // namespace ao::gtk::test

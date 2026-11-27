@@ -103,7 +103,7 @@ namespace ao::winui
   ListAuthoringCoordinator::ListAuthoringCoordinator(ListAuthoringCoordinatorConfig config)
     : _xamlRoot{std::move(config.xamlRoot)}
     , _asyncRuntime{config.asyncRuntime}
-    , _library{config.library}
+    , _editing{config.editing}
     , _views{config.views}
     , _sources{config.sources}
     , _notifications{config.notifications}
@@ -141,7 +141,7 @@ namespace ao::winui
       return;
     }
 
-    auto const optNode = _library.snapshot().listNode(listId);
+    auto const optNode = _editing.library().snapshot().listNode(listId);
 
     if (!optNode)
     {
@@ -289,7 +289,7 @@ namespace ao::winui
                                                  tryValidateEditorDraft(editorDraft());
                                                }
                                              });
-    _previewChanges = _library.changes().onChanged(
+    _previewChanges = _editing.library().changes().onChanged(
       [this, token](rt::LibraryChangeSet const& change)
       {
         if (!token.accepts() || _submitting || _previewTimer.IsRunning())
@@ -393,7 +393,7 @@ namespace ao::winui
     }
 
     auto const isRoot = rt::isVirtualListId(draft.parentId);
-    auto const optParent = isRoot ? std::nullopt : _library.snapshot().listNode(draft.parentId);
+    auto const optParent = isRoot ? std::nullopt : _editing.library().snapshot().listNode(draft.parentId);
     auto const parentExpression = optParent ? std::string_view{optParent->expression} : std::string_view{};
     auto const missingParent = !isRoot && !optParent;
     auto const unavailable = i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderListUnavailable);
@@ -456,7 +456,7 @@ namespace ao::winui
     auto finish = [name = draft.name, expression = draft.expression, selected](
                     ListAuthoringCoordinator* target, Result<ListId> res)
     { target->finishEditorSave(std::move(res), name, expression, selected); };
-    auto submission = uimodel::saveListAsync(&_library, std::move(draft));
+    auto submission = uimodel::saveListAsync(_editing, std::move(draft));
     _asyncRuntime.spawnWithLifetime(
       *_optDialogTasks,
       [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission), finish = std::move(finish)](
@@ -537,7 +537,7 @@ namespace ao::winui
 
     beginDialogWorkflow();
     _dialogActive = true;
-    auto submission = uimodel::previewListDeletionAsync(&_library, listId, includeDescendants);
+    auto submission = uimodel::previewListDeletionAsync(_editing, listId, includeDescendants);
     AO_INVARIANT(
       _optDialogTasks && _dialogGenerationGate.isOpen(), "A List deletion preview requires an active dialog workflow");
     auto const token = _dialogGenerationGate.token();
@@ -646,7 +646,7 @@ namespace ao::winui
     _dialog.IsPrimaryButtonEnabled(false);
     auto const removeTag = _removeTagCheck && _removeTagCheck.IsChecked().GetBoolean();
     auto submission = uimodel::deleteListAsync(
-      &_library, _deleteListId, _deleteDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag});
+      _editing, _deleteListId, _deleteDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag});
 
     if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
     {
@@ -700,7 +700,7 @@ namespace ao::winui
 
   std::vector<uimodel::WritableTagListTarget> ListAuthoringCoordinator::membershipTargets() const
   {
-    return uimodel::writableTagListTargets(_library.snapshot().lists(), _textOrderingPolicy);
+    return uimodel::writableTagListTargets(_editing.library().snapshot().lists(), _textOrderingPolicy);
   }
 
   void ListAuthoringCoordinator::editMembership(ListId const listId, bool const add)
@@ -717,7 +717,7 @@ namespace ao::winui
       return;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, stateRes->selection);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_editing, stateRes->selection);
 
     if (!sessionRes)
     {
@@ -793,7 +793,7 @@ namespace ao::winui
     return uimodel::describeViewListOrderCapabilities(_textCatalog,
                                                       *stateRes,
                                                       sourceStateRes.value_or(rt::TrackSourceState::Invalidated),
-                                                      _library.authoringAvailability());
+                                                      _editing.library().authoringAvailability());
   }
 
   void ListAuthoringCoordinator::applyOrder(ListOrderCommand const command)
@@ -803,7 +803,7 @@ namespace ao::winui
       return;
     }
 
-    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_library, _views, _trackList.viewId(), _textCatalog);
+    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_editing, _views, _trackList.viewId(), _textCatalog);
 
     if (!sessionRes)
     {

@@ -6,6 +6,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
@@ -14,13 +15,13 @@
 
 namespace ao::uimodel
 {
-  Result<TrackAuthoringSession> prepareTrackProperties(rt::Library& library,
+  Result<TrackAuthoringSession> prepareTrackProperties(LibraryEditing const editing,
                                                        rt::LibrarySnapshot const& snapshot,
                                                        std::span<TrackId const> const targetIds,
                                                        TrackPropertiesFormSpec const& spec,
                                                        TrackPropertiesFormModel& form)
   {
-    auto sessionRes = TrackAuthoringSession::begin(library, targetIds, snapshot);
+    auto sessionRes = TrackAuthoringSession::begin(editing, targetIds, snapshot);
 
     if (!sessionRes)
     {

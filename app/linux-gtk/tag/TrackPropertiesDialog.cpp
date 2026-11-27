@@ -19,6 +19,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
@@ -90,12 +91,11 @@ namespace ao::gtk
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
                                                async::Runtime& asyncRuntime,
-                                               rt::Library& library,
+                                               uimodel::LibraryEditing editing,
                                                rt::CompletionService& completion,
                                                i18n::MessageCatalog textCatalog,
                                                std::span<TrackId const> const trackIds)
     : AppDialog{}
-    , _library{library}
     , _asyncRuntime{asyncRuntime}
     , _completion{completion}
     , _textCatalog{std::move(textCatalog)}
@@ -103,7 +103,7 @@ namespace ao::gtk
     , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
     , _creditsEditor{_completion, _textCatalog, _formModel, [this] { updateSaveEnabled(); }}
   {
-    auto const prepareRes = prepareEditing(trackIds);
+    auto const prepareRes = prepareEditing(editing, trackIds);
     // A failed open still identifies the requested selection, but offers no batch edit actions.
     auto const titleCount = prepareRes ? _formModel.targetCount() : trackIds.size();
     auto const title =
@@ -339,13 +339,14 @@ namespace ao::gtk
     return label;
   }
 
-  Result<> TrackPropertiesDialog::prepareEditing(std::span<TrackId const> const trackIds)
+  Result<> TrackPropertiesDialog::prepareEditing(uimodel::LibraryEditing editing,
+                                                 std::span<TrackId const> const trackIds)
   {
     auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
-    auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
+    auto sessionRes = [this, &editing, trackIds, &baseline]
     {
-      auto snapshot = _library.snapshot();
-      return uimodel::prepareTrackProperties(_library, snapshot, trackIds, _formSpec, baseline);
+      auto snapshot = editing.library().snapshot();
+      return uimodel::prepareTrackProperties(editing, snapshot, trackIds, _formSpec, baseline);
     }();
 
     if (!sessionRes)

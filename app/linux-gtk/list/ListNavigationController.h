@@ -10,6 +10,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -50,6 +51,7 @@ namespace ao::gtk
 
     ListNavigationController(Gtk::Window& parent,
                              rt::AppRuntime& runtime,
+                             uimodel::LibraryEditing editing,
                              i18n::MessageCatalog textCatalog,
                              Callbacks callbacks,
                              ThemeCoordinator& themeCoordinator);
@@ -94,6 +96,7 @@ namespace ao::gtk
     Gtk::Window& _parent;
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
+    uimodel::LibraryEditing _editing;
     i18n::MessageCatalog _textCatalog;
     ThemeCoordinator& _themeCoordinator;
     TrackRowCache* _dataProvider = nullptr;

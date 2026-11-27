@@ -512,9 +512,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto const parentId = fixture.addList("Parent");
-    REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr,
-      fixture.runtimePtr->library().commands().createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
+    REQUIRE(rt::test::runRuntimeTask(fixture.runtime,
+                                     fixture.runtimeOwnerPtr->libraryCommands().createListAsync(
+                                       rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
     fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);

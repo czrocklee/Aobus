@@ -11,7 +11,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -32,7 +31,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     // 1. Add some lists to the library
-    auto& commands = fixture.runtime().library().commands();
+    auto& commands = fixture.owner().libraryCommands();
     auto const idA = ao::test::requireValue(
       runGtkTask(fixture.runtime(), commands.createListAsync(rt::ListDraft{.name = "Parent List A"})));
     drainGtkEvents();

@@ -13,7 +13,6 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -28,19 +27,19 @@ namespace ao::rt::test
 
   namespace
   {
-    ListId createList(AppRuntime& runtime, std::string name)
+    ListId createList(AppRuntimeOwner& owner, std::string name)
     {
       return ao::test::requireValue(
-        runRuntimeTask(runtime, runtime.library().commands().createListAsync(ListDraft{.name = std::move(name)})));
+        runRuntimeTask(owner.runtime(), owner.libraryCommands().createListAsync(ListDraft{.name = std::move(name)})));
     }
   } // namespace
 
   TEST_CASE("HeadlessShell - initial layout is empty")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
 
-    auto const layout = runtimePtr->workspace().snapshot();
+    auto const layout = ownerPtr->runtime().workspace().snapshot();
 
     CHECK(layout.openViews.empty());
     CHECK(layout.activeViewId == kInvalidViewId);
@@ -49,25 +48,27 @@ namespace ao::rt::test
   TEST_CASE("HeadlessShell - navigating to a list creates an active view")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const listId = createList(*runtimePtr, "Headless");
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const listId = createList(*ownerPtr, "Headless");
 
-    REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
+    REQUIRE(runtime.workspace().navigate({.target = listId}));
 
-    auto const layout = runtimePtr->workspace().snapshot();
+    auto const layout = runtime.workspace().snapshot();
     REQUIRE(layout.openViews.size() == 1);
     CHECK(layout.activeViewId == layout.openViews.front());
 
     auto const viewId = layout.activeViewId;
-    auto const viewState = runtimePtr->views().trackListState(viewId);
+    auto const viewState = runtime.views().trackListState(viewId);
     CHECK(viewState.listId == listId);
   }
 
   TEST_CASE("HeadlessShell - global navigation does not reuse a filtered All Tracks view")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const filteredViewId = ao::test::requireValue(runtimePtr->workspace().navigate({
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigate({
       .target =
         FilteredListTarget{
           .listId = kAllTracksListId,
@@ -75,18 +76,18 @@ namespace ao::rt::test
         },
     }));
 
-    REQUIRE(runtimePtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
+    REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
-    auto const layout = runtimePtr->workspace().snapshot();
+    auto const layout = runtime.workspace().snapshot();
     REQUIRE(layout.openViews.size() == 2);
     CHECK(layout.openViews.front() == filteredViewId);
     CHECK(layout.activeViewId == layout.openViews.back());
 
-    auto const filteredState = runtimePtr->views().trackListState(layout.openViews.front());
+    auto const filteredState = runtime.views().trackListState(layout.openViews.front());
     CHECK(filteredState.listId == kAllTracksListId);
     CHECK(filteredState.filterExpression == "$artist ~ \"A\"");
 
-    auto const activeState = runtimePtr->views().trackListState(layout.activeViewId);
+    auto const activeState = runtime.views().trackListState(layout.activeViewId);
     CHECK(activeState.listId == kAllTracksListId);
     CHECK(activeState.filterExpression.empty());
   }
@@ -94,20 +95,21 @@ namespace ao::rt::test
   TEST_CASE("HeadlessShell - closing a view updates the active layout")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    auto const firstListId = createList(*runtimePtr, "First");
-    auto const secondListId = createList(*runtimePtr, "Second");
-    REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
-    REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    auto const firstListId = createList(*ownerPtr, "First");
+    auto const secondListId = createList(*ownerPtr, "Second");
+    REQUIRE(runtime.workspace().navigate({.target = firstListId}));
+    REQUIRE(runtime.workspace().navigate({.target = secondListId}));
 
-    auto layout1 = runtimePtr->workspace().snapshot();
+    auto layout1 = runtime.workspace().snapshot();
     REQUIRE(layout1.openViews.size() == 2);
     auto const viewToClose = layout1.openViews.front();
     auto const remainingView = layout1.openViews.back();
 
-    REQUIRE(runtimePtr->workspace().closeView(viewToClose));
+    REQUIRE(runtime.workspace().closeView(viewToClose));
 
-    auto const layout2 = runtimePtr->workspace().snapshot();
+    auto const layout2 = runtime.workspace().snapshot();
     REQUIRE(layout2.openViews.size() == 1);
     CHECK(layout2.openViews.front() == remainingView);
     CHECK(layout2.activeViewId == remainingView);
@@ -123,19 +125,20 @@ namespace ao::rt::test
     auto secondPresentation = TrackPresentationSpec{};
 
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      firstListId = createList(*runtimePtr, "First saved");
-      secondListId = createList(*runtimePtr, "Second saved");
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      firstListId = createList(*ownerPtr, "First saved");
+      secondListId = createList(*ownerPtr, "Second saved");
 
-      REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
+      REQUIRE(runtime.workspace().navigate({.target = firstListId}));
       firstPresentation = builtinTrackPresentationPreset(BuiltinPreset::Artists).spec;
-      REQUIRE(runtimePtr->workspace().setActivePresentation(firstPresentation, {.recordHistory = false}));
+      REQUIRE(runtime.workspace().setActivePresentation(firstPresentation, {.recordHistory = false}));
 
-      REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
+      REQUIRE(runtime.workspace().navigate({.target = secondListId}));
       secondPresentation = builtinTrackPresentationPreset(BuiltinPreset::Technical).spec;
-      REQUIRE(runtimePtr->workspace().setActivePresentation(secondPresentation, {.recordHistory = false}));
+      REQUIRE(runtime.workspace().setActivePresentation(secondPresentation, {.recordHistory = false}));
 
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
       auto const encoded = ao::test::readFile(workspaceConfigPath);
       CHECK(encoded.contains("presentationVersion: 3"));
@@ -145,20 +148,21 @@ namespace ao::rt::test
     }
 
     // Create new runtime with same persistence
-    auto session2Ptr = makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& restoredRuntime = ownerPtr->runtime();
 
-    REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
+    REQUIRE(restoredRuntime.workspace().restoreSession(restoredRuntime.workspaceConfigStore()));
 
-    auto const layout = session2Ptr->workspace().snapshot();
+    auto const layout = restoredRuntime.workspace().snapshot();
     REQUIRE(layout.openViews.size() == 2);
     CHECK(layout.activeViewId == layout.openViews[1]);
 
-    auto const firstState = session2Ptr->views().trackListState(layout.openViews[0]);
+    auto const firstState = restoredRuntime.views().trackListState(layout.openViews[0]);
     CHECK(firstState.listId == firstListId);
     CHECK(firstState.filterExpression.empty());
     CHECK(firstState.presentation == firstPresentation);
 
-    auto const secondState = session2Ptr->views().trackListState(layout.openViews[1]);
+    auto const secondState = restoredRuntime.views().trackListState(layout.openViews[1]);
     CHECK(secondState.listId == secondListId);
     CHECK(secondState.filterExpression.empty());
     CHECK(secondState.presentation == secondPresentation);
@@ -172,12 +176,13 @@ namespace ao::rt::test
     auto listId = kInvalidListId;
 
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      listId = createList(*runtimePtr, "Grouped saved");
-      REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
-      REQUIRE(runtimePtr->workspace().setActivePresentation(artistSpec, {.recordHistory = false}));
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      listId = createList(*ownerPtr, "Grouped saved");
+      REQUIRE(runtime.workspace().navigate({.target = listId}));
+      REQUIRE(runtime.workspace().setActivePresentation(artistSpec, {.recordHistory = false}));
 
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
       auto const encoded = ao::test::readFile(workspaceConfigPath);
       CHECK(encoded.contains("group: \"album-artist\""));
@@ -185,14 +190,15 @@ namespace ao::rt::test
       CHECK(encoded.contains("direction: \"ascending\""));
     }
 
-    auto session2Ptr = makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& restoredRuntime = ownerPtr->runtime();
 
-    REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
+    REQUIRE(restoredRuntime.workspace().restoreSession(restoredRuntime.workspaceConfigStore()));
 
-    auto const layout = session2Ptr->workspace().snapshot();
+    auto const layout = restoredRuntime.workspace().snapshot();
     REQUIRE(layout.openViews.size() == 1);
     CHECK(layout.activeViewId == layout.openViews.front());
-    auto const restoredState = session2Ptr->views().trackListState(layout.openViews.front());
+    auto const restoredState = restoredRuntime.views().trackListState(layout.openViews.front());
     CHECK(restoredState.listId == listId);
     CHECK(restoredState.filterExpression.empty());
     CHECK(restoredState.groupBy == TrackGroupKey::AlbumArtist);
@@ -206,23 +212,25 @@ namespace ao::rt::test
     auto savedPresentation = TrackPresentationSpec{};
 
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      listId = createList(*runtimePtr, "Flat saved");
-      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = listId}));
-      savedPresentation = runtimePtr->views().trackListState(viewId).presentation;
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      listId = createList(*ownerPtr, "Flat saved");
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
+      savedPresentation = runtime.views().trackListState(viewId).presentation;
       REQUIRE(savedPresentation.groupBy == TrackGroupKey::None);
 
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
-    auto session2Ptr = makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& restoredRuntime = ownerPtr->runtime();
 
-    REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
+    REQUIRE(restoredRuntime.workspace().restoreSession(restoredRuntime.workspaceConfigStore()));
 
-    auto const layout = session2Ptr->workspace().snapshot();
+    auto const layout = restoredRuntime.workspace().snapshot();
     REQUIRE(layout.openViews.size() == 1);
     CHECK(layout.activeViewId == layout.openViews.front());
-    auto const restoredState = session2Ptr->views().trackListState(layout.openViews.front());
+    auto const restoredState = restoredRuntime.views().trackListState(layout.openViews.front());
     CHECK(restoredState.listId == listId);
     CHECK(restoredState.filterExpression.empty());
     CHECK(restoredState.groupBy == TrackGroupKey::None);

@@ -39,6 +39,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
@@ -145,7 +146,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackFieldGridComponent(async::Runtime& asyncRuntime,
-                              rt::Library& library,
+                              uimodel::LibraryEditing editing,
                               rt::CompletionService& completion,
                               rt::NotificationService& notifications,
                               i18n::MessageCatalog textCatalog,
@@ -154,13 +155,13 @@ namespace ao::gtk::layout
         : _textCatalog{std::move(textCatalog)}
         , _editCoordinator{ctx.parentWindow}
         , _async{asyncRuntime}
-        , _library{library}
+        , _editing{editing}
         , _completion{completion}
         , _notifications{notifications}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
         , _creditsEditor{asyncRuntime,
-                         library,
+                         editing,
                          completion,
                          notifications,
                          _textCatalog,
@@ -948,8 +949,8 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
         auto preparedRes = [&] -> Result<std::pair<uimodel::TrackAuthoringSession, std::optional<std::string>>>
         {
-          auto snapshot = _library.snapshot();
-          auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds, snapshot);
+          auto snapshot = _editing.library().snapshot();
+          auto sessionRes = uimodel::TrackAuthoringSession::begin(_editing, snap.trackIds, snapshot);
 
           if (!sessionRes)
           {
@@ -1038,7 +1039,7 @@ namespace ao::gtk::layout
 
         _addMetadataButton.popdown();
 
-        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
+        auto sessionRes = uimodel::TrackAuthoringSession::begin(_editing, snap.trackIds);
 
         if (!sessionRes)
         {
@@ -1303,7 +1304,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snapshot.trackIds);
+        auto sessionRes = uimodel::TrackAuthoringSession::begin(_editing, snapshot.trackIds);
 
         if (!sessionRes)
         {
@@ -1394,7 +1395,7 @@ namespace ao::gtk::layout
       i18n::MessageCatalog _textCatalog;
       DetailEditCoordinator _editCoordinator;
       async::Runtime& _async;
-      rt::Library& _library;
+      uimodel::LibraryEditing _editing;
       rt::CompletionService& _completion;
       rt::NotificationService& _notifications;
       TrackDetailScope* _scope;
@@ -1451,7 +1452,7 @@ namespace ao::gtk::layout
 
   void registerTrackFieldGridComponent(ComponentRegistry& registry,
                                        async::Runtime& asyncRuntime,
-                                       rt::Library& library,
+                                       uimodel::LibraryEditing editing,
                                        rt::CompletionService& completion,
                                        rt::NotificationService& notifications,
                                        i18n::MessageCatalog const& textCatalog)
@@ -1463,11 +1464,11 @@ namespace ao::gtk::layout
        .properties = {{.name = "categories", .kind = PropertyKind::StringList, .label = "Categories"}},
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&asyncRuntime, &library, &completion, &notifications, textCatalog](
+      [&asyncRuntime, editing, &completion, &notifications, textCatalog](
         LayoutBuildContext& ctx, LayoutNode const& node)
       {
         return std::make_unique<TrackFieldGridComponent>(
-          asyncRuntime, library, completion, notifications, textCatalog, ctx, node);
+          asyncRuntime, editing, completion, notifications, textCatalog, ctx, node);
       });
   }
 } // namespace ao::gtk::layout

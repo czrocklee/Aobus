@@ -458,8 +458,8 @@ namespace ao::gtk::test
   {
     auto fixture = CustomViewPickerFixture{};
     auto& runtime = fixture.runtime;
-    auto const secondListId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
+    auto const secondListId = ao::test::requireValue(runGtkTask(
+      runtime, fixture.runtimeFixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Other"})));
     auto& editor = fixture.openEditor();
     clickSave(editor);
 
@@ -578,7 +578,7 @@ namespace ao::gtk::test
     REQUIRE(albumsButton != nullptr);
 
     auto const secondListId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
+      runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Other"})));
 
     emitClicked(*albumsButton);
 

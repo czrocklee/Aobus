@@ -12,6 +12,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -31,7 +32,6 @@ namespace ao
 
 namespace ao::rt
 {
-  class Library;
   class PlaybackService;
   class ResourceByteMemoryCache;
   class ViewService;
@@ -69,7 +69,7 @@ namespace ao::gtk
   public:
     TrackPageHost(Gtk::Stack& stack,
                   async::Runtime& asyncRuntime,
-                  rt::Library& library,
+                  uimodel::LibraryEditing editing,
                   rt::PlaybackService& playback,
                   rt::ViewService& views,
                   rt::WorkspaceService& workspace,
@@ -122,7 +122,7 @@ namespace ao::gtk
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
     Gtk::Stack& _stack;
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     rt::PlaybackService& _playback;
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;

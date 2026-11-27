@@ -268,9 +268,9 @@ namespace ao::rt::test
   TEST_CASE("PlaybackCommands guarded seek - closed admission notifies immediately without a position change")
   {
     auto const tempDir = ao::test::TempDir{};
-    auto const runtimePtr = makeStateOnlyRuntime(tempDir);
-    runtimePtr->shutdown();
-    auto& playback = runtimePtr->playback();
+    auto const ownerPtr = makeStateOnlyRuntime(tempDir);
+    ownerPtr->shutdown();
+    auto& playback = ownerPtr->runtime().playback();
     auto const before = playback.snapshot();
     auto settlements = std::vector<PlaybackSnapshot>{};
 

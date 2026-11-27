@@ -23,6 +23,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -48,24 +49,26 @@ namespace ao::tui::test
     {
       ao::test::TempDir tempDir{};
       rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
+      std::unique_ptr<rt::AppRuntimeOwner> runtimeOwnerPtr{
+        rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
+      rt::AppRuntime& runtime = runtimeOwnerPtr->runtime();
 
-      TrackId first{rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "First"})};
-      TrackId second{rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Second"})};
-      TrackId third{rt::test::addRuntimeTrack(*runtimePtr, library::test::TrackSpec{.title = "Third"})};
+      TrackId first{rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "First"})};
+      TrackId second{rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "Second"})};
+      TrackId third{rt::test::addRuntimeTrack(*runtimeOwnerPtr, library::test::TrackSpec{.title = "Third"})};
       ListId listId{};
 
       OrderFixture()
       {
         listId = ao::test::requireValue(
-          rt::test::runRuntimeTask(*runtimePtr,
-                                   runtimePtr->library().commands().createListAsync(
+          rt::test::runRuntimeTask(runtime,
+                                   runtimeOwnerPtr->libraryCommands().createListAsync(
                                      rt::ListDraft{.name = "Ordered", .expression = "#ordered"})));
         auto const trackIds = std::array{first, second, third};
-        auto targetsRes = runtimePtr->library().bindTrackTargets(trackIds);
+        auto targetsRes = runtime.library().bindTrackTargets(trackIds);
         REQUIRE(targetsRes);
         ao::test::requireValue(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().addTracksToListAsync(listId, std::move(*targetsRes))));
+          runtime, runtimeOwnerPtr->libraryCommands().addTracksToListAsync(listId, std::move(*targetsRes))));
         executor->drain();
       }
 
@@ -73,7 +76,7 @@ namespace ao::tui::test
       rt::ViewId openManualOrderView() const
       {
         auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
-        auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate(rt::NavigationRequest{
+        auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
           .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
           .optPresentation = rt::NavigationPresentation{.spec = manual.spec},
         }));
@@ -85,7 +88,7 @@ namespace ao::tui::test
       rt::ViewId openGroupedView() const
       {
         auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
-        auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate(rt::NavigationRequest{
+        auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
           .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
           .optPresentation = rt::NavigationPresentation{.spec = albums.spec},
         }));
@@ -93,22 +96,22 @@ namespace ao::tui::test
         return viewId;
       }
 
-      std::vector<TrackId> storedOrder() const { return runtimePtr->library().snapshot().listOrderTrackIds(listId); }
+      std::vector<TrackId> storedOrder() const { return runtime.library().snapshot().listOrderTrackIds(listId); }
 
-      bool hasNotifications() const { return !runtimePtr->notifications().feed().entries.empty(); }
+      bool hasNotifications() const { return !runtime.notifications().feed().entries.empty(); }
 
-      std::size_t notificationCount() const { return runtimePtr->notifications().feed().entries.size(); }
+      std::size_t notificationCount() const { return runtime.notifications().feed().entries.size(); }
 
       std::string lastMessage() const
       {
-        auto const feed = runtimePtr->notifications().feed();
+        auto const feed = runtime.notifications().feed();
         REQUIRE_FALSE(feed.entries.empty());
         return std::get<std::string>(feed.entries.back().message);
       }
 
       rt::NotificationSeverity lastSeverity() const
       {
-        auto const feed = runtimePtr->notifications().feed();
+        auto const feed = runtime.notifications().feed();
         REQUIRE_FALSE(feed.entries.empty());
         return feed.entries.back().severity;
       }
@@ -116,10 +119,10 @@ namespace ao::tui::test
       ListOrderController makeController() const
       {
         return ListOrderController{
-          runtimePtr->async(),
-          runtimePtr->library(),
-          runtimePtr->views(),
-          runtimePtr->notifications(),
+          runtime.async(),
+          uimodel::LibraryEditing{runtimeOwnerPtr->libraryCommands()},
+          runtime.views(),
+          runtime.notifications(),
           ao::test::englishMessageCatalog(),
         };
       }
@@ -136,7 +139,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
 
     CHECK(fixture.lastMessage() == "Moved 1 track in Manual Order.");
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
   }
@@ -152,7 +155,7 @@ namespace ao::tui::test
 
     CHECK(fixture.lastMessage() == "Order unchanged.");
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
     // A no-op persists nothing, so the raw order stays unset.
     CHECK(fixture.storedOrder().empty());
@@ -174,7 +177,7 @@ namespace ao::tui::test
     SECTION("header override on the current preset")
     {
       viewId = fixture.openManualOrderView();
-      REQUIRE(fixture.runtimePtr->views().setColumnSort(
+      REQUIRE(fixture.runtime.views().setColumnSort(
         viewId, rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = true}));
       fixture.executor->drain();
       expected = ao::i18n::MessageId::ListOrderChooseCurrentView;
@@ -188,7 +191,7 @@ namespace ao::tui::test
     // would leave standing.
     CHECK(fixture.lastMessage() == ao::i18n::requiredText(catalog, expected));
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
     // The blocked command never reached a binding, so no rank was persisted.
     CHECK(fixture.storedOrder().empty());
@@ -240,7 +243,7 @@ namespace ao::tui::test
 
     CHECK(fixture.lastMessage() == "Reset Manual Order and forgot 3 saved positions.");
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
     // Reset clears the saved rank sequence; the List falls back to its natural order.
     CHECK(fixture.storedOrder().empty());
@@ -256,13 +259,13 @@ namespace ao::tui::test
 
     // The presentation changes after the command bound its order but before
     // the submission reached the library.
-    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
+    REQUIRE(fixture.runtime.workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
 
     CHECK(fixture.notificationCount() == 1);
     CHECK(fixture.lastMessage() == "The List changed. Start the order action again.");
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
     CHECK(fixture.storedOrder().empty());
   }
@@ -270,7 +273,8 @@ namespace ao::tui::test
   TEST_CASE("ListOrderController - a rejected command stays behind as a warning", "[concurrency]")
   {
     auto fixture = OrderFixture{};
-    auto const outsider = rt::test::addRuntimeTrack(*fixture.runtimePtr, library::test::TrackSpec{.title = "Outside"});
+    auto const outsider =
+      rt::test::addRuntimeTrack(*fixture.runtimeOwnerPtr, library::test::TrackSpec{.title = "Outside"});
     auto const viewId = fixture.openManualOrderView();
     auto controller = fixture.makeController();
 
@@ -279,7 +283,7 @@ namespace ao::tui::test
 
     CHECK(fixture.lastMessage() == "Every selected track must belong to the bound List source");
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Warning);
-    CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
+    CHECK(fixture.runtime.notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::History);
     CHECK(fixture.storedOrder().empty());
 

@@ -830,8 +830,8 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - starts empty when owned by CoreRuntime")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
 
-    CHECK(runtimePtr->completion().tags().empty());
+    CHECK(ownerPtr->runtime().completion().tags().empty());
   }
 } // namespace ao::rt::test

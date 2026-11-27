@@ -23,10 +23,10 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto ownerPtr = ao::gtk::test::makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
-    registerStatusComponents(registry, *runtimePtr, ao::test::englishMessageCatalog());
+    registerStatusComponents(registry, ownerPtr->runtime(), ao::test::englishMessageCatalog());
 
     struct ExpectedStatusSchema final
     {

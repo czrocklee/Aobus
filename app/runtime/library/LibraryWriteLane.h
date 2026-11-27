@@ -452,7 +452,7 @@ namespace ao::rt
     bool _availabilityNotificationInProgress = false;
     mutable async::Signal<LibraryAuthoringAvailability const&> _availabilityChanged;
 
-    friend class Library;
+    friend class LibraryOwner;
     friend class LibraryJobs;
     friend class detail::LibraryMutationLifetimeState;
     friend class detail::LibraryMutationOwnerLease;

@@ -43,24 +43,24 @@ namespace ao::rt::test
 {
   namespace
   {
-    TrackId addFileTrack(AppRuntime& runtime, std::string const& title, std::string_view const fileName)
+    TrackId addFileTrack(AppRuntimeOwner& owner, std::string const& title, std::string_view const fileName)
     {
-      auto const uri = audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", fileName);
-      return addRuntimeTrack(runtime, library::test::TrackSpec{.title = title, .uri = uri});
+      auto const uri = audio::test::installAudioFixture(owner.runtime().musicRoot(), "basic_metadata.flac", fileName);
+      return addRuntimeTrack(owner, library::test::TrackSpec{.title = title, .uri = uri});
     }
 
-    ListId createList(AppRuntime& runtime, std::string name)
+    ListId createList(AppRuntimeOwner& owner, std::string name)
     {
       return ao::test::requireValue(
-        runRuntimeTask(runtime, runtime.library().commands().createListAsync(ListDraft{.name = std::move(name)})));
+        runRuntimeTask(owner.runtime(), owner.libraryCommands().createListAsync(ListDraft{.name = std::move(name)})));
     }
 
-    void restoreLibrary(AppRuntime& runtime, std::filesystem::path const& yamlPath)
+    void restoreLibrary(AppRuntimeOwner& owner, std::filesystem::path const& yamlPath)
     {
-      auto planRes =
-        runRuntimeTask(runtime, runtime.library().jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+      auto& jobs = owner.libraryJobs();
+      auto planRes = runRuntimeTask(owner.runtime(), jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
       REQUIRE(planRes);
-      REQUIRE(runRuntimeTask(runtime, runtime.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes))));
+      REQUIRE(runRuntimeTask(owner.runtime(), jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
     }
   } // namespace
 
@@ -82,38 +82,39 @@ namespace ao::rt::test
     auto savedTrackUri = std::string{};
 
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      addReadyAudioProvider(*runtimePtr);
-      std::ignore = addFileTrack(*runtimePtr, "Alpha", "alpha.flac");
-      savedTrackId = addFileTrack(*runtimePtr, "Beta", "beta.flac");
-      savedListId = createList(*runtimePtr, "Saved list");
-      runtimePtr->sources().reloadAllTracks();
-      auto const reader = runtimePtr->library().snapshot();
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      addReadyAudioProvider(runtime);
+      std::ignore = addFileTrack(*ownerPtr, "Alpha", "alpha.flac");
+      savedTrackId = addFileTrack(*ownerPtr, "Beta", "beta.flac");
+      savedListId = createList(*ownerPtr, "Saved list");
+      runtime.sources().reloadAllTracks();
+      auto const reader = runtime.library().snapshot();
       auto const libraryId = reader.libraryId();
       savedTrackUri = reader.trackUri(savedTrackId).value();
 
       // A restored session that is saved again goes through the production save path.
-      REQUIRE(runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup,
-                                                      PlaybackSessionState{
-                                                        .libraryId = libraryId,
-                                                        .sourceListId = kAllTracksListId,
-                                                        .currentTrackId = savedTrackId,
-                                                        .currentTrackUri = savedTrackUri,
-                                                        .anchorIndex = 1,
-                                                        .positionMs = 400,
-                                                      },
-                                                      PlaybackSessionYamlSchema{}));
-      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE(runtime.workspaceConfigStore().save(kPlaybackSessionConfigGroup,
+                                                  PlaybackSessionState{
+                                                    .libraryId = libraryId,
+                                                    .sourceListId = kAllTracksListId,
+                                                    .currentTrackId = savedTrackId,
+                                                    .currentTrackUri = savedTrackUri,
+                                                    .anchorIndex = 1,
+                                                    .positionMs = 400,
+                                                  },
+                                                  PlaybackSessionYamlSchema{}));
+      auto const restoredRes = runtime.restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
-      REQUIRE(runtimePtr->savePlaybackSession());
+      REQUIRE(runtime.savePlaybackSession());
 
-      REQUIRE(runtimePtr->workspace().navigate({.target = savedListId}));
+      REQUIRE(runtime.workspace().navigate({.target = savedListId}));
       auto customSpec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
       customSpec.presetId = CustomPresetId{42};
-      REQUIRE(runtimePtr->workspace().addCustomPreset(
+      REQUIRE(runtime.workspace().addCustomPreset(
         CustomTrackPresentationPreset{.label = "Kept", .optBasePresetId = BuiltinPreset::Songs, .spec = customSpec}));
-      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
       auto layoutStore = ConfigStore{layoutPath};
       REQUIRE(layoutStore.saveTogether(
@@ -128,7 +129,7 @@ namespace ao::rt::test
                       {savedListId, BuiltinPreset::Albums}, {kAllTracksListId, BuiltinPreset::Songs}},
                     uimodel::ListPresentationPreferenceYamlSchema{libraryId})));
 
-      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().jobs().exportLibraryAsync(yamlPath, ExportMode::Full)));
+      REQUIRE(runRuntimeTask(runtime, ownerPtr->libraryJobs().exportLibraryAsync(yamlPath, ExportMode::Full)));
     }
 
     bool newDatabase = false;
@@ -145,14 +146,15 @@ namespace ao::rt::test
     }
 
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      restoreLibrary(*runtimePtr, yamlPath);
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      restoreLibrary(*ownerPtr, yamlPath);
     }
 
-    auto runtimePtr = makeStateOnlyRuntime(tempDir);
-    addReadyAudioProvider(*runtimePtr);
-    runtimePtr->sources().reloadAllTracks();
-    auto const reader = runtimePtr->library().snapshot();
+    auto ownerPtr = makeStateOnlyRuntime(tempDir);
+    auto& runtime = ownerPtr->runtime();
+    addReadyAudioProvider(runtime);
+    runtime.sources().reloadAllTracks();
+    auto const reader = runtime.library().snapshot();
     // The restore recreated both tracks and the list from the backup. A new
     // database numbers them from 1 again, so the saved ids name live objects.
     REQUIRE(reader.lists().size() == 1);
@@ -160,17 +162,17 @@ namespace ao::rt::test
     CHECK(reader.trackUri(savedTrackId).has_value() == newDatabase);
     CHECK(reader.listNode(savedListId).has_value() == newDatabase);
 
-    auto const playbackRes = runtimePtr->restorePlaybackSession();
+    auto const playbackRes = runtime.restorePlaybackSession();
     REQUIRE(playbackRes);
     CHECK_FALSE(playbackRes->restored);
 
-    auto const workspaceRes = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
+    auto const workspaceRes = runtime.workspace().restoreSession(runtime.workspaceConfigStore());
 
     if (newDatabase)
     {
       // Another library's list ids are dropped while its custom presets remain.
       REQUIRE(workspaceRes);
-      CHECK(runtimePtr->workspace().customPresets().size() == 1);
+      CHECK(runtime.workspace().customPresets().size() == 1);
     }
     else
     {
@@ -179,7 +181,7 @@ namespace ao::rt::test
       CHECK(workspaceRes.error().code == Error::Code::NotFound);
     }
 
-    CHECK(runtimePtr->workspace().snapshot().openViews.empty());
+    CHECK(runtime.workspace().snapshot().openViews.empty());
 
     auto layoutStore = ConfigStore{layoutPath, ConfigStore::OpenMode::ReadOnly};
     auto layouts = uimodel::TrackColumnLayouts::Snapshot{};

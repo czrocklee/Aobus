@@ -164,7 +164,8 @@ namespace ao::systemmedia::test
     auto& playback = runtime.playback();
     fixture.makePlaybackReady();
     auto const selected = fixture.addPlayableTrack("Selected row");
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {selected}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {selected}));
+    auto& executor = fixture.executor();
     auto const ownerThread = std::this_thread::get_id();
     std::int32_t selectionStartCount = 0;
     bool selectionStartOnOwner = false;
@@ -172,14 +173,14 @@ namespace ao::systemmedia::test
                                             [&]
                                             {
                                               ++selectionStartCount;
-                                              selectionStartOnOwner = std::this_thread::get_id() == ownerThread &&
-                                                                      fixture.executor->isCurrent();
+                                              selectionStartOnOwner =
+                                                std::this_thread::get_id() == ownerThread && executor.isCurrent();
                                               return runtime.playSelectionInFocusedView().has_value();
                                             }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
     std::int32_t raiseCount = 0;
     bool raiseOnOwner = false;
-    auto bridge = MprisBridge{*fixture.executor,
+    auto bridge = MprisBridge{executor,
                               playback,
                               actions,
                               MprisBridge::Callbacks{
@@ -187,26 +188,25 @@ namespace ao::systemmedia::test
                                   [&]
                                 {
                                   ++raiseCount;
-                                  raiseOnOwner =
-                                    std::this_thread::get_id() == ownerThread && fixture.executor->isCurrent();
+                                  raiseOnOwner = std::this_thread::get_id() == ownerThread && executor.isCurrent();
                                   return true;
                                 },
                                 .quit = [] {},
                               },
                               optionsFor(bus)};
-    startAndAwait(bridge, *fixture.executor);
+    startAndAwait(bridge, executor);
     auto const destination = std::string{bridge.busName()};
     auto client = BusClient{bus.address()};
 
     auto identityCall = getProperty(client, destination, kRootInterface, "Identity");
-    fixture.executor->checkQueued();
+    executor.checkQueued();
     CHECK_FALSE(identityCall.isReady());
-    auto identityReply = awaitCall(identityCall, *fixture.executor);
+    auto identityReply = awaitCall(identityCall, executor);
     CHECK(requireStringGet(identityReply) == "Aobus Integration");
 
     auto getAllCall = client.callAsync(
       destination, kPropertiesInterface, "GetAll", ::g_variant_new("(s)", kRootInterface), G_VARIANT_TYPE("(a{sv})"));
-    auto getAllReply = awaitCall(getAllCall, *fixture.executor);
+    auto getAllReply = awaitCall(getAllCall, executor);
     REQUIRE(getAllReply);
     REQUIRE(::g_variant_is_of_type(getAllReply.value(), G_VARIANT_TYPE("(a{sv})")) == TRUE);
     auto propertiesPtr = takeVariant(::g_variant_get_child_value(getAllReply.value(), 0));
@@ -225,12 +225,12 @@ namespace ao::systemmedia::test
                        "Set",
                        ::g_variant_new("(ssv)", kPlayerInterface, "Volume", ::g_variant_new_double(0.37)),
                        G_VARIANT_TYPE("()"));
-    auto volumeSetReply = awaitCall(volumeSetCall, *fixture.executor);
+    auto volumeSetReply = awaitCall(volumeSetCall, executor);
     requireUnitReply(volumeSetReply);
     CHECK(playback.snapshot().transport.volume.level == Catch::Approx{0.37F});
 
     auto volumeGetCall = getProperty(client, destination, kPlayerInterface, "Volume");
-    auto volumeGetReply = awaitCall(volumeGetCall, *fixture.executor);
+    auto volumeGetReply = awaitCall(volumeGetCall, executor);
     auto volumePtr = getReplyValue(volumeGetReply);
     REQUIRE(::g_variant_is_of_type(volumePtr.get(), G_VARIANT_TYPE_DOUBLE) == TRUE);
     CHECK(::g_variant_get_double(volumePtr.get()) == Catch::Approx{0.37});
@@ -241,7 +241,7 @@ namespace ao::systemmedia::test
                        "Set",
                        ::g_variant_new("(ssv)", kPlayerInterface, "PlaybackStatus", ::g_variant_new_string("Playing")),
                        G_VARIANT_TYPE("()"));
-    auto readOnlyReply = awaitCall(readOnlyCall, *fixture.executor);
+    auto readOnlyReply = awaitCall(readOnlyCall, executor);
     // GDBus validates introspected access before forwarding to the owner.
     checkRemoteError(readOnlyReply, "org.freedesktop.DBus.Error.InvalidArgs");
 
@@ -251,30 +251,31 @@ namespace ao::systemmedia::test
                        "Set",
                        ::g_variant_new("(ssv)", kPlayerInterface, "Volume", ::g_variant_new_string("loud")),
                        G_VARIANT_TYPE("()"));
-    auto wrongTypeReply = awaitCall(wrongTypeCall, *fixture.executor);
+    auto wrongTypeReply = awaitCall(wrongTypeCall, executor);
     checkRemoteError(wrongTypeReply, "org.freedesktop.DBus.Error.InvalidArgs");
 
     auto unknownCall = getProperty(client, destination, kPlayerInterface, "NotAProperty");
-    auto unknownReply = awaitCall(unknownCall, *fixture.executor);
+    auto unknownReply = awaitCall(unknownCall, executor);
     checkRemoteError(unknownReply, "org.freedesktop.DBus.Error.InvalidArgs");
 
     auto raiseCall =
       client.callAsync(destination, kRootInterface, "Raise", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    auto raiseReply = awaitCall(raiseCall, *fixture.executor);
+    auto raiseReply = awaitCall(raiseCall, executor);
     requireUnitReply(raiseReply);
     CHECK(raiseCount == 1);
     CHECK(raiseOnOwner);
 
+    auto const previousRevision = playback.snapshot().transport.positionRevision;
     auto playCall =
       client.callAsync(destination, kPlayerInterface, "Play", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    fixture.executor->checkQueued();
+    executor.checkQueued();
     CHECK_FALSE(playCall.isReady());
     CHECK(selectionStartCount == 0);
-    auto playReply = awaitCall(playCall, *fixture.executor);
+    auto playReply = awaitCall(playCall, executor);
     requireUnitReply(playReply);
     CHECK(selectionStartCount == 1);
     CHECK(selectionStartOnOwner);
-    REQUIRE(fixture.tryWaitForPlayback(selected));
+    REQUIRE(fixture.tryWaitForPlayback(selected, previousRevision));
   }
 
   TEST_CASE("MprisBridge private bus - Play targets the visible selection or retained playback")
@@ -294,21 +295,22 @@ namespace ao::systemmedia::test
                                               return runtime.playSelectionInFocusedView().has_value();
                                             }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus)};
-    startAndAwait(bridge, *fixture.executor);
+    auto& executor = fixture.executor();
+    auto bridge = MprisBridge{executor, playback, actions, {}, optionsFor(bus)};
+    startAndAwait(bridge, executor);
     auto const destination = std::string{bridge.busName()};
     auto client = BusClient{bus.address()};
     auto const canPlay = [&]
     {
       auto call = getProperty(client, destination, kPlayerInterface, "CanPlay");
-      auto const valuePtr = getReplyValue(awaitCall(call, *fixture.executor));
+      auto const valuePtr = getReplyValue(awaitCall(call, executor));
       REQUIRE(::g_variant_is_of_type(valuePtr.get(), G_VARIANT_TYPE_BOOLEAN) == TRUE);
       return ::g_variant_get_boolean(valuePtr.get()) != FALSE;
     };
     auto const runMethod = [&](char const* method)
     {
       auto call = client.callAsync(destination, kPlayerInterface, method, ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-      requireUnitReply(awaitCall(call, *fixture.executor));
+      requireUnitReply(awaitCall(call, executor));
     };
 
     CHECK_FALSE(canPlay());
@@ -318,35 +320,36 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
 
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {selected}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {selected}));
     CHECK(canPlay());
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Another row")"));
-    fixture.executor->drain();
+    REQUIRE(runtime.views().setFilter(fixture.viewId(), R"($title = "Another row")"));
+    executor.drain();
     CHECK_FALSE(canPlay());
     runMethod("Play");
     CHECK(selectionStartCount == 0);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
 
-    REQUIRE(runtime.views().setFilter(fixture.viewId, ""));
-    fixture.executor->drain();
+    REQUIRE(runtime.views().setFilter(fixture.viewId(), ""));
+    executor.drain();
     CHECK(canPlay());
 
     auto pendingPlay =
       client.callAsync(destination, kPlayerInterface, "Play", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    fixture.executor->checkQueued();
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
-    requireUnitReply(awaitCall(pendingPlay, *fixture.executor));
+    executor.checkQueued();
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {}));
+    requireUnitReply(awaitCall(pendingPlay, executor));
     CHECK(selectionStartCount == 0);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
 
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {selected}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {selected}));
     CHECK(canPlay());
+    auto const previousRevision = playback.snapshot().transport.positionRevision;
     runMethod("Play");
-    REQUIRE(fixture.tryWaitForPlayback(selected));
+    REQUIRE(fixture.tryWaitForPlayback(selected, previousRevision));
     REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
     CHECK(selectionStartCount == 1);
 
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {}));
     auto const beforeRepeat = playback.snapshot().transport;
     CHECK(canPlay());
     runMethod("Play");
@@ -357,7 +360,7 @@ namespace ao::systemmedia::test
 
     auto const offset = std::chrono::milliseconds{250};
     playback.commands().seek(offset);
-    fixture.executor->drain();
+    executor.drain();
     REQUIRE(playback.snapshot().transport.elapsed == offset);
     REQUIRE(runtime.savePlaybackSession());
     playback.commands().stop();
@@ -369,10 +372,10 @@ namespace ao::systemmedia::test
     REQUIRE(playback.snapshot().transport.hasDeferredResume);
     REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
     CHECK(canPlay());
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {other}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {other}));
     runMethod("Play");
-    REQUIRE(fixture.executor->tryDrainUntil(
-      [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    REQUIRE(
+      executor.tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
     CHECK(selectionStartCount == 1);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == selected);
     CHECK(playback.snapshot().transport.elapsed == offset);
@@ -387,14 +390,15 @@ namespace ao::systemmedia::test
     auto actions = uimodel::PlaybackActions{playback, {}};
     auto options = optionsFor(bus);
     options.desktopEntry = desktopEntry;
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, std::move(options)};
-    startAndAwait(bridge, *fixture.executor);
+    auto& executor = fixture.executor();
+    auto bridge = MprisBridge{executor, playback, actions, {}, std::move(options)};
+    startAndAwait(bridge, executor);
     auto const destination = std::string{bridge.busName()};
     auto client = BusClient{bus.address()};
 
     auto getAllCall = client.callAsync(
       destination, kPropertiesInterface, "GetAll", ::g_variant_new("(s)", kRootInterface), G_VARIANT_TYPE("(a{sv})"));
-    auto getAllReply = awaitCall(getAllCall, *fixture.executor);
+    auto getAllReply = awaitCall(getAllCall, executor);
     REQUIRE(getAllReply);
     auto propertiesPtr = takeVariant(::g_variant_get_child_value(getAllReply.value(), 0));
     auto entryPtr = takeVariant(::g_variant_lookup_value(propertiesPtr.get(), "DesktopEntry", nullptr));
@@ -403,10 +407,10 @@ namespace ao::systemmedia::test
     CHECK(::g_variant_get_boolean(canQuitPtr.get()) == FALSE);
 
     auto getCall = getProperty(client, destination, kRootInterface, "DesktopEntry");
-    auto getReply = awaitCall(getCall, *fixture.executor);
+    auto getReply = awaitCall(getCall, executor);
     auto introspectCall = client.callAsync(
       destination, "org.freedesktop.DBus.Introspectable", "Introspect", ::g_variant_new("()"), G_VARIANT_TYPE("(s)"));
-    auto introspectReply = awaitCall(introspectCall, *fixture.executor);
+    auto introspectReply = awaitCall(introspectCall, executor);
     REQUIRE(introspectReply);
     auto xmlPtr = takeVariant(::g_variant_get_child_value(introspectReply.value(), 0));
     auto nodePtr = utility::makeUniquePtr<::g_dbus_node_info_unref>(
@@ -447,18 +451,16 @@ namespace ao::systemmedia::test
     auto canonicalActions = uimodel::PlaybackActions{playback, {}};
     auto firstActions = uimodel::PlaybackActions{playback, {}};
     auto secondActions = uimodel::PlaybackActions{playback, {}};
+    auto& executor = fixture.executor();
     auto canonical =
-      MprisBridge{*fixture.executor, playback, canonicalActions, {}, optionsFor(bus, kBaseName, false, "Canonical")};
-    auto first =
-      MprisBridge{*fixture.executor, playback, firstActions, {}, optionsFor(bus, kBaseName, true, "First unique")};
-    auto second =
-      MprisBridge{*fixture.executor, playback, secondActions, {}, optionsFor(bus, kBaseName, true, "Second unique")};
+      MprisBridge{executor, playback, canonicalActions, {}, optionsFor(bus, kBaseName, false, "Canonical")};
+    auto first = MprisBridge{executor, playback, firstActions, {}, optionsFor(bus, kBaseName, true, "First unique")};
+    auto second = MprisBridge{executor, playback, secondActions, {}, optionsFor(bus, kBaseName, true, "Second unique")};
 
     canonical.start();
     first.start();
     second.start();
-    REQUIRE(
-      fixture.executor->tryDrainUntil([&] { return canonical.isActive() && first.isActive() && second.isActive(); }));
+    REQUIRE(executor.tryDrainUntil([&] { return canonical.isActive() && first.isActive() && second.isActive(); }));
 
     auto const canonicalName = std::string{canonical.busName()};
     auto const firstName = std::string{first.busName()};
@@ -474,9 +476,9 @@ namespace ao::systemmedia::test
     auto canonicalCall = getProperty(client, canonicalName, kRootInterface, "Identity");
     auto firstCall = getProperty(client, firstName, kRootInterface, "Identity");
     auto secondCall = getProperty(client, secondName, kRootInterface, "Identity");
-    auto canonicalReply = awaitCall(canonicalCall, *fixture.executor);
-    auto firstReply = awaitCall(firstCall, *fixture.executor);
-    auto secondReply = awaitCall(secondCall, *fixture.executor);
+    auto canonicalReply = awaitCall(canonicalCall, executor);
+    auto firstReply = awaitCall(firstCall, executor);
+    auto secondReply = awaitCall(secondCall, executor);
     CHECK(requireStringGet(canonicalReply) == "Canonical");
     CHECK(requireStringGet(firstReply) == "First unique");
     CHECK(requireStringGet(secondReply) == "Second unique");
@@ -490,13 +492,14 @@ namespace ao::systemmedia::test
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
     auto client = BusClient{bus.address()};
-    auto ownerPtr = std::make_unique<MprisBridge>(
-      *fixture.executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName));
+    auto& executor = fixture.executor();
+    auto ownerPtr =
+      std::make_unique<MprisBridge>(executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName));
     ownerPtr->start();
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return ownerPtr->isActive(); }));
+    REQUIRE(executor.tryDrainUntil([&] { return ownerPtr->isActive(); }));
     REQUIRE(hasBusOwner(client.nativeConnection(), kName));
-    fixture.executor->drain();
-    REQUIRE(fixture.executor->queuedCount() == 0);
+    executor.drain();
+    REQUIRE(executor.queuedCount() == 0);
 
     std::int32_t subscribed = 0;
     auto source = MprisBridge::PlaybackSource{
@@ -510,12 +513,12 @@ namespace ao::systemmedia::test
       .elapsed = [&playback] { return playback.elapsed(); },
     };
     auto contenderPtr = std::make_unique<MprisBridge>(
-      *fixture.executor, playback, actions, MprisBridge::Callbacks{}, std::move(source), optionsFor(bus, kName));
+      executor, playback, actions, MprisBridge::Callbacks{}, std::move(source), optionsFor(bus, kName));
     contenderPtr->start();
     // A separate private connection must fail with no queue: it cannot take
     // ownership even after the successful owner releases its name.
-    fixture.executor->checkQueued();
-    fixture.executor->drain();
+    executor.checkQueued();
+    executor.drain();
     CHECK_FALSE(contenderPtr->isActive());
     CHECK(subscribed == 0);
     CHECK(ownerPtr->isActive());
@@ -523,23 +526,22 @@ namespace ao::systemmedia::test
     contenderPtr.reset();
     CHECK(ownerPtr->isActive());
     CHECK(hasBusOwner(client.nativeConnection(), kName));
-    fixture.executor->drain();
-    REQUIRE(fixture.executor->queuedCount() == 0);
+    executor.drain();
+    REQUIRE(executor.queuedCount() == 0);
 
-    auto waitingContender =
-      MprisBridge{*fixture.executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName)};
+    auto waitingContender = MprisBridge{executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName)};
     waitingContender.start();
-    fixture.executor->checkQueued();
-    fixture.executor->drain();
+    executor.checkQueued();
+    executor.drain();
     CHECK_FALSE(waitingContender.isActive());
     ownerPtr.reset();
     CHECK_FALSE(hasBusOwner(client.nativeConnection(), kName));
-    fixture.executor->drain();
+    executor.drain();
     CHECK_FALSE(waitingContender.isActive());
     CHECK_FALSE(hasBusOwner(client.nativeConnection(), kName));
 
-    auto replacement = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus, kName)};
-    startAndAwait(replacement, *fixture.executor);
+    auto replacement = MprisBridge{executor, playback, actions, {}, optionsFor(bus, kName)};
+    startAndAwait(replacement, executor);
     CHECK(hasBusOwner(client.nativeConnection(), kName));
   }
 
@@ -555,14 +557,15 @@ namespace ao::systemmedia::test
     auto observer = BusClient{bus.address()};
     REQUIRE(changeBusName(peer.nativeConnection(), "RequestName", kName) == 1U);
     REQUIRE(hasBusOwner(observer.nativeConnection(), kName));
-    fixture.executor->drain();
-    REQUIRE(fixture.executor->queuedCount() == 0);
+    auto& executor = fixture.executor();
+    executor.drain();
+    REQUIRE(executor.queuedCount() == 0);
 
-    auto contenderPtr = std::make_unique<MprisBridge>(
-      *fixture.executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName));
+    auto contenderPtr =
+      std::make_unique<MprisBridge>(executor, playback, actions, MprisBridge::Callbacks{}, optionsFor(bus, kName));
     contenderPtr->start();
-    fixture.executor->checkQueued();
-    fixture.executor->drain();
+    executor.checkQueued();
+    executor.drain();
     CHECK_FALSE(contenderPtr->isActive());
     CHECK(hasBusOwner(observer.nativeConnection(), kName));
     REQUIRE(changeBusName(peer.nativeConnection(), "ReleaseName", kName) == 1U);
@@ -570,8 +573,8 @@ namespace ao::systemmedia::test
     contenderPtr.reset();
     CHECK_FALSE(hasBusOwner(observer.nativeConnection(), kName));
 
-    auto replacement = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus, kName)};
-    startAndAwait(replacement, *fixture.executor);
+    auto replacement = MprisBridge{executor, playback, actions, {}, optionsFor(bus, kName)};
+    startAndAwait(replacement, executor);
     CHECK(hasBusOwner(observer.nativeConnection(), kName));
   }
 
@@ -723,6 +726,7 @@ namespace ao::systemmedia::test
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
     auto observer = BusClient{bus.address()};
+    auto& executor = fixture.executor();
     bool settleFirst = false;
 
     SECTION("before acquisition")
@@ -736,12 +740,12 @@ namespace ao::systemmedia::test
     }
 
     {
-      auto first = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus, kName)};
+      auto first = MprisBridge{executor, playback, actions, {}, optionsFor(bus, kName)};
       first.start();
 
       if (settleFirst)
       {
-        REQUIRE(fixture.executor->tryDrainUntil([&] { return first.isActive(); }));
+        REQUIRE(executor.tryDrainUntil([&] { return first.isActive(); }));
         CHECK(hasBusOwner(observer.nativeConnection(), kName));
       }
       else
@@ -750,9 +754,9 @@ namespace ao::systemmedia::test
       }
     }
 
-    auto replacement = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus, kName)};
-    startAndAwait(replacement, *fixture.executor);
-    fixture.executor->drain();
+    auto replacement = MprisBridge{executor, playback, actions, {}, optionsFor(bus, kName)};
+    startAndAwait(replacement, executor);
+    executor.drain();
     CHECK(replacement.isActive());
     CHECK(hasBusOwner(observer.nativeConnection(), kName));
   }
@@ -763,6 +767,7 @@ namespace ao::systemmedia::test
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
+    auto& executor = fixture.executor();
     auto bridgePtr = std::unique_ptr<MprisBridge>{};
     bool quitOnOwner = false;
     bool destroyed = false;
@@ -770,21 +775,20 @@ namespace ao::systemmedia::test
       .quit =
         [&]
       {
-        quitOnOwner = fixture.executor->isCurrent();
+        quitOnOwner = executor.isCurrent();
         bridgePtr.reset();
         destroyed = true;
       },
     };
-    bridgePtr =
-      std::make_unique<MprisBridge>(*fixture.executor, playback, actions, std::move(callbacks), optionsFor(bus));
-    startAndAwait(*bridgePtr, *fixture.executor);
+    bridgePtr = std::make_unique<MprisBridge>(executor, playback, actions, std::move(callbacks), optionsFor(bus));
+    startAndAwait(*bridgePtr, executor);
     auto const destination = std::string{bridgePtr->busName()};
     auto client = BusClient{bus.address()};
 
     auto quitCall = client.callAsync(destination, kRootInterface, "Quit", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    auto quitReply = awaitCall(quitCall, *fixture.executor);
+    auto quitReply = awaitCall(quitCall, executor);
     requireUnitReply(quitReply);
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return destroyed; }));
+    REQUIRE(executor.tryDrainUntil([&] { return destroyed; }));
     CHECK(quitOnOwner);
     CHECK_FALSE(bridgePtr);
   }
@@ -796,7 +800,8 @@ namespace ao::systemmedia::test
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
     std::int32_t raiseCount = 0;
-    auto bridgePtr = std::make_unique<MprisBridge>(*fixture.executor,
+    auto& executor = fixture.executor();
+    auto bridgePtr = std::make_unique<MprisBridge>(executor,
                                                    playback,
                                                    actions,
                                                    MprisBridge::Callbacks{
@@ -808,14 +813,14 @@ namespace ao::systemmedia::test
                                                      },
                                                    },
                                                    optionsFor(bus));
-    startAndAwait(*bridgePtr, *fixture.executor);
-    fixture.executor->drain();
-    REQUIRE(fixture.executor->queuedCount() == 0);
+    startAndAwait(*bridgePtr, executor);
+    executor.drain();
+    REQUIRE(executor.queuedCount() == 0);
     auto const destination = std::string{bridgePtr->busName()};
     auto client = BusClient{bus.address()};
 
     auto heldCall = client.callAsync(destination, kRootInterface, "Raise", ::g_variant_new("()"), G_VARIANT_TYPE("()"));
-    fixture.executor->checkQueued();
+    executor.checkQueued();
     CHECK_FALSE(heldCall.isReady());
 
     auto const retirementStart = std::chrono::steady_clock::now();
@@ -829,7 +834,7 @@ namespace ao::systemmedia::test
     CHECK((heldReply.errorMessage().contains("disconnected") || heldReply.errorMessage().contains("closed")));
     CHECK(raiseCount == 0);
 
-    fixture.executor->drain();
+    executor.drain();
     CHECK(raiseCount == 0);
   }
 
@@ -850,7 +855,7 @@ namespace ao::systemmedia::test
       .elapsed = [&playback] { return playback.elapsed(); },
     };
     auto options = MprisBridgeOptions{.optBusAddress = std::string{}};
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, std::move(source), std::move(options)};
+    auto bridge = MprisBridge{fixture.executor(), playback, actions, {}, std::move(source), std::move(options)};
 
     bridge.start();
     CHECK_FALSE(bridge.isActive());
@@ -863,14 +868,15 @@ namespace ao::systemmedia::test
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
+    auto& executor = fixture.executor();
     auto control =
-      MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus, "org.mpris.MediaPlayer2.aobus.allowed")};
-    startAndAwait(control, *fixture.executor);
+      MprisBridge{executor, playback, actions, {}, optionsFor(bus, "org.mpris.MediaPlayer2.aobus.allowed")};
+    startAndAwait(control, executor);
 
     auto options = optionsFor(bus, "org.mpris.MediaPlayer2.aobus.mixed");
     options.optBusAddress = bus.address() + ";autolaunch:";
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, std::move(options)};
-    startAndAwait(bridge, *fixture.executor);
+    auto bridge = MprisBridge{executor, playback, actions, {}, std::move(options)};
+    startAndAwait(bridge, executor);
     CHECK(bridge.busName() == "org.mpris.MediaPlayer2.aobus.mixed");
     CHECK(control.isActive());
   }
@@ -891,13 +897,14 @@ namespace ao::systemmedia::test
       },
       .elapsed = [&playback] { return playback.elapsed(); },
     };
-    auto const missingSocket = fixture.tempDir.path() / "no-session-bus";
+    auto const missingSocket = fixture.runtime().musicRoot() / "no-session-bus";
     auto options = MprisBridgeOptions{.optBusAddress = "unix:path=" + missingSocket.string()};
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, std::move(source), std::move(options)};
+    auto& executor = fixture.executor();
+    auto bridge = MprisBridge{executor, playback, actions, {}, std::move(source), std::move(options)};
 
     bridge.start();
-    fixture.executor->checkQueued();
-    fixture.executor->drain();
+    executor.checkQueued();
+    executor.drain();
     CHECK_FALSE(bridge.isActive());
     CHECK(subscriptionCount == 0);
   }
@@ -908,11 +915,12 @@ namespace ao::systemmedia::test
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
     auto actions = uimodel::PlaybackActions{playback, {}};
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, optionsFor(bus)};
-    startAndAwait(bridge, *fixture.executor);
+    auto& executor = fixture.executor();
+    auto bridge = MprisBridge{executor, playback, actions, {}, optionsFor(bus)};
+    startAndAwait(bridge, executor);
 
     bus.stop();
-    REQUIRE(fixture.executor->tryDrainUntil([&] { return !bridge.isActive(); }));
+    REQUIRE(executor.tryDrainUntil([&] { return !bridge.isActive(); }));
     CHECK(bridge.busName().empty());
   }
 
@@ -933,17 +941,18 @@ namespace ao::systemmedia::test
       },
       .elapsed = [&playback] { return playback.elapsed(); },
     };
+    auto& executor = fixture.executor();
     auto bridgePtr = std::make_unique<MprisBridge>(
-      *fixture.executor, playback, actions, MprisBridge::Callbacks{}, std::move(source), optionsFor(bus));
+      executor, playback, actions, MprisBridge::Callbacks{}, std::move(source), optionsFor(bus));
 
-    fixture.executor->drain();
-    REQUIRE(fixture.executor->queuedCount() == 0);
+    executor.drain();
+    REQUIRE(executor.queuedCount() == 0);
     bridgePtr->start();
-    fixture.executor->checkQueued();
+    executor.checkQueued();
     CHECK_FALSE(bridgePtr->isActive());
     bridgePtr->retire();
     bridgePtr.reset();
-    fixture.executor->drain();
+    executor.drain();
     CHECK(subscriptionCount == 0);
   }
 } // namespace ao::systemmedia::test

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/ShellLayoutCollaborators.h"
+#include "app/linux-gtk/layout/component/ComponentRegistrations.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
@@ -54,13 +55,14 @@ namespace ao::gtk::layout::editor::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto ownerPtr = ao::gtk::test::makeRuntime(tempDir);
     auto const& textCatalog = ao::test::englishMessageCatalog();
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
       registry,
-      *runtimePtr,
+      ownerPtr->runtime(),
+      uimodel::LibraryEditing{ownerPtr->libraryCommands()},
       ShellLayoutCollaborators{
         .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
     auto actionRegistry = ActionRegistry{registry.schema()};
@@ -272,12 +274,13 @@ namespace ao::gtk::layout::editor::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_preview_lifetime_test");
     auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto ownerPtr = ao::gtk::test::makeRuntime(tempDir);
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
       registry,
-      *runtimePtr,
+      ownerPtr->runtime(),
+      uimodel::LibraryEditing{ownerPtr->libraryCommands()},
       ShellLayoutCollaborators{
         .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
     auto actionRegistry = ActionRegistry{registry.schema()};
@@ -410,17 +413,9 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorDialog - structural mutations keep the edited node selected")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_selection_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto const& textCatalog = ao::test::englishMessageCatalog();
-
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(
-      registry,
-      *runtimePtr,
-      ShellLayoutCollaborators{
-        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    registerContainerComponents(registry, textCatalog);
     auto actionRegistry = ActionRegistry{registry.schema()};
 
     auto window = Gtk::Window{};
@@ -589,17 +584,9 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorDialog - structural mutations keep a nested node selected within its non-root parent")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_nested_selection_test");
-
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto const& textCatalog = ao::test::englishMessageCatalog();
-
     auto registry = ComponentRegistry{};
-    LayoutRuntime::registerStandardComponents(
-      registry,
-      *runtimePtr,
-      ShellLayoutCollaborators{
-        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    registerContainerComponents(registry, textCatalog);
     auto actionRegistry = ActionRegistry{registry.schema()};
 
     auto window = Gtk::Window{};

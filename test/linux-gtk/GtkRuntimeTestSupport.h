@@ -9,6 +9,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <chrono>
 #include <filesystem>
@@ -34,6 +35,7 @@ namespace ao::test
 namespace ao::rt
 {
   class AppRuntime;
+  class AppRuntimeOwner;
   class TextOrderingPolicy;
 }
 
@@ -63,8 +65,8 @@ namespace ao::gtk::test
     return rt::test::runRuntimeTask(runtime, runGtkTaskOnCallbackAsync(&runtime.async(), std::move(task)), pump);
   }
 
-  TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec);
-  void updateRuntimeTrack(rt::AppRuntime& runtime,
+  TrackId addRuntimeTrack(rt::AppRuntimeOwner& owner, library::test::TrackSpec const& spec);
+  void updateRuntimeTrack(rt::AppRuntimeOwner& owner,
                           TrackId trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater);
 
@@ -80,7 +82,9 @@ namespace ao::gtk::test
     GtkRuntimeFixture(GtkRuntimeFixture&&) = delete;
     GtkRuntimeFixture& operator=(GtkRuntimeFixture&&) = delete;
 
+    rt::AppRuntimeOwner& owner();
     rt::AppRuntime& runtime();
+    uimodel::LibraryEditing editing();
     ao::test::TempDir& tempDir();
 
     /// Where this fixture's runtime keeps its derived caches, including the
@@ -96,7 +100,7 @@ namespace ao::gtk::test
   /// runtime rooted at @p tempPath.
   std::filesystem::path runtimeCacheDirectory(std::filesystem::path const& tempPath);
 
-  std::unique_ptr<rt::AppRuntime> makeRuntime(
+  std::unique_ptr<rt::AppRuntimeOwner> makeRuntime(
     ao::test::TempDir const& tempDir,
     compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);

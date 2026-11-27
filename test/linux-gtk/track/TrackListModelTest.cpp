@@ -123,8 +123,8 @@ namespace ao::gtk::test
     struct TrackListModelFixture final
     {
       TrackListModelFixture()
-        : id1{addRuntimeTrack(runtime, makeTrackSpec("Song A", "Artist A", "Album A", 2020))}
-        , id2{addRuntimeTrack(runtime, makeTrackSpec("Song B", "Artist B", "Album B", 2021))}
+        : id1{addRuntimeTrack(runtimeFixture.owner(), makeTrackSpec("Song A", "Artist A", "Album A", 2020))}
+        , id2{addRuntimeTrack(runtimeFixture.owner(), makeTrackSpec("Song B", "Artist B", "Album B", 2021))}
         , sourcePtr{rt::test::makeMutableTrackSource({id1, id2})}
         , rowCache{runtime.library(), ao::test::englishMessageCatalog()}
         , projectionPtr{runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})}
@@ -239,7 +239,8 @@ namespace ao::gtk::test
 
     SECTION("Delta batch notifications - Insert")
     {
-      auto const id3 = addRuntimeTrack(fixture.runtime, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
+      auto const id3 =
+        addRuntimeTrack(fixture.runtimeFixture.owner(), makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       fixture.sourcePtr->insert(id3, 0);
 
       REQUIRE(fixture.spy.events.size() == 1);
@@ -402,7 +403,8 @@ namespace ao::gtk::test
         }
       })};
 
-    updateRuntimeTrack(runtime, editedTrackId, [newTitle](library::test::TrackSpec& spec) { spec.title = newTitle; });
+    updateRuntimeTrack(
+      fixture.owner(), editedTrackId, [newTitle](library::test::TrackSpec& spec) { spec.title = newTitle; });
 
     CHECK(movedItemPtr == oldItemPtr);
     CHECK(movedTitle == newTitle);
@@ -422,9 +424,9 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const albumA1 = addRuntimeTrack(runtime, makeTrackSpec("A1", "Artist", "Album A"));
-    auto const albumA2 = addRuntimeTrack(runtime, makeTrackSpec("A2", "Artist", "Album A"));
-    auto const albumB = addRuntimeTrack(runtime, makeTrackSpec("B1", "Artist", "Album B"));
+    auto const albumA1 = addRuntimeTrack(fixture.owner(), makeTrackSpec("A1", "Artist", "Album A"));
+    auto const albumA2 = addRuntimeTrack(fixture.owner(), makeTrackSpec("A2", "Artist", "Album A"));
+    auto const albumB = addRuntimeTrack(fixture.owner(), makeTrackSpec("B1", "Artist", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
     auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
       runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
@@ -449,7 +451,7 @@ namespace ao::gtk::test
     CHECK(sectionRangeAt(sectionModel, 1) == std::make_pair(::guint{0}, ::guint{2}));
     CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
 
-    auto const albumA3 = addRuntimeTrack(runtime, makeTrackSpec("A3", "Artist", "Album A"));
+    auto const albumA3 = addRuntimeTrack(fixture.owner(), makeTrackSpec("A3", "Artist", "Album A"));
     sourcePtr->append(albumA3);
     CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{3}));
     CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
@@ -461,7 +463,7 @@ namespace ao::gtk::test
     CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{2}));
     CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
 
-    auto const albumC = addRuntimeTrack(runtime, makeTrackSpec("C1", "Artist", "Album C"));
+    auto const albumC = addRuntimeTrack(fixture.owner(), makeTrackSpec("C1", "Artist", "Album C"));
     sourcePtr->append(albumC);
     CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
 
@@ -475,8 +477,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const firstTrackId = addRuntimeTrack(runtime, makeTrackSpec("First", "Artist", "Album"));
-    auto const secondTrackId = addRuntimeTrack(runtime, makeTrackSpec("Second", "Artist", "Album"));
+    auto const firstTrackId = addRuntimeTrack(fixture.owner(), makeTrackSpec("First", "Artist", "Album"));
+    auto const secondTrackId = addRuntimeTrack(fixture.owner(), makeTrackSpec("Second", "Artist", "Album"));
     auto sourcePtr = rt::test::makeMutableTrackSource({firstTrackId, secondTrackId});
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
@@ -520,8 +522,8 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const trackA = addRuntimeTrack(runtime, makeTrackSpec("Track 1", "Artist A", "Album A"));
-    auto const trackB = addRuntimeTrack(runtime, makeTrackSpec("Track 2", "Artist B", "Album B"));
+    auto const trackA = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track 1", "Artist A", "Album A"));
+    auto const trackB = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track 2", "Artist B", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({trackA, trackB});
     auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
       runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
@@ -554,8 +556,8 @@ namespace ao::gtk::test
       { sectionValidityDuringEvents.push_back(hasValidSectionRanges(sectionModel)); })};
 
     // Simulate multi-track addition during library scan (which causes multiple edit ranges in sorted projection)
-    auto const newTrackA = addRuntimeTrack(runtime, makeTrackSpec("Track 0", "Artist A", "Album A"));
-    auto const newTrackB = addRuntimeTrack(runtime, makeTrackSpec("Track 3", "Artist B", "Album B"));
+    auto const newTrackA = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track 0", "Artist A", "Album A"));
+    auto const newTrackB = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track 3", "Artist B", "Album B"));
 
     sourcePtr->batchInsert(std::array{newTrackA, newTrackB});
 
@@ -597,9 +599,9 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const trackA = addRuntimeTrack(runtime, makeTrackSpec("Track A", "Artist", "Album"));
-    auto const trackB = addRuntimeTrack(runtime, makeTrackSpec("Track B", "Artist", "Album"));
-    auto const trackC = addRuntimeTrack(runtime, makeTrackSpec("Track C", "Artist", "Album"));
+    auto const trackA = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track A", "Artist", "Album"));
+    auto const trackB = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track B", "Artist", "Album"));
+    auto const trackC = addRuntimeTrack(fixture.owner(), makeTrackSpec("Track C", "Artist", "Album"));
     auto sourcePtr = rt::test::makeMutableTrackSource({trackA, trackB, trackC});
     auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
       runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
@@ -610,7 +612,7 @@ namespace ao::gtk::test
     auto const cachedTrackCPtr = trackRowAt(*modelPtr, 2);
     CHECK(cachedTrackCPtr->fieldText(rt::TrackField::Title) == "Track C");
 
-    updateRuntimeTrack(runtime, trackC, [](library::test::TrackSpec& spec) { spec.title = "Updated Track C"; });
+    updateRuntimeTrack(fixture.owner(), trackC, [](library::test::TrackSpec& spec) { spec.title = "Updated Track C"; });
     CHECK(cachedTrackCPtr->fieldText(rt::TrackField::Title) == "Track C");
 
     auto projectionBatches = std::vector<rt::TrackListProjectionDeltaBatch>{};
@@ -649,7 +651,7 @@ namespace ao::gtk::test
 
     SECTION("Structural batches reset after refreshing final-coordinate updates")
     {
-      auto const insertedTrack = addRuntimeTrack(runtime, makeTrackSpec("Inserted", "Artist", "Album"));
+      auto const insertedTrack = addRuntimeTrack(fixture.owner(), makeTrackSpec("Inserted", "Artist", "Album"));
       auto const finalTrackIds = std::array{trackA, insertedTrack, trackB, trackC};
       sourcePtr->replaceWithBatch(finalTrackIds,
                                   rt::TrackSourceDelta{rt::delta::RegularTrackEditScript{

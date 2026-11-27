@@ -11,6 +11,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 
 #include <memory>
@@ -20,7 +21,6 @@
 
 namespace ao::rt
 {
-  class Library;
   class ViewService;
 }
 
@@ -34,13 +34,13 @@ namespace ao::uimodel
   /**
    * Revision- and view-bound editing for one effective List order.
    *
-   * Submitted operations retain the session State, but Library and ViewService
-   * remain borrows and must outlive every such operation.
+   * Submitted operations retain the session State, but the command owner and
+   * ViewService remain borrowed and must outlive every such operation.
    */
   class [[nodiscard]] ListOrderAuthoringSession final
   {
   public:
-    static Result<ListOrderAuthoringSession> begin(rt::Library& library,
+    static Result<ListOrderAuthoringSession> begin(LibraryEditing editing,
                                                    rt::ViewService& views,
                                                    rt::ViewId viewId,
                                                    i18n::MessageCatalog const& textCatalog);

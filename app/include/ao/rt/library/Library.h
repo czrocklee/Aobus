@@ -9,7 +9,6 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
-#include <memory>
 #include <span>
 #include <vector>
 
@@ -18,76 +17,25 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace ao::async
-{
-  class Runtime;
-}
-
 namespace ao::rt
 {
   class LibraryChanges;
   class LibrarySnapshot;
-  class LibraryJobs;
-  class LibraryCommands;
+  class LibraryWriteLane;
 
-  // CQRS façade over the music library, exposing four cooperating roles:
-  // snapshots (consistent point-in-time reads), commands (sequenced
-  // asynchronous mutations), jobs (long-running async operations), and changes
-  // (the mutation event bus).
-  // Library owns its writable capability and private role graph. The underlying
-  // MusicLibrary storage, async Runtime and LibraryChanges bus are borrowed and
-  // must outlive it.
+  /// Read and observe one live library. Bindings identify targets; they do not authorize submission.
   class Library final
   {
   public:
-    /// Short-lived construction token carrying exclusive write authority for
-    /// one final-position MusicLibrary. It is consumed by Library construction.
-    class Prepared final
-    {
-    public:
-      ~Prepared();
-
-      Prepared(Prepared const&) = delete;
-      Prepared& operator=(Prepared const&) = delete;
-      Prepared(Prepared&&) noexcept;
-      Prepared& operator=(Prepared&&) noexcept;
-
-    private:
-      struct Impl;
-      explicit Prepared(std::unique_ptr<Impl> implPtr);
-      std::unique_ptr<Impl> _implPtr;
-
-      friend class Library;
-    };
-
-    /// Acquires the write authority needed to construct a Library against final storage.
-    static Result<Prepared> prepare(library::MusicLibrary& storage);
-
-    /// Consumes prepared write authority. The borrowed MusicLibrary, Runtime,
-    /// and LibraryChanges must outlive this facade and pending tasks.
-    Library(async::Runtime& asyncRuntime, Prepared prepared, LibraryChanges& changes);
-    ~Library();
-
     Library(Library const&) = delete;
     Library& operator=(Library const&) = delete;
     Library(Library&&) = delete;
     Library& operator=(Library&&) = delete;
 
-    /// Terminally and idempotently closes write/publication admission and
-    /// settles admitted mutations. Borrowed runtime workers must remain alive
-    /// while this call waits. Keep this Library alive through the subsequent
-    /// Runtime::requestStop()/join(); closing alone does not quiesce all jobs.
-    /// Defer closing from synchronous availability observers to a later turn.
-    void beginClosing() noexcept;
-
     LibrarySnapshot snapshot() const;
     LibraryChanges const& changes() const noexcept;
-    LibraryCommands& commands() noexcept;
-    LibraryJobs& jobs() noexcept;
-
     LibraryAuthoringAvailability authoringAvailability() const;
-    // Synchronous callback-executor notification. A handler must defer
-    // Library destruction or CoreRuntime shutdown to a later executor turn.
+    // Synchronous callback-executor notification. Defer owner shutdown to a later executor turn.
     async::Subscription onAuthoringAvailabilityChanged(
       compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
@@ -99,7 +47,12 @@ namespace ao::rt
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    friend class LibraryOwner;
+    Library(library::MusicLibrary const& storage, LibraryChanges const& changes, LibraryWriteLane const& writeLane);
+    ~Library() = default;
+
+    library::MusicLibrary const& _storage;
+    LibraryChanges const& _changes;
+    LibraryWriteLane const& _writeLane;
   };
 } // namespace ao::rt

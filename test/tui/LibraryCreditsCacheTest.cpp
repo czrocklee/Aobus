@@ -30,18 +30,19 @@ namespace ao::tui::test
   TEST_CASE("LibraryController credits - redraw borrows the same owning ordered list until focus changes")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
+    auto runtimeOwnerPtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
+    auto& runtime = runtimeOwnerPtr->runtime();
     auto const expected = std::vector<library::Credit>{{"A", library::CreditKind::Performer, "Piano"},
                                                        {"A", library::CreditKind::Performer, "Voice"},
                                                        {"A", library::CreditKind::Performer, "Piano"}};
-    auto const credited = rt::test::addRuntimeTrack(*runtimePtr, {.title = "A", .credits = expected});
-    auto const empty = rt::test::addRuntimeTrack(*runtimePtr, {.title = "B"});
-    auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+    auto const credited = rt::test::addRuntimeTrack(*runtimeOwnerPtr, {.title = "A", .credits = expected});
+    auto const empty = rt::test::addRuntimeTrack(*runtimeOwnerPtr, {.title = "B"});
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         columnLayouts};
@@ -81,31 +82,31 @@ namespace ao::tui::test
   {
     using library::CreditKind;
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
-    auto const id =
-      rt::test::addRuntimeTrack(*runtimePtr, {.title = "A", .credits = {{"Before", CreditKind::Conductor, "Piano"}}});
-    auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+    auto runtimeOwnerPtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
+    auto& runtime = runtimeOwnerPtr->runtime();
+    auto const id = rt::test::addRuntimeTrack(
+      *runtimeOwnerPtr, {.title = "A", .credits = {{"Before", CreditKind::Conductor, "Piano"}}});
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         columnLayouts};
     CHECK(controller.focusedCredits()[0].optValue ==
           std::vector<library::Credit>{{"Before", CreditKind::Conductor, "Piano"}});
     rt::test::updateRuntimeTrack(
-      *runtimePtr, id, [](auto& spec) { spec.credits = {{"After", CreditKind::Soloist, "Voice"}}; });
+      *runtimeOwnerPtr, id, [](auto& spec) { spec.credits = {{"After", CreditKind::Soloist, "Voice"}}; });
     CHECK(controller.focusedCredits()[0].optValue->empty());
     CHECK(controller.focusedCredits()[2].optValue ==
           std::vector<library::Credit>{{"After", CreditKind::Soloist, "Voice"}});
-    rt::test::updateRuntimeTrack(*runtimePtr, id, [](auto& spec) { spec.credits.clear(); });
+    rt::test::updateRuntimeTrack(*runtimeOwnerPtr, id, [](auto& spec) { spec.credits.clear(); });
     auto const& cleared = controller.focusedCredits()[2];
     REQUIRE(cleared.optValue);
     CHECK(cleared.optValue->empty());
-    auto const deletedRes =
-      rt::test::runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteTrackAsync(id));
+    auto const deletedRes = rt::test::runRuntimeTask(runtime, runtimeOwnerPtr->libraryCommands().deleteTrackAsync(id));
     REQUIRE(deletedRes);
     CHECK(controller.tracks().empty());
 
@@ -115,8 +116,8 @@ namespace ao::tui::test
       CHECK_FALSE(section.mixed);
     }
 
-    auto const newId =
-      rt::test::addRuntimeTrack(*runtimePtr, {.title = "New", .credits = {{"New", CreditKind::Performer, "Violin"}}});
+    auto const newId = rt::test::addRuntimeTrack(
+      *runtimeOwnerPtr, {.title = "New", .credits = {{"New", CreditKind::Performer, "Violin"}}});
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == newId);
     CHECK(controller.focusedCredits()[3].optValue ==
@@ -127,15 +128,16 @@ namespace ao::tui::test
   {
     using library::CreditKind;
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
+    auto runtimeOwnerPtr = rt::test::makeRuntime(tempDir, std::make_unique<async::LoopExecutor>());
+    auto& runtime = runtimeOwnerPtr->runtime();
     std::ignore = rt::test::addRuntimeTrack(
-      *runtimePtr, {.title = "Before", .credits = {{"Before", CreditKind::Performer, "Piano"}}});
-    auto catalog = uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-    auto presentations = uimodel::ListPresentations{catalog, runtimePtr->library().changes()};
-    auto columnLayouts = uimodel::TrackColumnLayouts{runtimePtr->library().changes()};
-    auto controller = LibraryController{runtimePtr->library(),
-                                        runtimePtr->views(),
-                                        runtimePtr->workspace(),
+      *runtimeOwnerPtr, {.title = "Before", .credits = {{"Before", CreditKind::Performer, "Piano"}}});
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto presentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto controller = LibraryController{runtime.library(),
+                                        runtime.views(),
+                                        runtime.workspace(),
                                         ao::test::englishMessageCatalog(),
                                         presentations,
                                         columnLayouts};
@@ -149,11 +151,10 @@ namespace ao::tui::test
               "        - name: After\n          kind: performer\n          role: Voice\n  lists: []\n";
       REQUIRE(yaml.good());
     }
-    auto planRes = rt::test::runRuntimeTask(
-      *runtimePtr, runtimePtr->library().jobs().prepareLibraryImportAsync(path, rt::ImportMode::Restore));
+    auto& jobs = runtimeOwnerPtr->libraryJobs();
+    auto planRes = rt::test::runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Restore));
     REQUIRE(planRes);
-    auto appliedRes = rt::test::runRuntimeTask(
-      *runtimePtr, runtimePtr->library().jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
+    auto appliedRes = rt::test::runRuntimeTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
     REQUIRE(appliedRes);
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.focusedCredits()[3].optValue ==

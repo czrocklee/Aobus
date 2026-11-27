@@ -16,6 +16,11 @@
 #include <memory>
 #include <optional>
 
+namespace ao::rt
+{
+  class LibraryCommands;
+}
+
 namespace ao::appkit::test
 {
   inline constexpr std::int32_t kFixtureTrackCount = 20;
@@ -61,9 +66,12 @@ namespace ao::appkit::test
     SessionFixture(SessionFixture&&) = delete;
     SessionFixture& operator=(SessionFixture&&) = delete;
     LibrarySession& session();
+    rt::LibraryCommands& libraryCommands() const noexcept;
+    void close() noexcept;
 
   private:
     std::unique_ptr<LibrarySession> _sessionPtr;
+    rt::LibraryCommands* _libraryCommands = nullptr; // Borrowed at session creation.
   };
 
   std::int32_t runDesktopScenario(DesktopLaunch launch, i18n::MessageCatalog catalog, bool successor);

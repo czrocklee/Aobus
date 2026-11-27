@@ -12,7 +12,6 @@
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/PlaybackUiTestSupport.h"
-#include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
@@ -28,7 +27,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -149,16 +147,14 @@ namespace ao::systemmedia::test
 
     TrackId addRuntimeTrack(rt::test::PlaybackUiFixture& fixture, library::test::TrackSpec const& spec)
     {
-      auto const trackId =
-        rt::test::addRuntimeTrack(fixture.runtime(), spec, [&fixture] { fixture.executor->drain(); });
-      fixture.runtime().sources().reloadAllTracks();
-      fixture.executor->drain();
+      auto const trackId = fixture.addTrack(spec);
+      fixture.executor().drain();
       return trackId;
     }
 
     bool tryWaitForPlayback(rt::test::PlaybackUiFixture& fixture, TrackId const trackId)
     {
-      return fixture.executor->tryDrainUntil(
+      return fixture.executor().tryDrainUntil(
         [&fixture, trackId]
         { return fixture.runtime().playback().snapshot().transport.nowPlaying.trackId == trackId; });
     }
@@ -294,7 +290,7 @@ namespace ao::systemmedia::test
     std::int32_t cancellationCount = 0;
     auto bus = PrivateBus{};
     auto bridge = MprisBridge{
-      *fixture.executor,
+      fixture.executor(),
       playback,
       actions,
       MprisBridge::Callbacks{
@@ -313,7 +309,7 @@ namespace ao::systemmedia::test
       playbackSource.source(),
       MprisBridgeOptions{.optBusAddress = bus.address()}};
     bridge.start();
-    REQUIRE(fixture.executor->tryDrainUntil([&bridge] { return bridge.isActive(); }));
+    REQUIRE(fixture.executor().tryDrainUntil([&bridge] { return bridge.isActive(); }));
 
     playbackSource.publish(playbackSnapshot(kFirstTrackId, kFirstResourceId));
     REQUIRE(pending.size() == 1);
@@ -347,7 +343,7 @@ namespace ao::systemmedia::test
     auto playbackSource = FakePlaybackSource{};
     auto capturedCompletion = MprisBridge::OnArtUrlReady{};
     auto bus = PrivateBus{};
-    auto bridge = MprisBridge{*fixture.executor,
+    auto bridge = MprisBridge{fixture.executor(),
                               playback,
                               actions,
                               MprisBridge::Callbacks{
@@ -362,7 +358,7 @@ namespace ao::systemmedia::test
                               playbackSource.source(),
                               MprisBridgeOptions{.optBusAddress = bus.address()}};
     bridge.start();
-    REQUIRE(fixture.executor->tryDrainUntil([&bridge] { return bridge.isActive(); }));
+    REQUIRE(fixture.executor().tryDrainUntil([&bridge] { return bridge.isActive(); }));
 
     CHECK_THROWS_AS(playbackSource.publish(playbackSnapshot(kTrackId, kResourceId)), std::runtime_error);
     REQUIRE(capturedCompletion);
@@ -378,7 +374,7 @@ namespace ao::systemmedia::test
     auto snapshot = playbackSnapshot(TrackId{1}, kInvalidResourceId);
     snapshot.transport.nowPlaying.title = kTitle;
     playbackSource.setSnapshot(std::move(snapshot));
-    auto bridge = MprisBridge{*fixture.executor, playback, actions, {}, playbackSource.source()};
+    auto bridge = MprisBridge{fixture.executor(), playback, actions, {}, playbackSource.source()};
     using MetadataVariantMap = std::map<Glib::ustring, Glib::VariantBase>;
 
     auto const property = bridge.playerProperty("Metadata");
@@ -1166,7 +1162,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
     REQUIRE(playback.commands().startFromView(viewId, trackId));
-    REQUIRE(fixture.executor->tryDrainUntil(
+    REQUIRE(fixture.executor().tryDrainUntil(
       [&]
       {
         auto const& state = playback.snapshot().transport;

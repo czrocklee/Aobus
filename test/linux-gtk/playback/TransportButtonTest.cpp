@@ -70,7 +70,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
     rt::test::addReadyAudioProvider(runtime);
-    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Selected track"});
+    auto const trackId = addRuntimeTrack(fixture.owner(), library::test::TrackSpec{.title = "Selected track"});
     runtime.sources().reloadAllTracks();
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));

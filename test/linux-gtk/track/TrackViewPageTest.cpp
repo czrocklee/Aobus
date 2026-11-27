@@ -153,7 +153,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               textCatalog,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     window.set_child(page);
@@ -192,7 +192,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               textCatalog,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader,
                               original,
@@ -260,7 +260,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               textCatalog,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     window.set_child(page);
@@ -354,7 +354,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               textCatalog,
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader,
                               presentation};
@@ -417,7 +417,7 @@ namespace ao::gtk::test
                                 columnLayouts,
                                 ao::test::englishMessageCatalog(),
                                 runtime.async(),
-                                runtime.library(),
+                                fixture.editing(),
                                 runtime.views(),
                                 thumbnailLoader};
       auto window = Gtk::Window{};
@@ -451,9 +451,9 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const firstId = addRuntimeTrack(runtime, {.title = "First library track"});
-    auto const secondId = addRuntimeTrack(runtime, {.title = "Second library track"});
-    auto const thirdId = addRuntimeTrack(runtime, {.title = "Third library track"});
+    auto const firstId = addRuntimeTrack(fixture.owner(), {.title = "First library track"});
+    auto const secondId = addRuntimeTrack(fixture.owner(), {.title = "Second library track"});
+    auto const thirdId = addRuntimeTrack(fixture.owner(), {.title = "Third library track"});
     auto const optFirstUri = runtime.library().snapshot().trackUri(firstId);
     auto const optSecondUri = runtime.library().snapshot().trackUri(secondId);
     REQUIRE(optFirstUri);
@@ -485,7 +485,7 @@ namespace ao::gtk::test
                                    columnLayouts,
                                    textCatalog,
                                    runtime.async(),
-                                   runtime.library(),
+                                   fixture.editing(),
                                    runtime.views(),
                                    thumbnailLoader,
                                    technical};
@@ -504,7 +504,7 @@ namespace ao::gtk::test
                                     columnLayouts,
                                     textCatalog,
                                     runtime.async(),
-                                    runtime.library(),
+                                    fixture.editing(),
                                     runtime.views(),
                                     thumbnailLoader,
                                     technical};
@@ -552,7 +552,7 @@ namespace ao::gtk::test
                                      { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
@@ -574,7 +574,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader,
                               manual,
@@ -675,7 +675,7 @@ namespace ao::gtk::test
                                      }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder).spec;
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
       .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
@@ -701,7 +701,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader,
                               manual,
@@ -791,7 +791,7 @@ namespace ao::gtk::test
       [&](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Initial title"}); }};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.library();
+    auto const& library = runtime.library();
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId);
     auto const& textCatalog = ao::test::englishMessageCatalog();
@@ -809,7 +809,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               textCatalog,
                               pageRuntime,
-                              library,
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     auto window = GtkWindowFixture{};
@@ -868,7 +868,8 @@ namespace ao::gtk::test
     REQUIRE(targetsRes);
     constexpr auto kLaterTitle = "Later published title";
     auto const laterEditRes = runGtkTask(
-      runtime, library.commands().updateMetadataAsync(*targetsRes, rt::MetadataPatch{.optTitle = kLaterTitle}));
+      runtime,
+      fixture.owner().libraryCommands().updateMetadataAsync(*targetsRes, rt::MetadataPatch{.optTitle = kLaterTitle}));
     REQUIRE(laterEditRes);
     REQUIRE(laterEditRes->status == rt::AuthoringStatus::Applied);
     REQUIRE(pageCallbacks.queuedCount() != 0);
@@ -904,7 +905,7 @@ namespace ao::gtk::test
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
                               runtime.async(),
-                              runtime.library(),
+                              fixture.editing(),
                               runtime.views(),
                               thumbnailLoader};
     auto window = Gtk::Window{};
@@ -932,7 +933,7 @@ namespace ao::gtk::test
     titleStack->set_visible_child("edit");
     REQUIRE(tryEmitFocusEnter(*entry));
     entry->set_text("After");
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, fixture.owner().libraryCommands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(tryPumpGtkEventsUntil([titleStack] { return titleStack->get_visible_child_name() == "display"; }));
 
     CHECK(titleStack->get_visible_child_name() == "display");

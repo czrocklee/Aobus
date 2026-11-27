@@ -12,6 +12,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -33,7 +34,6 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class Library;
   class NotificationService;
 }
 
@@ -82,7 +82,7 @@ namespace ao::appkit
   class [[nodiscard]] LibraryEditorModel final
   {
   public:
-    LibraryEditorModel(rt::Library& library,
+    LibraryEditorModel(uimodel::LibraryEditing editing,
                        async::Runtime& asyncRuntime,
                        rt::NotificationService& notifications,
                        i18n::MessageCatalog catalog,
@@ -143,7 +143,7 @@ namespace ao::appkit
                                              ListId listId,
                                              bool remove);
 
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     async::Runtime& _asyncRuntime;
     rt::NotificationService& _notifications;
     i18n::MessageCatalog _catalog;

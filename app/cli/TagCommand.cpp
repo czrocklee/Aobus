@@ -218,8 +218,8 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyRes = cli.runTask(add ? cli.library().commands().previewEditTagsAsync(trackIds, tags, {})
-                                              : cli.library().commands().previewEditTagsAsync(trackIds, {}, tags));
+        auto const replyRes = cli.runTask(add ? cli.core().libraryCommands().previewEditTagsAsync(trackIds, tags, {})
+                                              : cli.core().libraryCommands().previewEditTagsAsync(trackIds, {}, tags));
 
         if (!replyRes)
         {
@@ -237,8 +237,8 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(add ? cli.library().commands().editTagsAsync(*bindingRes, tags, {})
-                                            : cli.library().commands().editTagsAsync(*bindingRes, {}, tags));
+      auto const replyRes = cli.runTask(add ? cli.core().libraryCommands().editTagsAsync(*bindingRes, tags, {})
+                                            : cli.core().libraryCommands().editTagsAsync(*bindingRes, {}, tags));
 
       if (!replyRes)
       {

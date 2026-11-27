@@ -101,9 +101,10 @@ namespace ao::gtk::layout::test
                    rt::TextOrderingPolicy const* const textOrderingPolicy,
                    uimodel::LayoutComponentStateStore* const componentStateStore)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
-      , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
+      , ownerPtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary), textOrderingPolicy)}
       , messageCatalog{ao::test::messageCatalog(locale)}
-      , playbackActions{runtimePtr->playback(), [this] { return runtimePtr->playSelectionInFocusedView().has_value(); }}
+      , playbackActions{ownerPtr->runtime().playback(),
+                        [&runtime = ownerPtr->runtime()] { return runtime.playSelectionInFocusedView().has_value(); }}
       , actions{components.schema()}
       , session{componentStateStore}
       , context{.registry = components,
@@ -113,10 +114,12 @@ namespace ao::gtk::layout::test
                 .buildSnapshot = activateBuildSnapshot(session)}
       , layoutRuntime{components}
     {
-      playbackActions.bindFocusedSelection(runtimePtr->workspace(), runtimePtr->views());
+      auto& runtime = ownerPtr->runtime();
+      playbackActions.bindFocusedSelection(runtime.workspace(), runtime.views());
       LayoutRuntime::registerStandardComponents(
         components,
-        *runtimePtr,
+        runtime,
+        uimodel::LibraryEditing{ownerPtr->libraryCommands()},
         ShellLayoutCollaborators{.textCatalog = messageCatalog,
                                  .playbackActions = &playbackActions,
                                  .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
@@ -143,7 +146,7 @@ namespace ao::gtk::layout::test
     // runtime state precede every GTK/runtime consumer and therefore outlive it.
     Glib::RefPtr<Gtk::Application> appPtr;
     ao::test::TempDir tempDir;
-    std::unique_ptr<rt::AppRuntime> runtimePtr;
+    std::unique_ptr<rt::AppRuntimeOwner> ownerPtr;
     i18n::MessageCatalog messageCatalog;
     uimodel::PlaybackActions playbackActions;
     ComponentRegistry components;
@@ -170,9 +173,19 @@ namespace ao::gtk::layout::test
 
   LayoutRuntimeFixture::~LayoutRuntimeFixture() noexcept = default;
 
+  rt::AppRuntimeOwner& LayoutRuntimeFixture::owner()
+  {
+    return *_statePtr->ownerPtr;
+  }
+
   rt::AppRuntime& LayoutRuntimeFixture::runtime()
   {
-    return *_statePtr->runtimePtr;
+    return owner().runtime();
+  }
+
+  uimodel::LibraryEditing LayoutRuntimeFixture::editing()
+  {
+    return uimodel::LibraryEditing{owner().libraryCommands()};
   }
 
   std::filesystem::path LayoutRuntimeFixture::cacheDirectory() const

@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 // Asio's Win32 headers define GetCurrentTime(); XAML declares a method with that name.
 #pragma push_macro("GetCurrentTime")
@@ -29,7 +30,6 @@ namespace ao::async
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
   class WorkspaceService;
 }
 
@@ -41,7 +41,7 @@ namespace ao::winui
   {
     std::function<winrt::Microsoft::UI::Xaml::XamlRoot()> xamlRoot;
     async::Runtime& asyncRuntime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::WorkspaceService& workspace;
     rt::CompletionService& completion;
     i18n::MessageCatalog textCatalog;

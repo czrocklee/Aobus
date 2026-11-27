@@ -17,6 +17,7 @@
 #include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <chrono>
 #include <filesystem>
@@ -26,16 +27,16 @@
 
 namespace ao::gtk::test
 {
-  TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec)
+  TrackId addRuntimeTrack(rt::AppRuntimeOwner& owner, library::test::TrackSpec const& spec)
   {
-    return rt::test::addRuntimeTrack(runtime, spec, [] { drainGtkEvents(); });
+    return rt::test::addRuntimeTrack(owner, spec, [] { drainGtkEvents(); });
   }
 
-  void updateRuntimeTrack(rt::AppRuntime& runtime,
+  void updateRuntimeTrack(rt::AppRuntimeOwner& owner,
                           TrackId const trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater)
   {
-    rt::test::updateRuntimeTrack(runtime, trackId, std::move(updater), [] { drainGtkEvents(); });
+    rt::test::updateRuntimeTrack(owner, trackId, std::move(updater), [] { drainGtkEvents(); });
   }
 
   std::filesystem::path runtimeCacheDirectory(std::filesystem::path const& tempPath)
@@ -47,6 +48,13 @@ namespace ao::gtk::test
   {
     explicit State(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
                    rt::TextOrderingPolicy const* const textOrderingPolicy)
+      : runtimeOwner{openRuntime(tempDir, initializeLibrary, textOrderingPolicy)}
+    {
+    }
+
+    static rt::AppRuntimeOwner openRuntime(ao::test::TempDir const& tempDir,
+                                           compat::MoveOnlyFunction<void(library::MusicLibrary&)>& initializeLibrary,
+                                           rt::TextOrderingPolicy const* textOrderingPolicy)
     {
       auto const musicRoot = tempDir.path() / "music";
       auto const databasePath = tempDir.path() / "db";
@@ -63,21 +71,20 @@ namespace ao::gtk::test
 
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
       auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-      runtimePtr =
-        std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-          .executorPtr = std::move(executorPtr),
-          .musicRoot = musicRoot,
-          .databasePath = databasePath,
-          .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
-          .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-          .musicLibraryDurability = rt::LibraryDurability::Unflushed,
-          .workspaceConfigStorePtr = std::move(configStorePtr),
-          .textOrderingPolicy = textOrderingPolicy,
-        })));
+      return ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
+        .executorPtr = std::move(executorPtr),
+        .musicRoot = musicRoot,
+        .databasePath = databasePath,
+        .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .musicLibraryDurability = rt::LibraryDurability::Unflushed,
+        .workspaceConfigStorePtr = std::move(configStorePtr),
+        .textOrderingPolicy = textOrderingPolicy,
+      }));
     }
 
     ao::test::TempDir tempDir;
-    std::unique_ptr<rt::AppRuntime> runtimePtr;
+    rt::AppRuntimeOwner runtimeOwner;
   };
 
   GtkRuntimeFixture::GtkRuntimeFixture(compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
@@ -88,9 +95,19 @@ namespace ao::gtk::test
 
   GtkRuntimeFixture::~GtkRuntimeFixture() = default;
 
+  rt::AppRuntimeOwner& GtkRuntimeFixture::owner()
+  {
+    return _statePtr->runtimeOwner;
+  }
+
   rt::AppRuntime& GtkRuntimeFixture::runtime()
   {
-    return *_statePtr->runtimePtr;
+    return owner().runtime();
+  }
+
+  uimodel::LibraryEditing GtkRuntimeFixture::editing()
+  {
+    return uimodel::LibraryEditing{owner().libraryCommands()};
   }
 
   ao::test::TempDir& GtkRuntimeFixture::tempDir()
@@ -103,9 +120,10 @@ namespace ao::gtk::test
     return runtimeCacheDirectory(_statePtr->tempDir.path());
   }
 
-  std::unique_ptr<rt::AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                              compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
-                                              rt::TextOrderingPolicy const* const textOrderingPolicy)
+  std::unique_ptr<rt::AppRuntimeOwner> makeRuntime(
+    ao::test::TempDir const& tempDir,
+    compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary,
+    rt::TextOrderingPolicy const* const textOrderingPolicy)
   {
     auto const databasePath = rt::LibraryPaths{tempDir.path()}.databasePath();
 
@@ -116,16 +134,17 @@ namespace ao::gtk::test
     }
 
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-    return std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-      .executorPtr = std::move(executorPtr),
-      .musicRoot = tempDir.path(),
-      .databasePath = databasePath,
-      .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .musicLibraryDurability = rt::LibraryDurability::Unflushed,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-      .textOrderingPolicy = textOrderingPolicy,
-    })));
+    return std::make_unique<rt::AppRuntimeOwner>(
+      ao::test::requireValue(rt::AppRuntimeOwner::open(rt::AppRuntimeDependencies{
+        .executorPtr = std::move(executorPtr),
+        .musicRoot = tempDir.path(),
+        .databasePath = databasePath,
+        .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .musicLibraryDurability = rt::LibraryDurability::Unflushed,
+        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
+        .textOrderingPolicy = textOrderingPolicy,
+      })));
   }
 
   bool tryWaitForPlaybackSettlement(rt::AppRuntime& runtime,

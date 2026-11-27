@@ -206,14 +206,15 @@ namespace ao::uimodel::test
     auto actions = PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
     actions.bindFocusedSelection(runtime.workspace(), runtime.views());
 
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {trackA}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {trackA}));
+    auto const beforeFirstPlay = playback.snapshot().transport.positionRevision;
     REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
-    REQUIRE(fixture.tryWaitForPlayback(trackA));
+    REQUIRE(fixture.tryWaitForPlayback(trackA, beforeFirstPlay));
     auto const offset = std::chrono::milliseconds{250};
     playback.commands().seek(offset);
-    fixture.executor->drain();
+    fixture.executor().drain();
     REQUIRE(playback.snapshot().transport.elapsed == offset);
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {trackB}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {trackB}));
 
     SECTION("Paused")
     {
@@ -232,14 +233,14 @@ namespace ao::uimodel::test
     }
 
     REQUIRE(actions.tryExecute(PlaybackCommand::Play));
-    fixture.executor->drain();
+    fixture.executor().drain();
     CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == trackA);
     CHECK(playback.snapshot().transport.elapsed == offset);
     playback.commands().stop();
-    fixture.observedPositionRevision = playback.snapshot().transport.positionRevision;
+    auto const beforeSecondPlay = playback.snapshot().transport.positionRevision;
     REQUIRE(actions.tryExecute(PlaybackCommand::Play));
-    CHECK(fixture.tryWaitForPlayback(trackB));
+    CHECK(fixture.tryWaitForPlayback(trackB, beforeSecondPlay));
   }
 
   TEST_CASE("PlaybackActions - retains deferred audio after clearing the sequence")
@@ -256,7 +257,7 @@ namespace ao::uimodel::test
     REQUIRE(fixture.playFromView(trackA));
     auto const offset = std::chrono::milliseconds{250};
     playback.commands().seek(offset);
-    fixture.executor->drain();
+    fixture.executor().drain();
     REQUIRE(playback.snapshot().transport.elapsed == offset);
     REQUIRE(runtime.savePlaybackSession());
     playback.commands().stop();
@@ -274,22 +275,22 @@ namespace ao::uimodel::test
 
     SECTION("Play resumes without a selected row")
     {
-      REQUIRE(runtime.views().setSelection(fixture.viewId, {}));
+      REQUIRE(runtime.views().setSelection(fixture.viewId(), {}));
       REQUIRE(actions.tryExecute(PlaybackCommand::Play));
     }
 
     SECTION("PlayPause resumes despite browsing a different row")
     {
-      REQUIRE(runtime.views().setSelection(fixture.viewId, {trackB}));
+      REQUIRE(runtime.views().setSelection(fixture.viewId(), {trackB}));
       REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
     }
 
     SECTION("A pending output leaves the deferred track and the selection alone")
     {
-      REQUIRE(runtime.views().setSelection(fixture.viewId, {trackB}));
+      REQUIRE(runtime.views().setSelection(fixture.viewId(), {trackB}));
       auto const output = playback.snapshot().transport.output.selectedDevice;
       playback.commands().setOutputDevice(output.backendId, audio::DeviceId{"missing"}, output.profileId);
-      fixture.executor->drain();
+      fixture.executor().drain();
       auto const held = playback.snapshot().transport;
       REQUIRE(held.transport == audio::Transport::Idle);
       REQUIRE(held.hasDeferredResume);
@@ -298,14 +299,14 @@ namespace ao::uimodel::test
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
       CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
       CHECK(playback.snapshot().transport == held);
-      CHECK(runtime.views().firstVisibleSelectedTrack(fixture.viewId) == trackB);
+      CHECK(runtime.views().firstVisibleSelectedTrack(fixture.viewId()) == trackB);
 
       playback.commands().setOutputDevice(output);
-      fixture.executor->drain();
+      fixture.executor().drain();
       REQUIRE(actions.tryExecute(PlaybackCommand::Play));
     }
 
-    fixture.executor->drain();
+    fixture.executor().drain();
     CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == trackA);
     CHECK(playback.snapshot().transport.elapsed == offset);
@@ -317,7 +318,7 @@ namespace ao::uimodel::test
     fixture.makePlaybackReady();
     auto const selectedTrack = fixture.addPlayableTrack("Selected Track");
     fixture.addPlayableTrack("Other Track");
-    fixture.executor->drain();
+    fixture.executor().drain();
     auto& runtime = fixture.runtime();
     auto& views = runtime.views();
     std::int32_t startRequests = 0;
@@ -344,24 +345,24 @@ namespace ao::uimodel::test
     };
 
     checkNoPlayTarget();
-    REQUIRE(views.setSelection(fixture.viewId, {selectedTrack}));
+    REQUIRE(views.setSelection(fixture.viewId(), {selectedTrack}));
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
     CHECK(availability.aggregateCount == 1);
     REQUIRE(actions.isEnabled(PlaybackCommand::Play));
 
     availability.clear();
-    REQUIRE(views.setFilter(fixture.viewId, R"($title = "Other Track")"));
+    REQUIRE(views.setFilter(fixture.viewId(), R"($title = "Other Track")"));
     // The filter already hides the selected row; the projection change is still queued.
     checkNoPlayTarget();
-    fixture.executor->drain();
-    CHECK(views.trackListState(fixture.viewId).selection == std::vector{selectedTrack});
+    fixture.executor().drain();
+    CHECK(views.trackListState(fixture.viewId()).selection == std::vector{selectedTrack});
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
     CHECK(availability.aggregateCount == 1);
     checkNoPlayTarget();
 
     availability.clear();
-    REQUIRE(views.setFilter(fixture.viewId, ""));
-    fixture.executor->drain();
+    REQUIRE(views.setFilter(fixture.viewId(), ""));
+    fixture.executor().drain();
     checkAffected(availability, {PlaybackCommand::Play, PlaybackCommand::PlayPause});
     CHECK(availability.aggregateCount == 1);
     CHECK(actions.isEnabled(PlaybackCommand::Play));
@@ -379,7 +380,7 @@ namespace ao::uimodel::test
     auto& commands = playback.commands();
     auto const fallbackCountsPtr = std::make_shared<SilentRouteCounts>();
     runtime.addAudioProvider(makeReadyAudioProvider(makeReadyAudioStatus(), fallbackCountsPtr));
-    fixture.executor->drain();
+    fixture.executor().drain();
     auto const trackId = fixture.addPlayableTrack("Interrupted Track");
     auto const selectedTrackId = fixture.addPlayableTrack("Different Selection");
     auto actions = PlaybackActions{playback, [&runtime] { return runtime.playSelectionInFocusedView().has_value(); }};
@@ -389,7 +390,7 @@ namespace ao::uimodel::test
     auto const offset = std::chrono::milliseconds{250};
     REQUIRE(playback.snapshot().transport.duration > offset);
     commands.seek(offset);
-    fixture.executor->drain();
+    fixture.executor().drain();
     REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
     REQUIRE(playback.snapshot().transport.elapsed == offset);
     auto const fallbackOpens = fallbackCountsPtr->opens.load();
@@ -400,7 +401,7 @@ namespace ao::uimodel::test
                                                   .deviceId = audio::DeviceId{"studio-dac"},
                                                   .profileId = audio::kProfileShared};
     commands.setOutputDevice(dac);
-    fixture.executor->drain();
+    fixture.executor().drain();
 
     auto const held = playback.snapshot().transport;
     CHECK(held.output.optPendingOutputSelection == dac);
@@ -414,20 +415,20 @@ namespace ao::uimodel::test
     CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
 
     commands.resume();
-    fixture.executor->drain();
+    fixture.executor().drain();
     CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
     CHECK(fallbackCountsPtr->opens.load() == fallbackOpens);
     CHECK(fallbackCountsPtr->starts.load() == fallbackStarts);
 
     commands.clearSequence();
     REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
-    REQUIRE(runtime.views().setSelection(fixture.viewId, {selectedTrackId}));
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), {selectedTrackId}));
     auto const dacCountsPtr = std::make_shared<SilentRouteCounts>();
     runtime.addAudioProvider(makeReadyAudioProvider(
       {.descriptor = {.id = dac.backendId, .supportedProfiles = {{.id = dac.profileId}}},
        .devices = {{.id = dac.deviceId, .displayName = "Studio DAC", .backendId = dac.backendId}}},
       dacCountsPtr));
-    fixture.executor->drain();
+    fixture.executor().drain();
 
     auto const ready = playback.snapshot().transport;
     REQUIRE(ready.ready);
@@ -448,7 +449,7 @@ namespace ao::uimodel::test
       REQUIRE(actions.tryExecute(PlaybackCommand::PlayPause));
     }
 
-    fixture.executor->drain();
+    fixture.executor().drain();
     auto const resumed = playback.snapshot().transport;
     CHECK(resumed.transport == audio::Transport::Playing);
     CHECK(resumed.nowPlaying.trackId == trackId);

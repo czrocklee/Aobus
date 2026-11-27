@@ -27,6 +27,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/property/TrackPropertiesPreparation.h>
@@ -128,19 +129,19 @@ namespace ao::tui
 
     /// Captures binding and owning baselines from one snapshot, released before installation.
     std::expected<PreparedEditor, PreparationError> prepareEditor(
-      rt::Library& library,
+      uimodel::LibraryEditing editing,
       i18n::MessageCatalog const& textCatalog,
       std::vector<TrackId> const& targetIds,
       rt::TextOrderingPolicy const* const textOrderingPolicy,
       TrackEditorMode const mode)
     {
-      auto const snapshot = library.snapshot();
+      auto const snapshot = editing.library().snapshot();
       // Tags need identities and membership, not per-field metadata aggregation.
       auto const spec = mode == TrackEditorMode::Properties ? uimodel::buildTrackPropertiesFormSpec(textCatalog)
                                                             : uimodel::TrackPropertiesFormSpec{};
       auto baseline = uimodel::TrackPropertiesFormModel{textCatalog};
 
-      auto sessionRes = uimodel::prepareTrackProperties(library, snapshot, targetIds, spec, baseline);
+      auto sessionRes = uimodel::prepareTrackProperties(editing, snapshot, targetIds, spec, baseline);
 
       if (!sessionRes)
       {
@@ -202,14 +203,14 @@ namespace ao::tui
   struct TrackEditController::State final
   {
     State(async::Runtime& runtimeIn,
-          rt::Library& libraryIn,
+          uimodel::LibraryEditing editingIn,
           rt::NotificationService& notificationsIn,
           i18n::MessageCatalog const& textCatalogIn,
           Outputs outputsIn,
           rt::CompletionService& completionServiceIn,
           rt::TextOrderingPolicy const* const textOrderingPolicyIn)
       : runtime{runtimeIn}
-      , library{libraryIn}
+      , editing{editingIn}
       , notifications{notificationsIn}
       , textCatalog{textCatalogIn}
       , outputs{std::move(outputsIn)}
@@ -434,7 +435,7 @@ namespace ao::tui
     }
 
     async::Runtime& runtime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::NotificationService& notifications;
     i18n::MessageCatalog const& textCatalog;
     Outputs outputs;
@@ -448,14 +449,14 @@ namespace ao::tui
   };
 
   TrackEditController::TrackEditController(async::Runtime& runtime,
-                                           rt::Library& library,
+                                           uimodel::LibraryEditing editing,
                                            rt::NotificationService& notifications,
                                            i18n::MessageCatalog const& textCatalog,
                                            Outputs outputs,
                                            rt::CompletionService& completionService,
                                            rt::TextOrderingPolicy const* const textOrderingPolicy)
     : _statePtr{std::make_shared<State>(runtime,
-                                        library,
+                                        editing,
                                         notifications,
                                         textCatalog,
                                         std::move(outputs),
@@ -513,7 +514,7 @@ namespace ao::tui
       return false;
     }
 
-    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
+    auto preparedRes = prepareEditor(state.editing, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
 
     if (!preparedRes)
     {
@@ -657,7 +658,7 @@ namespace ao::tui
     // A successful install replaces the editor in place, so no reference is
     // held across one: every report below reads back whichever editor is open
     // at the moment it is made.
-    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
+    auto preparedRes = prepareEditor(state.editing, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
 
     if (!preparedRes)
     {

@@ -17,11 +17,11 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
@@ -45,7 +45,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackTagEditorComponent(async::Runtime& asyncRuntime,
-                              rt::Library& library,
+                              uimodel::LibraryEditing editing,
                               rt::NotificationService& notifications,
                               rt::TextOrderingPolicy const* textOrderingPolicy,
                               TagEditController* tagEditController,
@@ -55,7 +55,7 @@ namespace ao::gtk::layout
         : _tagEditor{textCatalog, textOrderingPolicy}
         , _textCatalog{textCatalog}
         , _async{asyncRuntime}
-        , _library{library}
+        , _editing{editing}
         , _notifications{notifications}
         , _tagEditController{tagEditController}
       {
@@ -97,7 +97,7 @@ namespace ao::gtk::layout
       {
         if (!_optTagEditSession || !std::ranges::equal(_optTagEditSession->targetIds(), _currentTrackIds))
         {
-          auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _currentTrackIds);
+          auto sessionRes = uimodel::TrackAuthoringSession::begin(_editing, _currentTrackIds);
 
           if (!sessionRes)
           {
@@ -171,14 +171,14 @@ namespace ao::gtk::layout
         }
 
         _currentTrackIds = snap.trackIds;
-        _tagEditor.setup(_library, _currentTrackIds);
+        _tagEditor.setup(_editing.library(), _currentTrackIds);
         _tagEditor.set_visible(true);
       }
 
       TagEditor _tagEditor;
       i18n::MessageCatalog _textCatalog;
       async::Runtime& _async;
-      rt::Library& _library;
+      uimodel::LibraryEditing _editing;
       rt::NotificationService& _notifications;
       TagEditController* _tagEditController;
       std::optional<uimodel::TrackAuthoringSession> _optTagEditSession;
@@ -191,7 +191,7 @@ namespace ao::gtk::layout
 
   void registerTrackTagEditorComponent(ComponentRegistry& registry,
                                        async::Runtime& asyncRuntime,
-                                       rt::Library& library,
+                                       uimodel::LibraryEditing editing,
                                        rt::NotificationService& notifications,
                                        rt::TextOrderingPolicy const* textOrderingPolicy,
                                        TagEditController* tagEditController,
@@ -203,11 +203,11 @@ namespace ao::gtk::layout
        .category = ComponentCategory::Track,
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&asyncRuntime, &library, &notifications, textOrderingPolicy, tagEditController, textCatalog](
+      [&asyncRuntime, editing, &notifications, textOrderingPolicy, tagEditController, textCatalog](
         LayoutBuildContext const& ctx, LayoutNode const& node)
       {
         return std::make_unique<TrackTagEditorComponent>(
-          asyncRuntime, library, notifications, textOrderingPolicy, tagEditController, textCatalog, ctx, node);
+          asyncRuntime, editing, notifications, textOrderingPolicy, tagEditController, textCatalog, ctx, node);
       });
   }
 } // namespace ao::gtk::layout

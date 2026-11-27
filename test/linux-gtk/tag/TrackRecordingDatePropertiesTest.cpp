@@ -52,7 +52,7 @@ namespace ao::gtk::test
     auto const& catalog = ao::test::englishMessageCatalog();
     auto parent = Gtk::Window{};
     auto dialog = TrackPropertiesDialog{
-      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, std::vector{trackId}};
+      parent, runtime.async(), fixture.editing(), runtime.completion(), catalog, std::vector{trackId}};
     parent.present();
     dialog.present();
     drainGtkEvents();
@@ -102,7 +102,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto const& catalog = ao::test::englishMessageCatalog();
     auto parent = Gtk::Window{};
-    auto dialog = TrackPropertiesDialog{parent, runtime.async(), runtime.library(), runtime.completion(), catalog, ids};
+    auto dialog = TrackPropertiesDialog{parent, runtime.async(), fixture.editing(), runtime.completion(), catalog, ids};
     parent.present();
     dialog.present();
     drainGtkEvents();

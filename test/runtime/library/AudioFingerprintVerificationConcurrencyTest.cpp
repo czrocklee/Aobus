@@ -74,7 +74,7 @@ namespace ao::rt::test
       LibraryCommandsFixture runtime{music.library(), changes, executor};
 
       std::filesystem::path songPath() const { return music.root() / kSongUri; }
-      LibraryJobs& jobs() { return runtime.library().jobs(); }
+      LibraryJobs& jobs() { return runtime.jobs(); }
 
       AudioFingerprintReport previewPending(std::size_t payloadBytes = 1600)
       {

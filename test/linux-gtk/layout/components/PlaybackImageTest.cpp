@@ -139,10 +139,11 @@ namespace ao::gtk::layout::test
 
     // Merge updates the Track matched by URI in place, so the playing Track keeps
     // its id while its cover changes; a restore would recreate it under a new id.
-    void importCoverAndWait(rt::AppRuntime& runtime, std::filesystem::path const& path)
+    void importCoverAndWait(rt::AppRuntimeOwner& owner, std::filesystem::path const& path)
     {
       auto pump = [] { ao::gtk::test::drainGtkEvents(); };
-      auto& jobs = runtime.library().jobs();
+      auto& runtime = owner.runtime();
+      auto& jobs = owner.libraryJobs();
       auto planRes =
         rt::test::runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Merge), pump);
       REQUIRE(planRes);
@@ -785,7 +786,7 @@ namespace ao::gtk::layout::test
       auto const secondCover = ao::gtk::test::encodePng(secondImagePtr);
       ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);
       writeCoverImport(importPath, std::span<std::byte const>{secondCover});
-      importCoverAndWait(runtime, importPath);
+      importCoverAndWait(fixture.owner(), importPath);
       // A missing Track would also report no cover, so prove the merge kept it.
       REQUIRE(runtime.library().snapshot().containsTrack(mutableCoverTrackId));
       CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) != coverResourceId);
@@ -806,7 +807,7 @@ namespace ao::gtk::layout::test
       CHECK(showsSecondCover());
 
       writeCoverImport(importPath, std::nullopt);
-      importCoverAndWait(runtime, importPath);
+      importCoverAndWait(fixture.owner(), importPath);
       REQUIRE(runtime.library().snapshot().containsTrack(mutableCoverTrackId));
       CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) == kInvalidResourceId);
       REQUIRE(

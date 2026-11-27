@@ -28,6 +28,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -39,8 +40,12 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryImportPlan.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/library/LibraryTransfer.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -52,6 +57,7 @@
 
 #include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -63,29 +69,82 @@
 
 namespace ao::rt::test
 {
-  template<typename Runtime>
-  concept ExposesCoreOwner = requires(Runtime& runtime) { runtime.core(); };
-
-  template<typename Runtime>
-  concept ExposesDatabasePath = requires(Runtime& runtime) { runtime.databasePath(); };
-
-  template<typename Runtime>
-  concept ExposesMusicLibrary = requires(Runtime& runtime) { runtime.musicLibrary(); };
-
-  static_assert(!std::is_base_of_v<CoreRuntime, AppRuntime>);
-  static_assert(std::is_nothrow_move_constructible_v<AppRuntime>);
-  static_assert(!std::is_move_assignable_v<AppRuntime>);
-  static_assert(std::is_final_v<CoreRuntime>);
-  static_assert(std::is_nothrow_move_constructible_v<CoreRuntime>);
-  static_assert(!std::is_move_assignable_v<CoreRuntime>);
-  static_assert(!ExposesCoreOwner<AppRuntime>);
-  static_assert(!ExposesDatabasePath<AppRuntime>);
-  static_assert(!ExposesMusicLibrary<AppRuntime>);
-
   using namespace ao::test;
 
   namespace
   {
+    // An individual owner operation on either borrow would breach the boundary.
+    template<typename Runtime>
+    concept HasInteractiveOwnerAccess =
+      requires(Runtime& runtime) { runtime.core(); } || requires(Runtime& runtime) { runtime.owner(); } ||
+      requires(Runtime& runtime) { runtime.databasePath(); } ||
+      requires(Runtime& runtime) { runtime.musicLibrary(); } ||
+      requires(Runtime& runtime) { runtime.libraryCommands(); } ||
+      requires(Runtime& runtime) { runtime.libraryJobs(); } || requires(Runtime& runtime) { runtime.shutdown(); } ||
+      requires(AppRuntimeDependencies dependencies) { Runtime::create(std::move(dependencies)); };
+
+    template<typename Reads>
+    concept HasLibraryOwnerAccess =
+      requires(Reads& reads) { reads.owner(); } || requires(Reads& reads) { reads.commands(); } ||
+      requires(Reads& reads) { reads.jobs(); } || requires(Reads& reads) { reads.libraryCommands(); } ||
+      requires(Reads& reads) { reads.libraryJobs(); } || requires(Reads& reads) { reads.beginClosing(); } ||
+      requires(library::MusicLibrary& storage) { Reads::prepare(storage); };
+
+    template<typename Jobs>
+    concept CanSubmitLibraryJob =
+      requires(Jobs& jobs) { jobs.prepareLibraryImportAsync({}, ImportMode::Restore); } ||
+      requires(Jobs& jobs, LibraryImportPlan plan) { jobs.applyLibraryImportPlanAsync(std::move(plan)); } ||
+      requires(Jobs& jobs, ExportMode mode) { jobs.exportLibraryAsync({}, mode); } ||
+      requires(Jobs& jobs) { jobs.buildScanPlanAsync(); } ||
+      requires(Jobs& jobs, ScanPlan plan) { jobs.applyScanPlanAsync(std::move(plan)); } ||
+      requires(Jobs& jobs) { jobs.verifyAudioFingerprintAsync("track.flac"); } ||
+      requires(Jobs& jobs) { jobs.backfillAudioIdentityAsync(); };
+
+    template<typename OwnerRef>
+    concept GrantsAnyRuntimeBorrow = requires { std::declval<OwnerRef>().runtime(); } || requires {
+      std::declval<OwnerRef>().libraryCommands();
+    } || requires { std::declval<OwnerRef>().libraryJobs(); };
+
+    // Test move construction independently of the borrow's inaccessible destructor.
+    template<typename Runtime>
+    concept CanMoveConstructBorrow = requires(Runtime& runtime) { ::new Runtime(std::move(runtime)); };
+
+    static_assert(!std::is_base_of_v<CoreRuntime, AppRuntime>);
+    static_assert(!CanMoveConstructBorrow<AppRuntime>);
+    static_assert(!std::is_move_assignable_v<AppRuntime>);
+    static_assert(!std::is_destructible_v<AppRuntime>);
+    static_assert(!std::is_destructible_v<Library>);
+    static_assert(!std::is_destructible_v<LibraryCommands>);
+    static_assert(!std::is_destructible_v<LibraryJobs>);
+    static_assert(!GrantsAnyRuntimeBorrow<AppRuntimeOwner const&>);
+    static_assert(!GrantsAnyRuntimeBorrow<AppRuntimeOwner&&>);
+    static_assert(!GrantsAnyRuntimeBorrow<AppRuntimeOwner const&&>);
+    static_assert(!HasInteractiveOwnerAccess<AppRuntime>);
+    static_assert(!HasLibraryOwnerAccess<Library>);
+    static_assert(!CanSubmitLibraryJob<LibraryJobs const>);
+
+    static_assert(std::is_nothrow_move_constructible_v<AppRuntimeOwner> && !std::is_move_assignable_v<AppRuntimeOwner>);
+    static_assert(std::is_final_v<CoreRuntime>);
+    static_assert(std::is_nothrow_move_constructible_v<CoreRuntime> && !std::is_move_assignable_v<CoreRuntime>);
+
+    static_assert(requires(AppRuntime& runtime, CoreRuntime& core, LibraryCommands& commands) {
+      { runtime.library() } -> std::same_as<Library const&>;
+      { runtime.jobProgress() } -> std::same_as<LibraryJobs const&>;
+      { core.library() } -> std::same_as<Library const&>;
+      { core.musicLibrary() } -> std::same_as<library::MusicLibrary const&>;
+      { commands.library() } -> std::same_as<Library const&>;
+    });
+    static_assert(requires(AppRuntimeDependencies dependencies, AppRuntimeOwner& owner, CoreRuntime& core) {
+      { AppRuntimeOwner::open(std::move(dependencies)) } -> std::same_as<Result<AppRuntimeOwner>>;
+      { owner.runtime() } -> std::same_as<AppRuntime&>;
+      { owner.libraryCommands() } -> std::same_as<LibraryCommands&>;
+      { owner.libraryJobs() } -> std::same_as<LibraryJobs&>;
+      { core.libraryCommands() } -> std::same_as<LibraryCommands&>;
+      { core.libraryJobs() } -> std::same_as<LibraryJobs&>;
+      { owner.shutdown() } noexcept -> std::same_as<void>;
+      { core.shutdown() } noexcept -> std::same_as<void>;
+    });
+
     struct AppRuntimeAudioState final
     {
       audio::BackendProvider::OnDevicesChangedCallback onDevicesChanged;
@@ -154,7 +213,7 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
 
-    auto const runtimeRes = AppRuntime::create(AppRuntimeDependencies{
+    auto const runtimeRes = AppRuntimeOwner::open(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
@@ -184,7 +243,7 @@ namespace ao::rt::test
 
     SECTION("AppRuntime")
     {
-      auto const res = AppRuntime::create(AppRuntimeDependencies{
+      auto const res = AppRuntimeOwner::open(AppRuntimeDependencies{
         .executorPtr = std::make_unique<InlineExecutor>(),
         .musicRoot = tempDir.path(),
         .databasePath = databaseFile.path,
@@ -239,36 +298,49 @@ namespace ao::rt::test
     CHECK(&optRuntime->databasePath() == databasePathAddress);
   }
 
-  TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires")
+  TEST_CASE("AppRuntimeOwner - move construction preserves interactive service identity after the source retires")
   {
     auto tempDir = ao::test::TempDir{};
-    auto optRuntime = std::optional<AppRuntime>{};
-    auto const* libraryAddress = static_cast<void const*>(nullptr);
+    auto optOwner = std::optional<AppRuntimeOwner>{};
+    AppRuntime* runtimeAddress = nullptr;
+    Library const* libraryAddress = nullptr;
+    LibraryCommands* commandsAddress = nullptr;
+    LibraryJobs* jobsAddress = nullptr;
     auto const* playbackAddress = static_cast<void const*>(nullptr);
     auto const* workspaceAddress = static_cast<void const*>(nullptr);
     auto const* resourcesAddress = static_cast<void const*>(nullptr);
 
     {
-      auto source = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      auto source = ao::test::requireValue(AppRuntimeOwner::open(AppRuntimeDependencies{
         .executorPtr = std::make_unique<InlineExecutor>(),
         .musicRoot = tempDir.path(),
         .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
       }));
-      libraryAddress = &source.library();
-      playbackAddress = &source.playback();
-      workspaceAddress = &source.workspace();
-      resourcesAddress = &source.resourceBytes();
-      optRuntime.emplace(std::move(source));
+      auto& runtime = source.runtime();
+      runtimeAddress = &runtime;
+      libraryAddress = &runtime.library();
+      commandsAddress = &source.libraryCommands();
+      jobsAddress = &source.libraryJobs();
+      playbackAddress = &runtime.playback();
+      workspaceAddress = &runtime.workspace();
+      resourcesAddress = &runtime.resourceBytes();
+      optOwner.emplace(std::move(source));
     }
 
-    REQUIRE(optRuntime);
-    CHECK(static_cast<void const*>(&optRuntime->library()) == libraryAddress);
-    CHECK(static_cast<void const*>(&optRuntime->playback()) == playbackAddress);
-    CHECK(static_cast<void const*>(&optRuntime->workspace()) == workspaceAddress);
-    CHECK(static_cast<void const*>(&optRuntime->resourceBytes()) == resourcesAddress);
-    auto const res = optRuntime->playSelectionInFocusedView();
+    REQUIRE(optOwner);
+    auto& runtime = optOwner->runtime();
+    CHECK(&runtime == runtimeAddress);
+    CHECK(&runtime.library() == libraryAddress);
+    CHECK(&optOwner->libraryCommands() == commandsAddress);
+    CHECK(&optOwner->libraryCommands().library() == libraryAddress);
+    CHECK(&optOwner->libraryJobs() == jobsAddress);
+    CHECK(&runtime.jobProgress() == jobsAddress);
+    CHECK(static_cast<void const*>(&runtime.playback()) == playbackAddress);
+    CHECK(static_cast<void const*>(&runtime.workspace()) == workspaceAddress);
+    CHECK(static_cast<void const*>(&runtime.resourceBytes()) == resourcesAddress);
+    auto const res = runtime.playSelectionInFocusedView();
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::InvalidState);
   }
@@ -283,14 +355,14 @@ namespace ao::rt::test
         library, library::test::TrackSpec{.title = "Already persisted", .uri = "persisted.flac"});
     }
 
-    auto runtimePtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto owner = ao::test::requireValue(AppRuntimeOwner::open(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
-    })));
-    auto allTracks = ao::test::requireValue(runtimePtr->sources().acquire(kAllTracksListId));
+    }));
+    auto allTracks = ao::test::requireValue(owner.runtime().sources().acquire(kAllTracksListId));
 
     CHECK(allTracks->size() == 1);
   }
@@ -307,11 +379,11 @@ namespace ao::rt::test
 
     SECTION("null override uses the workspace store")
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      REQUIRE(
-        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
-      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
-      CHECK_FALSE(ao::test::requireValue(runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup)));
+      auto ownerPtr = makeStateOnlyRuntime(tempDir);
+      auto& runtime = ownerPtr->runtime();
+      REQUIRE(runtime.workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtime.discardRestorablePlaybackSession());
+      CHECK_FALSE(ao::test::requireValue(runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup)));
       auto retained = PlaybackSessionState{};
       REQUIRE(
         ao::test::requireValue(overrideStore.load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
@@ -320,14 +392,14 @@ namespace ao::rt::test
 
     SECTION("explicit override leaves the workspace store untouched")
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir, &overrideStore);
-      REQUIRE(
-        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
-      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
+      auto ownerPtr = makeStateOnlyRuntime(tempDir, &overrideStore);
+      auto& runtime = ownerPtr->runtime();
+      REQUIRE(runtime.workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtime.discardRestorablePlaybackSession());
       CHECK_FALSE(ao::test::requireValue(overrideStore.contains(kPlaybackSessionConfigGroup)));
       auto retained = PlaybackSessionState{};
       REQUIRE(ao::test::requireValue(
-        runtimePtr->workspaceConfigStore().load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
+        runtime.workspaceConfigStore().load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
       CHECK(retained == sentinel);
     }
   }
@@ -337,37 +409,34 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
 
-    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto owner = ao::test::requireValue(AppRuntimeOwner::open(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    })));
+    }));
+    auto& runtime = owner.runtime();
 
-    CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
+    CHECK(runtime.musicRoot() == std::filesystem::path{tempDir.path()});
 
-    // Verify accessors
-    [[maybe_unused]] auto& commands = appPtr->library().commands();
-    [[maybe_unused]] auto& notifications = appPtr->notifications();
-
-    appPtr->addAudioProvider(
+    runtime.addAudioProvider(
       makeReadyAudioProvider(audio::BackendProvider::Status{.descriptor = {.id = audio::BackendId{"dummy"}}}));
 
     // reloadAllTracks
-    CHECK_NOTHROW(appPtr->sources().reloadAllTracks());
+    CHECK_NOTHROW(runtime.sources().reloadAllTracks());
 
     // playSelectionInFocusedView (with no focused view)
-    auto const withoutFocusRes = appPtr->playSelectionInFocusedView();
+    auto const withoutFocusRes = runtime.playSelectionInFocusedView();
     REQUIRE_FALSE(withoutFocusRes);
     CHECK(withoutFocusRes.error().code == Error::Code::InvalidState);
 
     // Add a view and focus it
-    REQUIRE(appPtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
+    REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     // playSelectionInFocusedView (with focused view but no selection)
-    auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
+    auto const withoutSelectionRes = runtime.playSelectionInFocusedView();
     REQUIRE_FALSE(withoutSelectionRes);
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
   }
@@ -380,14 +449,15 @@ namespace ao::rt::test
     auto const shownId = fixture.addPlayableTrack("Visible B");
     auto& runtime = fixture.runtime();
     auto const selection = std::vector{hiddenId, shownId};
-    REQUIRE(runtime.views().setSelection(fixture.viewId, selection));
-    REQUIRE(runtime.views().setFilter(fixture.viewId, R"($title = "Visible B")"));
-    fixture.executor->drain();
+    REQUIRE(runtime.views().setSelection(fixture.viewId(), selection));
+    REQUIRE(runtime.views().setFilter(fixture.viewId(), R"($title = "Visible B")"));
+    fixture.executor().drain();
 
+    auto const previousRevision = runtime.playback().snapshot().transport.positionRevision;
     CHECK(requireValue(runtime.playSelectionInFocusedView()) == shownId);
-    REQUIRE(fixture.tryWaitForPlayback(shownId));
+    REQUIRE(fixture.tryWaitForPlayback(shownId, previousRevision));
     CHECK(runtime.playback().snapshot().succession.currentTrackId == shownId);
-    CHECK(runtime.views().trackListState(fixture.viewId).selection == selection);
+    CHECK(runtime.views().trackListState(fixture.viewId()).selection == selection);
   }
 
   TEST_CASE("AppRuntime - playSelectionInFocusedView rejects hidden selection before playback admission")
@@ -395,11 +465,12 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    auto const hiddenTrackId = addRuntimeTrack(*runtimePtr, {.title = "Selected"});
-    auto const shownTrackId = addRuntimeTrack(*runtimePtr, {.title = "Unselected"});
-    auto const viewId = requireValue(runtimePtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
-    auto& views = runtimePtr->views();
+    auto ownerPtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    auto const hiddenTrackId = addRuntimeTrack(*ownerPtr, {.title = "Selected"});
+    auto const shownTrackId = addRuntimeTrack(*ownerPtr, {.title = "Unselected"});
+    auto const viewId = requireValue(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
+    auto& views = runtime.views();
     REQUIRE(views.setSelection(viewId, {hiddenTrackId}));
     REQUIRE(views.setFilter(viewId, R"($title = "Unselected")"));
     executor->drain();
@@ -408,12 +479,11 @@ namespace ao::rt::test
     REQUIRE(projectionPtr->trackIdAt(0) == shownTrackId);
     REQUIRE(views.trackListState(viewId).selection == std::vector{hiddenTrackId});
 
-    auto& playback = runtimePtr->playback();
+    auto& playback = runtime.playback();
     auto const before = playback.snapshot();
     auto optPlayRes = std::optional<Result<TrackId>>{};
-    auto const sub =
-      playback.events().onRevealTrackRequested([&](PlaybackRevealTrackRequest const&) noexcept
-                                               { optPlayRes.emplace(runtimePtr->playSelectionInFocusedView()); });
+    auto const sub = playback.events().onRevealTrackRequested(
+      [&](PlaybackRevealTrackRequest const&) noexcept { optPlayRes.emplace(runtime.playSelectionInFocusedView()); });
 
     // An observer-issued start would queue successfully, even if its track was later rejected by the playback layer.
     playback.commands().revealTrack(shownTrackId);
@@ -442,13 +512,13 @@ namespace ao::rt::test
     auto subscription =
       runtime.library().changes().onChanged([&publications](LibraryChangeSet const&) { ++publications; });
     REQUIRE(runQueuedTask(
-      runtime.async(), *executor, runtime.library().commands().createListAsync(ListDraft{.name = "Live publication"})));
+      runtime.async(), *executor, runtime.libraryCommands().createListAsync(ListDraft{.name = "Live publication"})));
     REQUIRE(publications == 1);
     publications = 0;
     auto const revisionBefore = runtime.library().snapshot().revision();
 
     [[maybe_unused]] auto future =
-      runtime.async().spawn(runtime.library().commands().createListAsync(ListDraft{.name = "Committed before close"}));
+      runtime.async().spawn(runtime.libraryCommands().createListAsync(ListDraft{.name = "Committed before close"}));
     REQUIRE(executor->tryWaitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
     {
@@ -470,53 +540,52 @@ namespace ao::rt::test
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
-      .executorPtr = std::move(executorPtr),
-      .musicRoot = tempDir.path(),
-      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .workspaceConfigStorePtr =
-        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    })));
+    auto ownerPtr =
+      std::make_unique<AppRuntimeOwner>(ao::test::requireValue(AppRuntimeOwner::open(AppRuntimeDependencies{
+        .executorPtr = std::move(executorPtr),
+        .musicRoot = tempDir.path(),
+        .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr =
+          std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+      })));
+    auto& runtime = ownerPtr->runtime();
 
-    appPtr->addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
+    runtime.addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
     REQUIRE(audioStatePtr->onDevicesChanged);
     audioStatePtr->onDevicesChanged(makeReadyAudioStatus().devices);
     executor->drain();
 
     auto const fixtureUri =
-      audio::test::installAudioFixture(appPtr->musicRoot(), "basic_metadata.flac", "playable.flac");
+      audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "playable.flac");
     auto const firstTrackId =
-      addRuntimeTrack(*appPtr,
+      addRuntimeTrack(*ownerPtr,
                       library::test::TrackSpec{.title = "First", .uri = fixtureUri, .codec = AudioCodec::Flac},
                       [executor] { executor->drain(); });
     auto const secondTrackId =
-      addRuntimeTrack(*appPtr,
+      addRuntimeTrack(*ownerPtr,
                       library::test::TrackSpec{.title = "Second", .uri = fixtureUri, .codec = AudioCodec::Flac},
                       [executor] { executor->drain(); });
-    appPtr->sources().reloadAllTracks();
-    auto const listId = ao::test::requireValue(runRuntimeTask(*appPtr,
-                                                              appPtr->library().commands().createListAsync(ListDraft{
-                                                                .name = "Teardown order",
-                                                              })));
-    auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
-    auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
-    REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
+    runtime.sources().reloadAllTracks();
+    auto const listId = ao::test::requireValue(
+      runRuntimeTask(runtime, ownerPtr->libraryCommands().createListAsync(ListDraft{.name = "Teardown order"})));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
+    auto const previousPositionRevision = runtime.playback().snapshot().transport.positionRevision;
+    REQUIRE(runtime.playback().commands().startFromView(viewId, firstTrackId));
     REQUIRE(tryWaitForPlaybackSettlement(
-      *executor, previousPositionRevision, [&] { return appPtr->playback().snapshot().transport.positionRevision; }));
+      *executor, previousPositionRevision, [&] { return runtime.playback().snapshot().transport.positionRevision; }));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
-    auto const sequenceSubscription = appPtr->playback().events().onSnapshot(
+    auto const sequenceSubscription = runtime.playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept
       { callbackEntered = snapshot.succession.currentTrackId == secondTrackId; });
 
     executor->drain();
     auto output = std::array<std::byte, 4096>{};
     REQUIRE(tryDriveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
-    REQUIRE(appPtr);
     CHECK_FALSE(audioStatePtr->providerShutdownStarted.load());
-    appPtr.reset();
+    ownerPtr.reset();
     CHECK(audioStatePtr->providerShutdownStarted.load());
   }
 } // namespace ao::rt::test

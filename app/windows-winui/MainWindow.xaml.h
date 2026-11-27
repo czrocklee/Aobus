@@ -27,6 +27,16 @@
 #include <string>
 #include <string_view>
 
+namespace ao::rt
+{
+  class LibraryJobs;
+}
+
+namespace ao::uimodel
+{
+  class LibraryEditing;
+}
+
 namespace ao::winui
 {
   class FullscreenSoulWindow;
@@ -70,7 +80,6 @@ namespace winrt::Aobus::implementation
     MainWindow(MainWindow&&) = delete;
     MainWindow& operator=(MainWindow&&) = delete;
 
-    void initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart);
     ao::Result<> activate();
     ao::Result<> prepareLibraryRestart();
     void retire() noexcept;
@@ -105,6 +114,12 @@ namespace winrt::Aobus::implementation
                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
 
   private:
+    friend class ao::winui::LibrarySession;
+
+    void initialize(ao::winui::LibrarySession& session,
+                    ao::uimodel::LibraryEditing editing,
+                    ao::rt::LibraryJobs& jobs,
+                    RestartLibraryCallback requestRestart);
     void shutdown() noexcept;
     /// Stand up the document-built shell and hand it the frame's own commands.
     void createShellBuilder();

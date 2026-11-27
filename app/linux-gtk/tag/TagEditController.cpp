@@ -50,7 +50,7 @@ namespace ao::gtk
 {
   TagEditController::TagEditController(Gtk::Window& parent,
                                        async::Runtime& asyncRuntime,
-                                       rt::Library& library,
+                                       uimodel::LibraryEditing editing,
                                        rt::CompletionService& completion,
                                        rt::NotificationService& notifications,
                                        rt::TextOrderingPolicy const* textOrderingPolicy,
@@ -59,7 +59,7 @@ namespace ao::gtk
                                        ThemeCoordinator& themeCoordinator)
     : _callbacks{std::move(callbacks)}
     , _asyncRuntime{asyncRuntime}
-    , _library{library}
+    , _editing{editing}
     , _completion{completion}
     , _notifications{notifications}
     , _textOrderingPolicy{textOrderingPolicy}
@@ -119,7 +119,7 @@ namespace ao::gtk
     }
 
     auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
-      _parent, _asyncRuntime, _library, _completion, _textCatalog, selection.selectedIds);
+      _parent, _asyncRuntime, _editing, _completion, _textCatalog, selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -140,7 +140,8 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_library, _textCatalog, selection.selectedIds, _textOrderingPolicy);
+    _tagPopoverPtr =
+      std::make_unique<TagPopover>(_editing.library(), _textCatalog, selection.selectedIds, _textOrderingPolicy);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -259,7 +260,7 @@ namespace ao::gtk
                 }
               });
 
-    auto const lists = _library.snapshot().lists();
+    auto const lists = _editing.library().snapshot().lists();
     auto const targets = uimodel::writableTagListTargets(lists, _textOrderingPolicy);
     auto addToListMenuPtr = Gio::Menu::create();
     auto const activeListId = _optActiveSelection ? _optActiveSelection->listId : rt::kAllTracksListId;
@@ -419,7 +420,7 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, _optActiveSelection->selectedIds);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_editing, _optActiveSelection->selectedIds);
 
     if (!sessionRes)
     {
@@ -476,7 +477,7 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(_library, _textCatalog, selectedIds, _textOrderingPolicy);
+    _tagPopoverPtr = std::make_unique<TagPopover>(_editing.library(), _textCatalog, selectedIds, _textOrderingPolicy);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -578,7 +579,7 @@ namespace ao::gtk
 
   bool TagEditController::tryBeginTagEditSession(std::span<TrackId const> trackIds)
   {
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, trackIds);
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(_editing, trackIds);
 
     if (!sessionRes)
     {

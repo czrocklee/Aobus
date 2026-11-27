@@ -15,6 +15,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListOrderOutcome.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
@@ -114,7 +115,7 @@ namespace ao::gtk
   struct TrackOrderDragController::State final : std::enable_shared_from_this<State>
   {
     State(async::Runtime& asyncRuntimeValue,
-          rt::Library& libraryValue,
+          uimodel::LibraryEditing editingValue,
           rt::ViewService& viewsValue,
           rt::ViewId const viewIdValue,
           i18n::MessageCatalog textCatalogValue,
@@ -122,7 +123,7 @@ namespace ao::gtk
           TrackSelectionController& selectionControllerValue,
           Callbacks callbacksValue)
       : asyncRuntime{asyncRuntimeValue}
-      , library{libraryValue}
+      , editing{editingValue}
       , views{viewsValue}
       , viewId{viewIdValue}
       , textCatalog{std::move(textCatalogValue)}
@@ -198,7 +199,7 @@ namespace ao::gtk
         selected = selectionController.selectedTrackIds();
       }
 
-      auto sessionRes = uimodel::ListOrderAuthoringSession::begin(library, views, viewId, textCatalog);
+      auto sessionRes = uimodel::ListOrderAuthoringSession::begin(editing, views, viewId, textCatalog);
 
       if (!sessionRes)
       {
@@ -372,7 +373,7 @@ namespace ao::gtk
     }
 
     async::Runtime& asyncRuntime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::ViewService& views;
     rt::ViewId viewId = rt::kInvalidViewId;
     i18n::MessageCatalog textCatalog;
@@ -390,7 +391,7 @@ namespace ao::gtk
   };
 
   TrackOrderDragController::TrackOrderDragController(async::Runtime& asyncRuntime,
-                                                     rt::Library& library,
+                                                     uimodel::LibraryEditing editing,
                                                      rt::ViewService& views,
                                                      rt::ViewId const viewId,
                                                      i18n::MessageCatalog const& textCatalog,
@@ -399,7 +400,7 @@ namespace ao::gtk
                                                      TrackSelectionController& selectionController,
                                                      Callbacks callbacks)
     : _statePtr{std::make_shared<State>(asyncRuntime,
-                                        library,
+                                        editing,
                                         views,
                                         viewId,
                                         textCatalog,

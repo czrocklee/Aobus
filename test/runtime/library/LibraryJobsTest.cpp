@@ -23,6 +23,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
@@ -164,15 +165,16 @@ namespace ao::rt::test
     template<typename JobTask>
     void requireQueuedMaintenanceAdmissionRetiredByClosing(library::MusicLibrary& storage,
                                                            LibraryChanges& changes,
-                                                           Library& library,
-                                                           async::Runtime& runtime,
+                                                           LibraryCommandsFixture& fixture,
                                                            ManualExecutor& executor,
                                                            TrackId parkedTarget,
                                                            JobTask jobTask)
     {
+      auto const& library = fixture.library();
+      auto& runtime = fixture.runtime();
+      auto& jobs = fixture.jobs();
       auto bindingRes = library.bindTrackTargets(std::array{parkedTarget});
       REQUIRE(bindingRes);
-      auto& jobs = library.jobs();
       auto const storageRevision = [&storage]
       {
         auto transaction = storage.readTransaction();
@@ -212,7 +214,7 @@ namespace ao::rt::test
       auto parkedPatch = MetadataPatch{.optTitle = "Retitled during queued admission"};
       auto interactiveCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto interactiveFuture = spawnFuture(
-        runtime, library.commands().updateMetadataAsync(*bindingRes, std::move(parkedPatch)), interactiveCompletedPtr);
+        runtime, fixture.commands().updateMetadataAsync(*bindingRes, std::move(parkedPatch)), interactiveCompletedPtr);
       REQUIRE(executor.tryWaitUntilQueuedCount(2, kBackgroundTaskSettlementTimeout));
       REQUIRE(executor.queuedCount() == 2);
       CHECK(storageRevision() == initialStorageRevision + 1);
@@ -236,7 +238,7 @@ namespace ao::rt::test
 
       // Closing retires the queued MaintenanceEnter command request and the
       // unclaimed interactive publication together.
-      library.beginClosing();
+      fixture.beginClosing();
 
       REQUIRE(executor.tryDrainUntil(
         [&jobCompletedPtr] { return isReady(jobCompletedPtr); }, kBackgroundTaskSettlementTimeout));
@@ -264,12 +266,13 @@ namespace ao::rt::test
     // region runs. Lane closing retires that delivery, and the job must settle
     // its published progress conversation over the finalization hop.
     template<typename JobTask>
-    void requireSuspendedMaintenanceAdmissionRetiredByClosing(Library& library,
-                                                              async::Runtime& runtime,
+    void requireSuspendedMaintenanceAdmissionRetiredByClosing(LibraryCommandsFixture& fixture,
                                                               ManualExecutor& executor,
                                                               JobTask jobTask)
     {
-      auto& jobs = library.jobs();
+      auto const& library = fixture.library();
+      auto& runtime = fixture.runtime();
+      auto& jobs = fixture.jobs();
       auto publishedIds = std::vector<LibraryTaskProgressId>{};
       auto finishedIds = std::vector<LibraryTaskProgressId>{};
       auto availabilityStates = std::vector<LibraryAuthoringState>{};
@@ -295,7 +298,7 @@ namespace ao::rt::test
       REQUIRE(executor.queuedCount() == 1);
       CHECK_FALSE(isReady(completedPtr));
 
-      library.beginClosing();
+      fixture.beginClosing();
 
       REQUIRE(
         executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
@@ -317,8 +320,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     auto const res = runQueuedTask(
       runtime, executor, jobs.prepareLibraryImportAsync("/nonexistent_path_123.yaml", ImportMode::Restore));
@@ -339,10 +341,10 @@ namespace ao::rt::test
     auto const run = [&]
     {
       auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-      optFuture.emplace(spawnFuture(runtimeFixture.runtime(),
-                                    runtimeFixture.library().jobs().prepareLibraryImportAsync(
-                                      libraryFixture.root() / "absent.yaml", ImportMode::Merge),
-                                    completedPtr));
+      optFuture.emplace(spawnFuture(
+        runtimeFixture.runtime(),
+        runtimeFixture.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge),
+        completedPtr));
       executor.checkQueued();
       CHECK_FALSE(completedPtr->load());
       throw std::runtime_error{"test wait failed"};
@@ -354,7 +356,7 @@ namespace ao::rt::test
     REQUIRE(completedPtr->load());
     REQUIRE(optFuture);
     CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
-    CHECK(Library::prepare(libraryFixture.library()));
+    CHECK(library::WritableMusicLibrary::acquire(libraryFixture.library()));
   }
 
   TEST_CASE("LibraryJobs - fixture unwinding cancels the future and releases admitted maintenance", "[concurrency]")
@@ -371,15 +373,15 @@ namespace ao::rt::test
     auto const run = [&]
     {
       auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-      auto& library = runtimeFixture.library();
+      auto const& library = runtimeFixture.library();
       availabilitySub = library.onAuthoringAvailabilityChanged([&availabilityCount](LibraryAuthoringAvailability const&)
                                                                { ++availabilityCount; });
-      finishedSub =
-        library.jobs().onProgressFinished([&finishedCount](LibraryTaskProgressFinished const&) { ++finishedCount; });
-      optFuture.emplace(
-        spawnFuture(runtimeFixture.runtime(),
-                    library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge),
-                    completedPtr));
+      finishedSub = runtimeFixture.jobs().onProgressFinished([&finishedCount](LibraryTaskProgressFinished const&)
+                                                             { ++finishedCount; });
+      optFuture.emplace(spawnFuture(
+        runtimeFixture.runtime(),
+        runtimeFixture.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge),
+        completedPtr));
       REQUIRE(executor.tryWaitUntilQueued(kBackgroundTaskSettlementTimeout));
       REQUIRE(executor.tryRunOne());
       // Progress and maintenance delivery are queued, with the write lane admitted
@@ -397,7 +399,7 @@ namespace ao::rt::test
     CHECK_THROWS_AS(optFuture->get(), async::OperationCancelled);
     CHECK(availabilityCount == 0);
     CHECK(finishedCount == 0);
-    CHECK(Library::prepare(libraryFixture.library()));
+    CHECK(library::WritableMusicLibrary::acquire(libraryFixture.library()));
   }
 
   TEST_CASE("LibraryJobs - lane closing settles import progress when maintenance admission is retired", "[concurrency]")
@@ -406,13 +408,11 @@ namespace ao::rt::test
     auto executor = ManualExecutor{};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-    auto& library = runtimeFixture.library();
 
     requireSuspendedMaintenanceAdmissionRetiredByClosing(
-      library,
-      runtimeFixture.runtime(),
+      runtimeFixture,
       executor,
-      library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
+      runtimeFixture.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
   }
 
   TEST_CASE("LibraryJobs - lane closing settles apply progress when maintenance admission is retired", "[concurrency]")
@@ -422,8 +422,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& library = runtimeFixture.library();
-    auto& jobs = library.jobs();
+    auto const& library = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
 
     // One prepared plan is needed up front; the retirement scenario below
     // parks the apply inside maintenance admission before the plan is consumed.
@@ -439,7 +439,7 @@ namespace ao::rt::test
     REQUIRE(library.authoringAvailability().state == LibraryAuthoringState::Available);
 
     requireSuspendedMaintenanceAdmissionRetiredByClosing(
-      library, runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
+      runtimeFixture, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
   }
 
   TEST_CASE("LibraryJobs - lane closing settles import progress from a queued maintenance admission", "[concurrency]")
@@ -449,17 +449,14 @@ namespace ao::rt::test
     auto executor = ManualExecutor{};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-    auto& runtime = runtimeFixture.runtime();
-    auto& library = runtimeFixture.library();
 
     requireQueuedMaintenanceAdmissionRetiredByClosing(
       libraryFixture.library(),
       changes,
-      library,
-      runtime,
+      runtimeFixture,
       executor,
       parkedTarget,
-      library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
+      runtimeFixture.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
   }
 
   TEST_CASE("LibraryJobs - lane closing settles apply progress from a queued maintenance admission", "[concurrency]")
@@ -470,8 +467,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& library = runtimeFixture.library();
-    auto& jobs = library.jobs();
+    auto const& library = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
 
     // One prepared plan is needed up front; the queued-admission scenario
     // below parks the apply before the plan is consumed.
@@ -488,8 +485,7 @@ namespace ao::rt::test
 
     requireQueuedMaintenanceAdmissionRetiredByClosing(libraryFixture.library(),
                                                       changes,
-                                                      library,
-                                                      runtime,
+                                                      runtimeFixture,
                                                       executor,
                                                       parkedTarget,
                                                       jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
@@ -504,8 +500,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
     auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
@@ -545,7 +540,7 @@ namespace ao::rt::test
 
     SECTION("a changed target revision takes precedence over a missing source")
     {
-      auto deleteRes = runQueuedTask(runtime, executor, runtimeLibrary.commands().deleteTrackAsync(existingTrackId));
+      auto deleteRes = runQueuedTask(runtime, executor, runtimeFixture.commands().deleteTrackAsync(existingTrackId));
       INFO((deleteRes ? "target changed" : deleteRes.error().message));
       REQUIRE(deleteRes);
       REQUIRE(std::filesystem::remove(yamlPath));
@@ -568,9 +563,8 @@ namespace ao::rt::test
       auto changes = makeLibraryChanges(executor, libraryFixture.library());
       auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
       auto& runtime = runtimeFixture.runtime();
-      auto& runtimeLibrary = runtimeFixture.library();
       auto res = runQueuedTask(
-        runtime, executor, runtimeLibrary.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+        runtime, executor, runtimeFixture.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
       REQUIRE(res);
       optPlan.emplace(std::move(*res));
@@ -580,9 +574,8 @@ namespace ao::rt::test
     auto otherChanges = makeLibraryChanges(otherExecutor, libraryFixture.library());
     auto otherFixture = LibraryCommandsFixture{libraryFixture.library(), otherChanges, otherExecutor};
     auto& otherRuntime = otherFixture.runtime();
-    auto& otherLibrary = otherFixture.library();
     auto res =
-      runQueuedTask(otherRuntime, otherExecutor, otherLibrary.jobs().applyLibraryImportPlanAsync(std::move(*optPlan)));
+      runQueuedTask(otherRuntime, otherExecutor, otherFixture.jobs().applyLibraryImportPlanAsync(std::move(*optPlan)));
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::Conflict);
@@ -595,7 +588,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
+    auto const& runtimeLibrary = runtimeFixture.library();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
     auto stopSource = std::stop_source{};
@@ -604,7 +597,7 @@ namespace ao::rt::test
     {
       REQUIRE(stopSource.request_stop());
       auto future = runtime.spawn(
-        runtimeLibrary.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()));
+        runtimeFixture.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()));
       CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
     }
 
@@ -613,7 +606,7 @@ namespace ao::rt::test
       auto completedPtr = std::make_shared<std::atomic_bool>(false);
       auto future = spawnFuture(
         runtime,
-        runtimeLibrary.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
+        runtimeFixture.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
         completedPtr);
       executor.checkQueued();
 
@@ -632,7 +625,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
+    auto const& runtimeLibrary = runtimeFixture.library();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
     auto stopSource = std::stop_source{};
@@ -650,7 +643,7 @@ namespace ao::rt::test
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = spawnFuture(
       runtime,
-      runtimeLibrary.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
+      runtimeFixture.jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
       completedPtr);
 
     REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
@@ -670,8 +663,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, storage);
     auto runtimeFixture = LibraryCommandsFixture{storage, changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& library = runtimeFixture.library();
-    auto& jobs = library.jobs();
+    auto const& library = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Restored");
     auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
@@ -713,8 +706,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Committed");
     auto prepareCompletedPtr = std::make_shared<std::atomic_bool>(false);
@@ -754,7 +747,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& jobs = runtimeFixture.library().jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto const controlPath = libraryFixture.root() / "control.yaml";
     auto const backupPath = libraryFixture.root() / "backup.yaml";
     auto const previous = std::string{"# previous backup"};
@@ -791,7 +784,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& jobs = runtimeFixture.library().jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto const directoryTarget = libraryFixture.root() / "backup.yaml";
     REQUIRE(std::filesystem::create_directory(directoryTarget));
     auto const priorPath = directoryTarget / "existing.yaml";
@@ -829,8 +822,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto events = std::vector<LibraryTaskProgressUpdated>{};
     auto finishedEvents = std::vector<LibraryTaskProgressFinished>{};
     auto progressSubscription =
@@ -888,8 +880,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
     std::int32_t progressFinishedCount = 0;
     auto progressFinishedSub = jobs.onProgressFinished(
       [&progressFinishedCount](LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
@@ -907,8 +898,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     std::int32_t progressCount = 0;
     std::int32_t progressFinishedCount = 0;
     std::int32_t availabilityCount = 0;
@@ -1023,8 +1014,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     // Scanning progress is phase-coalesced, so a later path under the same
     // music root may replace this filename before callback delivery. The scan
@@ -1046,8 +1036,7 @@ namespace ao::rt::test
     auto observed = std::vector<LibraryChangeSet>{};
     auto changedSubscription =
       changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     auto const res = runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
@@ -1073,8 +1062,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -1107,7 +1095,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
+    auto const& runtimeLibrary = runtimeFixture.library();
     auto bindingRes = runtimeLibrary.bindTrackTargets(std::array{authoringTarget});
     REQUIRE(bindingRes);
     auto preparationStarted = AsyncTestState<bool>::create(false);
@@ -1115,7 +1103,7 @@ namespace ao::rt::test
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = spawnFuture(
       runtime,
-      runtimeLibrary.jobs().applyScanPlanAsync(std::move(*planRes),
+      runtimeFixture.jobs().applyScanPlanAsync(std::move(*planRes),
                                                {},
                                                {},
                                                [&preparationStarted, &releasePreparation](ScanApplyProgress const&)
@@ -1138,7 +1126,7 @@ namespace ao::rt::test
       auto authoringRes = runQueuedTask(
         runtime,
         executor,
-        runtimeLibrary.commands().updateMetadataAsync(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"}));
+        runtimeFixture.commands().updateMetadataAsync(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"}));
       CHECK(authoringRes);
 
       if (authoringRes)
@@ -1149,12 +1137,12 @@ namespace ao::rt::test
       executor.drain();
 
       auto listRes = runQueuedTask(
-        runtime, executor, runtimeLibrary.commands().createListAsync(ListDraft{.name = "Created during scan"}));
+        runtime, executor, runtimeFixture.commands().createListAsync(ListDraft{.name = "Created during scan"}));
       CHECK(listRes);
 
       auto overlapCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto overlapFuture =
-        spawnFuture(runtime, runtimeLibrary.jobs().backfillAudioIdentityAsync(), overlapCompletedPtr);
+        spawnFuture(runtime, runtimeFixture.jobs().backfillAudioIdentityAsync(), overlapCompletedPtr);
       auto const overlapCompleted =
         executor.tryDrainUntil([&overlapCompletedPtr] { return isReady(overlapCompletedPtr); });
       CHECK(overlapCompleted);
@@ -1189,7 +1177,7 @@ namespace ao::rt::test
     REQUIRE(postScanBindingRes);
     auto postScanAuthoringRes = runQueuedTask(runtime,
                                               executor,
-                                              runtimeLibrary.commands().updateMetadataAsync(
+                                              runtimeFixture.commands().updateMetadataAsync(
                                                 *postScanBindingRes, MetadataPatch{.optTitle = "Edited after scan"}));
     REQUIRE(postScanAuthoringRes);
     CHECK(postScanAuthoringRes->status == AuthoringStatus::Applied);
@@ -1205,8 +1193,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -1243,11 +1230,10 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
 
     auto progressEvents = std::vector<LibraryTaskProgressUpdated>{};
-    auto sub = runtimeLibrary.jobs().onProgress([&](auto const& ev) noexcept { progressEvents.push_back(ev); });
+    auto sub = jobs.onProgress([&](auto const& ev) noexcept { progressEvents.push_back(ev); });
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     auto expectedNames = std::vector<std::string>{};
     std::int32_t failureCallbackCount = 0;
@@ -1303,8 +1289,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     REQUIRE(plan.size() == kFileCount);
     auto const expectedLastSubject = utility::pathToUtf8(plan.items().back().fullPath.filename());
@@ -1392,7 +1377,7 @@ namespace ao::rt::test
                                                         finalRelease.release();
                                                       }};
     auto& runtime = runtimeFixture.runtime();
-    auto& jobs = runtimeFixture.library().jobs();
+    auto& jobs = runtimeFixture.jobs();
     auto progressSub = jobs.onProgress(
       [&progressEvents, &eventOrder](LibraryTaskProgressUpdated const& event)
       {
@@ -1494,8 +1479,8 @@ namespace ao::rt::test
     auto observed = std::vector<LibraryChangeSet>{};
     auto changedSubscription =
       changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -1505,8 +1490,8 @@ namespace ao::rt::test
     auto fingerprintingRelease = AsyncBarrier{};
     auto sawCancellation = AsyncTestState<bool>::create(false);
     auto progressFinished = AsyncTestState<bool>::create(false);
-    auto progressFinishedSub = runtimeLibrary.jobs().onProgressFinished(
-      [progressFinished](LibraryTaskProgressFinished const&) noexcept { progressFinished.set(true); });
+    auto progressFinishedSub = jobs.onProgressFinished([progressFinished](LibraryTaskProgressFinished const&) noexcept
+                                                       { progressFinished.set(true); });
 
     auto taskHandle = runtime.spawnCancellable(
       [jobs = &jobs,
@@ -1544,8 +1529,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
@@ -1596,8 +1581,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto callbackCount = AsyncTestState<std::int32_t>::create(0);
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future =
@@ -1627,8 +1612,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
@@ -1673,8 +1658,8 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& runtime = runtimeFixture.runtime();
-    auto& runtimeLibrary = runtimeFixture.library();
-    auto& jobs = runtimeLibrary.jobs();
+    auto const& runtimeLibrary = runtimeFixture.library();
+    auto& jobs = runtimeFixture.jobs();
     auto stopSource = std::stop_source{};
     auto progressFinished = AsyncTestState<bool>::create(false);
     auto progressFinishedSub = jobs.onProgressFinished([progressFinished](LibraryTaskProgressFinished const&) noexcept

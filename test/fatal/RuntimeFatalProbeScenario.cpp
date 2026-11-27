@@ -395,8 +395,8 @@ namespace ao::rt::test
       return {scenario.substr(0, delimiter), scenario.substr(delimiter + 1U)};
     }
 
-    Result<std::unique_ptr<AppRuntime>> makePlaybackProbeRuntime(std::string_view const scratchName,
-                                                                 std::unique_ptr<async::Executor> executorPtr)
+    Result<std::unique_ptr<AppRuntimeOwner>> makePlaybackProbeRuntime(std::string_view const scratchName,
+                                                                      std::unique_ptr<async::Executor> executorPtr)
     {
       if (scratchName.empty())
       {
@@ -412,7 +412,7 @@ namespace ao::rt::test
         return makeError(Error::Code::IoError, directoryError.message());
       }
 
-      auto runtimeRes = AppRuntime::create(AppRuntimeDependencies{
+      auto runtimeRes = AppRuntimeOwner::open(AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = scratchPath,
         .databasePath = scratchPath / "db",
@@ -425,7 +425,7 @@ namespace ao::rt::test
         return std::unexpected{runtimeRes.error()};
       }
 
-      return std::make_unique<AppRuntime>(std::move(*runtimeRes));
+      return std::make_unique<AppRuntimeOwner>(std::move(*runtimeRes));
     }
 
     std::int32_t runYamlExportMissingCoverResource(std::string_view const scratchName)
@@ -971,7 +971,7 @@ namespace ao::rt::test
       auto runtimePtr = std::move(*runtimeRes);
       auto arm = ThrowingVolumeArm{};
       executor->rejectNext();
-      runtimePtr->addAudioProvider(std::make_unique<ThrowingVolumeProvider>(arm));
+      runtimePtr->runtime().addAudioProvider(std::make_unique<ThrowingVolumeProvider>(arm));
       return 3;
     }
 
@@ -987,7 +987,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto& playback = runtimePtr->playback();
+      auto& playback = runtimePtr->runtime().playback();
       bool queuedObserverCommand = false;
       auto const subscription = playback.events().onSnapshot(
         [&playback, &queuedObserverCommand](PlaybackSnapshot const& snapshot)
@@ -1017,9 +1017,9 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      runtimePtr->addAudioProvider(std::make_unique<ThrowingVolumeProvider>(arm));
+      runtimePtr->runtime().addAudioProvider(std::make_unique<ThrowingVolumeProvider>(arm));
       executor->drain();
-      auto& playback = runtimePtr->playback();
+      auto& playback = runtimePtr->runtime().playback();
       playback.commands().setOutputDevice(audio::BackendId{"probe_throwing_backend"},
                                           audio::DeviceId{"probe_throwing_device"},
                                           audio::ProfileId{audio::kProfileShared});
@@ -1076,7 +1076,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto const subscription = runtimePtr->playback().events().onSnapshot(
+      auto const subscription = runtimePtr->runtime().playback().events().onSnapshot(
         [&](PlaybackSnapshot const&)
         {
           if (destroy)
@@ -1088,7 +1088,7 @@ namespace ao::rt::test
             runtimePtr->shutdown();
           }
         });
-      runtimePtr->playback().commands().setMuted(true);
+      runtimePtr->runtime().playback().commands().setMuted(true);
       return 3;
     }
 
@@ -1103,7 +1103,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto* const playback = &runtimePtr->playback();
+      auto* const playback = &runtimePtr->runtime().playback();
       auto worker = std::jthread{[playback] { [[maybe_unused]] auto const& snapshot = playback->snapshot(); }};
       worker.join();
       return 3;
@@ -1120,7 +1120,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto* const commands = &runtimePtr->playback().commands();
+      auto* const commands = &runtimePtr->runtime().playback().commands();
       auto worker = std::jthread{[commands] { commands->setMuted(true); }};
       worker.join();
       return 3;
@@ -1137,7 +1137,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto* const events = &runtimePtr->playback().events();
+      auto* const events = &runtimePtr->runtime().playback().events();
       auto worker = std::jthread{
         [events] { [[maybe_unused]] auto subscription = events->onSnapshot([](PlaybackSnapshot const&) noexcept {}); }};
       worker.join();
@@ -1154,7 +1154,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto* const views = &runtimePtr->views();
+      auto* const views = &runtimePtr->runtime().views();
       auto worker = std::jthread{[views] { std::ignore = views->findTrackListState(kInvalidViewId); }};
       worker.join();
       return 3;
@@ -1170,7 +1170,7 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto worker = std::jthread{[&runtimePtr] { runtimePtr->setTextOrderingPolicy(nullptr); }};
+      auto worker = std::jthread{[&runtimePtr] { runtimePtr->runtime().setTextOrderingPolicy(nullptr); }};
       worker.join();
       return 3;
     }
@@ -1229,7 +1229,7 @@ namespace ao::rt::test
       preset.label = "probe";
       preset.spec.presetId = CustomPresetId{1};
       executor->rejectNext();
-      std::ignore = runtimePtr->workspace().addCustomPreset(preset);
+      std::ignore = runtimePtr->runtime().workspace().addCustomPreset(preset);
       return 3;
     }
 
@@ -1257,7 +1257,8 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto const optViewId = createProbeView(*runtimePtr);
+      auto& runtime = runtimePtr->runtime();
+      auto const optViewId = createProbeView(runtime);
 
       if (!optViewId)
       {
@@ -1265,7 +1266,7 @@ namespace ao::rt::test
       }
 
       executor->rejectNext();
-      std::ignore = runtimePtr->views().setFilter(*optViewId, "$year > 2000");
+      std::ignore = runtime.views().setFilter(*optViewId, "$year > 2000");
       return 3;
     }
 
@@ -1281,7 +1282,8 @@ namespace ao::rt::test
       }
 
       auto runtimePtr = std::move(*runtimeRes);
-      auto const optViewId = createProbeView(*runtimePtr);
+      auto& runtime = runtimePtr->runtime();
+      auto const optViewId = createProbeView(runtime);
 
       if (!optViewId)
       {
@@ -1290,7 +1292,7 @@ namespace ao::rt::test
 
       auto const sort = TrackColumnSort{.column = TrackField::Title, .ascending = false};
       executor->rejectNext();
-      std::ignore = runtimePtr->views().setColumnSort(*optViewId, sort);
+      std::ignore = runtime.views().setColumnSort(*optViewId, sort);
       return 3;
     }
 

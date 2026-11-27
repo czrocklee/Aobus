@@ -11,6 +11,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -45,7 +46,6 @@ namespace ao::async
 namespace ao::rt
 {
   class CompletionService;
-  class Library;
   class WorkspaceService;
   struct MetadataPatch;
 }
@@ -57,7 +57,7 @@ namespace ao::winui
   {
     winrt::Microsoft::UI::Xaml::XamlRoot xamlRoot{nullptr};
     async::Runtime& asyncRuntime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::WorkspaceService& workspace;
     rt::CompletionService& completion;
     i18n::MessageCatalog textCatalog;
@@ -199,7 +199,7 @@ namespace ao::winui
 
     winrt::Microsoft::UI::Xaml::XamlRoot _xamlRoot{nullptr};
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     rt::WorkspaceService& _workspace;
     rt::CompletionService& _completion;
     i18n::MessageCatalog _textCatalog;

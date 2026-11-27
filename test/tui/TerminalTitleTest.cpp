@@ -63,7 +63,7 @@ namespace ao::tui::test
     auto const second = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Second", .artist = "Other"});
     auto writes = std::vector<std::string>{};
     {
-      auto title = TerminalTitle{runtimePtr->library(),
+      auto title = TerminalTitle{runtimePtr->runtime().library(),
                                  [&](std::string_view value)
                                  {
                                    writes.emplace_back(value);
@@ -108,7 +108,7 @@ namespace ao::tui::test
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     REQUIRE(title.setFormat("$title"));
     auto const start = std::chrono::steady_clock::time_point{};
     auto const now = start + std::chrono::seconds{1};
@@ -139,7 +139,7 @@ namespace ao::tui::test
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     REQUIRE(title.setFormat("$title"));
     auto const start = std::chrono::steady_clock::time_point{};
     auto context = TerminalTitleContext{.transport = audio::Transport::Playing};
@@ -184,7 +184,7 @@ namespace ao::tui::test
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto const other = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Other"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, "A", start);
@@ -214,7 +214,7 @@ namespace ao::tui::test
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     auto const now = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
@@ -230,7 +230,7 @@ namespace ao::tui::test
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     auto const context = TerminalTitleContext{.transport = audio::Transport::Opening};
     REQUIRE(title.setFormat("$title"));
@@ -251,7 +251,7 @@ namespace ao::tui::test
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto const other = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Other"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, "A", start, {.transport = audio::Transport::Playing});
@@ -315,7 +315,7 @@ namespace ao::tui::test
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "曲名\n\033]2;injected\a\xc2\x9c"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
     REQUIRE(writes.size() == 1);
@@ -334,7 +334,7 @@ namespace ao::tui::test
     std::size_t expectedWrites = 0;
 
     {
-      auto title = TerminalTitle{runtimePtr->library(),
+      auto title = TerminalTitle{runtimePtr->runtime().library(),
                                  [&](std::string_view value)
                                  {
                                    writes.emplace_back(value);
@@ -412,7 +412,7 @@ namespace ao::tui::test
     }
 
     {
-      auto title = TerminalTitle{runtimePtr->library(),
+      auto title = TerminalTitle{runtimePtr->runtime().library(),
                                  [&](std::string_view value)
                                  {
                                    writes.emplace_back(value);
@@ -453,7 +453,7 @@ namespace ao::tui::test
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
-    auto title = TerminalTitle{runtimePtr->library(),
+    auto title = TerminalTitle{runtimePtr->runtime().library(),
                                [](std::string_view value)
                                {
                                  if (value != "\033[23;2t")
@@ -475,7 +475,7 @@ namespace ao::tui::test
     std::int32_t restoreAttempts = 0;
 
     {
-      auto title = TerminalTitle{runtimePtr->library(),
+      auto title = TerminalTitle{runtimePtr->runtime().library(),
                                  [&](std::string_view value)
                                  {
                                    if (value == "\033[23;2t")
@@ -510,7 +510,7 @@ namespace ao::tui::test
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "A\u2028B\u2029C\u009fD\u00a0E"});
-    auto formatter = TerminalTitleFormatter{runtimePtr->library()};
+    auto formatter = TerminalTitleFormatter{runtimePtr->runtime().library()};
     REQUIRE(formatter.setFormat("$title"));
     CHECK(formatter.format(track) == "A B C D\u00a0E");
     CHECK(formatter.format(track, "\xff") == "A B C D\u00a0E");
@@ -535,7 +535,7 @@ namespace ao::tui::test
 
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = longTitle});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
     REQUIRE(writes.size() == 1);
@@ -564,12 +564,12 @@ namespace ao::tui::test
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
-    auto survivingPreview = TerminalTitleFormatter{runtimePtr->library()};
+    auto survivingPreview = TerminalTitleFormatter{runtimePtr->runtime().library()};
     REQUIRE(survivingPreview.setFormat("$title"));
     CHECK(survivingPreview.format(track) == "Song");
 
     {
-      auto title = TerminalTitleFormatter{runtimePtr->library()};
+      auto title = TerminalTitleFormatter{runtimePtr->runtime().library()};
       REQUIRE(title.setFormat("$title"));
       CHECK(title.format(track) == "Song");
       CHECK(title.format(track, "⠀⠀⡷") == "⠀⠀⡷ Song");
@@ -586,8 +586,8 @@ namespace ao::tui::test
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song", .artist = "Artist"});
     auto writes = std::vector<std::string>{};
-    auto title = makeRecordingTitle(runtimePtr->library(), writes);
-    auto preview = TerminalTitleFormatter{runtimePtr->library()};
+    auto title = makeRecordingTitle(runtimePtr->runtime().library(), writes);
+    auto preview = TerminalTitleFormatter{runtimePtr->runtime().library()};
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
     auto const published = writes;

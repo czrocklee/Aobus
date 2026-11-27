@@ -12,6 +12,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -23,7 +24,6 @@
 
 namespace ao::rt
 {
-  class Library;
   class LibrarySnapshot;
   class TextOrderingPolicy;
 }
@@ -46,15 +46,15 @@ namespace ao::uimodel
    * The session owns the runtime binding and becomes stale on maintenance,
    * runtime replacement, or any intervening effective library commit. A stale
    * session never silently rebinds its draft to newer projection state.
-   * Submitted operations retain the session State, but Library remains a
-   * borrow and must outlive every such operation.
+   * Submitted operations retain the session State, but the command owner
+   * remains borrowed and must outlive every such operation.
    */
   class [[nodiscard]] TrackAuthoringSession final
   {
   public:
-    static Result<TrackAuthoringSession> begin(rt::Library& library, std::span<TrackId const> targetIds);
+    static Result<TrackAuthoringSession> begin(LibraryEditing editing, std::span<TrackId const> targetIds);
     /// Binds and validates against one caller-owned baseline snapshot without retaining it.
-    static Result<TrackAuthoringSession> begin(rt::Library& library,
+    static Result<TrackAuthoringSession> begin(LibraryEditing editing,
                                                std::span<TrackId const> targetIds,
                                                rt::LibrarySnapshot const& snapshot);
 
@@ -151,13 +151,13 @@ namespace ao::uimodel
   /**
    * Revision-bound membership editing for one stable target set.
    *
-   * Submitted operations retain the session State, but Library remains a
-   * borrow and must outlive every such operation.
+   * Submitted operations retain the session State, but the command owner
+   * remains borrowed and must outlive every such operation.
    */
   class [[nodiscard]] ListMembershipAuthoringSession final
   {
   public:
-    static Result<ListMembershipAuthoringSession> begin(rt::Library& library, std::span<TrackId const> trackIds);
+    static Result<ListMembershipAuthoringSession> begin(LibraryEditing editing, std::span<TrackId const> trackIds);
 
     ~ListMembershipAuthoringSession();
 

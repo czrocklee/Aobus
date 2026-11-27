@@ -341,14 +341,15 @@ namespace ao::gtk::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
-    auto const retireWork = utility::ScopedRegistration{[&]
+    auto ownerPtr = rt::test::makeRuntime(tempDir, std::move(executorPtr));
+    auto& runtime = ownerPtr->runtime();
+    auto const retireWork = utility::ScopedRegistration{[&ownerPtr, executor]
                                                         {
-                                                          runtimePtr->shutdown();
+                                                          ownerPtr->shutdown();
                                                           executor->runUntilIdle();
                                                         }};
-    auto& playback = runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*runtimePtr, rt::test::makePipeWireOutputStatus());
+    auto& playback = runtime.playback();
+    rt::test::addReadyAudioProvider(runtime, rt::test::makePipeWireOutputStatus());
     executor->runUntilIdle();
     auto const fixed = playback.snapshot().transport.output.selectedDevice;
     REQUIRE(fixed.routingPolicy == audio::OutputRoutingPolicy::Fixed);
@@ -385,7 +386,7 @@ namespace ao::gtk::test
 
     auto const discoverOtherOutput = [&] -> Gtk::Switch&
     {
-      rt::test::addReadyAudioProvider(*runtimePtr);
+      rt::test::addReadyAudioProvider(runtime);
       // Publish the inventory without delivering the switch's GTK idle handoff.
       executor->runUntilIdle();
       REQUIRE(findLabelByText(selector, "Test Device") != nullptr);

@@ -25,7 +25,7 @@
 
 namespace ao::rt
 {
-  class Library;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -66,7 +66,7 @@ namespace ao::gtk::portal
   public:
     ImportExportCoordinator(Gtk::Window& parent,
                             async::Runtime& asyncRuntime,
-                            rt::Library& library,
+                            rt::LibraryJobs& libraryJobs,
                             rt::NotificationService& notifications,
                             i18n::MessageCatalog textCatalog,
                             ImportExportCallbacks callbacks,

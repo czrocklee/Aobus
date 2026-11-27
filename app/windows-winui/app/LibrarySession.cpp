@@ -29,7 +29,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -166,10 +165,12 @@ namespace ao::winui
 
   struct RuntimeGraph final
   {
-    RuntimeGraph(rt::AppRuntime&& runtimeValue, DispatcherQueueExecutor& dispatcherExecutorValue)
-      : runtime{std::move(runtimeValue)}
+    RuntimeGraph(rt::AppRuntimeOwner&& runtimeOwnerValue, DispatcherQueueExecutor& dispatcherExecutorValue)
+      : runtimeOwner{std::move(runtimeOwnerValue)}
       , dispatcherExecutor{dispatcherExecutorValue}
-      , workspaceSortCheckpoint{dispatcherExecutor, runtime.workspace(), runtime.workspaceConfigStore()}
+      , workspaceSortCheckpoint{dispatcherExecutor,
+                                runtimeOwner.runtime().workspace(),
+                                runtimeOwner.runtime().workspaceConfigStore()}
     {
     }
 
@@ -187,12 +188,12 @@ namespace ao::winui
       }
 
       optInteractiveBorrowers.reset();
-      runtime.shutdown();
+      runtimeOwner.shutdown();
       dispatcherExecutor.completeClosing();
       stopped = true;
     }
 
-    rt::AppRuntime runtime;
+    rt::AppRuntimeOwner runtimeOwner;
     DispatcherQueueExecutor& dispatcherExecutor;
     WorkspaceSortCheckpoint workspaceSortCheckpoint;
     std::optional<InteractiveBorrowers> optInteractiveBorrowers;
@@ -256,7 +257,8 @@ namespace ao::winui
     i18n::MessageCatalog textCatalog,
     rt::TextOrderingPolicy const& textOrderingPolicy,
     rt::CompletionAliasPolicy const& completionAliasPolicy,
-    std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
+    std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest,
+    rt::AppRuntimeOwner::BindLibraryCommands bindLibraryCommands)
   {
     auto sessionPtr = std::unique_ptr<LibrarySession>{new LibrarySession{
       std::move(stateRoot), std::move(dispatcher), std::move(textCatalog), textOrderingPolicy, completionAliasPolicy}};
@@ -264,6 +266,11 @@ namespace ao::winui
     if (auto initializedRes = sessionPtr->initialize(std::move(optSuccessorRequest)); !initializedRes)
     {
       return std::unexpected{initializedRes.error()};
+    }
+
+    if (bindLibraryCommands)
+    {
+      bindLibraryCommands(sessionPtr->runtimeOwner().libraryCommands());
     }
 
     return sessionPtr;
@@ -356,7 +363,7 @@ namespace ao::winui
         runtimeRes.error().code, std::format("Failed to open initial library: {}", runtimeRes.error().message));
     }
 
-    auto& runtime = storage.requireRuntimeGraph().runtime;
+    auto& runtime = this->runtime();
 
     // Both groups were read above; the notices wait for the runtime that owns the feed.
     if (storage.settingsStorePtr->hasNewerGroup(kDesktopSettingsConfigGroup))
@@ -450,7 +457,7 @@ namespace ao::winui
 
     if (storage.optRuntimeGraph)
     {
-      checkpointWorkspaceBestEffort(storage.optRuntimeGraph->runtime);
+      checkpointWorkspaceBestEffort(storage.optRuntimeGraph->runtimeOwner.runtime());
       storage.optRuntimeGraph->shutdown();
     }
 
@@ -461,7 +468,7 @@ namespace ao::winui
 
   rt::AppRuntime& LibrarySession::runtime() const noexcept
   {
-    return _storagePtr->requireRuntimeGraph().runtime;
+    return _storagePtr->requireRuntimeGraph().runtimeOwner.runtime();
   }
 
   std::filesystem::path const& LibrarySession::musicRoot() const noexcept
@@ -547,12 +554,12 @@ namespace ao::winui
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
   {
     auto& storage = *_storagePtr;
-    auto& graph = storage.requireRuntimeGraph();
+    auto& runtime = this->runtime();
 
     // The two presentation groups moved to the per-library layout document and
     // are written only by the stores' own persist ports.
     return persistDesktopSettingsCandidate(
-      graph.runtime.workspace(), graph.runtime.workspaceConfigStore(), *storage.settingsStorePtr, settings);
+      runtime.workspace(), runtime.workspaceConfigStore(), *storage.settingsStorePtr, settings);
   }
 
   Result<> LibrarySession::commitSelectedRoot()
@@ -566,7 +573,7 @@ namespace ao::winui
     }
 
     auto candidateRes = prepareSelectedRootCommit(storage.settings, *storage.optSelectedRootCommit);
-    auto& runtime = storage.requireRuntimeGraph().runtime;
+    auto& runtime = this->runtime();
 
     if (!candidateRes)
     {
@@ -608,7 +615,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    auto retiredRes = storage.optRuntimeGraph->runtime.retirePlaybackSessionForLibrarySwitch();
+    auto retiredRes = runtime().retirePlaybackSessionForLibrarySwitch();
 
     if (!retiredRes)
     {
@@ -637,15 +644,16 @@ namespace ao::winui
     // root is: what lives there is derived, so the session opens without it and
     // cover reads re-extract from the media files instead.
     auto const cacheDirRes = utility::applicationCacheDirectory();
-    auto runtimeRes = rt::AppRuntime::create(
-      rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
-                                 .musicRoot = root,
-                                 .databasePath = paths.databasePath(),
-                                 .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
-                                 .workspaceConfigStorePtr = std::move(workspaceStorePtr),
-                                 .playbackSessionConfigStore = storage.playbackStorePtr.get(),
-                                 .textOrderingPolicy = &storage.textOrderingPolicy,
-                                 .completionAliasPolicy = &storage.completionAliasPolicy});
+    auto runtimeRes = rt::AppRuntimeOwner::open({
+      .executorPtr = std::move(executorPtr),
+      .musicRoot = root,
+      .databasePath = paths.databasePath(),
+      .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
+      .workspaceConfigStorePtr = std::move(workspaceStorePtr),
+      .playbackSessionConfigStore = storage.playbackStorePtr.get(),
+      .textOrderingPolicy = &storage.textOrderingPolicy,
+      .completionAliasPolicy = &storage.completionAliasPolicy,
+    });
 
     if (!runtimeRes)
     {
@@ -662,16 +670,22 @@ namespace ao::winui
     return {};
   }
 
+  rt::AppRuntimeOwner& LibrarySession::runtimeOwner() noexcept
+  {
+    return _storagePtr->requireRuntimeGraph().runtimeOwner;
+  }
+
   void LibrarySession::bindRuntimeServices()
   {
     auto& storage = *_storagePtr;
     auto& graph = storage.requireRuntimeGraph();
     AO_INVARIANT(!graph.optInteractiveBorrowers, "LibrarySession cannot bind interactive runtime borrowers twice");
+    auto& runtime = graph.runtimeOwner.runtime();
 
     // Both groups are read here rather than during initialize(): they are keyed
     // by ListId, which only means anything against the library that is open by
     // now. A rejected or absent group leaves the seeded default in place.
-    auto const libraryId = graph.runtime.library().snapshot().libraryId();
+    auto const libraryId = runtime.library().snapshot().libraryId();
     auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
 
     if (auto const loadedRes = storage.layoutStorePtr->load(uimodel::kTrackColumnLayoutsConfigGroup,
@@ -692,10 +706,10 @@ namespace ao::winui
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
     }
 
-    auto knownListIds = graph.runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) |
-                        std::ranges::to<std::vector>();
+    auto knownListIds =
+      runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) | std::ranges::to<std::vector>();
     graph.optInteractiveBorrowers.emplace(
-      graph.runtime,
+      runtime,
       storage.textCatalog,
       InteractiveBorrowerBindings{
         .restoredListPresentations = std::move(restoredListPresentations),
@@ -789,12 +803,12 @@ namespace ao::winui
                                           owner->finishActiveScan(std::move(outcome));
                                         }
                                       }};
-    auto& appRuntime = storage.requireRuntimeGraph().runtime;
-    auto* const runtime = &appRuntime.async();
-    auto* const jobs = &appRuntime.library().jobs();
-    storage.libraryTask = appRuntime.async().spawnCancellable(
-      [runtime, jobs, present = std::move(present)](std::stop_token const stopToken) mutable
-      { return runActiveScanAsync(runtime, jobs, std::move(present), stopToken); });
+    auto& owner = runtimeOwner();
+    auto* const runtime = &owner.runtime().async();
+    auto* const jobs = &owner.libraryJobs();
+    storage.libraryTask =
+      runtime->spawnCancellable([runtime, jobs, present = std::move(present)](std::stop_token const stopToken) mutable
+                                { return runActiveScanAsync(runtime, jobs, std::move(present), stopToken); });
   }
 
   void LibrarySession::finishActiveScan(uimodel::LibraryScanOutcome outcome)
@@ -812,7 +826,7 @@ namespace ao::winui
     // reporting a plain ready library.
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
     auto message = formatLibraryScanMessage(storage.textCatalog, outcome);
-    auto& appRuntime = storage.requireRuntimeGraph().runtime;
+    auto& appRuntime = runtime();
     auto optStartupStatus =
       storage.startupWarnings.settle(storage.scanAfterOpen, severity == rt::NotificationSeverity::Error);
 
@@ -894,7 +908,7 @@ namespace ao::winui
     // takes the status line.
     auto request = uimodel::librarySwitchNotSavedNotification(storage.textCatalog, error);
     auto message = std::get<std::string>(request.message);
-    storage.requireRuntimeGraph().runtime.notifications().post(std::move(request));
+    runtime().notifications().post(std::move(request));
 
     reportStartupWarning(std::move(message));
   }
@@ -932,7 +946,7 @@ namespace ao::winui
 
     // PlaybackActions only requests a start when the focused projection has a selection.
     auto const token = storage.ownerCallbackGate.token();
-    auto& runtime = storage.requireRuntimeGraph().runtime;
+    auto& runtime = this->runtime();
     auto const playedRes = runtime.playSelectionInFocusedView();
 
     if (playedRes)
@@ -956,14 +970,12 @@ namespace ao::winui
 
   Result<> LibrarySession::playTrack(rt::ViewId const viewId, TrackId const trackId)
   {
-    auto& storage = *_storagePtr;
-
-    if (storage.shutdown)
+    if (_storagePtr->shutdown)
     {
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    auto& appRuntime = storage.requireRuntimeGraph().runtime;
+    auto& appRuntime = runtime();
 
     if (auto selectedRes = appRuntime.views().setSelection(viewId, {trackId}); !selectedRes)
     {

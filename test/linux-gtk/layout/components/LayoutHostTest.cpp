@@ -70,9 +70,6 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
-    auto const tempDir = ao::test::TempDir{};
-    std::unique_ptr<rt::AppRuntime> const runtimePtr = makeRuntime(tempDir);
-
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry, ao::test::englishMessageCatalog());
     registry.registerComponent({.id = "test.null", .displayName = "Null"}, makeFailingComponent);
@@ -197,10 +194,11 @@ namespace ao::gtk::layout::test
       auto registry2 = ComponentRegistry{};
       auto window2 = Gtk::Window{};
       auto const tempDir2 = ao::test::TempDir{};
-      std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
+      auto ownerPtr = makeRuntime(tempDir2);
       LayoutRuntime::registerStandardComponents(
         registry2,
-        *runtime2Ptr,
+        ownerPtr->runtime(),
+        uimodel::LibraryEditing{ownerPtr->libraryCommands()},
         ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
                                  .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
@@ -240,19 +238,23 @@ namespace ao::gtk::layout::test
     auto themeCoordinator = ThemeCoordinator{};
     auto tagEditController = TagEditController{window,
                                                runtime.async(),
-                                               runtime.library(),
+                                               runtimeFixture.editing(),
                                                runtime.completion(),
                                                runtime.notifications(),
                                                runtime.textOrderingPolicy(),
                                                ao::test::englishMessageCatalog(),
                                                TagEditController::Callbacks{},
                                                themeCoordinator};
-    auto listNavigation = ListNavigationController{
-      window, runtime, ao::test::englishMessageCatalog(), ListNavigationController::Callbacks{}, themeCoordinator};
+    auto listNavigation = ListNavigationController{window,
+                                                   runtime,
+                                                   runtimeFixture.editing(),
+                                                   ao::test::englishMessageCatalog(),
+                                                   ListNavigationController::Callbacks{},
+                                                   themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto trackPageHost = TrackPageHost{stack,
                                        runtime.async(),
-                                       runtime.library(),
+                                       runtimeFixture.editing(),
                                        runtime.playback(),
                                        runtime.views(),
                                        runtime.workspace(),

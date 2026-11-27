@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/compat/MoveOnlyFunction.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -51,6 +52,11 @@ namespace ao::uimodel
   class TrackPresentationCatalog;
 }
 
+namespace winrt::Aobus::implementation
+{
+  struct MainWindow;
+}
+
 namespace ao::winui
 {
   class DispatcherQueueExecutor;
@@ -65,13 +71,16 @@ namespace ao::winui
   class [[nodiscard]] LibrarySession final
   {
   public:
+    /// The optional command-binding hook runs once after successful initialization and is not retained.
+    /// The command borrow expires when the session is destroyed.
     static Result<std::unique_ptr<LibrarySession>> create(
       std::filesystem::path stateRoot,
       winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
       i18n::MessageCatalog textCatalog,
       rt::TextOrderingPolicy const& textOrderingPolicy,
       rt::CompletionAliasPolicy const& completionAliasPolicy,
-      std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
+      std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest,
+      rt::AppRuntimeOwner::BindLibraryCommands bindLibraryCommands = {});
     ~LibrarySession();
 
     LibrarySession(LibrarySession const&) = delete;
@@ -80,6 +89,9 @@ namespace ao::winui
     LibrarySession& operator=(LibrarySession&&) = delete;
 
     rt::AppRuntime& runtime() const noexcept;
+    /// Bind the window's authoring and transfer coordinators during composition.
+    void initializeWindow(winrt::Aobus::implementation::MainWindow& window,
+                          compat::MoveOnlyFunction<Result<>(std::filesystem::path)> requestRestart);
     std::filesystem::path const& musicRoot() const noexcept;
     bool shouldScanAfterOpen() const noexcept;
     uimodel::PlaybackActions& playbackActions() const noexcept;
@@ -126,6 +138,7 @@ namespace ao::winui
     void shutdown() noexcept;
 
     Result<> emplaceRuntimeGraph(std::filesystem::path const& root);
+    rt::AppRuntimeOwner& runtimeOwner() noexcept;
     Result<> saveSettingsCandidate(DesktopSettings const& settings);
     void bindRuntimeServices();
     void startActiveScan();

@@ -89,13 +89,16 @@ namespace ao::appkit
   public:
     using AudioProviderFactory = decltype(&audio::createPlatformBackendProviders);
 
+    /// The optional command-binding hook runs once after successful initialization and is not retained.
+    /// The command borrow expires when the session closes.
     static Result<std::unique_ptr<LibrarySession>> create(
       std::filesystem::path const& root,
       std::filesystem::path const& stateRoot,
       bool restorePlayback,
       i18n::MessageCatalog catalog,
       std::function<void(DesktopInvalidation)> onInvalidated,
-      AudioProviderFactory createProviders = audio::createPlatformBackendProviders);
+      AudioProviderFactory createProviders = audio::createPlatformBackendProviders,
+      rt::AppRuntimeOwner::BindLibraryCommands bindLibraryCommands = {});
     ~LibrarySession();
     LibrarySession(LibrarySession const&) = delete;
     LibrarySession& operator=(LibrarySession const&) = delete;

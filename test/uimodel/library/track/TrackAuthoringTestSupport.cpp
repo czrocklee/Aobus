@@ -7,31 +7,31 @@
 #include "test/library/MusicLibraryTestSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 namespace ao::uimodel::test
 {
-  struct TrackAuthoringFixture::Impl final
+  namespace
   {
-    explicit Impl(std::size_t const trackCount)
-      : musicLibrary{library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db")}, asyncRuntime{executor}
+    std::vector<TrackId> seedTracks(library::MusicLibrary& musicLibrary, std::size_t const trackCount)
     {
+      auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(trackCount);
 
       for (std::size_t index = 0; index < trackCount; ++index)
@@ -42,37 +42,23 @@ namespace ao::uimodel::test
             .title = index == 0 ? "Old Title" : "Other Title", .uri = "track-" + std::to_string(index) + ".flac"}));
       }
 
-      auto readTransaction = musicLibrary.readTransaction();
-      auto const revision = musicLibrary.libraryRevision(readTransaction);
-      changesPtr = std::make_unique<rt::LibraryChanges>(executor, revision, "test-library");
-      optLibrary.emplace(asyncRuntime, ao::test::requireValue(rt::Library::prepare(musicLibrary)), *changesPtr);
+      return trackIds;
     }
+  } // namespace
 
-    ~Impl()
+  struct TrackAuthoringFixture::Impl final
+  {
+    explicit Impl(std::size_t const trackCount)
+      : trackIds{seedTracks(musicLibrary, trackCount)}
     {
-      if (optLibrary)
-      {
-        optLibrary->beginClosing();
-      }
-
-      asyncRuntime.requestStop();
-      asyncRuntime.join();
-      optLibrary.reset();
-      changesPtr.reset();
     }
-
-    Impl(Impl const&) = delete;
-    Impl& operator=(Impl const&) = delete;
-    Impl(Impl&&) = delete;
-    Impl& operator=(Impl&&) = delete;
 
     ao::test::TempDir temp;
-    library::MusicLibrary musicLibrary;
+    library::MusicLibrary musicLibrary{library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db")};
     std::vector<TrackId> trackIds;
     rt::test::ManualExecutor executor;
-    async::Runtime asyncRuntime;
-    std::unique_ptr<rt::LibraryChanges> changesPtr;
-    std::optional<rt::Library> optLibrary;
+    rt::LibraryChanges changes{rt::test::makeLibraryChanges(executor, musicLibrary)};
+    rt::test::LibraryCommandsFixture commandsFixture{musicLibrary, changes, executor};
   };
 
   TrackAuthoringFixture::TrackAuthoringFixture(std::size_t const trackCount)
@@ -82,19 +68,29 @@ namespace ao::uimodel::test
 
   TrackAuthoringFixture::~TrackAuthoringFixture() = default;
 
-  rt::Library& TrackAuthoringFixture::library() const
+  rt::Library const& TrackAuthoringFixture::library() const
   {
-    return *_implPtr->optLibrary;
+    return _implPtr->commandsFixture.library();
   }
 
-  rt::LibraryChanges& TrackAuthoringFixture::changes() const
+  rt::LibraryCommands& TrackAuthoringFixture::libraryCommands() const
   {
-    return *_implPtr->changesPtr;
+    return _implPtr->commandsFixture.commands();
+  }
+
+  LibraryEditing TrackAuthoringFixture::editing() const
+  {
+    return LibraryEditing{libraryCommands()};
+  }
+
+  void TrackAuthoringFixture::beginClosing()
+  {
+    _implPtr->commandsFixture.beginClosing();
   }
 
   async::Runtime& TrackAuthoringFixture::runtime() const
   {
-    return _implPtr->asyncRuntime;
+    return _implPtr->commandsFixture.runtime();
   }
 
   rt::test::ManualExecutor& TrackAuthoringFixture::executor() const

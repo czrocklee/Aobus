@@ -17,7 +17,7 @@
 namespace ao::rt
 {
   class Library;
-  class LibraryChanges;
+  class LibraryCommands;
 } // namespace ao::rt
 
 namespace ao::async
@@ -28,6 +28,11 @@ namespace ao::async
 namespace ao::rt::test
 {
   class ManualExecutor;
+}
+
+namespace ao::uimodel
+{
+  class LibraryEditing;
 }
 
 namespace ao::uimodel::test
@@ -43,8 +48,10 @@ namespace ao::uimodel::test
     TrackAuthoringFixture(TrackAuthoringFixture&&) = delete;
     TrackAuthoringFixture& operator=(TrackAuthoringFixture&&) = delete;
 
-    rt::Library& library() const;
-    rt::LibraryChanges& changes() const;
+    rt::Library const& library() const;
+    rt::LibraryCommands& libraryCommands() const;
+    LibraryEditing editing() const;
+    void beginClosing();
     async::Runtime& runtime() const;
     rt::test::ManualExecutor& executor() const;
     std::span<TrackId const> trackIds() const noexcept;

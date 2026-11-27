@@ -451,7 +451,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyRes = cli.runTask(cli.library().commands().previewUpdateMetadataAsync(targetIds, patch));
+        auto const replyRes = cli.runTask(cli.core().libraryCommands().previewUpdateMetadataAsync(targetIds, patch));
 
         if (!replyRes)
         {
@@ -470,7 +470,7 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(cli.library().commands().updateMetadataAsync(*bindingRes, patch));
+      auto const replyRes = cli.runTask(cli.core().libraryCommands().updateMetadataAsync(*bindingRes, patch));
 
       if (!replyRes)
       {
@@ -519,7 +519,7 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(cli.library().commands().updatePropertiesAsync(*bindingRes, patch));
+      auto const replyRes = cli.runTask(cli.core().libraryCommands().updatePropertiesAsync(*bindingRes, patch));
 
       if (!replyRes)
       {
@@ -1286,7 +1286,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const trackRes = cli.runTask(cli.library().commands().previewCreateTrackFromFileAsync(trackPath));
+            auto const trackRes = cli.runTask(cli.core().libraryCommands().previewCreateTrackFromFileAsync(trackPath));
 
             if (!trackRes)
             {
@@ -1305,7 +1305,7 @@ namespace ao::cli
             return;
           }
 
-          auto const trackRes = cli.runTask(cli.library().commands().createTrackFromFileAsync(trackPath));
+          auto const trackRes = cli.runTask(cli.core().libraryCommands().createTrackFromFileAsync(trackPath));
 
           if (trackRes)
           {
@@ -1782,7 +1782,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const deleteRes = cli.runTask(cli.library().commands().previewDeleteTrackAsync(trackId));
+            auto const deleteRes = cli.runTask(cli.core().libraryCommands().previewDeleteTrackAsync(trackId));
 
             if (!deleteRes)
             {
@@ -1793,7 +1793,7 @@ namespace ao::cli
             return;
           }
 
-          auto const deleteRes = cli.runTask(cli.library().commands().deleteTrackAsync(trackId));
+          auto const deleteRes = cli.runTask(cli.core().libraryCommands().deleteTrackAsync(trackId));
 
           if (deleteRes)
           {

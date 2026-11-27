@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 
 #include <memory>
 
@@ -21,6 +22,7 @@ namespace ao::gtk::layout
 
   void LayoutRuntime::registerStandardComponents(ComponentRegistry& registry,
                                                  rt::AppRuntime& runtime,
+                                                 uimodel::LibraryEditing editing,
                                                  ShellLayoutCollaborators const& collaborators)
   {
     registerContainerComponents(registry, collaborators.textCatalog);
@@ -44,8 +46,9 @@ namespace ao::gtk::layout
                             collaborators.themeCoordinator,
                             collaborators.createSmartListFromExpression,
                             collaborators.textCatalog);
-    registerTrackDetailComponents(registry, runtime, collaborators.imageLoader, collaborators.textCatalog);
-    registerTrackEditorComponents(registry, runtime, collaborators.tagEditController, collaborators.textCatalog);
+    registerTrackDetailComponents(registry, runtime, editing, collaborators.imageLoader, collaborators.textCatalog);
+    registerTrackEditorComponents(
+      registry, runtime, editing, collaborators.tagEditController, collaborators.textCatalog);
     registerStatusComponents(registry, runtime, collaborators.textCatalog);
   }
 

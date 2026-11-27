@@ -67,7 +67,7 @@ namespace ao::gtk::layout::test
     // can be laid out before its growth request is configured after Save.
     windowFixture.window().set_default_size(480, 720);
     auto editor = TrackCreditsEditor{runtime.async(),
-                                     runtime.library(),
+                                     fixture.editing(),
                                      runtime.completion(),
                                      runtime.notifications(),
                                      ao::test::englishMessageCatalog(),
@@ -200,7 +200,7 @@ namespace ao::gtk::layout::test
         }
       });
     auto externalSession =
-      ao::test::requireValue(uimodel::TrackAuthoringSession::begin(runtime.library(), std::array{id}));
+      ao::test::requireValue(uimodel::TrackAuthoringSession::begin(fixture.editing(), std::array{id}));
     auto patch = rt::MetadataPatch{};
     patch.optCredits = rt::CreditReplacement{
       .kinds = uimodel::allTrackCreditKinds(), .entries = {{"External", CreditKind::Performer, "Violin"}}};

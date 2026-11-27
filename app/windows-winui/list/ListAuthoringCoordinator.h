@@ -15,7 +15,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/list/ListAuthoring.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/CallbackAdmissionGate.h>
@@ -45,7 +45,6 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class Library;
   class NotificationService;
   class TextOrderingPolicy;
   class TrackSourceCache;
@@ -66,7 +65,7 @@ namespace ao::winui
   {
     std::function<winrt::Microsoft::UI::Xaml::XamlRoot()> xamlRoot;
     async::Runtime& asyncRuntime;
-    rt::Library& library;
+    uimodel::LibraryEditing editing;
     rt::ViewService& views;
     rt::TrackSourceCache& sources;
     rt::NotificationService& notifications;
@@ -154,7 +153,7 @@ namespace ao::winui
 
     std::function<winrt::Microsoft::UI::Xaml::XamlRoot()> _xamlRoot;
     async::Runtime& _asyncRuntime;
-    rt::Library& _library;
+    uimodel::LibraryEditing _editing;
     rt::ViewService& _views;
     rt::TrackSourceCache& _sources;
     rt::NotificationService& _notifications;

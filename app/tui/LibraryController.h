@@ -64,7 +64,7 @@ namespace ao::tui
   class LibraryController final
   {
   public:
-    LibraryController(rt::Library& library,
+    LibraryController(rt::Library const& library,
                       rt::ViewService& views,
                       rt::WorkspaceService& workspace,
                       i18n::MessageCatalog textCatalog,
@@ -186,7 +186,7 @@ namespace ao::tui
     Result<> navigateToList(ListId listId);
     Result<> navigateFromActiveView(rt::NavigationRequest const& request);
 
-    rt::Library& _library;
+    rt::Library const& _library;
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;

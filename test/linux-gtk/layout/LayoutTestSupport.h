@@ -31,11 +31,13 @@ namespace ao::library
 namespace ao::rt
 {
   class AppRuntime;
+  class AppRuntimeOwner;
   class TextOrderingPolicy;
 }
 
 namespace ao::uimodel
 {
+  class LibraryEditing;
   class LayoutComponentStateStore;
   struct LayoutDocument;
   struct LayoutNode;
@@ -99,7 +101,9 @@ namespace ao::gtk::layout::test
     LayoutRuntimeFixture(LayoutRuntimeFixture&&) = delete;
     LayoutRuntimeFixture& operator=(LayoutRuntimeFixture&&) = delete;
 
+    rt::AppRuntimeOwner& owner();
     rt::AppRuntime& runtime();
+    uimodel::LibraryEditing editing();
 
     /// Where this fixture's runtime keeps its derived caches, including the
     /// cover cache a resource request reads content through.
