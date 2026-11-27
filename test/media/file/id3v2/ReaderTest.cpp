@@ -347,7 +347,10 @@ namespace ao::media::file::mpeg::id3v2::test
     auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
     REQUIRE(optFrames);
-    CHECK(optFrames->metadata().title() == "Title");
+    auto const title = optFrames->metadata().title();
+    CHECK(title == "Title");
+    // The first value follows the 10-byte frame header and one encoding byte.
+    CHECK(title.data() == utility::bytes::stringView(byteSpan(body).subspan(11)).data());
     CHECK(optFrames->metadata().artist() == "Artist");
   }
 

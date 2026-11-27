@@ -23,11 +23,6 @@ namespace ao::media::detail
   class MediaException final : public std::exception
   {
   public:
-    explicit MediaException(Error error)
-      : _error{std::move(error)}
-    {
-    }
-
     MediaException(Error::Code code, std::string message, std::source_location loc = std::source_location::current())
       : _error{.code = code, .message = std::move(message), .location = loc}
     {
@@ -39,8 +34,6 @@ namespace ao::media::detail
   private:
     Error _error;
   };
-
-  [[noreturn]] void throwMediaError(Error error);
 
   [[noreturn]] void throwMediaError(Error::Code code,
                                     std::string message,

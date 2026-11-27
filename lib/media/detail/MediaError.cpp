@@ -12,12 +12,6 @@
 
 namespace ao::media::detail
 {
-  [[noreturn]] void throwMediaError(Error error)
-  {
-    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
-    throw MediaException{std::move(error)};
-  }
-
   [[noreturn]] void throwMediaError(Error::Code const code, std::string message, std::source_location const loc)
   {
     AO_EXCEPTION_CARRIER(PrivateErrorTransport);

@@ -211,23 +211,7 @@ namespace ao::media::file::mp4
       }
     }
 
-    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
-    {
-      if (lhs.size() != rhs.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < lhs.size(); ++index)
-      {
-        if (utility::toAsciiLower(lhs[index]) != utility::toAsciiLower(rhs[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
+    using utility::isEqualIgnoringAsciiCase;
 
     // Picard's freeform names for non-performing credits, also read as mdta keys.
     std::optional<CreditKind> creditKindForName(std::string_view name) noexcept

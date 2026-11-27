@@ -12,6 +12,7 @@
 #include <ao/media/file/Visitor.h>
 #include <ao/utility/Xxh3.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -529,7 +530,7 @@ namespace ao::media::file::mpeg::test
     CHECK(readContent(file).duration() == std::chrono::milliseconds{26});
   }
 
-  TEST_CASE("MPEG File - audio payload signature ignores tag changes")
+  TEST_CASE("MPEG File - audio payload ignores tag changes")
   {
     auto firstBody = std::vector<std::uint8_t>{};
     addTextFrame(firstBody, "TIT2", "Before");
@@ -554,9 +555,9 @@ namespace ao::media::file::mpeg::test
     REQUIRE(firstPayloadRes);
     REQUIRE(secondPayloadRes);
 
-    CHECK(firstPayloadRes->bytes.size() == frame.size());
-    CHECK(secondPayloadRes->bytes.size() == frame.size());
-    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
+    auto const expected = std::as_bytes(std::span<std::uint8_t const>{frame});
+    CHECK(std::ranges::equal(firstPayloadRes->bytes, expected));
+    CHECK(std::ranges::equal(secondPayloadRes->bytes, expected));
   }
 
   TEST_CASE("MPEG File - derives CBR audio properties")
@@ -891,6 +892,35 @@ namespace ao::media::file::mpeg::test
     REQUIRE(payloadRes);
     CHECK(payloadRes->offset == expectedOffset);
     CHECK(payloadRes->bytes.size() == frame.size());
+  }
+
+  TEST_CASE("MPEG File - rejects a non-syncsafe ID3 envelope without losing the audio payload")
+  {
+    // Zero leaves the valid control unchanged; bytes 6 through 9 hold the tag size.
+    auto const reservedBitOffset = GENERATE(0U, 6U, 7U, 8U, 9U);
+    CAPTURE(reservedBitOffset);
+    auto body = std::vector<std::uint8_t>{};
+    addTextFrame(body, "TIT2", "ID3 title");
+    auto data = wrapId3v2(3, body);
+
+    if (reservedBitOffset != 0U)
+    {
+      data[reservedBitOffset] |= 0x80U;
+    }
+
+    auto const audioOffset = data.size();
+    auto const audio = createValidMpegFrames(2);
+    data.append_range(audio);
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+
+    auto const content = readContent(file);
+    CHECK(content.text(TextField::Title) == (reservedBitOffset == 0U ? "ID3 title" : ""));
+    CHECK(content.codec() == AudioCodec::Mp3);
+    auto const payloadRes = file.audioPayload();
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == audioOffset);
+    CHECK(std::ranges::equal(payloadRes->bytes, std::as_bytes(std::span<std::uint8_t const>{audio})));
   }
 
   TEST_CASE("MPEG File - discards optional ID3 frames exceeding the tag body")

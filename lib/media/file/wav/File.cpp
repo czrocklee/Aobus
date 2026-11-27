@@ -16,7 +16,6 @@
 #include <ao/utility/ByteView.h>
 #include <ao/utility/String.h>
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -34,7 +33,6 @@ namespace ao::media::file::wav
   namespace
   {
     constexpr std::uint16_t kDecimalBase = 10;
-    constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
 
     std::string_view trimTrailingNulls(std::string_view text) noexcept
     {
@@ -52,24 +50,6 @@ namespace ao::media::file::wav
              (static_cast<std::uint32_t>(std::to_integer<std::uint32_t>(bytes[offset + 1])) << 8U) |
              (static_cast<std::uint32_t>(std::to_integer<std::uint32_t>(bytes[offset + 2])) << 16U) |
              (static_cast<std::uint32_t>(std::to_integer<std::uint32_t>(bytes[offset + 3])) << 24U);
-    }
-
-    bool isEqualId(std::span<std::byte const> bytes, std::string_view id) noexcept
-    {
-      if (bytes.size() != id.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < bytes.size(); ++index)
-      {
-        if (std::to_integer<unsigned char>(bytes[index]) != static_cast<unsigned char>(id[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
     }
 
     std::uint16_t yearFromText(std::string_view text) noexcept
@@ -139,7 +119,7 @@ namespace ao::media::file::wav
 
     void readInfoList(detail::ContentBuilder& builder, media::wav::ChunkView const& chunk)
     {
-      if (chunk.bytes.size() < 4 || !isEqualId(chunk.bytes.first(4), "INFO"))
+      if (!utility::bytes::stringView(chunk.bytes).starts_with("INFO"))
       {
         return;
       }
@@ -287,34 +267,24 @@ namespace ao::media::file::wav
       }
     }
 
-    bool hasValidSyncSafeSize(mpeg::id3v2::EncodedSize const& size) noexcept
-    {
-      return std::ranges::all_of(size.data, [](std::uint8_t byte) { return (byte & kSyncSafeHighBit) == 0; });
-    }
-
     void readId3Chunk(detail::ContentBuilder& builder, media::wav::ChunkView const& chunk)
     {
-      if (chunk.bytes.size() < mpeg::id3v2::HeaderLayout::kSize)
-      {
-        return;
-      }
-
       auto const* const header = utility::bytes::tryLayout<mpeg::id3v2::HeaderLayout>(chunk.bytes);
 
-      if (header == nullptr || header->id != std::array<char, 3>{'I', 'D', '3'} || !hasValidSyncSafeSize(header->size))
+      if (header == nullptr || header->id != std::array<char, 3>{'I', 'D', '3'})
       {
         return;
       }
 
-      auto const tagSize = mpeg::id3v2::decodeSize(header->size);
+      auto const optTagSize = mpeg::id3v2::tryDecodeSize(header->size);
       auto const frameOffset = mpeg::id3v2::HeaderLayout::kSize;
 
-      if (tagSize > chunk.bytes.size() - frameOffset)
+      if (!optTagSize || *optTagSize > chunk.bytes.size() - frameOffset)
       {
         return;
       }
 
-      auto const frames = chunk.bytes.subspan(frameOffset, tagSize);
+      auto const frames = chunk.bytes.subspan(frameOffset, *optTagSize);
 
       if (auto optId3Builder = mpeg::id3v2::readFrames(*header, frames); optId3Builder)
       {

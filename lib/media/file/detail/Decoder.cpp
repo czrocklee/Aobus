@@ -3,76 +3,23 @@
 
 #include "Decoder.h"
 
-#include <ao/utility/ByteView.h>
-
-#include <boost/endian/conversion.hpp>
-#include <boost/endian/detail/order.hpp>
-
 #include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
-#include <span>
-#include <string>
 #include <string_view>
 #include <system_error>
 
 namespace ao::media::file
 {
-  std::string decodeString(std::span<std::byte const> buf)
-  {
-    return std::string{utility::bytes::stringView(buf)};
-  }
-
-  std::optional<std::uint32_t> readU32(std::span<std::byte const> bytes,
-                                       std::size_t& offset,
-                                       boost::endian::order order) noexcept
-  {
-    if (offset > bytes.size() || sizeof(std::uint32_t) > bytes.size() - offset)
-    {
-      return std::nullopt;
-    }
-
-    std::uint32_t value = 0;
-    std::memcpy(&value, bytes.data() + offset, sizeof(value));
-    offset += sizeof(value);
-
-    if (order == boost::endian::order::big)
-    {
-      boost::endian::big_to_native_inplace(value);
-    }
-    else
-    {
-      boost::endian::little_to_native_inplace(value);
-    }
-
-    return value;
-  }
-
-  std::optional<std::span<std::byte const>> readSized(std::span<std::byte const> bytes,
-                                                      std::size_t& offset,
-                                                      boost::endian::order order) noexcept
-  {
-    auto const optLength = readU32(bytes, offset, order);
-
-    if (!optLength || offset > bytes.size() || *optLength > bytes.size() - offset)
-    {
-      return std::nullopt;
-    }
-
-    auto const value = bytes.subspan(offset, *optLength);
-    offset += *optLength;
-    return value;
-  }
-
   std::optional<std::uint16_t> decodeUint16(std::string_view text)
   {
     std::uint16_t result = 0;
-    auto const [end, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
-    auto const consumedAll = static_cast<std::size_t>(end - text.data()) == text.size();
-    return ec == std::errc() && consumedAll ? std::optional<std::uint16_t>{result} : std::nullopt;
+    auto const* const first = text.data();
+    auto const* const last = first + text.size();
+    auto const [end, ec] = std::from_chars(first, last, result);
+    return ec == std::errc{} && end == last ? std::optional<std::uint16_t>{result} : std::nullopt;
   }
 
   std::optional<std::uint16_t> decodeYear(std::string_view text)

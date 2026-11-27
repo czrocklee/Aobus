@@ -30,7 +30,7 @@ The private application-runtime `readMediaTrack` adapter converts visitor calls 
 - `open()` validates extension and read-only mapping, but parsing remains lazy.
 - `visit()` succeeds only when required parsing and non-empty payload selection succeed.
 - A failed `visit()` invokes no visitor callback.
-- A successful visit emits only accepted non-empty text, non-zero numeric and technical values, a known codec, accepted non-empty pictures, and one source-ordered Credits callback when that list is nonempty.
+- A successful visit emits accepted non-empty text, non-zero numeric and technical values, a known codec, an exact PCM frame count when available, distinct non-empty embedded CUE text, accepted non-empty pictures, and one source-ordered Credits callback when that list is nonempty.
 - The visitor boundary does not establish a global scalar-valid UTF-8 invariant; the consuming library builder owns strict validation and NFC admission.
 - `audioPayload().offset` and `bytes.size()` describe a range entirely inside the mapped file.
 - Required parse success or failure is cached and reused by payload and content operations.
@@ -70,8 +70,9 @@ Const operations mutate these caches. Sequential use is required, and external l
 
 `visit(visitor)` first requires successful payload selection, then computes or reuses interpreted content. Only after both operations succeed does it deliver callbacks. Therefore a required failure cannot leave a partially mutated consumer.
 
-Callbacks are synchronous. Their string and byte arguments, including the whole Credits span and each borrowed name/role, may be retained only while the same backing `File` remains alive. Calling `visit()` again does not invalidate earlier views.
-The whole-list callback follows all scalar, technical, and picture callbacks, retaining entry order and duplicates; it is never repeated per tag or per WAVE chunk.
+Callbacks are synchronous. Their string and byte arguments, including embedded CUE text, the whole Credits span, and its borrowed names and roles, may be retained only while the same backing `File` remains alive. Calling `visit()` again does not invalidate earlier views.
+An exact PCM frame count, when available, follows the other technical callbacks. Distinct non-empty CUE texts follow in first-seen order, before pictures.
+The whole-list Credits callback comes last, retaining entry order and duplicates; it is never repeated per tag or per WAVE chunk.
 
 ### Runtime adaptation
 
@@ -89,6 +90,7 @@ The first metadata block must be one exact 34-byte `StreamInfo`; all block bound
 
 Every traversed atom must have a complete compact or 64-bit extended header. Recognized semantic boxes read their fields relative to the actual payload and therefore accept either header form. A top-level size `0` atom consumes the remainder of the file; size `0` inside a container, truncated headers, undersized declarations, and boundary overruns are rejected. Path lookup and audio-track selection validate only through the first complete match, while required payload indexing traverses every top-level atom and requires exactly one non-empty `mdat`. Metadata atoms, `mdta` key tables, freeform fields, cover children, and optional timing/property evidence are accepted only within their validated bounds. A malformed optional entry does not overwrite an earlier accepted value, and a malformed multi-image `covr` contributes no image.
 
+Packet demuxing accepts both version-0 and version-1 `mdhd` timing; the file visitor only uses version 0 for duration.
 The audio packet demuxer requires a declared `stsd` entry count of one in the selected track; every `stsc` mapping must use `sampleDescriptionIndex == 1`.
 Other declared counts and mappings to other descriptions are unsupported and return `FormatRejected`, even when the container is otherwise valid.
 This does not exhaust physical entries: the existing first-match cookie lookup can still reach a later physical entry or `stsd` whose declared count was not selected.
@@ -129,7 +131,7 @@ A valid supported WAVE format and non-empty `data` chunk are required. `LIST/INF
 
 The reusable [RIFF parser](../../../include/ao/media/wav/Riff.h) retains the unnormalized channel-mask integer decoded from an extensible format's little-endian field, distinguishing explicit zero from a legacy PCM or IEEE-float format with no declaration.
 Channel count remains the byte-stride authority: preserving a mask neither infers missing speakers nor rejects partial, excess, reserved, or wildcard bits by population count.
-This is container evidence, not playback admission or routing verification; the media visitor and decoder PCM formats do not expose or act on it. Admitting or routing the declaration requires a separate playback-contract change.
+The media visitor does not report a channel mask. Playback separately [interprets the raw declaration](../playback/pcm-format.md#wav-source-interpretation) for decoder admission and the effective PCM mask. Neither parsing nor decoding verifies native routing.
 For a file both extents accept, complete and required-audio parsing select the same declaration and borrowed data range.
 An extensible format requires its full 40-byte prefix and a declared extension of at least 22 bytes that fits inside the `fmt` payload; RIFF alignment padding is not extension data. Complete additional format bytes beyond the known prefix are accepted and ignored.
 The declared byte rate must equal sample rate times block alignment without arithmetic wraparound; an inconsistent byte layout is `CorruptData`, not a device-capability decision.
@@ -198,6 +200,7 @@ There is no direct frontend observation. Runtime library workflows translate rea
 - [`DemuxerTest.cpp`](../../../test/media/mp4/DemuxerTest.cpp) protects selected-track MP4 sample admission, fixed-size allocation feasibility, timing, and missing packet payloads.
 
 - [`FileTest.cpp`](../../../test/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
+- [`ExactExtentTest.cpp`](../../../test/media/ExactExtentTest.cpp) protects exact FLAC and WAVE frame counts and textual rather than binary FLAC CUE extraction; [`ContentTextTest.cpp`](../../../test/media/file/ContentTextTest.cpp) protects first-seen CUE order and exact deduplication.
 - [`DemuxerTest.cpp`](../../../test/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
 - Format tests under [`test/media/file/`](../../../test/media/file) protect mappings, properties, covers, payloads, caches, and malformed input.
 - [`MpegFileTrailingTagTest.cpp`](../../../test/media/file/MpegFileTrailingTagTest.cpp) pins suffix-aware frame-chain selection, retagging of truncated inputs, APE/terminal-byte boundaries, and the deliberate byte-only ambiguity limits.
