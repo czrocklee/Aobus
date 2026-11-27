@@ -285,7 +285,8 @@ Applying a live plan to another runtime, another library identity, or another ta
 Every live apply attempt consumes its move-only plan, including an attempt that returns a pre-commit error. Retrying requires a fresh preview; passing a moved-from plan violates the API precondition.
 
 Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
-Commit failure likewise publishes no change set.
+If the LMDB map fills while committing a Restore, apply returns `StorageFull` with the same rollback guarantees, even if preview succeeded. The caller can reopen with more capacity and preview the same input again.
+Other commit failures likewise publish no change set.
 The import transaction is one lexical owner with no nested item transactions: pre-effect validation may return a typed error, while a failure after any item has staged state unwinds that owner before translation.
 Export iterator integrity faults likewise unwind without producing a partial YAML document or being translated through a private library exception in runtime.
 
@@ -376,6 +377,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`CueYamlPreparationTest.cpp`](../../../test/runtime/CueYamlPreparationTest.cpp) checks prepared-import staleness and preservation of intervening writes.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
   It also checks preservation of the destination under an already-requested stop, both with a track record and with an empty library, plus complete replacement on success and rejection of a missing destination directory without creating it.
+- [`LibraryRestoreCapacityTest.cpp`](../../../test/runtime/library/LibraryRestoreCapacityTest.cpp) checks rollback without publication when the map fills after a successful Restore preview, and retries the Restore with a fresh plan after reopening the same library with more capacity.
 - [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves title-action, recording-date, and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
