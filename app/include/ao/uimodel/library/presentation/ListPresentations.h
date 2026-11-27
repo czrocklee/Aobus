@@ -13,7 +13,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 
 namespace ao::rt
@@ -39,16 +38,15 @@ namespace ao::uimodel
     std::string_view listExpression{};
   };
 
-  bool isTrackPresentationEligibleForList(ListId listId, std::string_view presentationId) noexcept;
+  bool isTrackPresentationEligibleForList(ListId listId, rt::TrackPresetId const& id) noexcept;
 
   rt::TrackPresentationSpec recommendListPresentation(ListPresentationContext const& context,
-                                                      std::span<rt::TrackPresentationPreset const> builtinPresets,
-                                                      std::span<rt::CustomTrackPresentationPreset const> customPresets);
+                                                      std::span<rt::TrackPresentationPreset const> builtinPresets);
 
   class ListPresentations final
   {
   public:
-    using Snapshot = std::map<ListId, std::string>;
+    using Snapshot = std::map<ListId, rt::TrackPresetId>;
 
     ListPresentations(TrackPresentationCatalog& catalog, rt::LibraryChanges const& changes);
     ~ListPresentations();
@@ -61,8 +59,9 @@ namespace ao::uimodel
     Snapshot snapshot() const { return _presentations; }
     /**
      * Installs a persisted snapshot, dropping every entry whose list the
-     * library no longer has. @p knownListIds enumerates the live lists; a
-     * virtual id (rt::isVirtualListId) is kept without appearing there.
+     * library no longer has. @p knownListIds
+     * enumerates the live lists; a virtual id (rt::isVirtualListId) is kept
+     * without appearing there.
      *
      * LibraryChanges retires an entry when its list is deleted while this owner
      * is alive, so within a session the map cannot outlive its lists. A
@@ -73,22 +72,8 @@ namespace ao::uimodel
      */
     void restore(Snapshot presentations, std::span<ListId const> knownListIds);
 
-    /**
-     * Returns a borrowed view of the matching string owned by _presentations.
-     *
-     * The view remains valid until this owner is destroyed or that map entry is
-     * replaced or erased. An effective restore(), same-list replacement or
-     * clear, library reset, or deletion of that List invalidates it; mutation
-     * of a different map entry does not.
-     *
-     * ListPresentations supplies no synchronization or intrinsic thread
-     * affinity, so callers must serialize access to the mutable model. Copy the
-     * id before an invalidating operation, reentrant callback, coroutine
-     * suspension, or longer-lived storage unless owner lifetime and entry
-     * stability remain guaranteed throughout.
-     */
-    std::optional<std::string_view> presentationIdForList(ListId listId) const;
-    void setPresentationIdForList(ListId listId, std::string_view presentationId);
+    std::optional<rt::TrackPresetId> presentationIdForList(ListId listId) const;
+    void setPresentationIdForList(ListId listId, rt::TrackPresetId presentationId);
     void clearPresentationForList(ListId listId);
 
     rt::TrackPresentationSpec presentationForList(ListPresentationContext const& context) const;

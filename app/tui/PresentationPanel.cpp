@@ -11,6 +11,7 @@
 #include "TextCell.h"
 #include "TrackPresentationNavigation.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackPresentation.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -55,7 +56,7 @@ namespace ao::tui
 
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
-                                        std::string_view const activePresentationId,
+                                        rt::TrackPresetId const& activePreset,
                                         KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
@@ -63,7 +64,7 @@ namespace ao::tui
                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
                               cellWidth(overlayLabel(textCatalog, Overlay::PresentationPanel)) + cellWidth(" · ") +
-                                cellWidth(trackPresentationDisplayId(textCatalog, activePresentationId)));
+                                cellWidth(trackPresentationDisplayLabel(textCatalog, activePreset, items)));
 
     for (auto const& item : items)
     {
@@ -75,7 +76,7 @@ namespace ao::tui
 
   ftxui::Element presentationPanel(i18n::MessageCatalog const& textCatalog,
                                    std::vector<TrackPresentationNavEntry> const& items,
-                                   std::string_view const activePresentationId,
+                                   rt::TrackPresetId const& activePreset,
                                    std::int32_t const selectedIndex,
                                    KeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* const rowHitRegions,
@@ -86,7 +87,8 @@ namespace ao::tui
     using namespace ftxui;
 
     auto const panelColumns =
-      columns <= 0 ? presentationPanelColumns(textCatalog, items, activePresentationId, keymapPlan, 0) : columns;
+      columns <= 0 ? presentationPanelColumns(textCatalog, items, activePreset, keymapPlan, 0) : columns;
+    auto const activeKey = rt::trackPresetKey(activePreset);
 
     auto rows = Elements{};
     auto listRows = std::vector<SelectableListRow>{};
@@ -110,7 +112,7 @@ namespace ao::tui
       }
 
       auto rowPtr = hbox({
-        text(item.id == activePresentationId ? "* " : "  "),
+        text(item.id == activeKey ? "* " : "  "),
         presentationPanelRowLabel(item) | flex,
       });
 
@@ -158,7 +160,7 @@ namespace ao::tui
                                ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiListSearchHint)}
                                : overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel))));
 
-    auto activePresentationLabel = trackPresentationDisplayId(textCatalog, activePresentationId);
+    auto const activePresentationLabel = trackPresentationDisplayLabel(textCatalog, activePreset, items);
     return style::titledPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),
                               vbox(std::move(rows)),
                               style::PanelOptions{.rightTitle = activePresentationLabel}) |

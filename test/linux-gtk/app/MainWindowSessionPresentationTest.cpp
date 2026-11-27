@@ -41,11 +41,9 @@ namespace ao::gtk::test
 {
   namespace
   {
-    rt::TrackPresentationSpec const& presentation(std::string_view const id)
+    rt::TrackPresentationSpec const& presentation(rt::BuiltinPreset const id)
     {
-      auto const* const preset = rt::builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      return preset->spec;
+      return rt::builtinTrackPresentationPreset(id).spec;
     }
 
     std::shared_ptr<AppConfigStore> appConfigStore(ao::test::TempDir const& tempDir)
@@ -53,11 +51,11 @@ namespace ao::gtk::test
       return std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
     }
 
-    void savePresentationPreference(rt::AppRuntime& runtime, ListId const listId, std::string const& presentationId)
+    void savePresentationPreference(rt::AppRuntime& runtime, ListId const listId, rt::BuiltinPreset const preset)
     {
       auto layoutState = uimodel::TrackColumnLayouts::Snapshot{};
       auto preferenceState = uimodel::ListPresentations::Snapshot{};
-      preferenceState.emplace(listId, presentationId);
+      preferenceState.emplace(listId, preset);
       auto store = GtkLayoutStateStore{
         rt::LibraryPaths{runtime.musicRoot()}.managedDataPath(), runtime.library().snapshot().libraryId()};
       store.save(layoutState, preferenceState);
@@ -107,11 +105,11 @@ namespace ao::gtk::test
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = presentation(rt::kListOrderTrackPresentationId),
+            .spec = presentation(rt::BuiltinPreset::ListOrder),
           },
       }));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, "albums");
+      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, rt::BuiltinPreset::Albums);
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -122,13 +120,13 @@ namespace ao::gtk::test
 
     auto state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     REQUIRE(state.listId == rt::kAllTracksListId);
-    CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
+    CHECK(state.presentation.isPreset(rt::BuiltinPreset::ListOrder));
 
     REQUIRE(runtimePtr->workspace().navigate({.target = otherListId}));
     REQUIRE(runtimePtr->workspace().goBack());
     state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     CHECK(state.listId == rt::kAllTracksListId);
-    CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
+    CHECK(state.presentation.isPreset(rt::BuiltinPreset::ListOrder));
   }
 
   TEST_CASE("MainWindow - empty workspace creates All Tracks with its saved preference")
@@ -138,7 +136,7 @@ namespace ao::gtk::test
 
     {
       auto runtimePtr = makeRuntime(tempDir);
-      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, "songs");
+      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, rt::BuiltinPreset::Songs);
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -149,7 +147,7 @@ namespace ao::gtk::test
 
     auto const state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     CHECK(state.listId == rt::kAllTracksListId);
-    CHECK(state.presentation.id == "songs");
+    CHECK(state.presentation.isPreset(rt::BuiltinPreset::Songs));
   }
 
   TEST_CASE("MainWindow - ordinary list selection applies a default only to a new plain view")
@@ -161,7 +159,7 @@ namespace ao::gtk::test
     {
       auto runtimePtr = makeRuntime(tempDir);
       listId = createList(*runtimePtr, "Preferred list");
-      savePresentationPreference(*runtimePtr, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, rt::BuiltinPreset::Albums);
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -173,16 +171,16 @@ namespace ao::gtk::test
     drainGtkEvents();
     auto const firstViewId = runtimePtr->workspace().snapshot().activeViewId;
     REQUIRE(firstViewId != rt::kInvalidViewId);
-    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "albums");
+    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.isPreset(rt::BuiltinPreset::Albums));
 
-    REQUIRE(runtimePtr->workspace().setActivePresentation(presentation("songs")));
+    REQUIRE(runtimePtr->workspace().setActivePresentation(presentation(rt::BuiltinPreset::Songs)));
     REQUIRE(window.navigateToList(rt::kAllTracksListId));
     drainGtkEvents();
     REQUIRE(window.navigateToList(listId));
     drainGtkEvents();
 
     CHECK(runtimePtr->workspace().snapshot().activeViewId == firstViewId);
-    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "songs");
+    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.isPreset(rt::BuiltinPreset::Songs));
   }
 
   TEST_CASE("MainWindow - playback restore reuses a restored plain view without changing presentation")
@@ -202,14 +200,14 @@ namespace ao::gtk::test
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = presentation("songs"),
+            .spec = presentation(rt::BuiltinPreset::Songs),
           },
       }));
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(*runtimePtr, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, rt::BuiltinPreset::Albums);
       runtimePtr->playback().commands().stop();
     }
 
@@ -224,7 +222,7 @@ namespace ao::gtk::test
     REQUIRE(listViews.size() == 1);
     auto const state = runtimePtr->views().trackListState(listViews.front());
     CHECK(state.filterExpression.empty());
-    CHECK(state.presentation.id == "songs");
+    CHECK(state.presentation.isPreset(rt::BuiltinPreset::Songs));
     CHECK(state.selection == std::vector<TrackId>{trackId});
   }
 
@@ -277,7 +275,7 @@ namespace ao::gtk::test
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = presentation("songs"),
+            .spec = presentation(rt::BuiltinPreset::Songs),
           },
       }));
       drainGtkEvents();
@@ -285,7 +283,7 @@ namespace ao::gtk::test
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(*runtimePtr, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, rt::BuiltinPreset::Albums);
       runtimePtr->playback().commands().stop();
     }
 
@@ -306,13 +304,13 @@ namespace ao::gtk::test
       if (auto const state = runtimePtr->views().trackListState(viewId); state.filterExpression.empty())
       {
         ++plainCount;
-        CHECK(state.presentation.id == "albums");
+        CHECK(state.presentation.isPreset(rt::BuiltinPreset::Albums));
       }
       else
       {
         ++filteredCount;
         CHECK(state.filterExpression == "$title ~ \"Restored\"");
-        CHECK(state.presentation.id == "songs");
+        CHECK(state.presentation.isPreset(rt::BuiltinPreset::Songs));
       }
     }
 
@@ -336,7 +334,7 @@ namespace ao::gtk::test
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
-      savePresentationPreference(*runtimePtr, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, rt::BuiltinPreset::Albums);
       runtimePtr->playback().commands().stop();
     }
 
@@ -351,7 +349,7 @@ namespace ao::gtk::test
     REQUIRE(listViews.size() == 1);
     auto const state = runtimePtr->views().trackListState(listViews.front());
     CHECK(state.filterExpression.empty());
-    CHECK(state.presentation.id == "albums");
+    CHECK(state.presentation.isPreset(rt::BuiltinPreset::Albums));
     CHECK(runtimePtr->workspace().snapshot().activeViewId == listViews.front());
     CHECK(state.selection == std::vector<TrackId>{trackId});
   }

@@ -69,7 +69,7 @@ It gains a version before a release changes its tokens in a way that an earlier 
 ### Losable state and caches
 
 Everything else Aobus persists is losable: for example the GTK `window` and `session` groups, the playback session, the workspace, shell component state, the per-library presentation files, and caches.
-A version mismatch drops such state or falls back to defaults, and a later save may replace it.
+A version mismatch drops such state or falls back to defaults, and a later save may replace it. A rejected `workspace` group is the exception to that later replacement: the session that failed to load it keeps the unread bytes until an explicit removal, while still running a fallback view. That retention is not protected configuration and does not add a migration. See [workspace session failure](../workspace/session.md#failure-execution-and-lifetime).
 
 ## Changing a format
 

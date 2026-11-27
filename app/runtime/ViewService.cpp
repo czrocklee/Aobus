@@ -62,50 +62,6 @@ namespace ao::rt
       std::shared_ptr<TrackListProjection> projectionPtr;
     };
 
-    TrackPresentationSpec presentationForGroup(TrackGroupKey const groupBy)
-    {
-      auto const& presets = builtinTrackPresentationPresets();
-      auto const* preset = builtinTrackPresentationPreset(kDefaultTrackPresentationId);
-
-      for (auto const& candidate : presets)
-      {
-        if (candidate.spec.groupBy == groupBy)
-        {
-          preset = &candidate;
-          break;
-        }
-      }
-
-      return preset->spec;
-    }
-
-    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial)
-    {
-      if (initial.optPresentation)
-      {
-        return normalizeTrackPresentationSpec(*initial.optPresentation);
-      }
-
-      auto const hasExplicitOrder = initial.groupBy != TrackGroupKey::None || !initial.sortBy.empty();
-
-      if (hasExplicitOrder)
-      {
-        auto result = presentationForGroup(initial.groupBy);
-
-        result.id.clear();
-        result.groupBy = initial.groupBy;
-
-        if (!initial.sortBy.empty())
-        {
-          result.sortBy = initial.sortBy;
-        }
-
-        return result;
-      }
-
-      return presentationForGroup(initial.groupBy);
-    }
-
     Result<PreparedViewResources> prepareViewResources(
       ViewId const viewId,
       ListId const baseListId,
@@ -168,12 +124,22 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, std::format("View {} does not exist", viewId));
     }
 
+    Result<> validateColumnSort(TrackPresentationSpec const& presentation)
+    {
+      if (presentation.optColumnSort && !trackSortFieldForColumn(presentation.optColumnSort->column))
+      {
+        return makeError(Error::Code::InvalidInput, "The track column does not support sorting");
+      }
+
+      return {};
+    }
+
     void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
     {
       auto const normalized = normalizeTrackPresentationSpec(spec);
       entry.state.presentation = normalized;
       entry.state.groupBy = normalized.groupBy;
-      entry.state.sortBy = normalized.sortBy;
+      entry.state.sortBy = normalized.effectiveSortBy();
 
       if (entry.projectionPtr)
       {
@@ -306,7 +272,14 @@ namespace ao::rt
     }
 
     auto const id = ViewId{_implPtr->nextViewId};
-    auto const presentation = initialPresentation(initial);
+    auto const presentation = initial.optPresentation ? normalizeTrackPresentationSpec(*initial.optPresentation)
+                                                      : defaultTrackPresentationSpec();
+
+    if (auto res = validateColumnSort(presentation); !res)
+    {
+      return std::unexpected{res.error()};
+    }
+
     auto resourcesRes = prepareViewResources(id,
                                              initial.listId,
                                              std::move(*baseSourceRes),
@@ -327,7 +300,7 @@ namespace ao::rt
       .listId = initial.listId,
       .filterExpression = initial.filterExpression,
       .groupBy = presentation.groupBy,
-      .sortBy = presentation.sortBy,
+      .sortBy = presentation.effectiveSortBy(),
       .presentation = presentation,
     };
     auto resources = std::move(*resourcesRes);
@@ -402,6 +375,20 @@ namespace ao::rt
     return {};
   }
 
+  Result<> ViewService::setColumnSort(ViewId const viewId, TrackColumnSort const sort)
+  {
+    auto const* current = findTrackListPresentation(viewId);
+
+    if (current == nullptr)
+    {
+      return missingViewError(viewId);
+    }
+
+    auto presentation = *current;
+    presentation.optColumnSort = sort;
+    return setPresentation(viewId, presentation);
+  }
+
   Result<> ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
   {
     _implPtr->ensureOnExecutor();
@@ -410,6 +397,11 @@ namespace ao::rt
     if (it == _implPtr->views.end())
     {
       return missingViewError(viewId);
+    }
+
+    if (auto res = validateColumnSort(presentation); !res)
+    {
+      return res;
     }
 
     auto spec = normalizeTrackPresentationSpec(presentation);

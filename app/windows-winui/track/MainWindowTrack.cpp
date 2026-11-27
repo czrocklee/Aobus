@@ -18,6 +18,7 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -120,7 +121,24 @@ namespace winrt::Aobus::implementation
   void MainWindow::handleColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
                                              Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
-    executeSort(requiredColumnFieldId(sender));
+    if (_sessionPhase == SessionPhase::Retired)
+    {
+      return;
+    }
+
+    // The compiled template calls the window, which outlives the shell that
+    // realized this header. Only senders in the mounted shell can target it.
+    auto const shell = ShellLayoutHost().Child();
+
+    for (auto node = sender.try_as<Microsoft::UI::Xaml::DependencyObject>(); shell && node;
+         node = Microsoft::UI::Xaml::Media::VisualTreeHelper::GetParent(node))
+    {
+      if (node == shell)
+      {
+        executeSort(requiredColumnFieldId(sender));
+        return;
+      }
+    }
   }
 
   void MainWindow::handleColumnResizeCompleted(
@@ -223,20 +241,17 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto const optField = ao::rt::trackFieldFromId(columnId);
-    auto const* definition = optField ? ao::rt::trackFieldDefinition(*optField) : nullptr;
+    auto const optColumn = ao::rt::trackFieldFromId(columnId);
 
-    if (definition == nullptr || !definition->optSortField)
+    if (!optColumn || !ao::rt::trackSortFieldForColumn(*optColumn))
     {
-      updateStatus(ao::winui::formatResource("winui_column_not_sortable", columnId));
+      updateStatus(ao::winui::formatResource("track_sort_column_unavailable", columnId));
       return;
     }
 
-    auto sortedRes = _trackListPtr->toggleSort(*definition->optSortField);
-
-    if (!sortedRes)
+    if (auto const sortedRes = _trackListPtr->toggleSort(*optColumn); !sortedRes)
     {
-      updateStatus(ao::winui::formatResource("winui_sort_failed", sortedRes.error().message));
+      updateStatus(ao::winui::formatResource("track_sort_failed", sortedRes.error().message));
       return;
     }
 

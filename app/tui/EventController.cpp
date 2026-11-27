@@ -37,6 +37,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -658,6 +659,22 @@ namespace ao::tui
     _listOrder.apply(command, _library.activeViewId(), _library.selectedTrackIds());
   }
 
+  void EventController::applyColumnSort(std::string_view const columnId)
+  {
+    if (auto res = _library.sortByColumn(columnId); !res)
+    {
+      postActivityNotification(rt::NotificationSeverity::Warning, std::move(res.error().message));
+    }
+  }
+
+  void EventController::applyPaintedColumnSort(rt::TrackField const field, bool const ascending)
+  {
+    if (_library.activePresentation().nextColumnSort(field).ascending == ascending)
+    {
+      applyColumnSort(rt::trackFieldId(field));
+    }
+  }
+
   void EventController::reportPlaybackControlUnavailable()
   {
     postActivityNotification(
@@ -811,8 +828,9 @@ namespace ao::tui
       case CommandAction::OpenCurrentArtist: navigateCurrentMetadata(false); break;
       case CommandAction::OpenCurrentAlbum: navigateCurrentMetadata(true); break;
       case CommandAction::SetPresentation:
-        finishPresentationSelection(_library.setPresentation(command.argument));
+        finishPresentationSelection(_library.setPresentationKey(command.argument));
         break;
+      case CommandAction::SortColumn: applyColumnSort(command.argument); break;
       case CommandAction::ClearFilter:
         _library.clearFilterDraft();
         applyFilter();
@@ -1047,6 +1065,12 @@ namespace ao::tui
       return *optHandled;
     }
 
+    if (tryHandleColumnSortPress(mouse))
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return true;
+    }
+
     if (auto const optHandled = handleScrollbarPress(mouse); optHandled)
     {
       _lastClickedTrack = kInvalidTrackId;
@@ -1257,7 +1281,7 @@ namespace ao::tui
     }
 
     AO_EXPECTS(std::holds_alternative<TrackColumnResizeDrag>(_workspaceGesture));
-    auto const drag = std::get<TrackColumnResizeDrag>(_workspaceGesture);
+    auto& drag = std::get<TrackColumnResizeDrag>(_workspaceGesture);
 
     if (_library.currentListId() != drag.listId || _library.trackRowsRevision() != drag.rowsRevision)
     {
@@ -1272,6 +1296,30 @@ namespace ao::tui
     {
       cancelColumnResize();
       return false;
+    }
+
+    // The resize slop overlaps the cell; a stationary click there sorts, while motion keeps the resize gesture.
+    if (drag.optSortClickY && (mouse.x != drag.startX || mouse.y != *drag.optSortClickY))
+    {
+      drag.optSortClickY.reset();
+    }
+
+    if (drag.optSortClickY)
+    {
+      if (mouse.motion == ftxui::Mouse::Released)
+      {
+        auto const field = drag.field;
+        auto const ascending = drag.nextSortAscending;
+        cancelColumnResize();
+
+        if (_hitRegions.trackTableRevision == _library.trackRowsRevision() && containsMouse(handleIt->box, mouse) &&
+            containsMouse(_hitRegions.trackTableBox, mouse))
+        {
+          applyPaintedColumnSort(field, ascending);
+        }
+      }
+
+      return true;
     }
 
     auto const columns = drag.startColumns + mouse.x - drag.startX;
@@ -1406,14 +1454,42 @@ namespace ao::tui
       return true;
     }
 
+    auto const canSort = rt::trackSortFieldForColumn(handleIt->field) && containsMouse(handleIt->box, mouse) &&
+                         containsMouse(_hitRegions.trackTableBox, mouse);
     _trackColumnResizePreview = {};
     _workspaceGesture = TrackColumnResizeDrag{
       .field = handleIt->field,
       .startX = mouse.x,
+      .optSortClickY = canSort ? std::optional<int>{mouse.y} : std::nullopt,
+      .nextSortAscending = handleIt->nextSortAscending,
       .startColumns = handleIt->columns,
       .listId = _library.currentListId(),
       .rowsRevision = _hitRegions.trackTableRevision,
     };
+    return true;
+  }
+
+  bool EventController::tryHandleColumnSortPress(ftxui::Mouse const& mouse)
+  {
+    if (isModalOverlay(_shell.overlay()) || !containsMouse(_hitRegions.trackTableBox, mouse))
+    {
+      return false;
+    }
+
+    auto const& headers = _hitRegions.trackColumnResizeHandles;
+    auto const header = std::ranges::find_if(
+      headers, [&](TrackColumnResizeHandle const& handle) { return containsMouse(handle.box, mouse); });
+
+    if (header == headers.end() || !rt::trackSortFieldForColumn(header->field))
+    {
+      return false;
+    }
+
+    if (_hitRegions.trackTableRevision == _library.trackRowsRevision())
+    {
+      applyPaintedColumnSort(header->field, header->nextSortAscending);
+    }
+
     return true;
   }
 
@@ -1795,8 +1871,17 @@ namespace ao::tui
     }
 
     auto optCommand = parseCommand(_shell.inputDraft());
+    auto acceptCompletion = !optCommand || _shell.isCompletionNavigated();
 
-    if ((!optCommand || _shell.isCompletionNavigated()) && _shell.tryApplyCommandCompletion())
+    if (!acceptCompletion && optCommand && optCommand->action == CommandAction::SortColumn &&
+        _shell.commandCompletion())
+    {
+      // A typed eligible ID wins over the implicit selection, but not over explicit navigation.
+      auto const optColumn = rt::trackFieldFromId(optCommand->argument);
+      acceptCompletion = !optColumn || !std::ranges::contains(_library.sortableTrackColumns(), *optColumn);
+    }
+
+    if (acceptCompletion && _shell.tryApplyCommandCompletion())
     {
       optCommand = parseCommand(_shell.inputDraft());
 

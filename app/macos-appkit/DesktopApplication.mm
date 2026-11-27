@@ -23,6 +23,7 @@
 #include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -874,13 +875,11 @@ namespace ao::appkit
 
   auto const& picker = _sessionPtr->state().presentation;
   auto const& optPreference = _sessionPtr->state().optListPresentationId;
-  auto* const currentLabel = [_libraryBrowser.presentationIdentifier isEqual:@"appkit-column-sort"] != NO
-                               ? [self text:MessageId::TrackPresentationColumnSort]
-                               : nativeText(picker.label);
   auto entries = std::vector{
-    Entry{.kind = Entry::Kind::Current, .title = utf8(currentLabel), .enabled = false},
-    Entry{
-      .title = utf8([self text:MessageId::TrackPresentationAuto]), .optId = std::string{}, .checked = !optPreference},
+    Entry{.kind = Entry::Kind::Current, .title = picker.label, .enabled = false},
+    Entry{.kind = Entry::Kind::Automatic,
+          .title = utf8([self text:MessageId::TrackPresentationAuto]),
+          .checked = !optPreference},
     Entry{.kind = Entry::Kind::Separator},
   };
   bool preferenceAvailable = !optPreference;
@@ -900,28 +899,35 @@ namespace ao::appkit
       continue;
     }
 
+    auto const optPresetId = ao::rt::parseTrackPresetId(item.id);
+
+    if (!optPresetId)
+    {
+      continue;
+    }
+
     if (pendingSeparator)
     {
       entries.push_back(Entry{.kind = Entry::Kind::Separator});
       pendingSeparator = false;
     }
 
-    auto const checked = optPreference && item.id == *optPreference;
+    auto const checked = optPresetId == optPreference;
     preferenceAvailable = preferenceAvailable || checked;
     entries.push_back(Entry{.title = item.label,
-                            .optId = item.id,
+                            .optPresetId = optPresetId,
                             .toolTip = item.disabledReason,
                             .enabled = item.enabled,
                             .checked = checked});
   }
 
-  if (!preferenceAvailable)
+  if (optPreference && !preferenceAvailable)
   {
-    entries.push_back(
-      Entry{.title = utf8(ao::appkit::catalogFormat(
-              _sessionPtr->catalog(), MessageId::TrackPresentationUnavailable, {{"id", *optPreference}})),
-            .enabled = false,
-            .checked = true});
+    auto const key = ao::rt::trackPresetKey(*optPreference);
+    entries.push_back(Entry{.title = utf8(ao::appkit::catalogFormat(
+                              _sessionPtr->catalog(), MessageId::TrackPresentationUnavailable, {{"id", key}})),
+                            .enabled = false,
+                            .checked = true});
   }
 
   if (entries != _presentationEntries)
@@ -939,7 +945,16 @@ namespace ao::appkit
       }
 
       auto* const item = [[NSMenuItem alloc] initWithTitle:nativeText(entry.title) action:nil keyEquivalent:@""];
-      item.representedObject = entry.optId ? nativeText(*entry.optId) : nil;
+
+      if (entry.kind == Entry::Kind::Automatic)
+      {
+        item.representedObject = NSNull.null;
+      }
+      else if (entry.optPresetId)
+      {
+        item.representedObject = nativeText(ao::rt::trackPresetKey(*entry.optPresetId));
+      }
+
       item.enabled = static_cast<BOOL>(entry.enabled);
       item.toolTip = entry.toolTip.empty() ? nil : nativeText(entry.toolTip);
       item.state = entry.checked ? NSControlStateValueOn : NSControlStateValueOff;
@@ -949,9 +964,10 @@ namespace ao::appkit
     _presentationEntries = std::move(entries);
   }
 
+  // Select the display-only row so choosing the same preset remains a command.
   [_presentation selectItemAtIndex:0];
   _presentation.enabled = static_cast<BOOL>(picker.enabled);
-  _presentation.toolTip = currentLabel;
+  _presentation.toolTip = nativeText(picker.label);
 }
 
 - (void)refreshPlayback

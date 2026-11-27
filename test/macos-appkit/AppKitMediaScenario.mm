@@ -13,6 +13,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -955,7 +956,7 @@ namespace ao::appkit::test
       auto fixture = SessionFixture{musicRoot, stateRoot};
       auto& session = fixture.session();
       // Sequence ordinals require a flat fixture, independently of the frontend's new-view recommendation.
-      auto const presentationRes = session.setPresentation("library");
+      auto const presentationRes = session.setPresentation(ao::rt::BuiltinPreset::Library);
       AO_INVARIANT(presentationRes);
       requireWaitUntil([&] { return session.displayIndex().displayCount() == session.displayIndex().rowCount(); },
                        "The media sequence fixture must settle into its explicit flat presentation");

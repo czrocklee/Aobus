@@ -4,6 +4,7 @@
 ja:table {
   messages:table {
     track_field_recording_date { "録音日" }
+    track_sort_recording_year { "録音年" }
     track_credits_heading { "クレジット" }
     track_credit_performer { "パフォーマー" }
     track_credit_lyricist { "作詞者" }
@@ -202,6 +203,8 @@ ja:table {
     create_custom_track_presentation { "カスタム表示を作成…" }
     track_presentation_picker_label { "表示" }
     track_presentation_all_tracks_manual_order_unavailable { "「すべての曲」には保存された順序がありません。ライブラリ全体を手動で並べ替えるには、保存済みリストを作成してください。" }
+    track_sort_column_unavailable { "この列では並べ替えできません: {column}" }
+    track_sort_failed { "曲を並べ替えられませんでした: {detail}" }
     audio_backend_pipewire_description { "低レイテンシの最新 Linux オーディオサーバー" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接ハードウェアアクセス）" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
@@ -298,6 +301,7 @@ ja:table {
     list_order_list_unavailable { "このリストは利用できなくなりました。" }
     list_order_fix_filter { "順序を変更する前に、リストまたはクイックフィルター式を修正してください。" }
     list_order_choose_flat_presentation { "曲を並べ替えるには、「手動の順序」またはその他のフラットな未ソート表示を選択してください。" }
+    list_order_choose_current_view { "列による並べ替えを解除するには、現在の表示をもう一度選択してください。" }
     list_order_clear_quick_filter { "ドラッグまたは相対移動を行うにはクイックフィルターをクリアしてください。最上部または最下部への移動は引き続き利用可能です。" }
     list_order_changed { "リストが変更されました。並べ替え操作をやり直してください。" }
     list_order_unchanged { "順序は変更されていません。" }
@@ -592,6 +596,7 @@ ja:table {
     tui_shell_detail_track_detail { "曲詳細" }
     tui_shell_detail_audio_pipeline { "オーディオパイプライン" }
     tui_shell_detail_output_device { "出力デバイス" }
+    tui_shell_detail_sort_column { "列で曲を並べ替え" }
     tui_shell_detail_choose_view { "表示を選択" }
     tui_shell_detail_notification_center { "通知センター" }
     tui_shell_detail_close_overlay { "オーバーレイを閉じる" }
@@ -670,8 +675,6 @@ ja:table {
     tui_library_expression_filter_matched { "式フィルターが {count, plural, one {# 曲} other {# 曲}} に一致しました" }
     tui_presentation_custom { "カスタム" }
     tui_presentation_custom_from { "{id} からのカスタム" }
-    tui_presentation_default { "デフォルト" }
-    tui_presentation_badge { "表示:{id}" }
     tui_editor_title { "曲のプロパティ" }
     tui_editor_title_multiple { "{count, plural, other {# 曲}}を編集" }
     tui_editor_applies_to_all { "変更は{count, plural, other {# 曲}}すべてに適用されます" }
@@ -771,12 +774,9 @@ ja:table {
     winui_column_resize_failed { "列のサイズ変更に失敗しました: {detail}" }
     winui_column_move_failed { "列の移動に失敗しました: {detail}" }
     winui_column_visibility_failed { "列の表示設定に失敗しました: {detail}" }
-    winui_column_not_sortable { "列 ''{column}'' は並べ替えできません" }
-    winui_sort_failed { "並べ替えに失敗しました: {detail}" }
     winui_unavailable_track { "利用できない曲" }
     winui_theme_file_not_found { "テーマファイルが見つかりません: {path}" }
     winui_startup_failure { "Aobus を起動できませんでした:\n\n{detail}" }
-    track_presentation_column_sort { "列で並べ替え" }
     track_multiple_values { "<複数の値>" }
     track_metadata_heading { "メタデータ" }
     track_audio_properties_heading { "オーディオ情報" }

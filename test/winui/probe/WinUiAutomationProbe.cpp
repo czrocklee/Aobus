@@ -732,8 +732,9 @@ namespace
         }
 
         _sessionPtr = std::move(*priorRes);
-        _sessionPtr->listPresentations().setPresentationIdForList(ao::rt::kAllTracksListId, "artists");
-        _sessionPtr->listPresentations().setPresentationIdForList(_seed.pinnedBachId, "technical");
+        _sessionPtr->listPresentations().setPresentationIdForList(
+          ao::rt::kAllTracksListId, ao::rt::BuiltinPreset::Artists);
+        _sessionPtr->listPresentations().setPresentationIdForList(_seed.pinnedBachId, ao::rt::BuiltinPreset::Technical);
         auto viewRes = _sessionPtr->runtime().workspace().navigate({
           .target = ao::rt::GlobalViewKind::AllTracks,
           .optPresentation = ao::rt::NavigationPresentation{.spec = _restoredSpec},
@@ -1194,6 +1195,16 @@ namespace
     {
       auto& runtime = _sessionPtr->runtime();
       return runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    }
+
+    Button trackHeader(winrt::hstring const& tableId, winrt::hstring const& fieldId) const
+    {
+      auto const table = findVisualById<Controls::ScrollViewer>(_root, tableId);
+      return table
+               ? findVisualIf<Button>(table,
+                                      [&fieldId](Button const& button)
+                                      { return winrt::unbox_value_or<winrt::hstring>(button.Tag(), {}) == fieldId; })
+               : nullptr;
     }
 
     // Select a realized shipping sidebar row, driving its SelectionChanged handler.
@@ -1974,7 +1985,11 @@ namespace
       auto const state = activeState();
       check(state.listId == ao::rt::kAllTracksListId && state.presentation == _restoredSpec,
             "binding the window replaced the exact restored view with a default or pin");
-      check(_sessionPtr->listPresentations().presentationIdForList(state.listId) == "artists",
+      auto const year = trackHeader(L"modern-track-table", L"year");
+      auto const label = year ? year.Content().try_as<Controls::TextBlock>() : nullptr;
+      check(label && label.Text() == L"Year \u2193", "the restored Year sort must mark its native header descending");
+      check(_sessionPtr->listPresentations().presentationIdForList(state.listId) ==
+              ao::rt::TrackPresetId{ao::rt::BuiltinPreset::Artists},
             "restoring the workspace rewrote the independent saved pin");
       checkNativeSelectionSummary();
       afterFrame(&WinUiAutomationProbe::selectedModern);
@@ -2062,7 +2077,8 @@ namespace
         return;
       }
 
-      if (_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) != "technical")
+      if (_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) !=
+          ao::rt::TrackPresetId{ao::rt::BuiltinPreset::Technical})
       {
         fail("the Technical pin was not restored for the unopened List");
         finish();
@@ -2075,7 +2091,7 @@ namespace
     void pinnedComposerOpened()
     {
       auto const state = activeState();
-      auto const* technical = ao::rt::builtinTrackPresentationPreset("technical");
+      auto const& technical = ao::rt::builtinTrackPresentationPreset(ao::rt::BuiltinPreset::Technical);
 
       if (state.listId != _seed.pinnedBachId || !state.filterExpression.empty() ||
           std::ranges::contains(_viewsBeforePinnedList, state.id))
@@ -2085,10 +2101,11 @@ namespace
         return;
       }
 
-      check(technical != nullptr && state.presentation == technical->spec,
+      check(state.presentation == technical.spec,
             "the new view did not use its saved Technical pin instead of the composer recommendation");
       checkSelectionSummary("switch from selected All Tracks to empty Pinned Bach", "");
-      check(_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) == "technical",
+      check(_sessionPtr->listPresentations().presentationIdForList(_seed.pinnedBachId) ==
+              ao::rt::TrackPresetId{ao::rt::BuiltinPreset::Technical},
             "first sidebar visit changed the saved pin");
       selectSidebarList(L"Bach", &WinUiAutomationProbe::composerOpened);
     }
@@ -2463,7 +2480,7 @@ namespace
       check(static_cast<bool>(views.setSelection(_composerViewId, {_seed.summaryTracks.at(1)})),
             "could not select in the active Bach view");
       checkSelectionSummary("one known duration in Bach", "1 item selected (1:05)");
-      checkComposerPreset("classical-composers", std::nullopt);
+      checkComposerPreset(ao::rt::BuiltinPreset::ClassicalComposers, std::nullopt);
       auto const picker = findVisualById<Button>(_root, L"modern-presentation-button");
 
       if (!picker)
@@ -2477,7 +2494,9 @@ namespace
       afterFrame(&WinUiAutomationProbe::pickTechnical);
     }
 
-    void pickTechnical()
+    void pickTechnical() { selectTechnical(&WinUiAutomationProbe::pickedTechnical); }
+
+    void selectTechnical(Step const next)
     {
       _stage = "Technical menu choice";
       auto const label = winrt::to_hstring(
@@ -2488,7 +2507,7 @@ namespace
         if (auto const item = findVisual<Controls::MenuFlyoutItem>(popup.Child(), label); item && item.IsEnabled())
         {
           invoke(item);
-          afterFrame(&WinUiAutomationProbe::pickedTechnical);
+          afterFrame(next);
           return;
         }
       }
@@ -2497,34 +2516,28 @@ namespace
       finish();
     }
 
-    void checkComposerState(ao::rt::TrackPresentationSpec const& expected, std::optional<std::string_view> const optPin)
+    void checkComposerState(ao::rt::TrackPresentationSpec const& expected,
+                            std::optional<ao::rt::TrackPresetId> const& optPin)
     {
       auto const state = activeState();
       check(state.id == _composerViewId && state.listId == _seed.composerListId && state.presentation == expected,
             std::format("expected exact '{}' on the original composer view, observed '{}' on view {}",
-                        expected.id,
-                        state.presentation.id,
+                        ao::rt::trackPresetKey(expected.presetId),
+                        ao::rt::trackPresetKey(state.presentation.presetId),
                         state.id.raw()));
       check(_sessionPtr->listPresentations().presentationIdForList(_seed.composerListId) == optPin,
-            std::format("expected composer pin '{}'", optPin.value_or("Auto")));
+            std::format("expected composer pin '{}'", optPin ? ao::rt::trackPresetKey(*optPin) : "Auto"));
     }
 
-    void checkComposerPreset(std::string_view id, std::optional<std::string_view> const optPin)
+    void checkComposerPreset(ao::rt::BuiltinPreset const preset, std::optional<ao::rt::TrackPresetId> const& optPin)
     {
-      if (auto const* preset = ao::rt::builtinTrackPresentationPreset(id); preset != nullptr)
-      {
-        checkComposerState(preset->spec, optPin);
-      }
-      else
-      {
-        fail(std::format("missing builtin preset '{}'", id));
-      }
+      checkComposerState(ao::rt::builtinTrackPresentationPreset(preset).spec, optPin);
     }
 
     void pickedTechnical()
     {
       _stage = "Technical presentation and pin after picker choice";
-      checkComposerPreset("technical", "technical");
+      checkComposerPreset(ao::rt::BuiltinPreset::Technical, ao::rt::BuiltinPreset::Technical);
 
       if (auto backRes = _sessionPtr->runtime().workspace().goBack(); !backRes)
       {
@@ -2539,7 +2552,7 @@ namespace
     void pickerBack()
     {
       _stage = "Back after picker choice";
-      checkComposerPreset("classical-composers", "technical");
+      checkComposerPreset(ao::rt::BuiltinPreset::ClassicalComposers, ao::rt::BuiltinPreset::Technical);
 
       if (auto forwardRes = _sessionPtr->runtime().workspace().goForward(); !forwardRes)
       {
@@ -2554,7 +2567,7 @@ namespace
     void pickerForward()
     {
       _stage = "Forward after picker choice";
-      checkComposerPreset("technical", "technical");
+      checkComposerPreset(ao::rt::BuiltinPreset::Technical, ao::rt::BuiltinPreset::Technical);
       auto const title = findVisual<Button>(_root, L"Title");
 
       if (!title)
@@ -2571,9 +2584,9 @@ namespace
     void leaveSortedComposer()
     {
       _stage = "temporary composer sort";
-      _sortedSpec = activeState().presentation;
-      check(_sortedSpec.id == "windows-column-sort", "the Title header did not install a temporary presentation");
-      checkComposerState(_sortedSpec, "technical");
+      _sortedSpec = ao::rt::builtinTrackPresentationPreset(ao::rt::BuiltinPreset::Technical).spec;
+      _sortedSpec.optColumnSort = ao::rt::TrackColumnSort{.column = ao::rt::TrackField::Title, .ascending = true};
+      checkComposerState(_sortedSpec, ao::rt::BuiltinPreset::Technical);
       selectSidebarList(L"All Tracks", &WinUiAutomationProbe::revisitComposer);
     }
 
@@ -2590,8 +2603,33 @@ namespace
     void composerReused()
     {
       _stage = "pinned composer list reused after temporary sort";
-      checkComposerState(_sortedSpec, "technical");
+      checkComposerState(_sortedSpec, ao::rt::BuiltinPreset::Technical);
       checkSelectionSummary("switch back to the existing Bach selection", "1 item selected (1:05)");
+      auto const picker = findVisualById<Button>(_root, L"modern-presentation-button");
+
+      if (!picker)
+      {
+        fail("shipping presentation button missing after header sort");
+        finish();
+        return;
+      }
+
+      auto const label = winrt::to_hstring(
+        ao::i18n::requiredText(_sessionPtr->textCatalog(), ao::i18n::MessageId::TrackPresentationTechnical));
+      check(AutomationProperties::GetName(picker) == label, "sorting must keep the named Technical preset");
+      invoke(picker);
+      afterFrame(&WinUiAutomationProbe::reselectTechnical);
+    }
+
+    void reselectTechnical() { selectTechnical(&WinUiAutomationProbe::technicalReset); }
+
+    void technicalReset()
+    {
+      _stage = "reselecting Technical clears the header sort";
+      checkComposerPreset(ao::rt::BuiltinPreset::Technical, ao::rt::BuiltinPreset::Technical);
+      check(static_cast<bool>(findVisual<Button>(_root, L"Title")),
+            "reselecting Technical removes the Title header's sort indicator");
+      checkSelectionSummary("reselecting the active preset preserves selection", "1 item selected (1:05)");
       prepareModernRebuild();
     }
 
@@ -2644,7 +2682,7 @@ namespace
     void groupModern()
     {
       check(activeState().listId == ao::rt::kAllTracksListId, "did not return to All Tracks for the grouped audit");
-      auto presentationRes = _sessionPtr->runtime().workspace().setActivePresentation("albums");
+      auto presentationRes = _sessionPtr->runtime().workspace().setActivePresentation(ao::rt::BuiltinPreset::Albums);
       check(static_cast<bool>(presentationRes), "could not select the real album-grouped presentation");
 
       if (!presentationRes)
@@ -2654,6 +2692,46 @@ namespace
       }
 
       _grouped = true;
+      afterFrame(&WinUiAutomationProbe::sortAlbumTrackNumber);
+    }
+
+    void sortAlbumTrackNumber()
+    {
+      _stage = "sort the built-in Albums Track # column";
+      auto const header = findVisual<Button>(_root, L"Track #");
+
+      if (!header)
+      {
+        fail("the Albums view has no unmarked Track # header");
+        finish();
+        return;
+      }
+
+      invoke(header);
+      afterFrame(&WinUiAutomationProbe::albumTrackNumberSorted);
+    }
+
+    void albumTrackNumberSorted()
+    {
+      using ao::rt::BuiltinPreset;
+      auto const state = activeState();
+      auto expected = ao::rt::builtinTrackPresentationPreset(BuiltinPreset::Albums).spec;
+      expected.optColumnSort =
+        ao::rt::TrackColumnSort{.column = ao::rt::TrackField::DisplayTrackNumber, .ascending = true};
+      check(state.presentation == expected, "an actual Albums Track # click preserves its display-column identity");
+      check(static_cast<bool>(findVisual<Button>(_root, L"Track # \u2191")),
+            "the Albums Track # header marks its ascending sort");
+
+      auto const resetRes =
+        _sessionPtr->runtime().workspace().setActivePresentation(BuiltinPreset::Albums, {.recordHistory = false});
+
+      if (!resetRes)
+      {
+        fail("could not reset Albums before the grouped audit");
+        finish();
+        return;
+      }
+
       afterFrame(&WinUiAutomationProbe::modernGrouped);
     }
 
@@ -2947,6 +3025,7 @@ namespace
       }
 
       _retiredSelectionSummary = findVisualById<Controls::TextBlock>(_root, kSelectionSummaryId);
+      _retiredTitleHeader = trackHeader(L"modern-track-table", L"title");
       invoke(classic);
       afterFrame(&WinUiAutomationProbe::classic);
     }
@@ -2957,6 +3036,7 @@ namespace
             "native menu did not switch the real shell to Classic");
       _flyout = nullptr;
       auditShell("Classic");
+      checkRetiredHeaderClick();
 
       if (_retiredSelectionSummary)
       {
@@ -2976,6 +3056,28 @@ namespace
       _narrow = true;
       resizeForLayout(640, 640);
       afterFrame(&WinUiAutomationProbe::narrowClassic);
+    }
+
+    void checkRetiredHeaderClick()
+    {
+      _stage = "stale header click after switching shells";
+      auto const liveTitle = trackHeader(L"classic-track-table", L"title");
+
+      if (!liveTitle || !_retiredTitleHeader || liveTitle == _retiredTitleHeader ||
+          winrt::unbox_value_or<winrt::hstring>(_retiredTitleHeader.Tag(), {}) != L"title")
+      {
+        fail("the shell handoff did not leave distinct live and retained Title headers with valid tags");
+        return;
+      }
+
+      // Deliver to the real binding directly: native automation on an unloaded
+      // Button need not dispatch Click at all and would not test admission.
+      auto const before = activeState();
+      implementation()->handleColumnHeaderClicked(_retiredTitleHeader, nullptr);
+      auto const after = activeState();
+      check(after.id == before.id && after.presentation == before.presentation,
+            "the retired Modern header changed the live Classic view's sort");
+      _retiredTitleHeader = nullptr;
     }
 
     Controls::MenuFlyoutItem classicRescanMenuItem() const
@@ -3154,18 +3256,10 @@ namespace
     void prepareClassicMove()
     {
       _stage = "Classic Move: filtered Manual Order view";
-      auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
-
-      if (manual == nullptr)
-      {
-        fail("Manual Order presentation missing");
-        finish();
-        return;
-      }
-
+      auto const& manual = ao::rt::builtinTrackPresentationPreset(ao::rt::BuiltinPreset::ListOrder);
       auto viewRes = _sessionPtr->runtime().workspace().navigate({
         .target = ao::rt::FilteredListTarget{.listId = _seed.composerListId, .filterExpression = kAlphaFilter},
-        .optPresentation = ao::rt::NavigationPresentation{.spec = manual->spec},
+        .optPresentation = ao::rt::NavigationPresentation{.spec = manual.spec},
       });
 
       if (!viewRes)
@@ -3182,10 +3276,10 @@ namespace
     bool isClassicMoveViewIntact() const
     {
       auto const state = activeState();
-      auto const* manual = ao::rt::builtinTrackPresentationPreset(ao::rt::kListOrderTrackPresentationId);
+      auto const& manual = ao::rt::builtinTrackPresentationPreset(ao::rt::BuiltinPreset::ListOrder);
       return state.id == _moveViewId && state.listId == _seed.composerListId &&
-             state.filterExpression == kAlphaFilter && !state.optFilterError && manual != nullptr &&
-             state.presentation == manual->spec && state.selection == std::vector{_seed.summaryTracks.front()};
+             state.filterExpression == kAlphaFilter && !state.optFilterError && state.presentation == manual.spec &&
+             state.selection == std::vector{_seed.summaryTracks.front()};
     }
 
     void moveClassicSelection()
@@ -3451,10 +3545,12 @@ namespace
     ao::rt::ViewId _allTracksViewId{};
     ao::rt::ViewId _composerViewId{};
     Controls::TextBlock _retiredSelectionSummary{nullptr};
+    Button _retiredTitleHeader{nullptr};
     winrt::weak_ref<Button> _retiredInspectorToggle;
     ao::rt::TrackPresentationSpec const _restoredSpec{
-      .id = "windows-column-sort",
-      .sortBy = {{.field = ao::rt::TrackSortField::Year, .ascending = false}},
+      .presetId = ao::rt::BuiltinPreset::Library,
+      .sortBy = {{.field = ao::rt::TrackSortField::Title, .ascending = true}},
+      .optColumnSort = ao::rt::TrackColumnSort{.column = ao::rt::TrackField::Year, .ascending = false},
       .visibleFields = {ao::rt::TrackField::Title, ao::rt::TrackField::Year},
     };
     ao::rt::TrackPresentationSpec _sortedSpec;

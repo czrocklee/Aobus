@@ -7,6 +7,7 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "tui/ShellInteractionModel.h"
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -16,6 +17,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <optional>
@@ -76,6 +78,28 @@ namespace ao::tui::test
     REQUIRE(shell.tryApplyCommandCompletion());
     CHECK(shell.inputDraft() == "output");
     CHECK(shell.inputField().cursor() == 6);
+  }
+
+  TEST_CASE("CommandCompletion - discovers sort and inserts stable ids for localized column names")
+  {
+    auto const catalog = ao::test::messageCatalog("de-DE");
+    auto const columns = std::array{rt::TrackField::Title, rt::TrackField::Artist};
+    auto const context = CommandCompletionContext{.sortableColumns = columns};
+
+    auto const optCommand = completeDraft(catalog, "sort", context);
+    REQUIRE(optCommand);
+    CHECK(optCommand->items.front().insertText == "sort ");
+
+    auto const optArguments = completeDraft(catalog, "sort ", context);
+    REQUIRE(optArguments);
+    CHECK(insertTexts(*optArguments) == std::vector<std::string>{"title", "artist"});
+
+    auto const optTitle = completeDraft(catalog, "sort Tit", context);
+    REQUIRE(optTitle);
+    CHECK(optTitle->replaceBegin == 5);
+    CHECK(optTitle->replaceEnd == 8);
+    CHECK(insertTexts(*optTitle) == std::vector<std::string>{"title"});
+    CHECK(optTitle->items.front().displayText == "Titel");
   }
 
   TEST_CASE("CommandCompletion - completes presentation ids after view commands")
@@ -290,15 +314,15 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletion - custom presentation uses its id and label")
   {
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
-      {.label = "My listening view", .spec = {.id = "my-listening-view"}}};
+      {.label = "My listening view", .spec = {.presetId = rt::CustomPresetId{0xabcdef}}}};
     auto const optResult = completeDraft(
-      ao::test::englishMessageCatalog(), "view my-l", CommandCompletionContext{.customPresentations = custom});
+      ao::test::englishMessageCatalog(), "view 0000", CommandCompletionContext{.customPresentations = custom});
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 5);
     CHECK(optResult->replaceEnd == 9);
     REQUIRE(optResult->items.size() == 1);
-    CHECK(optResult->items.front().displayText == "my-listening-view");
-    CHECK(optResult->items.front().insertText == "my-listening-view");
+    CHECK(optResult->items.front().displayText == "0000000000abcdef");
+    CHECK(optResult->items.front().insertText == "0000000000abcdef");
     CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items.front().detail) ==
           "My listening view");
   }

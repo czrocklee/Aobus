@@ -342,7 +342,7 @@ namespace ao::rt::test::playback_succession
     })));
     viewId = ao::test::requireValue(workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = listId,
-      .optPresentation = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}},
+      .optPresentation = TrackPresentationSpec{.presetId = BuiltinPreset::ListOrder},
     })));
     successionPtr = std::make_unique<PlaybackSuccession>(transport.executor,
                                                          views,

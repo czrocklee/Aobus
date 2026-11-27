@@ -46,7 +46,7 @@ supplied directly; deserialization does not repair invalid documents.
 Presentation choice and column layout are deliberately not members of `desktop`.
 They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK, TUI, and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies; each frontend keeps a separate per-library document for its geometry units, which also keeps its list ids from reaching another library through this global file.
 Column layout includes stable field order, canonical sizing, and visibility.
-Workspace owns the active view's current presentation and sort state.
+The [per-library workspace session](../../system/workspace/session.md) captures each live view's exact presentation, including its sort.
 `windows-theme.yaml` requires exactly three maps. `shared` requires `fontFamily`, `accent`, `windowBackground`, `surface`, `textPrimary`, `textSecondary`, `divider`, and `selection`. `modern` requires `navigationBackground`, `inspectorBackground`, and `nowPlayingBackground`. `classic` requires `chrome`, `toolbarBackground`, `treeBackground`, and `statusBackground`. `chrome` is `system` or `retro` and defaults to `system` when the file is absent.
 
 Theme tokens control semantic font, text, accent, selection, divider, and surface

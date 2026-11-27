@@ -41,7 +41,7 @@ GTK, TUI, and WinUI pass the track and source List from a playback reveal reques
 - A navigation point stores semantic reconstruction input, never `ViewId`, selection, scroll position, widget state, or a projection handle.
 - Committing a point equal to the current point is a no-op; committing after backward traversal removes forward points.
 - History contains at most 256 points and is not persisted.
-- Quick-filter editing remains view-owned and does not enter history unless a workspace navigation command explicitly commits the resulting semantic point.
+- Quick-filter editing and column sorting do not themselves change workspace history. A later recorded navigation can capture the edited view state.
 
 ## State model
 
@@ -78,7 +78,8 @@ Presentation intent follows this matrix:
 | `NewViewDefault`     | Ignore the supplied specification and preserve the exact current presentation. | Normalize and apply the supplied specification. |
 
 A filtered target is never reusable, so a supplied `NewViewDefault` applies to its newly created view.
-When the request records history, its navigation point stores the final effective presentation after this decision.
+When the request records history, its destination point stores the final effective presentation after this decision.
+A newly edited quick filter can form a distinct departure point when the current history entry names the same List with a different filter.
 
 The command then prepares the next open set, focus, and history candidate and commits them once.
 Navigation returns the resulting active `ViewId`.
@@ -105,25 +106,42 @@ On a view change, workspace commits the live departure point and destination tog
 Invalid, unknown, and unopened ids are rejected.
 Focusing the active view succeeds without publication; a different open view produces one `Focus` commit and does not implicitly append history.
 
+When an explicit reveal needs to navigate to a particular open view, `navigateToOpenView(viewId)` preserves that view's filter and presentation. Unlike focus, a change of view records the live departure and the exact destination together in one `Navigation` commit. Back restores the departure, including its quick filter and column sort. An already-active, available target is a no-op. A closed view or one whose saved List has already been deleted is rejected without changing history, even if the deletion notification has not yet closed the view.
+
 There is no public raw add-view operation.
 Opening and adopting a view is part of semantic navigation or session restoration.
 
 ### Change active presentation
 
 `setActivePresentation(spec, presentationChangeOptions)` requires an active live view, normalizes the complete specification, applies it through `ViewService`, and optionally commits the resulting navigation point.
+The full-spec setter on `ViewService` is private; `WorkspaceService` uses it for active presentation changes, navigation overrides, and history replay. New views receive their full spec during creation, including during session restore.
 Presentation-change options contain only the history-recording policy and cannot carry navigation target or presentation-mode fields.
 The complete presentation value participates in equality, including visible and redundant fields.
 
-The id overload resolves built-in presets and then workspace custom presets.
-It returns the resolved presentation.
-An unknown id returns `NotFound`; a missing active view returns `InvalidState`.
+`setActivePresentation(presetId, presentationChangeOptions)` takes a typed `TrackPresetId` and resolves either the `BuiltinPreset` or the workspace `CustomPresetId` directly. It returns the resolved presentation.
+A custom id absent from the workspace returns `NotFound`; a missing active view for a resolved preset returns `InvalidState`. Text consumers reject malformed keys before calling this command.
+The resolved definition has no header override, so choosing the active preset again clears one.
 Reapplying an identical presentation and history point succeeds without publication.
+
+### Sort a view by column
+
+`ViewService::setColumnSort(viewId, sort)` is the public command for a column-header sort. It takes a view id and one `TrackColumnSort`, the clicked `TrackField` and its direction. It stores that value in `optColumnSort` and leaves `presetId`, base `sortBy`, grouping, and the field lists unchanged. The override is not a preset and has no catalog caption.
+
+An unknown view returns `NotFound`. A column with no sort mapping returns `InvalidInput`. An unchanged presentation succeeds without publishing. An effective change publishes `ViewService::PresentationChanged`, not `WorkspaceChanged`, and does not change the workspace revision, history cursor, or the List's saved presentation preference.
+
+The applied row keys are [`effectiveSortBy()`](../presentation/track-presentation.md#invariants), a sequence of `TrackSortTerm` values. The clicked column's sort key is first and the preset's remaining keys break ties. Click history is not a sort key. `DisplayTrackNumber` and `TrackNumber` both project to `TrackSortField::TrackNumber`, so either column sorts disc number before track number, in the same direction. `Movement` and `MovementNumber` both project to `TrackSortField::Movement`. The header arrow follows the clicked column, not that shared sort key.
+
+A grouped table and playback do not apply that sequence as one order. [Track-list presentation](../presentation/track-presentation.md#grouping-and-sorting) owns the split: section order stays on the preset's base sort, within-section rows use the effective sequence, and playback launch copies only the flat effective sequence into a detached projection with no groups.
+
+The header arrow and the next click target `TrackColumnSort::column`, not the shared sort key and not the inserted disc-number term. `nextColumnSort(column)` is ascending unless the current override is already that same column and ascending. Clicking the other column of a shared-key pair therefore starts ascending. Choosing the already selected preset applies its definition and clears the override. With the default history-recording policy, that choice first checkpoints the override if the departure matches the current point as described below, then records the cleared preset as the new point.
+
+A recorded departure can update only the current history point's column override. It does so when the live view has an override and the List, quick filter, and entire presentation apart from `optColumnSort` match the point. Sharing a preset id is not enough: grouping, base sort, and field lists must also match. The update does not add a stop or discard Forward entries; a new destination still follows the ordinary history commit rules. Repeating navigation to the already-active view after a column sort uses that checkpoint and does not add a stop or discard Forward. The request may omit a presentation, carry `NewViewDefault`, or carry an equivalent override. `NewViewDefault` is ignored for the reused view, and the repeat is compared after the checkpoint, not against the point from before the sort. [Session capture](session.md) independently saves the exact live presentation, including the override.
 
 ### Traverse history
 
-`goBack()` and `goForward()` copy the history candidate and move only that candidate cursor.
-Replay reuses a live view already open in the workspace that matches list and filter or creates a replacement. It restores the exact presentation, prepares the next open/focused snapshot, and commits snapshot plus cursor once.
-Replay never appends a history point.
+`goBack()` and `goForward()` copy history, refresh a matching departure point's header override as described above, then move only the candidate cursor. A different quick filter does not become a new stop during traversal.
+Replay reuses a live view already open in the workspace that matches list and filter or creates a replacement. It restores the exact presentation, prepares the next open/focused snapshot, and commits the snapshot and history candidate once.
+Replay never appends a history point or discards Forward entries.
 
 `canGoBack()` and `canGoForward()` expose the current cursor boundaries without duplicating history state.
 They are owner-thread-confined reads and publish no separate availability signal; a frontend rereads them after the existing workspace-changed observation.
@@ -138,15 +156,18 @@ Closing an id not present in the workspace succeeds without publication and does
 
 A committed library-list deletion closes every matching open view in one `ListDeletion` commit, even when several filtered views use the same base list.
 A complete library reset, such as a YAML restore, names no deleted list, so the workspace instead closes, in the same kind of commit, every open view whose base list the library no longer has; All Tracks and other virtual lists stay open.
-History points remain semantic snapshots; replaying a point for a deleted list fails during reconstruction.
+History points remain semantic snapshots; replaying a point for a deleted list fails during reconstruction and leaves the live cursor unchanged.
+When the history cursor still names a saved List that no longer exists, a later successful recorded navigation commits the live fallback view as the departure in that same candidate. A failed destination does not record it. Back from the new stop returns to the recovered view and does not try to recreate the deleted List.
 
 ### Edit custom presets
 
-Adding a new preset or changing the preset with the same `spec.id` produces one `Presets` commit.
+A custom preset must carry a `CustomPresetId` in `presetId`. A built-in id returns `InvalidInput`. `optColumnSort` also returns `InvalidInput`: a preset definition cannot contain a view-local header override.
+Copying the live view into that definition keeps the grouped table's section and within-section order, not the detached flat playback order. [Track-list presentation](../presentation/track-presentation.md#grouping-and-sorting) owns when a grouping-column override is left out of the new base sort.
+Adding a new preset or changing a preset with the same custom id produces one `Presets` commit.
 The label is display text, not replacement identity.
 Adding an identical value or removing an absent id succeeds without publication.
 Removing an existing preset likewise commits one complete preset collection.
-Stable preset identity and versioned persistence remain owned by the presentation and workspace-session proposals.
+The [preset reference](../../reference/presentation/track-preset.md) and [workspace session-state reference](../../reference/workspace/session-state.md) own stable preset identities and their serialized form.
 
 ### Reveal an album
 

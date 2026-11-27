@@ -90,7 +90,8 @@ namespace ao::rt
     ViewService& operator=(ViewService&&) = delete;
 
     Result<> setFilter(ViewId viewId, std::string filterExpression);
-    Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
+    /// Override the primary row order without changing this view's preset.
+    Result<> setColumnSort(ViewId viewId, TrackColumnSort sort);
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
@@ -138,6 +139,8 @@ namespace ao::rt
 
   private:
     friend class WorkspaceService;
+
+    Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
 
     Result<bool> listContainsTrack(ListId listId, TrackId trackId) const;
     Result<ViewId> createView(TrackListViewConfig const& initial);

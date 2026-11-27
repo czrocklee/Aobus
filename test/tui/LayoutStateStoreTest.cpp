@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -40,7 +41,7 @@ namespace ao::tui::test
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}};
     auto const store = LayoutStateStore{libraryPath, kLibraryId};
     auto const seededColumns = columns;
     auto const seededPresentations = presentations;
@@ -120,7 +121,7 @@ namespace ao::tui::test
         .field = rt::TrackField::Duration, .width = 17, .visibility = uimodel::TrackColumnVisibility::Show},
       uimodel::TrackColumnState{.field = rt::TrackField::Album, .visibility = uimodel::TrackColumnVisibility::Hide},
     };
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, rt::BuiltinPreset::Albums}};
 
     REQUIRE(store.save(columnLayouts, presentations, true, PanelWidths{}));
     CHECK(ao::test::readFile(runtimeSessionPath) == "workspace-sentinel\n");
@@ -185,7 +186,8 @@ namespace ao::tui::test
           {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 20, .weight = -1.0}}},
           {rt::kAllTracksListId, allTracksColumns},
         },
-        uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}},
+        uimodel::ListPresentations::Snapshot{
+          {ListId{10}, rt::BuiltinPreset::Albums}, {rt::kAllTracksListId, rt::BuiltinPreset::Songs}},
         false,
         savedWidths));
     }
@@ -198,7 +200,7 @@ namespace ao::tui::test
     store.load(columns, presentations, navigationEnabled, widths);
 
     CHECK(columns == uimodel::TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, allTracksColumns}});
-    CHECK(presentations == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
+    CHECK(presentations == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, rt::BuiltinPreset::Songs}});
     // Terminal geometry and navigation name no library object, so they still apply.
     CHECK_FALSE(navigationEnabled);
     CHECK(widths == savedWidths);
@@ -226,7 +228,7 @@ namespace ao::tui::test
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}};
 
     auto widths = PanelWidths{};
     bool navigationEnabled = true;
@@ -235,7 +237,7 @@ namespace ao::tui::test
     REQUIRE(columns.size() == 1);
     CHECK(columns.contains(ListId{7}));
     REQUIRE(presentations.size() == 1);
-    CHECK(presentations.at(ListId{42}) == "albums");
+    CHECK(presentations.at(ListId{42}) == rt::TrackPresetId{rt::BuiltinPreset::Albums});
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
@@ -265,7 +267,7 @@ namespace ao::tui::test
     std::ofstream{configPath, std::ios::binary} << stored;
     auto store = LayoutStateStore{libraryPath, kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}};
     auto const expectedColumns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{42},
        {uimodel::TrackColumnState{
@@ -278,7 +280,7 @@ namespace ao::tui::test
     store.load(columns, presentations, navigationEnabled, widths);
 
     CHECK(columns == expectedColumns);
-    CHECK(presentations == uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}});
+    CHECK(presentations == uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}});
     CHECK(ao::test::readFile(configPath) == stored);
 
     REQUIRE(store.save(columns, presentations, false, widths));
@@ -306,7 +308,7 @@ namespace ao::tui::test
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17}}},
     };
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, rt::BuiltinPreset::Albums}};
 
     REQUIRE(store.save(columns, presentations, true, PanelWidths{}));
     auto const before = ao::test::readFile(configPath);
@@ -315,7 +317,7 @@ namespace ao::tui::test
     CHECK(before.contains("presentationId: \"albums\""));
 
     columns.at(ListId{10})[0] = uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 29, .weight = -1.0};
-    presentations.at(ListId{10}) = "artists";
+    presentations.at(ListId{10}) = rt::BuiltinPreset::Artists;
     auto const desiredWidths = PanelWidths{.navigation = 32, .detail = 48};
     auto const failedSaveRes = store.save(columns, presentations, false, desiredWidths);
 
@@ -347,7 +349,7 @@ namespace ao::tui::test
     auto const directory = ao::test::TempDir{};
     auto store = LayoutStateStore{directory.path(), kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
-    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}};
     REQUIRE(store.save(columns, presentations, false, PanelWidths{}));
     auto reopened = LayoutStateStore{directory.path(), kLibraryId};
     auto widths = PanelWidths{};
@@ -355,7 +357,7 @@ namespace ao::tui::test
     presentations.clear();
     reopened.load(columns, presentations, enabled, widths);
     CHECK_FALSE(enabled);
-    CHECK(presentations.at(ListId{7}) == "songs");
+    CHECK(presentations.at(ListId{7}) == rt::TrackPresetId{rt::BuiltinPreset::Songs});
     REQUIRE(reopened.save(columns, presentations, true, widths));
     auto again = LayoutStateStore{directory.path(), kLibraryId};
     enabled = false;
@@ -379,12 +381,12 @@ namespace ao::tui::test
       }
       auto store = LayoutStateStore{directory.path(), kLibraryId};
       auto columns = uimodel::TrackColumnLayouts::Snapshot{};
-      auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+      auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Songs}};
       auto widths = PanelWidths{};
       bool enabled = false;
       store.load(columns, presentations, enabled, widths);
       CHECK(enabled);
-      CHECK(presentations.at(ListId{7}) == "songs");
+      CHECK(presentations.at(ListId{7}) == rt::TrackPresetId{rt::BuiltinPreset::Songs});
       REQUIRE(store.save(columns, presentations, false, widths));
       auto reopened = LayoutStateStore{directory.path(), kLibraryId};
       reopened.load(columns, presentations, enabled, widths);

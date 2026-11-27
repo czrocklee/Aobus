@@ -251,7 +251,7 @@ namespace ao::gtk
 
     for (std::size_t index = 0; index < presets.size(); ++index)
     {
-      if (presets[index].spec.id == "list-order")
+      if (presets[index].presetId() == rt::BuiltinPreset::ListOrder)
       {
         _presentationDropDown.set_selected(static_cast<std::uint32_t>(index + 1));
         break;
@@ -402,8 +402,7 @@ namespace ao::gtk
 
     for (auto const& preset : rt::builtinTrackPresentationPresets())
     {
-      auto const optText = uimodel::builtinTrackPresentation(_textCatalog, preset.spec.id);
-      stringListPtr->append(optText ? std::string{optText->label} : preset.spec.id);
+      stringListPtr->append(std::string{uimodel::builtinTrackPresentation(_textCatalog, preset.presetId()).label});
     }
 
     // Custom presentations follow the builtins in the option list and keep
@@ -411,7 +410,7 @@ namespace ao::gtk
     // that presentation selected instead of silently falling back to Auto.
     for (auto const& preset : _customPresets)
     {
-      stringListPtr->append(preset.label.empty() ? preset.spec.id : preset.label);
+      stringListPtr->append(preset.label.empty() ? rt::trackPresetKey(preset.presetId()) : preset.label);
     }
 
     _presentationOptionsPtr = stringListPtr;

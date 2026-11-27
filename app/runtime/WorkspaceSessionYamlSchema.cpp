@@ -24,12 +24,15 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::detail
 {
   namespace
   {
+    constexpr std::string_view kBuiltin = "builtin";
+    constexpr std::string_view kCustom = "custom";
     constexpr std::string_view kAscending = "ascending";
     constexpr std::string_view kDescending = "descending";
 
@@ -76,9 +79,16 @@ namespace ao::rt::detail
       return stored;
     }
 
+    StoredTrackSortTerm toStoredSortTerm(TrackSortTerm const& term)
+    {
+      auto const field = trackSortFieldId(term.field);
+      AO_EXPECTS(!field.empty(), "Cannot serialize an invalid sort field");
+      return StoredTrackSortTerm{
+        .field = std::string{field}, .direction = std::string{term.ascending ? kAscending : kDescending}};
+    }
+
     Result<StoredTrackPresentationSpec> toStoredPresentation(TrackPresentationSpec const& spec)
     {
-      AO_EXPECTS(!spec.id.empty(), "Cannot serialize a presentation with an empty id");
       auto const normalized = normalizeTrackPresentationSpec(spec);
       auto groupRes = storedIdFor(normalized.groupBy, trackGroupKeyId, "track group key");
 
@@ -87,24 +97,24 @@ namespace ao::rt::detail
         return std::unexpected{groupRes.error()};
       }
 
-      auto stored = StoredTrackPresentationSpec{.id = normalized.id, .group = std::move(*groupRes)};
+      auto stored = StoredTrackPresentationSpec{.presetId = normalized.presetId, .group = std::move(*groupRes)};
       stored.sort.reserve(normalized.sortBy.size());
 
       for (auto const& term : normalized.sortBy)
       {
-        auto fieldRes = storedIdFor(term.field, trackSortFieldId, "track sort field");
-
-        if (!fieldRes)
-        {
-          return std::unexpected{fieldRes.error()};
-        }
-
-        AO_EXPECTS(!std::ranges::contains(stored.sort, *fieldRes, &StoredTrackSortTerm::field),
+        auto storedTerm = toStoredSortTerm(term);
+        AO_EXPECTS(!std::ranges::contains(stored.sort, storedTerm.field, &StoredTrackSortTerm::field),
                    "Cannot serialize duplicate sort field");
-        stored.sort.push_back(StoredTrackSortTerm{
-          .field = std::move(*fieldRes),
-          .direction = std::string{term.ascending ? kAscending : kDescending},
-        });
+        stored.sort.push_back(std::move(storedTerm));
+      }
+
+      if (normalized.optColumnSort)
+      {
+        auto const& sort = *normalized.optColumnSort;
+        AO_EXPECTS(trackSortFieldForColumn(sort.column), "Cannot serialize an unsortable column");
+        stored.optColumnSort =
+          StoredTrackColumnSort{.column = std::string{trackFieldId(sort.column)},
+                                .direction = std::string{sort.ascending ? kAscending : kDescending}};
       }
 
       auto visibleFieldsRes = toStoredFields(normalized.visibleFields, "visible field");
@@ -152,13 +162,37 @@ namespace ao::rt::detail
       return fields;
     }
 
-    Result<TrackPresentationSpec> trackPresentationFromStored(StoredTrackPresentationSpec const& stored)
+    Result<bool> ascendingFromStored(std::string_view direction)
     {
-      if (stored.id.empty())
+      if (direction != kAscending && direction != kDescending)
       {
-        return makeError(Error::Code::FormatRejected, "Track presentation uses an empty id");
+        return makeError(Error::Code::FormatRejected, std::format("Unknown track sort direction '{}'", direction));
       }
 
+      return direction == kAscending;
+    }
+
+    Result<TrackSortTerm> sortTermFromStored(StoredTrackSortTerm const& stored)
+    {
+      auto const optField = trackSortFieldFromId(stored.field);
+
+      if (!optField)
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Unknown track sort field '{}'", stored.field));
+      }
+
+      auto const ascendingRes = ascendingFromStored(stored.direction);
+
+      if (!ascendingRes)
+      {
+        return std::unexpected{ascendingRes.error()};
+      }
+
+      return TrackSortTerm{.field = *optField, .ascending = *ascendingRes};
+    }
+
+    Result<TrackPresentationSpec> trackPresentationFromStored(StoredTrackPresentationSpec const& stored)
+    {
       auto const optGroup = trackGroupKeyFromId(stored.group);
 
       if (!optGroup)
@@ -166,30 +200,44 @@ namespace ao::rt::detail
         return makeError(Error::Code::FormatRejected, std::format("Unknown track group key '{}'", stored.group));
       }
 
-      auto spec = TrackPresentationSpec{.id = stored.id, .groupBy = *optGroup};
+      auto spec = TrackPresentationSpec{.presetId = stored.presetId, .groupBy = *optGroup};
       spec.sortBy.reserve(stored.sort.size());
 
       for (auto const& term : stored.sort)
       {
-        auto const optField = trackSortFieldFromId(term.field);
+        auto const termRes = sortTermFromStored(term);
 
-        if (!optField)
+        if (!termRes)
         {
-          return makeError(Error::Code::FormatRejected, std::format("Unknown track sort field '{}'", term.field));
+          return std::unexpected{termRes.error()};
         }
 
-        if (std::ranges::contains(spec.sortBy, *optField, &TrackSortTerm::field))
+        if (std::ranges::contains(spec.sortBy, termRes->field, &TrackSortTerm::field))
         {
           return makeError(Error::Code::FormatRejected, std::format("Duplicate track sort field '{}'", term.field));
         }
 
-        if (term.direction != kAscending && term.direction != kDescending)
+        spec.sortBy.push_back(*termRes);
+      }
+
+      if (stored.optColumnSort)
+      {
+        auto const& sort = *stored.optColumnSort;
+        auto const optColumn = trackFieldFromId(sort.column);
+
+        if (!optColumn || !trackSortFieldForColumn(*optColumn))
         {
-          return makeError(
-            Error::Code::FormatRejected, std::format("Unknown track sort direction '{}'", term.direction));
+          return makeError(Error::Code::FormatRejected, std::format("Unknown or unsortable column '{}'", sort.column));
         }
 
-        spec.sortBy.push_back(TrackSortTerm{.field = *optField, .ascending = term.direction == kAscending});
+        auto const ascendingRes = ascendingFromStored(sort.direction);
+
+        if (!ascendingRes)
+        {
+          return std::unexpected{ascendingRes.error()};
+        }
+
+        spec.optColumnSort = TrackColumnSort{.column = *optColumn, .ascending = *ascendingRes};
       }
 
       auto visibleFieldsRes = trackFieldsFromStored(stored.visibleFields, "visible field");
@@ -232,25 +280,76 @@ namespace ao::rt::detail
       return std::move(reader).finish(std::move(term));
     }
 
+    Result<> writeColumnSort(ryml::NodeRef node, StoredTrackColumnSort const& sort)
+    {
+      auto writer = yaml::MapWriter{node};
+      writer.scalar("column", sort.column).scalar("direction", sort.direction);
+      return std::move(writer).finish();
+    }
+
+    Result<StoredTrackColumnSort> readColumnSort(ryml::ConstNodeRef node, std::string_view context)
+    {
+      constexpr auto kKeys = std::to_array<std::string_view>({"column", "direction"});
+      auto sort = StoredTrackColumnSort{};
+      auto reader = yaml::MapReader{node, kKeys, context};
+      reader.requiredScalar("column", sort.column).requiredScalar("direction", sort.direction);
+      return std::move(reader).finish(std::move(sort));
+    }
+
     Result<> writePresentation(ryml::NodeRef node, StoredTrackPresentationSpec const& presentation)
     {
       auto writer = yaml::MapWriter{node};
-      writer.scalar("id", presentation.id)
+
+      auto const kind = std::holds_alternative<BuiltinPreset>(presentation.presetId) ? kBuiltin : kCustom;
+      writer.scalar("kind", kind)
+        .scalar("presetId", trackPresetKey(presentation.presetId))
         .scalar("group", presentation.group)
-        .sequence("sort", presentation.sort, writeSortTerm)
-        .scalarSequence("visibleFields", presentation.visibleFields)
+        .sequence("sort", presentation.sort, writeSortTerm);
+
+      if (presentation.optColumnSort)
+      {
+        writer.value("columnSort", *presentation.optColumnSort, writeColumnSort);
+      }
+
+      writer.scalarSequence("visibleFields", presentation.visibleFields)
         .scalarSequence("redundantFields", presentation.redundantFields);
       return std::move(writer).finish();
     }
 
     Result<StoredTrackPresentationSpec> readPresentation(ryml::ConstNodeRef node, std::string_view context)
     {
-      constexpr auto kKeys =
-        std::to_array<std::string_view>({"id", "group", "sort", "visibleFields", "redundantFields"});
+      constexpr auto kKeys = std::to_array<std::string_view>(
+        {"kind", "presetId", "group", "sort", "columnSort", "visibleFields", "redundantFields"});
       auto presentation = StoredTrackPresentationSpec{};
       auto reader = yaml::MapReader{node, kKeys, context};
-      reader.requiredScalar("id", presentation.id)
-        .requiredScalar("group", presentation.group)
+      auto kind = std::string{};
+      auto key = std::string{};
+
+      if (auto const& res = reader.requiredScalar("kind", kind).requiredScalar("presetId", key).result(); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      if (kind != kBuiltin && kind != kCustom)
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Unknown presentation kind '{}'", kind));
+      }
+
+      auto const optId = parseTrackPresetId(key);
+
+      if (!optId || (kind == kBuiltin) != std::holds_alternative<BuiltinPreset>(*optId))
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Invalid {} preset id '{}'", kind, key));
+      }
+
+      presentation.presetId = *optId;
+
+      if (node.has_child("columnSort"))
+      {
+        reader.requiredValue("columnSort", presentation.optColumnSort.emplace(), readColumnSort);
+      }
+
+      reader.requiredScalar("group", presentation.group)
         .requiredSequence("sort", presentation.sort, readSortTerm)
         .requiredScalarSequence("visibleFields", presentation.visibleFields)
         .requiredScalarSequence("redundantFields", presentation.redundantFields);
@@ -382,6 +481,8 @@ namespace ao::rt::detail
 
     for (auto const& preset : state.customPresets)
     {
+      AO_EXPECTS(std::holds_alternative<CustomPresetId>(preset.spec.presetId), "A custom preset requires a custom id");
+      AO_EXPECTS(!preset.spec.optColumnSort, "A custom preset definition cannot include a column sort");
       auto specRes = toStoredPresentation(preset.spec);
 
       if (!specRes)
@@ -391,7 +492,7 @@ namespace ao::rt::detail
 
       document.customPresets.push_back(StoredCustomTrackPresentationPreset{
         .label = preset.label,
-        .basePresetId = preset.basePresetId,
+        .basePresetId = preset.optBasePresetId ? trackPresetKey(*preset.optBasePresetId) : std::string{},
         .spec = std::move(*specRes),
       });
     }
@@ -434,8 +535,6 @@ namespace ao::rt::detail
       state.openViews.push_back(TrackListViewConfig{
         .listId = ListId{stored.listId},
         .filterExpression = stored.filterExpression,
-        .groupBy = presentationRes->groupBy,
-        .sortBy = presentationRes->sortBy,
         .optPresentation = std::move(*presentationRes),
       });
     }
@@ -451,9 +550,26 @@ namespace ao::rt::detail
         return std::unexpected{specRes.error()};
       }
 
+      if (specRes->optColumnSort)
+      {
+        return makeError(Error::Code::FormatRejected, "A custom preset definition cannot include a column sort");
+      }
+
+      if (!std::holds_alternative<CustomPresetId>(specRes->presetId))
+      {
+        return makeError(Error::Code::FormatRejected, "A custom preset requires a custom id");
+      }
+
+      auto const optBaseId = parseTrackPresetId(stored.basePresetId);
+
+      if (!optBaseId && !stored.basePresetId.empty())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Invalid base preset id '{}'", stored.basePresetId));
+      }
+
       state.customPresets.push_back(CustomTrackPresentationPreset{
         .label = stored.label,
-        .basePresetId = stored.basePresetId,
+        .optBasePresetId = optBaseId,
         .spec = std::move(*specRes),
       });
     }

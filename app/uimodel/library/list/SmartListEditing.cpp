@@ -13,12 +13,12 @@
 #include <algorithm>
 #include <cstddef>
 #include <format>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 namespace ao::uimodel
 {
@@ -175,31 +175,25 @@ namespace ao::uimodel
                                                      std::span<rt::TrackPresentationPreset const> builtinPresets,
                                                      std::span<rt::CustomTrackPresentationPreset const> customPresets)
   {
-    if (!optPresentationId)
+    auto const optId = optPresentationId ? rt::parseTrackPresetId(*optPresentationId) : std::nullopt;
+
+    if (!optId)
     {
       return kSmartListAutoTrackPresentationIndex;
     }
 
-    auto const it =
-      std::ranges::find(builtinPresets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
-
-    if (it != builtinPresets.end())
+    if (auto const* builtin = std::get_if<rt::BuiltinPreset>(&*optId); builtin != nullptr)
     {
-      return static_cast<std::size_t>(std::ranges::distance(builtinPresets.begin(), it)) + 1;
+      auto const it = std::ranges::find(builtinPresets, *builtin, &rt::TrackPresentationPreset::presetId);
+      return it != builtinPresets.end() ? static_cast<std::size_t>(it - builtinPresets.begin()) + 1
+                                        : kSmartListAutoTrackPresentationIndex;
     }
 
-    // Custom presentations follow the builtins in the editor's option order,
-    // so a custom id maps past the builtin indexes instead of falling to Auto.
-    auto const customIt =
-      std::ranges::find(customPresets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
-
-    if (customIt != customPresets.end())
-    {
-      return builtinPresets.size() + static_cast<std::size_t>(std::ranges::distance(customPresets.begin(), customIt)) +
-             1;
-    }
-
-    return kSmartListAutoTrackPresentationIndex;
+    // Custom presentations follow the builtins in the editor's option order.
+    auto const customId = std::get<rt::CustomPresetId>(*optId);
+    auto const it = std::ranges::find(customPresets, customId, &rt::CustomTrackPresentationPreset::presetId);
+    return it != customPresets.end() ? builtinPresets.size() + static_cast<std::size_t>(it - customPresets.begin()) + 1
+                                     : kSmartListAutoTrackPresentationIndex;
   }
 
   std::string resolveSmartListTrackPresentationId(
@@ -218,7 +212,7 @@ namespace ao::uimodel
 
     if (auto const presetIndex = selectedIndex - 1; presetIndex < builtinPresets.size())
     {
-      return std::string{builtinPresets[presetIndex].spec.id};
+      return std::string{rt::builtinPresetKey(builtinPresets[presetIndex].presetId())};
     }
 
     // The option order places custom presentations after the builtins, so a
@@ -227,9 +221,9 @@ namespace ao::uimodel
 
     if (customIndex < customPresets.size())
     {
-      return std::string{customPresets[customIndex].spec.id};
+      return rt::trackPresetKey(customPresets[customIndex].presetId());
     }
 
-    return std::string{rt::kDefaultTrackPresentationId};
+    return std::string{rt::builtinPresetKey(rt::BuiltinPreset::Library)};
   }
 } // namespace ao::uimodel

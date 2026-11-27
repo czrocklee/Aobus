@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
@@ -21,6 +22,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -521,7 +523,95 @@ namespace ao::rt::test
     checkOrder(true);
   }
 
-  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks")
+  TEST_CASE("TrackListProjection - dropping sort restores source order")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const zulu = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zulu"});
+    auto const alpha = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Alpha"});
+    env.setupFiltered({{zulu, alpha}});
+    auto projection = env.createProjection(ViewId{1});
+    projection.setPresentation(builtinTrackPresentationPreset(BuiltinPreset::Songs).spec);
+    REQUIRE(projection.trackIdAt(0) == alpha);
+
+    projection.setPresentation(builtinTrackPresentationPreset(BuiltinPreset::ListOrder).spec);
+
+    REQUIRE(projection.size() == 2);
+    CHECK(projection.trackIdAt(0) == zulu);
+    CHECK(projection.trackIdAt(1) == alpha);
+    CHECK(projection.indexOf(alpha) == 1);
+  }
+
+  TEST_CASE("TrackListProjection - promoting an existing Songs key reorders rows without rematerializing keys")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const titleFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Zulu"});
+    auto const artistFirst = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Z", .artist = "Alpha"});
+    env.setupFiltered({{artistFirst, titleFirst}});
+
+    auto projection = env.createProjection(ViewId{1});
+    auto songs = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+    projection.setPresentation(songs);
+    REQUIRE(projection.size() == 2);
+    REQUIRE(projection.trackIdAt(0) == titleFirst);
+    auto const before = rt::detail::RuntimeOperationProbe::counts(projection);
+
+    songs.optColumnSort = TrackColumnSort{TrackField::Artist, true};
+    projection.setPresentation(songs);
+
+    auto const after = rt::detail::RuntimeOperationProbe::counts(projection);
+    CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
+    CHECK(after.rowIndexRebuilds == before.rowIndexRebuilds + 1);
+    CHECK(projection.trackIdAt(0) == artistFirst);
+    CHECK(projection.trackIdAt(1) == titleFirst);
+    CHECK(projection.indexOf(titleFirst) == 1);
+  }
+
+  TEST_CASE("TrackListProjection - authored group direction reorders implicit keys even if effective terms match")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const older = env.libraryFixture.addTrack(library::test::makeTrackSpec("Older", 2020));
+    auto const newer = env.libraryFixture.addTrack(library::test::makeTrackSpec("Newer", 2021));
+    env.setupFiltered({{newer, older}});
+
+    auto projection = env.createProjection(ViewId{1});
+    auto spec =
+      TrackPresentationSpec{.groupBy = TrackGroupKey::Year, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}};
+    projection.setPresentation(spec);
+    REQUIRE(projection.groupCount() == 2);
+    REQUIRE(projection.trackIdAt(0) == older);
+    auto const before = rt::detail::RuntimeOperationProbe::counts(projection);
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const subscription =
+      projection.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    batches.clear();
+
+    spec.optColumnSort = TrackColumnSort{TrackField::Year, false};
+    projection.setPresentation(spec);
+    auto const overrideOnly = rt::detail::RuntimeOperationProbe::counts(projection);
+    CHECK(overrideOnly == before);
+    CHECK(batches.empty());
+    CHECK(projection.trackIdAt(0) == older);
+    auto const effectiveTerms = spec.effectiveSortBy();
+
+    spec.sortBy.push_back(TrackSortTerm{.field = TrackSortField::Year, .ascending = false});
+    REQUIRE(spec.effectiveSortBy() == effectiveTerms);
+    projection.setPresentation(spec);
+
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+    auto const after = rt::detail::RuntimeOperationProbe::counts(projection);
+    CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
+    CHECK(after.rowIndexRebuilds == before.rowIndexRebuilds + 1);
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(trackGroupHeadingYear(projection.groupAt(0).heading.primary) == 2021);
+    CHECK(trackGroupHeadingYear(projection.groupAt(1).heading.primary) == 2020);
+    CHECK(projection.trackIdAt(0) == newer);
+    CHECK(projection.trackIdAt(1) == older);
+    CHECK(projection.indexOf(older) == 1);
+  }
+
+  TEST_CASE("TrackListProjection - a new sort field rebuilds keys and changes row order")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -554,8 +644,11 @@ namespace ao::rt::test
       CHECK(optA->metadata().year() <= optB->metadata().year());
     }
 
+    auto const before = rt::detail::RuntimeOperationProbe::counts(proj);
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
+    auto const after = rt::detail::RuntimeOperationProbe::counts(proj);
+    CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds + 1);
     REQUIRE(proj.size() == 15);
 
     for (std::size_t i = 0; i < 14; ++i)

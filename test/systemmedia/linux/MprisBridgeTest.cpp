@@ -166,14 +166,13 @@ namespace ao::systemmedia::test
     rt::ViewId prepareAllTracksView(rt::AppRuntime& runtime)
     {
       runtime.sources().reloadAllTracks();
-      auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-      REQUIRE(listOrder != nullptr);
+      auto const& listOrder = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
       auto const res = runtime.workspace().navigate({
         .target = rt::GlobalViewKind::AllTracks,
         .optPresentation =
           rt::NavigationPresentation{
             .mode = rt::NavigationPresentationMode::Override,
-            .spec = listOrder->spec,
+            .spec = listOrder.spec,
           },
       });
       REQUIRE(res);

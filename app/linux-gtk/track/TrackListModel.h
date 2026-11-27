@@ -58,6 +58,9 @@ namespace ao::gtk
     /// they can restyle in place without replacing a list item or rebinding fields.
     sigc::signal<void()>& signalPlayingChanged() noexcept { return _playingChanged; }
 
+    /// Emitted before GTK reanchors its viewport to the old items' new positions.
+    sigc::signal<void()>& signalBeforeReset() noexcept { return _beforeReset; }
+
   protected:
     TrackListModel();
 
@@ -86,6 +89,7 @@ namespace ao::gtk
     TrackListItemPool _items;
     TrackId _playingTrackId{kInvalidTrackId};
     sigc::signal<void()> _playingChanged;
+    sigc::signal<void()> _beforeReset;
     std::size_t _modelSize = 0;
   };
 } // namespace ao::gtk

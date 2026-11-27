@@ -47,7 +47,7 @@ The submission task is created before any in-flight flag is armed, one submissio
 
 The outcomes are presented as follows:
 
-- Success closes the editor. A new List stays Auto, absence of a per-List presentation preference, and is opened, as the GTK sidebar selects it, so the created List on screen confirms the save; the opened view resolves the recommendation then. An edit never rewrites the List's stored preference, including absence or a dangling opaque id, and leaves the workspace where the user was. No preference write or extra notification claims the change.
+- Success closes the editor. A new List stays Auto, absence of a per-List presentation preference, and is opened, as the GTK sidebar selects it, so the created List on screen confirms the save; the opened view resolves the recommendation then. An edit never rewrites the List's stored preference, including absence or a key for an unavailable custom preset, and leaves the workspace where the user was. No preference write or extra notification claims the change.
 - A recoverable `Result` error keeps the draft and its binding and shows the runtime's diagnostic in the editor footer; `Ctrl-S` retries, because a List save carries no retained session that could go stale.
 - Cancellation restores the editable draft and reports the same retryable diagnostic; retirement suppresses all late presentation.
 

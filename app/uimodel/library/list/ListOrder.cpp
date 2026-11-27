@@ -63,6 +63,13 @@ namespace ao::uimodel
       return state;
     }
 
+    // Choosing the current view again clears only this override. The preset is not necessarily Manual Order.
+    if (input.presentation.optColumnSort)
+    {
+      state.disabledReason = i18n::requiredText(textCatalog, i18n::MessageId::ListOrderChooseCurrentView);
+      return state;
+    }
+
     state.canAuthorOrder = true;
     state.canAbsoluteMove = true;
     state.canResetOrder = true;

@@ -248,7 +248,7 @@
                             </MenuFlyout>
                         </Button.ContextFlyout>
                         <TextBlock
-                            Text="{x:Bind Text}"
+                            Text="{x:Bind Text, Mode=OneWay}"
                             TextAlignment="{x:Bind Alignment}"
                             TextTrimming="CharacterEllipsis"
                             HorizontalAlignment="Stretch"

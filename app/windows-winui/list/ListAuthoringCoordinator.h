@@ -12,6 +12,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
@@ -190,7 +191,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker _filterChangedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _previewTickRevoker{};
 
-    std::vector<std::string> _presentationIds;
+    std::vector<std::optional<rt::TrackPresetId>> _presentationIds;
     ListId _parentListId = kInvalidListId;
     ListId _editListId = kInvalidListId;
     ListId _deleteListId = kInvalidListId;

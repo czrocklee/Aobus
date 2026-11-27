@@ -38,10 +38,6 @@ namespace ao::uimodel::test
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());
 
-    auto const optId = std::optional<std::string>{std::string{presets[1].spec.id}};
-    CHECK(presets[1].spec.id == rt::kListOrderTrackPresentationId);
-    CHECK(resolveSmartListTrackPresentationIndex(optId, presets, {}) == 2);
-
     for (std::size_t index = 0; index < kPresetIds.size(); ++index)
     {
       CAPTURE(kPresetIds[index]);
@@ -58,9 +54,6 @@ namespace ao::uimodel::test
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());
-
-    CHECK(resolveSmartListTrackPresentationId(2, true, presets, {}) == presets[1].spec.id);
-    CHECK(presets[1].spec.id == rt::kListOrderTrackPresentationId);
 
     for (std::size_t index = 0; index < kPresetIds.size(); ++index)
     {
@@ -79,15 +72,14 @@ namespace ao::uimodel::test
     // empty id. A builtin selection is unaffected by the Auto semantics.
     CHECK(resolveSmartListTrackPresentationId(0, true, presets, {}).empty());
     CHECK(resolveSmartListTrackPresentationId(999, false, presets, {}).empty());
-    CHECK(resolveSmartListTrackPresentationId(2, true, presets, {}) == presets[1].spec.id);
+    CHECK(resolveSmartListTrackPresentationId(2, true, presets, {}) == "list-order");
   }
 
   TEST_CASE("SmartListPresentation - falls back for out-of-range manual selection")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
 
-    CHECK(resolveSmartListTrackPresentationId(presets.size() + 1, true, presets, {}) ==
-          rt::kDefaultTrackPresentationId);
+    CHECK(resolveSmartListTrackPresentationId(presets.size() + 1, true, presets, {}) == "library");
   }
 
   TEST_CASE("SmartListPresentation - round-trips custom presentations after the builtins")
@@ -95,27 +87,22 @@ namespace ao::uimodel::test
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() == kPresetIds.size());
 
-    auto makeCustom = [](std::string_view label, std::string_view id)
-    {
-      auto preset = rt::CustomTrackPresentationPreset{};
-      preset.label = std::string{label};
-      preset.spec.id = std::string{id};
-      return preset;
+    auto const customs = std::vector{
+      rt::CustomTrackPresentationPreset{.label = "Road focus", .spec = {.presetId = rt::CustomPresetId{0x1a}}},
+      rt::CustomTrackPresentationPreset{.label = "Jazz focus", .spec = {.presetId = rt::CustomPresetId{0x2b}}},
     };
-
-    auto const customs = std::vector{makeCustom("Road focus", "custom-road"), makeCustom("Jazz focus", "custom-jazz")};
 
     // A custom id selects its own option past the builtins and maps back unchanged.
     auto const firstIndex =
-      resolveSmartListTrackPresentationIndex(std::optional<std::string>{"custom-road"}, presets, customs);
+      resolveSmartListTrackPresentationIndex(std::optional<std::string>{"000000000000001a"}, presets, customs);
     auto const secondIndex =
-      resolveSmartListTrackPresentationIndex(std::optional<std::string>{"custom-jazz"}, presets, customs);
+      resolveSmartListTrackPresentationIndex(std::optional<std::string>{"000000000000002b"}, presets, customs);
 
     CHECK(firstIndex == presets.size() + 1);
     CHECK(secondIndex == presets.size() + 2);
 
-    CHECK(resolveSmartListTrackPresentationId(firstIndex, true, presets, customs) == "custom-road");
-    CHECK(resolveSmartListTrackPresentationId(secondIndex, true, presets, customs) == "custom-jazz");
+    CHECK(resolveSmartListTrackPresentationId(firstIndex, true, presets, customs) == "000000000000001a");
+    CHECK(resolveSmartListTrackPresentationId(secondIndex, true, presets, customs) == "000000000000002b");
 
     // Builtin behavior is unchanged while customs are present.
     CHECK(resolveSmartListTrackPresentationIndex(std::optional<std::string>{"list-order"}, presets, customs) == 2);
@@ -125,11 +112,11 @@ namespace ao::uimodel::test
     // to both spans still selects Auto.
     CHECK(resolveSmartListTrackPresentationIndex(std::nullopt, presets, customs) ==
           kSmartListAutoTrackPresentationIndex);
-    CHECK(resolveSmartListTrackPresentationIndex(std::optional<std::string>{"custom-missing"}, presets, customs) ==
+    CHECK(resolveSmartListTrackPresentationIndex(std::optional<std::string>{"000000000000003c"}, presets, customs) ==
           kSmartListAutoTrackPresentationIndex);
 
     // A manual selection past the builtins and the customs still falls back.
-    CHECK(resolveSmartListTrackPresentationId(presets.size() + customs.size() + 1, true, presets, customs) ==
-          rt::kDefaultTrackPresentationId);
+    auto const outOfRangeIndex = presets.size() + customs.size() + 1;
+    CHECK(resolveSmartListTrackPresentationId(outOfRangeIndex, true, presets, customs) == "library");
   }
 } // namespace ao::uimodel::test

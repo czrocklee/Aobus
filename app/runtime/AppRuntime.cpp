@@ -310,19 +310,12 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Cannot reveal an invalid track id");
     }
 
-    auto const* albums = builtinTrackPresentationPreset("albums");
-
-    if (albums == nullptr)
-    {
-      return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
-    }
-
     auto navigationRes = _implPtr->workspaceService.navigate(NavigationRequest{
       .target = GlobalViewKind::AllTracks,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::Override,
-          .spec = albums->spec,
+          .spec = builtinTrackPresentationPreset(BuiltinPreset::Albums).spec,
         },
     });
 

@@ -3,6 +3,8 @@
 
 #include <ao/rt/NavigationHistory.h>
 
+#include <ao/rt/TrackPresentation.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <optional>
@@ -36,6 +38,25 @@ namespace ao::rt
       *_optCurrentIndex -= 1;
     }
 
+    return true;
+  }
+
+  bool NavigationHistory::tryCheckpointColumnSort(NavigationPoint const& live)
+  {
+    if (!_optCurrentIndex || !live.presentation.optColumnSort)
+    {
+      return false;
+    }
+
+    auto& current = _points[*_optCurrentIndex];
+
+    if (current.listId != live.listId || current.filterExpression != live.filterExpression ||
+        (current.presentation != live.presentation && !current.presentation.hasOnlyColumnSortChange(live.presentation)))
+    {
+      return false;
+    }
+
+    current.presentation.optColumnSort = live.presentation.optColumnSort;
     return true;
   }
 

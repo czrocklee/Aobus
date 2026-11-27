@@ -126,7 +126,7 @@ Create or Save requires a named draft whose current preview allows submission. T
 A named draft with a blank local expression can still be submitted if its preview source is available, even if that source reports an inherited filter error. With a non-empty local expression, a filter error in the saved parent chain blocks submission and appears in the diagnostic.
 A rejected preview or write leaves the draft open with its diagnostic and changes neither the target nor the tree. These inline diagnostics are not posted to the feed. If the target is already gone when Edit is invoked, there is no editor: the failure is a retained Error and is also reported to the live status line.
 
-Once the List save succeeds, the editor pins the selected named presentation, or clears the pin for Auto or no valid selection. An unavailable stored id opens as Auto: saving in that state clears the pin; merely browsing to the List does not. A failed List save leaves the preference untouched.
+Once the List save succeeds, the editor pins the selected named presentation, or clears the pin for Auto or no valid selection. A stored key for an unavailable custom preset opens as Auto: saving in that state clears the pin; merely browsing to the List does not. A failed List save leaves the preference untouched.
 
 The editor then navigates with an `Override` so the history point records the resolved presentation. Even a rename reapplies the choice to a reused view, replacing a temporary header sort. If navigation fails, the editor reports a retained Error to the feed and the live status line and closes; the saved List and its preference remain. Successful navigation updates the status line without posting an activity notification.
 
@@ -169,9 +169,10 @@ List editor drafts, deletion previews, transfer plans, picker state, and dialog
 state are not persisted. Accepted List definitions, tags, membership, and saved
 order use their normal library mutation contracts. Per-List presentation and
 column preferences use shared `trackView.presentations` and
-`trackView.columnLayouts`; workspace owns the active view's current presentation
-and sorting. A failed preference-file write is logged and does not roll back the
-List save or the in-memory preference. Windows desktop paths and schema details
+`trackView.columnLayouts`; the [workspace session](../workspace/session.md)
+separately captures each live view's exact presentation, including its sort.
+A failed preference-file write is logged and does not roll back the List save or
+in-memory preference. Windows desktop paths and schema details
 remain in the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Implementation map

@@ -10,10 +10,12 @@
 #include "test/runtime/ExecutorTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -70,11 +72,10 @@ namespace ao::tui::test
       /// Opens the saved List in the shipped flat unsorted Manual Order presentation.
       rt::ViewId openManualOrderView() const
       {
-        auto const* const manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-        REQUIRE(manual != nullptr);
+        auto const& manual = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
         auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate(rt::NavigationRequest{
           .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
-          .optPresentation = rt::NavigationPresentation{.spec = manual->spec},
+          .optPresentation = rt::NavigationPresentation{.spec = manual.spec},
         }));
         executor->drain();
         return viewId;
@@ -83,11 +84,10 @@ namespace ao::tui::test
       /// Opens the saved List grouped by album, which cannot carry a manual order.
       rt::ViewId openGroupedView() const
       {
-        auto const* const albums = rt::builtinTrackPresentationPreset("albums");
-        REQUIRE(albums != nullptr);
+        auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums);
         auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate(rt::NavigationRequest{
           .target = rt::FilteredListTarget{.listId = listId, .filterExpression = {}},
-          .optPresentation = rt::NavigationPresentation{.spec = albums->spec},
+          .optPresentation = rt::NavigationPresentation{.spec = albums.spec},
         }));
         executor->drain();
         return viewId;
@@ -161,8 +161,24 @@ namespace ao::tui::test
   TEST_CASE("ListOrderController - a command without order capability reports its blocking reason", "[concurrency]")
   {
     auto fixture = OrderFixture{};
-    auto const viewId = fixture.openGroupedView();
     auto controller = fixture.makeController();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto viewId = rt::kInvalidViewId;
+    auto expected = ao::i18n::MessageId::ListOrderChooseFlatPresentation;
+
+    SECTION("grouped presentation")
+    {
+      viewId = fixture.openGroupedView();
+    }
+
+    SECTION("header override on the current preset")
+    {
+      viewId = fixture.openManualOrderView();
+      REQUIRE(fixture.runtimePtr->views().setColumnSort(
+        viewId, rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = true}));
+      fixture.executor->drain();
+      expected = ao::i18n::MessageId::ListOrderChooseCurrentView;
+    }
 
     controller.apply(ListOrderCommand::MoveDown, viewId, {fixture.first});
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
@@ -170,7 +186,7 @@ namespace ao::tui::test
     // The reason is guidance for this keypress, so it passes like any other
     // transient outcome instead of pinning a warning a later successful move
     // would leave standing.
-    CHECK(fixture.lastMessage() == "Choose Manual Order or another flat unsorted presentation to rearrange tracks.");
+    CHECK(fixture.lastMessage() == ao::i18n::requiredText(catalog, expected));
     CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
     CHECK(fixture.runtimePtr->notifications().feed().entries.back().lifetime.kind() ==
           rt::NotificationLifetimeKind::Transient);
@@ -240,9 +256,7 @@ namespace ao::tui::test
 
     // The presentation changes after the command bound its order but before
     // the submission reached the library.
-    auto const* const albums = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(albums != nullptr);
-    REQUIRE(fixture.runtimePtr->views().setPresentation(viewId, albums->spec));
+    REQUIRE(fixture.runtimePtr->workspace().setActivePresentation(rt::BuiltinPreset::Albums, {.recordHistory = false}));
     REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
 
     CHECK(fixture.notificationCount() == 1);

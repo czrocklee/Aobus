@@ -37,6 +37,7 @@ A healthy view model accepts stable values or a narrow command port and publishe
 Frontend adapters translate platform input into one UIModel/runtime action and semantic output into a platform representation.
 GTK and TUI must use the same runtime authority for equivalent actions.
 For example, playback launch crosses the boundary as `ViewId` plus `TrackId`; a frontend does not send a reconstructed row-order vector.
+Presentation pickers use shared catalog and eligibility policy and apply choices through [Workspace presentation commands](../system/workspace/navigation.md#change-active-presentation). Carry typed preset ids through runtime commands; parse stable keys only at text boundaries. Table headers pass only a view id and one `TrackColumnSort` to [`ViewService::setColumnSort()`](../system/workspace/navigation.md#sort-a-view-by-column); runtime stores that clicked column and direction as `optColumnSort` and does not change `presetId`. The full-spec setter on `ViewService` is private to the runtime collaboration with `WorkspaceService`.
 
 ## Workflow
 

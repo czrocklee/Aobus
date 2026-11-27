@@ -7,7 +7,9 @@ id: presentation.track-preset
 ## Scope and version
 
 This reference enumerates the runtime built-in `TrackPresentationPreset` identities, menu order, and structural intent.
-Preset ids are persistence-facing identifiers; the exact field, grouping, and sort vectors remain source-owned by `TrackPresentation.cpp` rather than duplicated here.
+Built-in identities are values of the closed `BuiltinPreset` enum; their canonical text form is the stable slug listed below, not an enum ordinal or display label. `CustomPresetId` is a strong unsigned 64-bit value. Its canonical text form is exactly 16 lowercase hexadecimal digits, including leading zeros and no `0x` prefix.
+`TrackPresetId` distinguishes those two kinds. The shared text parser accepts only the listed built-in slugs and canonical custom keys; it does not resolve whether a custom preset exists in the workspace.
+The exact field, grouping, and sort vectors remain source-owned by `TrackPresentation.cpp` rather than duplicated here.
 Exact built-in labels and descriptions belong to the [presentation text catalog](../../system/presentation/text-catalog.md).
 
 ## Code boundary
@@ -18,7 +20,7 @@ UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`
 
 ## Surface
 
-| Order | Id                     | Grouping and structural intent                                                                        |
+| Order | Built-in slug          | Grouping and structural intent                                                                        |
 | ----: | ---------------------- | ----------------------------------------------------------------------------------------------------- |
 |     1 | `library`              | Flat album-artist/album/disc/track order; global default.                                             |
 |     2 | `list-order`           | Flat source order; user-facing **Manual Order**, selected explicitly or by the New Playlist template. |
@@ -35,19 +37,20 @@ UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`
 |    13 | `technical`            | Flat technical summary, file size, and path.                                                          |
 
 The catalog order is the frontend menu order.
-Custom presets carry their own stable id, user-authored label, base preset id, and normalized presentation spec and follow the built-ins in catalogs.
+Custom presets carry their own stable id, user-authored label, optional base preset id, and normalized presentation spec and follow the built-ins in catalogs.
+A `TrackPresentationSpec` always has a `presetId` of type `TrackPresetId`. `sortBy` is that preset's base order of `TrackSortTerm` values. `optColumnSort` is an optional `TrackColumnSort`, the clicked column and direction, not a catalog entry. Custom-preset definitions must not carry it.
 Exact field ids and sort/group enum values used by those specs belong to the [runtime track field catalog](../library/model/track-field.md).
-`list-order` has no special storage semantics: its empty `sortBy` exposes source order, and saved Lists may write their independent rank overlay only while the active presentation is flat and unsorted.
+`list-order` has no special storage semantics: its empty `sortBy` exposes source order, and saved Lists may write their independent rank overlay only while the active presentation is flat and unsorted. A header override on Manual Order blocks that overlay. Choosing Manual Order again clears the temporary sort and restores source order.
 All Tracks does not own such an overlay, so frontends disable `list-order` for that virtual source.
 
 ## Validation rules
 
-`normalizeTrackPresentationSpec` removes duplicate visible and redundant field entries, replaces an empty id with the default `library` id, and supplies `Title` when the visible-field vector is empty.
-Persisted selection must resolve by id; unknown ids fall back through the owning preference contract.
+`normalizeTrackPresentationSpec` removes duplicate visible and redundant field entries and supplies `Title` when the visible-field vector is empty. It preserves `presetId` and `optColumnSort`. `defaultTrackPresentationSpec()` supplies the complete Library preset.
+A well-formed custom key may refer to a preset that is not in the current workspace. Its use as a stored preference follows the [List preference contract](../../system/presentation/list-preference.md#resolution).
 
 ## Compatibility and versioning
 
-Changing a built-in id breaks persisted selection and requires an explicit compatibility path.
+Changing a built-in slug breaks persisted selection and requires an explicit compatibility path.
 Fields, grouping, and sorting may evolve only with matching runtime presentation tests and behavioral documentation.
 Labels and descriptions may evolve only with matching UIModel catalog tests and catalog-reference updates.
 

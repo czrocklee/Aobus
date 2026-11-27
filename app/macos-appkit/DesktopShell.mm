@@ -12,6 +12,7 @@
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
@@ -23,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string_view>
 
 namespace
@@ -690,12 +692,24 @@ namespace
     {
       id const identifier = _presentation.selectedItem.representedObject;
 
-      if ([identifier isKindOfClass:NSString.class] == NO)
+      auto optPresetId = std::optional<ao::rt::TrackPresetId>{};
+
+      if (identifier != NSNull.null)
       {
-        return;
+        if ([identifier isKindOfClass:NSString.class] == NO)
+        {
+          return;
+        }
+
+        optPresetId = ao::rt::parseTrackPresetId(utf8(static_cast<NSString*>(identifier)));
+
+        if (!optPresetId)
+        {
+          return;
+        }
       }
 
-      if (auto res = _sessionPtr->setPresentation(utf8(static_cast<NSString*>(identifier))); !res)
+      if (auto const res = _sessionPtr->setPresentation(optPresetId); !res)
       {
         _sessionPtr->runtime().notifications().post(
           ao::rt::NotificationSeverity::Error, res.error().message, ao::rt::NotificationLifetime::history());

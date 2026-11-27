@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -29,7 +30,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -69,10 +69,6 @@ namespace ao::winui
     };
   } // namespace detail
 
-  /// Stable presentation id stamped when a column-header sort replaces the active
-  /// presentation; the presentation label resolves it to localized copy.
-  inline constexpr std::string_view kColumnSortPresentationId = "windows-column-sort";
-
   class TrackListController final
   {
   public:
@@ -98,7 +94,7 @@ namespace ao::winui
     TrackId trackIdAtDisplayIndex(std::size_t index) const noexcept;
     bool isCurrentRowSource(winrt::Windows::Foundation::IInspectable const& source) const noexcept;
     Result<> play(TrackId trackId, std::function<Result<>(rt::ViewId, TrackId)> const& playTrack);
-    Result<> toggleSort(rt::TrackSortField field);
+    Result<> toggleSort(rt::TrackField column);
     Result<> navigateTo(ListId listId);
     Result<> navigateTo(ListId listId, rt::NavigationPresentation presentation);
     Result<> revealTrack(rt::PlaybackRevealTrackRequest const& request);
@@ -108,7 +104,6 @@ namespace ao::winui
     Result<> setColumnVisible(std::string_view fieldId, bool visible);
     std::vector<uimodel::TrackColumnChoice> columnChoices() const;
     ListId activeListId() const;
-    std::string activePresentationId() const;
 
     winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Foundation::IInspectable> items()
       const noexcept
@@ -134,6 +129,8 @@ namespace ao::winui
     void handleProjectionBatch(rt::TrackListProjectionDeltaBatch const& batch);
     void refreshRows();
     void refreshColumns();
+    void handlePresentationChanged(rt::ViewId viewId);
+    void refreshSortIndicators(std::optional<rt::TrackColumnSort> optSort);
     void adoptWorkspaceView(rt::ViewId viewId);
     Result<rt::ViewId> focusExplicitReveal(rt::PlaybackRevealTrackRequest const& request);
     void storeColumnSpecs(ListId listId, std::span<uimodel::TrackColumnSolveSpec const> specs);
@@ -152,10 +149,13 @@ namespace ao::winui
     winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable> _headers;
     async::Subscription _projectionSub;
     async::Subscription _viewProjectionSub;
+    async::Subscription _presentationSub;
     async::Subscription _workspaceSub;
     uimodel::TrackDisplayIndex _displayIndex;
     TrackRevealIntent _revealIntent{};
     std::vector<TrackColumnCellSpec> _columns;
+    std::optional<rt::TrackColumnSort> _optHeaderSort; // The mark on the visible headers, not the view's order.
+
     std::int32_t _viewportWidth = kDefaultViewportWidth;
     std::int32_t _surfaceViewportWidth = kDefaultViewportWidth;
     std::int32_t _trailingChromeWidth = 0;

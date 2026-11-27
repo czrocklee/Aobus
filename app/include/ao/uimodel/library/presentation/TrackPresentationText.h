@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 
 #include <cstddef>
@@ -33,10 +34,10 @@ namespace ao::uimodel
   };
 
   std::string_view trackFieldLabel(i18n::MessageCatalog const& catalog, rt::TrackField field) noexcept;
+  std::string_view trackSortFieldLabel(i18n::MessageCatalog const& catalog, rt::TrackSortField field) noexcept;
   std::string_view trackGroupKeyLabel(i18n::MessageCatalog const& catalog, rt::TrackGroupKey key) noexcept;
   std::string_view missingTrackValueLabel(i18n::MessageCatalog const& catalog, rt::MissingTrackValueKind kind) noexcept;
-  std::optional<TrackPresentationText> builtinTrackPresentation(i18n::MessageCatalog const& catalog,
-                                                                std::string_view id) noexcept;
+  TrackPresentationText builtinTrackPresentation(i18n::MessageCatalog const& catalog, rt::BuiltinPreset preset);
   std::string completionDetail(i18n::MessageCatalog const& catalog, rt::CompletionDetail const& detail);
   std::string trackSelectionSummary(i18n::MessageCatalog const& catalog,
                                     std::size_t count,

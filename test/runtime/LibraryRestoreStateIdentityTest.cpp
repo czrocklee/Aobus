@@ -109,12 +109,10 @@ namespace ao::rt::test
       REQUIRE(runtimePtr->savePlaybackSession());
 
       REQUIRE(runtimePtr->workspace().navigate({.target = savedListId}));
-      auto const* songsPreset = builtinTrackPresentationPreset("songs");
-      REQUIRE(songsPreset != nullptr);
-      auto customSpec = songsPreset->spec;
-      customSpec.id = "custom.kept";
+      auto customSpec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+      customSpec.presetId = CustomPresetId{42};
       REQUIRE(runtimePtr->workspace().addCustomPreset(
-        CustomTrackPresentationPreset{.label = "Kept", .basePresetId = "songs", .spec = customSpec}));
+        CustomTrackPresentationPreset{.label = "Kept", .optBasePresetId = BuiltinPreset::Songs, .spec = customSpec}));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
 
       auto layoutStore = ConfigStore{layoutPath};
@@ -126,7 +124,8 @@ namespace ao::rt::test
                     },
                     uimodel::TrackColumnLayoutYamlSchema{libraryId}),
         configWrite(uimodel::kListPresentationsConfigGroup,
-                    uimodel::ListPresentations::Snapshot{{savedListId, "albums"}, {kAllTracksListId, "songs"}},
+                    uimodel::ListPresentations::Snapshot{
+                      {savedListId, BuiltinPreset::Albums}, {kAllTracksListId, BuiltinPreset::Songs}},
                     uimodel::ListPresentationPreferenceYamlSchema{libraryId})));
 
       REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().jobs().exportLibraryAsync(yamlPath, ExportMode::Full)));

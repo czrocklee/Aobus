@@ -1,6 +1,6 @@
 namespace Aobus
 {
-    runtimeclass TrackCellItem
+    runtimeclass TrackCellItem : Microsoft.UI.Xaml.Data.INotifyPropertyChanged
     {
         TrackCellItem(String text, String fieldId, Double width, Boolean sortable, String resizeName);
         String Text{ get; };

@@ -15,6 +15,7 @@
 #include "test/tui/EventControllerTestSupport.h"
 #include "test/tui/KeymapTestSupport.h"
 #include "test/tui/RenderTestSupport.h"
+#include "tui/CommandCompletion.h"
 #include "tui/CommandPalettePanel.h"
 #include "tui/HitRegions.h"
 #include "tui/Keymap.h"
@@ -156,7 +157,7 @@ namespace ao::tui::test
       REQUIRE(playback.snapshot().transport.duration > std::chrono::milliseconds{0});
     }
 
-    void enterCommand(EventController& controller, std::string_view text)
+    void typeCommand(EventController& controller, std::string_view text)
     {
       CHECK(controller.tryHandleEvent(ftxui::Event::Character(":")));
 
@@ -164,8 +165,24 @@ namespace ao::tui::test
       {
         CHECK(controller.tryHandleEvent(ftxui::Event::Character(std::string{ch})));
       }
+    }
 
+    void enterCommand(EventController& controller, std::string_view text)
+    {
+      typeCommand(controller, text);
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    }
+
+    std::vector<std::string> trackTitles(LibraryController const& library)
+    {
+      auto titles = std::vector<std::string>{};
+
+      for (auto const& track : library.tracks())
+      {
+        titles.push_back(track.row.title);
+      }
+
+      return titles;
     }
 
     void enterQuickFilter(EventController& controller, std::string_view text)
@@ -230,9 +247,10 @@ namespace ao::tui::test
       fixture.executor->drain();
 
       openList(library, listId);
-      REQUIRE(library.trySetSelectedPresentation(presentationIndex(library, rt::kListOrderTrackPresentationId)));
+      REQUIRE(library.trySetSelectedPresentation(
+        presentationIndex(library, rt::builtinPresetKey(rt::BuiltinPreset::ListOrder))));
       REQUIRE(library.selectSelectedPresentation());
-      REQUIRE(library.activePresentationId() == rt::kListOrderTrackPresentationId);
+      REQUIRE(library.activePresentation().isPreset(rt::BuiltinPreset::ListOrder));
 
       // The projection replacement the presentation switch schedules is queued
       // on the callback executor; settle it before the test drives the shell.
@@ -1259,7 +1277,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() >= 2);
     auto const secondSection = library.sections()[1];
     auto controller = fixture.makeEvents(library);
@@ -1631,7 +1649,9 @@ namespace ao::tui::test
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtimePtr->views().trackListState(library.activeViewId()).presentation.id == "albums");
+    CHECK(fixture.runtimePtr->views()
+            .trackListState(library.activeViewId())
+            .presentation.isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("EventController - rejected presentation choices preserve the All Tracks view and pin")
@@ -1648,11 +1668,11 @@ namespace ao::tui::test
     // Replaying back leaves an exact active view different from its pin, and
     // exposes any rejected choice that accidentally truncates forward history.
     auto& workspace = fixture.runtimePtr->workspace();
-    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, "songs");
-    auto const forwardPresentation = ao::test::requireValue(workspace.setActivePresentation("songs"));
+    fixture.listPresentations.setPresentationIdForList(rt::kAllTracksListId, rt::BuiltinPreset::Songs);
+    auto const forwardPresentation = ao::test::requireValue(workspace.setActivePresentation(rt::BuiltinPreset::Songs));
     REQUIRE(library.navigateHistory(false));
     fixture.executor->drain();
-    REQUIRE(library.activePresentationId() == "albums");
+    REQUIRE(library.activePresentation().isPreset(rt::BuiltinPreset::Albums));
     REQUIRE_FALSE(workspace.canGoBack());
     REQUIRE(workspace.canGoForward());
     auto const workspaceBefore = workspace.snapshot();
@@ -1666,7 +1686,7 @@ namespace ao::tui::test
       auto& hitRegions = fixture.hitRegions;
       return renderText(mousePanel(presentationPanel(textCatalog,
                                                      library.presentationEntries(),
-                                                     library.activePresentationId(),
+                                                     library.activePresentation().presetId,
                                                      library.selectedPresentation(),
                                                      defaultKeymapPlan(),
                                                      &hitRegions.presentationRows,
@@ -1687,7 +1707,7 @@ namespace ao::tui::test
     {
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("p")));
       REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
-      highlightPresentation(controller, library, rt::kListOrderTrackPresentationId);
+      highlightPresentation(controller, library, rt::builtinPresetKey(rt::BuiltinPreset::ListOrder));
       auto const selectedIndex = library.selectedPresentation();
       CHECK(renderPicker().contains(reason));
 
@@ -1702,8 +1722,8 @@ namespace ao::tui::test
       REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
       std::ignore = renderPicker();
       auto const& rows = fixture.hitRegions.presentationRows;
-      auto const row =
-        std::ranges::find(rows, rt::kListOrderTrackPresentationId, &PresentationRowHitRegion::presentationId);
+      auto const row = std::ranges::find(
+        rows, rt::builtinPresetKey(rt::BuiltinPreset::ListOrder), &PresentationRowHitRegion::presentationId);
       REQUIRE(row != rows.end());
 
       CHECK(controller.tryHandleEvent(clickBox(row->box)));
@@ -1726,7 +1746,8 @@ namespace ao::tui::test
     CHECK(library.activeViewId() == workspaceBefore.activeViewId);
     CHECK(library.activePresentation() == presentationBefore);
     CHECK(workspace.snapshot() == workspaceBefore);
-    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == "songs");
+    CHECK(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) ==
+          rt::TrackPresetId{rt::BuiltinPreset::Songs});
     CHECK_FALSE(workspace.canGoBack());
     REQUIRE(workspace.canGoForward());
     REQUIRE(library.navigateHistory(true));
@@ -1764,7 +1785,8 @@ namespace ao::tui::test
     auto const checkManualOrderEnabled = [&library](bool const enabled)
     {
       auto const& entries = library.presentationEntries();
-      auto const entry = std::ranges::find(entries, rt::kListOrderTrackPresentationId, &TrackPresentationNavEntry::id);
+      auto const entry =
+        std::ranges::find(entries, rt::builtinPresetKey(rt::BuiltinPreset::ListOrder), &TrackPresentationNavEntry::id);
       REQUIRE(entry != entries.end());
       CHECK(entry->enabled == enabled);
     };
@@ -1773,7 +1795,7 @@ namespace ao::tui::test
     openList(library, listId);
     checkManualOrderEnabled(true);
     auto controller = fixture.makeEvents(library);
-    REQUIRE(library.activePresentationId() != rt::kListOrderTrackPresentationId);
+    REQUIRE_FALSE(library.activePresentation().isPreset(rt::BuiltinPreset::ListOrder));
     REQUIRE_FALSE(fixture.listPresentations.presentationIdForList(listId));
 
     SECTION("by command")
@@ -1786,14 +1808,14 @@ namespace ao::tui::test
     {
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("p")));
       REQUIRE(fixture.shell.overlay() == Overlay::PresentationPanel);
-      highlightPresentation(controller, library, rt::kListOrderTrackPresentationId);
+      highlightPresentation(controller, library, rt::builtinPresetKey(rt::BuiltinPreset::ListOrder));
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
       CHECK(fixture.shell.overlay() == Overlay::None);
     }
 
     CHECK(library.currentListId() == listId);
-    CHECK(library.activePresentationId() == rt::kListOrderTrackPresentationId);
-    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::kListOrderTrackPresentationId);
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::ListOrder));
+    CHECK(fixture.listPresentations.presentationIdForList(listId) == rt::TrackPresetId{rt::BuiltinPreset::ListOrder});
   }
 
   TEST_CASE("EventController - presentation navigation keys move within views")
@@ -1928,7 +1950,9 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
 
     enterCommand(controller, "view albums");
-    CHECK(fixture.runtimePtr->views().trackListState(library.activeViewId()).presentation.id == "albums");
+    CHECK(fixture.runtimePtr->views()
+            .trackListState(library.activeViewId())
+            .presentation.isPreset(rt::BuiltinPreset::Albums));
 
     enterCommand(controller, "reload");
     CHECK(library.tracks().size() == 2);
@@ -2374,7 +2398,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() == 2);
     auto const pairIt = std::ranges::find(library.sections(), std::size_t{2}, &TrackSection::rowCount);
     REQUIRE(pairIt != library.sections().end());
@@ -2564,7 +2588,9 @@ namespace ao::tui::test
     auto clickRow = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 12};
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", clickRow)));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtimePtr->views().trackListState(library.activeViewId()).presentation.id == "albums");
+    CHECK(fixture.runtimePtr->views()
+            .trackListState(library.activeViewId())
+            .presentation.isPreset(rt::BuiltinPreset::Albums));
   }
 
   TEST_CASE("EventController - notification shortcut opens available activity details")
@@ -2647,6 +2673,293 @@ namespace ao::tui::test
     // itself stays in the feed, alongside whatever the overlay itself posted.
     auto const entries = fixture.runtimePtr->notifications().feed().entries;
     CHECK(std::ranges::any_of(entries, [notificationId](auto const& entry) { return entry.id == notificationId; }));
+  }
+
+  TEST_CASE("EventController - Return resolves sort arguments against eligible completions")
+  {
+    using enum rt::TrackField;
+    auto fixture = EventControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "Third", .year = 1990});
+    auto library = fixture.makeLibrary();
+    auto const presetId = rt::CustomPresetId{1};
+    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+      .label = "Sort columns",
+      .spec = {.presetId = presetId,
+               .sortBy = {{.field = rt::TrackSortField::Title}},
+               .visibleFields = {MovementNumber, Movement, Title, Year}},
+    }));
+    REQUIRE(library.setPresentation(presetId));
+    auto const complete = [&library](std::string_view const draft, std::size_t const cursor)
+    {
+      auto const columns = library.sortableTrackColumns();
+      return completeCommandDraft(library.textCatalog(), draft, cursor, {.sortableColumns = columns});
+    };
+    auto controller = fixture.makeEvents(library, defaultKeymapPlan(), complete);
+    REQUIRE(trackTitles(library) == std::vector<std::string>{"First", "Second", "Third"});
+
+    SECTION("an incomplete ID uses the highlighted eligible column")
+    {
+      typeCommand(controller, "sort yea");
+      REQUIRE(fixture.shell.commandCompletion());
+      REQUIRE(fixture.shell.commandCompletion()->items.front().insertText == "year");
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK_FALSE(fixture.shell.isInputActive());
+      CHECK(library.activePresentation().optColumnSort == rt::TrackColumnSort{.column = Year});
+      CHECK(trackTitles(library) == std::vector<std::string>{"Third", "First", "Second"});
+    }
+
+    SECTION("an exact ID wins over a different implicit candidate")
+    {
+      typeCommand(controller, "sort MOVEMENT");
+      REQUIRE(fixture.shell.commandCompletion());
+      REQUIRE(fixture.shell.commandCompletion()->items.front().insertText == "movement-number");
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(library.activePresentation().optColumnSort == rt::TrackColumnSort{.column = Movement});
+    }
+
+    SECTION("explicit navigation can override the exact typed ID")
+    {
+      typeCommand(controller, "sort MOVEMENT");
+      REQUIRE(fixture.shell.commandCompletion());
+      REQUIRE(fixture.shell.commandCompletion()->items.front().insertText == "movement-number");
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowUp));
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(library.activePresentation().optColumnSort == rt::TrackColumnSort{.column = MovementNumber});
+    }
+
+    SECTION("a nonexistent column without candidates still warns")
+    {
+      auto const before = notificationCount(fixture);
+      typeCommand(controller, "sort nonexistent");
+      REQUIRE_FALSE(fixture.shell.commandCompletion());
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK_FALSE(fixture.shell.isInputActive());
+      CHECK_FALSE(library.activePresentation().optColumnSort);
+      REQUIRE(notificationCount(fixture) == before + 1);
+      auto const warning = i18n::requiredFormat(
+        library.textCatalog(), i18n::MessageId::TrackSortColumnUnavailable, {{"column", "nonexistent"}});
+      CHECK(lastNotification(fixture) == warning);
+    }
+
+    SECTION("bare sort opens argument choices without sorting")
+    {
+      enterCommand(controller, "sort");
+      CHECK(fixture.shell.isInputActive());
+      CHECK(fixture.shell.inputDraft() == "sort ");
+      REQUIRE(fixture.shell.commandCompletion());
+      CHECK(fixture.shell.commandCompletion()->items.front().insertText == "movement-number");
+      CHECK_FALSE(library.activePresentation().optColumnSort);
+    }
+  }
+
+  TEST_CASE("EventController - the sort command and a header click reverse the same column sort")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Songs));
+    auto& hitRegions = fixture.hitRegions;
+    hitRegions.trackTableBox = ftxui::Box{.x_min = 0, .x_max = 90, .y_min = 2, .y_max = 18};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
+    auto controller = fixture.makeEvents(library);
+
+    enterCommand(controller, "sort TITLE");
+    CHECK(library.activePresentation().isPreset(rt::BuiltinPreset::Songs));
+    CHECK(library.activePresentation().optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Title});
+    REQUIRE(library.tracks().size() == 2);
+    CHECK(library.tracks().front().row.title == "First");
+    CHECK(library.tracks().back().row.title == "Second");
+
+    auto const press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 2};
+    // Rows did not change, but this hit target still represents a header without the arrow.
+    REQUIRE(hitRegions.trackTableRevision == library.trackRowsRevision());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", press)));
+    REQUIRE(library.tracks().front().row.title == "First");
+    std::ignore = renderElement(trackTableView(library.textCatalog(),
+                                               library.tracks(),
+                                               library.selectedTrack(),
+                                               kInvalidTrackId,
+                                               library.activePresentation(),
+                                               {.resizeHandles = &hitRegions.trackColumnResizeHandles,
+                                                .tableBox = &hitRegions.trackTableBox,
+                                                .availableColumns = 90}),
+                                90,
+                                8);
+    auto const title =
+      std::ranges::find(hitRegions.trackColumnResizeHandles, rt::TrackField::Title, &TrackColumnResizeHandle::field);
+    REQUIRE(title != hitRegions.trackColumnResizeHandles.end());
+    REQUIRE(controller.tryHandleEvent(clickBox(title->box)));
+    REQUIRE(library.tracks().size() == 2);
+    CHECK(library.tracks().front().row.title == "Second");
+    CHECK(library.tracks().back().row.title == "First");
+    CHECK(fixture.trackColumnResizePreview.layout.empty());
+
+    auto const picker = renderText(presentationPanel(library.textCatalog(),
+                                                     library.presentationEntries(),
+                                                     library.activePresentation().presetId,
+                                                     library.selectedPresentation(),
+                                                     defaultKeymapPlan()),
+                                   80);
+    CHECK(lineIndexContaining(picker, "Songs") == 0);
+    CHECK(picker.contains("* Songs"));
+  }
+
+  TEST_CASE("EventController - columns with the same sort key keep independent header directions")
+  {
+    using enum rt::TrackField;
+    auto const columns =
+      GENERATE((std::array{Movement, MovementNumber}), (std::array{TrackNumber, DisplayTrackNumber}));
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto const presetId = rt::CustomPresetId{1};
+    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+      .label = "Paired columns",
+      .spec = {.presetId = presetId, .visibleFields = {columns[0], columns[1]}},
+    }));
+    REQUIRE(library.setPresentation(presetId));
+    auto& hitRegions = fixture.hitRegions;
+    auto controller = fixture.makeEvents(library);
+
+    auto const headerBox = [&hitRegions](rt::TrackField const field)
+    {
+      auto const it = std::ranges::find(hitRegions.trackColumnResizeHandles, field, &TrackColumnResizeHandle::field);
+      REQUIRE(it != hitRegions.trackColumnResizeHandles.end());
+      return it->box;
+    };
+    auto const renderTable = [&]
+    {
+      hitRegions.trackTableRevision = library.trackRowsRevision();
+      return renderElement(trackTableView(library.textCatalog(),
+                                          library.tracks(),
+                                          library.selectedTrack(),
+                                          kInvalidTrackId,
+                                          library.activePresentation(),
+                                          {.resizeHandles = &hitRegions.trackColumnResizeHandles,
+                                           .tableBox = &hitRegions.trackTableBox,
+                                           .availableColumns = 80}),
+                           80,
+                           8);
+    };
+    auto const checkSort = [&](rt::TrackField const column, bool const ascending)
+    {
+      CHECK(library.activePresentation().optColumnSort ==
+            rt::TrackColumnSort{.column = column, .ascending = ascending});
+      auto const rendered = renderTable();
+      auto const arrow = std::string_view{ascending ? "↑" : "↓"};
+      auto const optArrow = findTextCells(rendered.screen, arrow);
+      REQUIRE(optArrow);
+      CHECK(headerBox(column).Contain(optArrow->x_min, optArrow->y_min));
+      CHECK(rendered.text.find(arrow) == rendered.text.rfind(arrow));
+      CHECK_FALSE(rendered.text.contains(ascending ? "↓" : "↑"));
+    };
+
+    CHECK_FALSE(renderTable().text.contains("↑"));
+    REQUIRE(controller.tryHandleEvent(clickBox(headerBox(columns[1]))));
+    checkSort(columns[1], true);
+    REQUIRE(controller.tryHandleEvent(clickBox(headerBox(columns[1]))));
+    checkSort(columns[1], false);
+
+    enterCommand(controller, columns[0] == Movement ? "sort movement" : "sort track-number");
+    checkSort(columns[0], true);
+    REQUIRE(controller.tryHandleEvent(clickBox(headerBox(columns[1]))));
+    checkSort(columns[1], true);
+  }
+
+  TEST_CASE("EventController - the painted Japanese Year header sorts on click and resizes on drag")
+  {
+    using ftxui::Mouse;
+    auto fixture = EventControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "Third", .year = 1990});
+    auto library = fixture.makeLibrary();
+    auto const presetId = rt::CustomPresetId{1};
+    REQUIRE(fixture.runtimePtr->workspace().addCustomPreset({
+      .label = "Year and Title",
+      .spec = {.presetId = presetId,
+               .sortBy = {{.field = rt::TrackSortField::Title}},
+               .visibleFields = {rt::TrackField::Year, rt::TrackField::Title}},
+    }));
+    REQUIRE(library.setPresentation(presetId));
+    auto controller = fixture.makeEvents(library);
+    auto& hit = fixture.hitRegions;
+    auto const catalog = ao::test::messageCatalog("ja");
+    auto const renderTable = [&]
+    {
+      auto const layout = projectTerminalTrackColumnLayout(
+        library.activePresentation(), fixture.trackColumnLayouts.layoutForList(library.currentListId()), 80);
+      hit.trackTableRevision = library.trackRowsRevision();
+      return renderElement(
+        trackTableView(
+          catalog,
+          library.tracks(),
+          library.selectedTrack(),
+          kInvalidTrackId,
+          library.activePresentation(),
+          {.columnLayout = &layout, .resizeHandles = &hit.trackColumnResizeHandles, .tableBox = &hit.trackTableBox}),
+        80,
+        8);
+    };
+    auto const rendered = renderTable();
+    auto const optLabel = findTextCells(rendered.screen, "年");
+    auto const optRule = findTextCells(rendered.screen, "│");
+    REQUIRE(optLabel);
+    REQUIRE(optRule);
+    REQUIRE_FALSE(hit.trackColumnResizeHandles.empty());
+    auto const yearHeader = hit.trackColumnResizeHandles.front();
+    REQUIRE(yearHeader.field == rt::TrackField::Year);
+    CHECK(optLabel->x_min + 1 == yearHeader.box.x_max);
+    CHECK(optRule->y_min == optLabel->y_min);
+    auto const pointer = [&](Mouse::Motion const motion, std::int32_t const x)
+    {
+      return controller.tryHandleEvent(
+        ftxui::Event::Mouse("", {.button = Mouse::Left, .motion = motion, .x = x, .y = optLabel->y_min}));
+    };
+
+    SECTION("either cell of the wide glyph accepts a stationary sort click")
+    {
+      auto const x = optLabel->x_min + GENERATE(0, 1);
+      REQUIRE(pointer(Mouse::Pressed, x));
+      CHECK_FALSE(library.activePresentation().optColumnSort);
+      REQUIRE(pointer(Mouse::Released, x));
+      CHECK(library.activePresentation().optColumnSort == rt::TrackColumnSort{.column = rt::TrackField::Year});
+      CHECK(trackTitles(library) == std::vector<std::string>{"Third", "First", "Second"});
+      CHECK(fixture.trackColumnLayouts.snapshot().empty());
+    }
+
+    SECTION("both the label and separator can start a resize without sorting")
+    {
+      auto const fromRule = GENERATE(false, true);
+      auto const x = fromRule ? optRule->x_min : optLabel->x_min;
+
+      if (fromRule)
+      {
+        REQUIRE(pointer(Mouse::Pressed, x));
+        REQUIRE(pointer(Mouse::Released, x));
+        CHECK_FALSE(library.activePresentation().optColumnSort);
+        CHECK(fixture.trackColumnLayouts.snapshot().empty());
+      }
+
+      REQUIRE(pointer(Mouse::Pressed, x));
+      REQUIRE(pointer(Mouse::Moved, x + 5));
+      CHECK_FALSE(fixture.trackColumnResizePreview.layout.empty());
+      CHECK(fixture.trackColumnLayouts.snapshot().empty());
+      REQUIRE(pointer(Mouse::Released, x + 5));
+      CHECK(fixture.trackColumnResizePreview.layout.empty());
+      CHECK_FALSE(library.activePresentation().optColumnSort);
+      CHECK(trackTitles(library) == std::vector<std::string>{"First", "Second", "Third"});
+      renderTable();
+      REQUIRE_FALSE(hit.trackColumnResizeHandles.empty());
+      CHECK(hit.trackColumnResizeHandles.front().columns == yearHeader.columns + 5);
+    }
+
+    SECTION("returning to the label after dragging does not sort")
+    {
+      auto const x = optLabel->x_min + 1;
+      REQUIRE(pointer(Mouse::Pressed, x));
+      REQUIRE(pointer(Mouse::Moved, x + 5));
+      REQUIRE(pointer(Mouse::Released, x));
+      CHECK_FALSE(library.activePresentation().optColumnSort);
+      CHECK(fixture.trackColumnLayouts.snapshot().empty());
+    }
   }
 
   TEST_CASE("EventController - column resize previews then commits once on release")
@@ -2953,7 +3266,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() >= 2);
     auto const expected = library.sections()[1];
     auto controller = fixture.makeEvents(library);
@@ -2971,7 +3284,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() >= 2);
     auto controller = fixture.makeEvents(library);
 
@@ -2986,7 +3299,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() >= 2);
     auto const expected = library.sections()[1];
     auto& hitRegions = fixture.hitRegions;
@@ -3003,7 +3316,7 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("songs") == "View: songs");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Songs) == "View: songs");
     REQUIRE(library.sections().empty());
     auto& hitRegions = fixture.hitRegions;
     hitRegions.trackSectionRows = {
@@ -3023,7 +3336,7 @@ namespace ao::tui::test
     fixture.addTrack(
       library::test::TrackSpec{.title = "Two", .artist = "Alpha", .album = "Zulu", .albumArtist = "Alpha"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     auto controller = fixture.makeEvents(library);
     auto const count = library.sections().size();
     REQUIRE(count >= 2);
@@ -3039,7 +3352,7 @@ namespace ao::tui::test
                                         24);
     auto const& box = fixture.hitRegions.trackSectionRows[1].box;
     REQUIRE_FALSE(box.IsEmpty());
-    REQUIRE(library.setPresentation("artists") == "View: artists");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Artists) == "View: artists");
     REQUIRE(library.sections().size() == count);
     auto const& currentSection = library.sections()[1];
     REQUIRE((currentSection.primaryText != previousSection.primaryText ||
@@ -3065,7 +3378,7 @@ namespace ao::tui::test
 
       if (refreshBeforePress)
       {
-        REQUIRE(library.setPresentation("albums") == "View: albums");
+        REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
       }
 
       controller.tryHandleEvent(
@@ -3073,7 +3386,7 @@ namespace ao::tui::test
 
       if (!refreshBeforePress)
       {
-        REQUIRE(library.setPresentation("albums") == "View: albums");
+        REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
       }
 
       controller.tryHandleEvent(
@@ -3405,7 +3718,7 @@ namespace ao::tui::test
     fixture.addTrack(library::test::TrackSpec{
       .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
-    REQUIRE(library.setPresentation("albums") == "View: albums");
+    REQUIRE(library.setPresentation(rt::BuiltinPreset::Albums) == "View: albums");
     REQUIRE(library.sections().size() >= 2);
     auto& hitRegions = fixture.hitRegions;
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
@@ -3677,10 +3990,10 @@ namespace ao::tui::test
       PlaybackModeChoice{.repeat = rt::RepeatMode::One},
       PlaybackModeChoice{},
     };
-    bool first = true;
 
-    for (auto const choice : expected)
+    for (std::size_t index = 0; index < expected.size(); ++index)
     {
+      auto const choice = expected[index];
       auto const state = currentPlayback(fixture).succession;
       auto const rendered = renderElement(
         playbackBar(
@@ -3692,11 +4005,10 @@ namespace ao::tui::test
       auto const& box = fixture.hitRegions.playbackModeBox;
       REQUIRE(box.x_max - box.x_min + 1 == 6);
 
-      if (first)
+      if (index == 0)
       {
         mouse.x = box.x_max;
         mouse.y = box.y_min;
-        first = false;
       }
 
       CHECK(box.Contain(mouse.x, mouse.y));

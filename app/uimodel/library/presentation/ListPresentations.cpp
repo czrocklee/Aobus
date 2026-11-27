@@ -14,20 +14,17 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
-#include <map>
 #include <optional>
 #include <ranges>
 #include <span>
-#include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::uimodel
 {
-  bool isTrackPresentationEligibleForList(ListId const listId, std::string_view const presentationId) noexcept
+  bool isTrackPresentationEligibleForList(ListId const listId, rt::TrackPresetId const& id) noexcept
   {
-    return listId != rt::kAllTracksListId || presentationId != rt::kListOrderTrackPresentationId;
+    return listId != rt::kAllTracksListId || id != rt::TrackPresetId{rt::BuiltinPreset::ListOrder};
   }
 
   ListPresentations::ListPresentations(TrackPresentationCatalog& catalog, rt::LibraryChanges const& changes)
@@ -89,7 +86,7 @@ namespace ao::uimodel
     _changedPtr->emit(kInvalidListId);
   }
 
-  std::optional<std::string_view> ListPresentations::presentationIdForList(ListId const listId) const
+  std::optional<rt::TrackPresetId> ListPresentations::presentationIdForList(ListId const listId) const
   {
     if (auto const it = _presentations.find(listId); it != _presentations.end())
     {
@@ -99,27 +96,19 @@ namespace ao::uimodel
     return std::nullopt;
   }
 
-  void ListPresentations::setPresentationIdForList(ListId const listId, std::string_view const presentationId)
+  void ListPresentations::setPresentationIdForList(ListId const listId, rt::TrackPresetId const presentationId)
   {
     if (listId == kInvalidListId)
     {
       return;
     }
 
-    auto const strId = std::string{presentationId};
-
-    if (strId.empty())
-    {
-      clearPresentationForList(listId);
-      return;
-    }
-
-    if (auto const it = _presentations.find(listId); it != _presentations.end() && it->second == strId)
+    if (auto const it = _presentations.find(listId); it != _presentations.end() && it->second == presentationId)
     {
       return;
     }
 
-    _presentations[listId] = strId;
+    _presentations.insert_or_assign(listId, presentationId);
     _changedPtr->emit(listId);
   }
 
@@ -141,11 +130,11 @@ namespace ao::uimodel
         return *optSpec;
       }
 
-      APP_LOG_DEBUG(
-        "ListPresentations: saved presentation id '{}' is unavailable; using recommendation fallback", *optId);
+      APP_LOG_DEBUG("ListPresentations: saved presentation id '{}' is unavailable; using recommendation fallback",
+                    rt::trackPresetKey(*optId));
     }
 
-    return recommendListPresentation(context, _catalog.builtinPresets(), _catalog.customPresentations());
+    return recommendListPresentation(context, _catalog.builtinPresets());
   }
 
   rt::TrackPresentationSpec ListPresentations::presentationForList(ListId const listId,

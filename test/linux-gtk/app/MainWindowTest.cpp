@@ -945,8 +945,9 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const workspacePath = std::filesystem::path{fixture.tempDir().path()} / "config.yaml";
+    // The current schema still rejects a document missing its library id.
     auto const rejected = std::string{"workspace:\n"
-                                      "  presentationVersion: 2\n"
+                                      "  presentationVersion: 3\n"
                                       "  openViews: []\n"
                                       "  activeViewIndex: 0\n"
                                       "  customPresets: []\n"};
@@ -1512,9 +1513,8 @@ namespace ao::gtk::test
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     auto const viewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(viewId != rt::kInvalidViewId);
-    auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
-    REQUIRE(listOrder != nullptr);
-    REQUIRE(runtime.views().setPresentation(viewId, listOrder->spec));
+    auto const& listOrder = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ListOrder);
+    REQUIRE(runtime.workspace().setActivePresentation(listOrder.spec, {.recordHistory = false}));
     REQUIRE(playback.commands().startFromView(viewId, track1));
     REQUIRE(tryWaitForPlaybackSettlement(runtime, track1));
     playback.commands().seek(std::chrono::milliseconds{250});

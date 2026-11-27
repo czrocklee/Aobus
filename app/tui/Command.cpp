@@ -37,6 +37,10 @@ namespace ao::tui
        .detail = i18n::MessageId::TuiShellDetailTrackView,
        .category = i18n::MessageId::TuiShellCategoryView,
        .optShortcutAction = KeyAction::TogglePresentations},
+      {.prefix = "sort ",
+       .action = CommandAction::SortColumn,
+       .detail = i18n::MessageId::TuiShellDetailSortColumn,
+       .category = i18n::MessageId::TuiShellCategoryView},
     });
 
     constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
@@ -419,9 +423,10 @@ namespace ao::tui
     {
       if (command.starts_with(prefixCommand.prefix))
       {
+        auto const arguments = prefixCommand.action == CommandAction::SortColumn ? std::string_view{command} : value;
         return Command{
           .action = prefixCommand.action,
-          .argument = std::string{utility::trim(value.substr(prefixCommand.prefix.size()))},
+          .argument = std::string{utility::trim(arguments.substr(prefixCommand.prefix.size()))},
         };
       }
     }

@@ -50,7 +50,7 @@ The live `WorkspaceSnapshot` contains ordered open ids, active id, custom preset
 Each open id identifies `TrackListViewState` owned by `ViewService`.
 
 The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-view index, and custom presets.
-Each deserialized config carries base list, filter, and a required exact presentation; the derived group and sort fields mirror that presentation for view creation.
+Each deserialized config carries a base list, filter, and exact presentation. The presentation records the built-in or custom preset ID, the grouping and base sort, and any temporary header sort.
 The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact current serialization.
 
 ## Commands and transitions
@@ -58,7 +58,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 ### Capture and save
 
 `saveSession(store)` copies the current workspace snapshot and walks its open views in order.
-For each live view it records list, filter, group, sort, and exact presentation.
+For each live view it records the list, filter, and exact presentation.
 For a nonempty workspace, the active view contributes its position in that ordered sequence.
 An empty workspace contributes the canonical index `0`.
 A nonempty live snapshot must contain its active id. `saveSession()` deliberately seeds an out-of-range index until it encounters that id, so a broken live aggregate violates the serialization contract instead of being written as an ambiguous session.
@@ -75,7 +75,7 @@ There is no workspace dirty revision, retry scheduler, or durable acknowledgemen
 The schema strictly deserializes its private document and returns one complete semantic candidate.
 
 - A missing group returns success without creating a view or publishing an event.
-- File, parse, node-shape, missing/extra field, sequence-element, version, or stable-vocabulary failure returns before view creation.
+- A load error other than `NotFound` returns before view creation. The store preserves the `workspace` group: a fallback view cannot overwrite the rejected session on shutdown. A successful explicit removal releases that protection; other groups in a readable document remain independently writable.
 - An empty candidate requires active-view index `0`; a nonempty candidate requires an index smaller than `openViews.size()`.
 - Index validation completes before the first candidate view is created.
 - A candidate whose `libraryId` differs from the open library's id loses its views and active index before view creation, because its list ids were issued by another library; restore then continues as an empty candidate carrying the saved custom presets.
@@ -112,7 +112,7 @@ GTK restores workspace state after constructing the library-bound runtime and be
 Every restored view retains the exact presentation carried by the workspace candidate, and GTK does not reinterpret that state through its per-list default preference.
 The restored active view therefore seeds history with the same presentation that remains visible after initialization; later history replay restores that exact point.
 If the restored snapshot has no open view, GTK navigates to All Tracks with the resolved default presentation and immediately requests a workspace checkpoint.
-That automatic first-view checkpoint occurs only after a successful empty restore; a rejected workspace document may produce an in-memory default view but is not overwritten during initialization.
+That automatic first-view checkpoint occurs only after a successful empty restore. A rejected load leaves the stored group unchanged, including on a later checkpoint, as [failure](#failure-execution-and-lifetime) specifies. The session may still open an in-memory fallback view.
 
 For ordinary list navigation and playback restoration, GTK always resolves the per-list preference or recommendation and submits it as `NewViewDefault` presentation intent.
 `WorkspaceService` decides whether to reuse an existing unfiltered view or create one: reuse preserves the exact active presentation, while creation applies the supplied default.
@@ -148,6 +148,10 @@ Workspace persistence uses an explicit recursively strict schema plus semantic p
 Missing or extra fields and malformed vector elements reject the complete document instead of retaining defaults or being skipped.
 Unsupported `presentationVersion` values return `NotSupported` before version-specific siblings are interpreted; unknown closed presentation tokens are `FormatRejected`.
 
+A load failure other than a missing group calls `ConfigStore::preserveGroup("workspace")` on that store. Later `save` and `saveTogether` that include the group return `InvalidState` and write nothing until a successful `removeGroup("workspace")`. Sibling groups on the same store remain writable. The mark lives on that store instance; another store opened on the same file does not inherit it.
+
+This retains a failed decode, including an unsupported presentation version and a malformed document. It does not retain a successful decode whose list ids later fail view creation. It is not protected configuration: the group is not reported by `hasNewerGroup`, removal is allowed, and the refusal is not `NotSupported`. Workspace remains losable state. There is no migration and no read compatibility with an older vocabulary. A refused checkpoint is logged and does not block shutdown.
+
 The current schema has no resource limits or full root version.
 
 Save remains best effort at the workspace wrapper.
@@ -159,7 +163,7 @@ The session uses the literal `workspace` group in the store owned by `AppRuntime
 GTK uses a per-library workspace location; TUI uses its selected configuration path.
 Exact locations belong to the [managed file locations reference](../../reference/persistence/location.md).
 
-The payload carries required `presentationVersion: 1` and stable textual field, sort, group, and direction values.
+The payload carries required `presentationVersion: 3`, kind `builtin` or `custom`, a matching preset key, and the base `sort`. A view may also carry `columnSort`, whose `column` is a track-field id. A custom-preset definition has no `columnSort`.
 That marker covers nested presentation vocabulary only.
 The payload still has no complete root schema version or resource budgets.
 The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact inventory and compatibility boundary.
@@ -177,7 +181,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, another library's session, and candidate cleanup.
+- [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, another library's session, candidate cleanup, and retention of a rejected workspace group across a fallback checkpoint.
 - [`LibraryRestoreStateIdentityTest.cpp`](../../../test/runtime/LibraryRestoreStateIdentityTest.cpp) proves that a session saved before a library restore opens no view over another list.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.

@@ -18,6 +18,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NavigationHistory.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -33,6 +34,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <expected>
@@ -179,6 +181,16 @@ namespace ao::rt
       return views.findTrackListState(viewId);
     }
 
+    Result<TrackListViewState> openViewState(ViewId const viewId) const
+    {
+      if (!std::ranges::contains(currentSnapshot.openViews, viewId))
+      {
+        return makeError(Error::Code::InvalidInput, std::format("View {} is not open in this workspace", viewId));
+      }
+
+      return liveViewState(viewId);
+    }
+
     std::optional<TrackListViewState> findOpenView(ListId const listId, std::string_view const filterExpression) const
     {
       // Views being prepared or destroyed can still be registered with ViewService.
@@ -203,16 +215,18 @@ namespace ao::rt
       };
     }
 
-    std::optional<TrackPresentationSpec> presentationForId(std::string_view const id) const
+    std::optional<TrackPresentationSpec> presentationForId(TrackPresetId const& id) const
     {
-      if (auto const* preset = builtinTrackPresentationPreset(id); preset != nullptr)
+      if (auto const* builtin = std::get_if<BuiltinPreset>(&id); builtin != nullptr)
       {
-        return preset->spec;
+        return builtinTrackPresentationPreset(*builtin).spec;
       }
+
+      auto const customId = std::get<CustomPresetId>(id);
 
       for (auto const& custom : currentSnapshot.customPresets)
       {
-        if (custom.spec.id == id)
+        if (custom.presetId() == customId)
         {
           return custom.spec;
         }
@@ -222,24 +236,30 @@ namespace ao::rt
     }
 
     Result<ViewId> navigateToReusableView(TrackListViewState const& state,
-                                          NavigationRequest const& request,
-                                          NavigationHistory nextHistory)
+                                          NavigationHistory nextHistory,
+                                          std::optional<NavigationPresentation> const& optPresentation = {},
+                                          bool const recordHistory = true)
     {
       auto const viewId = state.id;
       auto presentation = state.presentation;
 
-      if (request.optPresentation && request.optPresentation->mode == NavigationPresentationMode::Override)
+      if (optPresentation && optPresentation->mode == NavigationPresentationMode::Override)
       {
-        presentation = normalizeTrackPresentationSpec(request.optPresentation->spec);
+        presentation = normalizeTrackPresentationSpec(optPresentation->spec);
       }
 
-      auto nextSnapshot = currentSnapshot;
+      auto const focusChanged = currentSnapshot.activeViewId != viewId;
       auto const presentationChanged = state.presentation != presentation;
-      auto changed = nextSnapshot.activeViewId != viewId || presentationChanged;
-      nextSnapshot.activeViewId = viewId;
+      auto changed = focusChanged || presentationChanged;
 
-      if (request.recordHistory)
+      if (recordHistory)
       {
+        if (!focusChanged)
+        {
+          // Compare repeats against a checkpoint of the live column sort, regardless of presentation intent.
+          checkpointDeparture(nextHistory, presentationChanged);
+        }
+
         changed = nextHistory.tryCommit(navigationPoint(state, presentation)) || changed;
       }
 
@@ -248,6 +268,8 @@ namespace ao::rt
         return viewId;
       }
 
+      auto nextSnapshot = currentSnapshot;
+      nextSnapshot.activeViewId = viewId;
       auto pending = prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
 
       if (presentationChanged)
@@ -309,6 +331,45 @@ namespace ao::rt
       return viewId;
     }
 
+    bool isMissingSavedList(ListId const listId) const
+    {
+      if (isVirtualListId(listId))
+      {
+        return false;
+      }
+
+      auto const transaction = library.readTransaction();
+      return !library.lists().reader(transaction).get(listId);
+    }
+
+    void checkpointDeparture(NavigationHistory& candidate, bool const allowNewStop) const
+    {
+      if (currentSnapshot.activeViewId == kInvalidViewId)
+      {
+        return;
+      }
+
+      auto const state = views.trackListState(currentSnapshot.activeViewId);
+
+      if (auto point = navigationPoint(state, state.presentation);
+          !candidate.tryCheckpointColumnSort(point) && allowNewStop)
+      {
+        if (auto const optCurrent = candidate.current(); optCurrent)
+        {
+          // Record a changed filter or the fallback from a deleted List. A different live List can
+          // also be focused intentionally, which does not add a departure stop.
+          auto const recordDeparture = optCurrent->listId == point.listId
+                                         ? optCurrent->filterExpression != point.filterExpression
+                                         : isMissingSavedList(optCurrent->listId);
+
+          if (recordDeparture)
+          {
+            std::ignore = candidate.tryCommit(std::move(point));
+          }
+        }
+      }
+    }
+
     Result<ViewId> navigate(NavigationRequest const& request)
     {
       auto targetRes = resolveNavigationTarget(request.target);
@@ -318,13 +379,68 @@ namespace ao::rt
         return std::unexpected{targetRes.error()};
       }
 
-      if (auto const optState = targetRes->reusePlainView ? findOpenView(targetRes->listId, {}) : std::nullopt;
-          optState)
+      auto nextHistory = navigationHistory;
+      auto const optState = targetRes->reusePlainView ? findOpenView(targetRes->listId, {}) : std::nullopt;
+
+      if (request.recordHistory && (!optState || optState->id != currentSnapshot.activeViewId))
       {
-        return navigateToReusableView(*optState, request, navigationHistory);
+        checkpointDeparture(nextHistory, true);
       }
 
-      return navigateToNewView(*targetRes, request, navigationHistory);
+      if (optState)
+      {
+        return navigateToReusableView(
+          *optState, std::move(nextHistory), request.optPresentation, request.recordHistory);
+      }
+
+      return navigateToNewView(*targetRes, request, std::move(nextHistory));
+    }
+
+    static void recordLiveDeparture(NavigationHistory& history, TrackListViewState const& state)
+    {
+      if (auto point = navigationPoint(state, state.presentation); !history.tryCheckpointColumnSort(point))
+      {
+        std::ignore = history.tryCommit(std::move(point));
+      }
+    }
+
+    Result<ViewId> navigateToOpenView(ViewId const viewId)
+    {
+      auto const targetRes = openViewState(viewId);
+
+      if (!targetRes)
+      {
+        return std::unexpected{targetRes.error()};
+      }
+
+      // The view can still be open between a List deletion and its workspace notification.
+      if (isMissingSavedList(targetRes->listId))
+      {
+        return makeError(Error::Code::NotFound, "The destination view's List no longer exists");
+      }
+
+      auto const active = currentSnapshot.activeViewId;
+
+      if (active == viewId)
+      {
+        return viewId;
+      }
+
+      auto nextHistory = navigationHistory;
+
+      if (active != kInvalidViewId)
+      {
+        auto const departureRes = liveViewState(active);
+
+        if (!departureRes)
+        {
+          return std::unexpected{departureRes.error()};
+        }
+
+        recordLiveDeparture(nextHistory, *departureRes);
+      }
+
+      return navigateToReusableView(*targetRes, std::move(nextHistory));
     }
 
     Result<ListId> trackSourceList(TrackId const trackId, ListId const sourceListId) const
@@ -396,18 +512,17 @@ namespace ao::rt
           }
         }
 
-        // A quick filter may have changed since the last history entry. Install both
-        // the live departure point and destination only after navigation succeeds.
-        std::ignore = nextHistory.tryCommit(navigationPoint(*stateRes, stateRes->presentation));
+        recordLiveDeparture(nextHistory, *stateRes);
       }
 
       auto const target = ResolvedNavigationTarget{.listId = *listRes, .reusePlainView = true};
-      auto request = NavigationRequest{.target = *listRes};
 
       if (auto const optState = findOpenView(target.listId, {}); optState)
       {
-        return navigateToReusableView(*optState, request, std::move(nextHistory));
+        return navigateToReusableView(*optState, std::move(nextHistory));
       }
+
+      auto request = NavigationRequest{.target = *listRes};
 
       if (newViewPresentation)
       {
@@ -420,12 +535,7 @@ namespace ao::rt
 
     Result<> focus(ViewId const viewId)
     {
-      if (viewId == kInvalidViewId || !std::ranges::contains(currentSnapshot.openViews, viewId))
-      {
-        return makeError(Error::Code::InvalidInput, std::format("View {} is not open in this workspace", viewId));
-      }
-
-      if (auto stateRes = liveViewState(viewId); !stateRes)
+      if (auto stateRes = openViewState(viewId); !stateRes)
       {
         return std::unexpected{stateRes.error()};
       }
@@ -505,6 +615,11 @@ namespace ao::rt
 
       if (options.recordHistory)
       {
+        if (changed)
+        {
+          std::ignore = nextHistory.tryCheckpointColumnSort(navigationPoint(*stateRes, stateRes->presentation));
+        }
+
         changed = nextHistory.tryCommit(navigationPoint(*stateRes, presentation)) || changed;
       }
 
@@ -586,6 +701,7 @@ namespace ao::rt
     Result<> goBack()
     {
       auto nextHistory = navigationHistory;
+      checkpointDeparture(nextHistory, false);
       auto optPoint = nextHistory.back();
 
       if (!optPoint)
@@ -599,6 +715,7 @@ namespace ao::rt
     Result<> goForward()
     {
       auto nextHistory = navigationHistory;
+      checkpointDeparture(nextHistory, false);
       auto optPoint = nextHistory.forward();
 
       if (!optPoint)
@@ -611,9 +728,33 @@ namespace ao::rt
 
     Result<> addPreset(CustomTrackPresentationPreset const& preset)
     {
+      if (!std::holds_alternative<CustomPresetId>(preset.spec.presetId))
+      {
+        return makeError(Error::Code::InvalidInput, "A custom preset requires a custom preset id");
+      }
+
+      if (preset.spec.optColumnSort)
+      {
+        return makeError(Error::Code::InvalidInput, "A preset definition cannot have a view-local column sort");
+      }
+
+      auto seen = std::array<bool, kTrackSortFieldCount>{};
+
+      for (auto const& term : preset.spec.sortBy)
+      {
+        auto const index = static_cast<std::size_t>(term.field);
+
+        if (index >= seen.size() || seen[index])
+        {
+          return makeError(Error::Code::InvalidInput, "A custom preset requires distinct, known sort fields");
+        }
+
+        seen[index] = true;
+      }
+
       auto nextSnapshot = currentSnapshot;
-      auto const it = std::ranges::find_if(
-        nextSnapshot.customPresets, [&](auto const& existing) { return existing.spec.id == preset.spec.id; });
+      auto const it =
+        std::ranges::find(nextSnapshot.customPresets, preset.presetId(), &CustomTrackPresentationPreset::presetId);
 
       if (it != nextSnapshot.customPresets.end())
       {
@@ -633,11 +774,11 @@ namespace ao::rt
       return {};
     }
 
-    Result<> removePreset(std::string_view const presetId)
+    Result<> removePreset(CustomPresetId const presetId)
     {
       auto nextSnapshot = currentSnapshot;
       auto const removed = std::erase_if(
-        nextSnapshot.customPresets, [presetId](auto const& preset) { return preset.spec.id == presetId; });
+        nextSnapshot.customPresets, [presetId](auto const& preset) { return preset.presetId() == presetId; });
 
       if (removed == 0)
       {
@@ -722,6 +863,12 @@ namespace ao::rt
     return _implPtr->navigate(request);
   }
 
+  Result<ViewId> WorkspaceService::navigateToOpenView(ViewId const viewId)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->navigateToOpenView(viewId);
+  }
+
   Result<ViewId> WorkspaceService::navigateToTrackSource(
     TrackId const trackId,
     ListId const sourceListId,
@@ -744,15 +891,15 @@ namespace ao::rt
     return _implPtr->applyPresentation(presentation, options);
   }
 
-  Result<TrackPresentationSpec> WorkspaceService::setActivePresentation(std::string_view const presentationId,
+  Result<TrackPresentationSpec> WorkspaceService::setActivePresentation(TrackPresetId const& presetId,
                                                                         PresentationChangeOptions const options)
   {
     _implPtr->ensureOnExecutor();
-    auto const optPresentation = _implPtr->presentationForId(presentationId);
+    auto const optPresentation = _implPtr->presentationForId(presetId);
 
     if (!optPresentation)
     {
-      return makeError(Error::Code::NotFound, std::format("Unknown track presentation '{}'", presentationId));
+      return makeError(Error::Code::NotFound, std::format("Unknown track presentation '{}'", trackPresetKey(presetId)));
     }
 
     auto res = _implPtr->applyPresentation(*optPresentation, options);
@@ -813,7 +960,7 @@ namespace ao::rt
     return _implPtr->addPreset(preset);
   }
 
-  Result<> WorkspaceService::removeCustomPreset(std::string_view const presetId)
+  Result<> WorkspaceService::removeCustomPreset(CustomPresetId const presetId)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->removePreset(presetId);
@@ -841,8 +988,6 @@ namespace ao::rt
       state.openViews.push_back(TrackListViewConfig{
         .listId = viewState.listId,
         .filterExpression = viewState.filterExpression,
-        .groupBy = viewState.groupBy,
-        .sortBy = viewState.sortBy,
         .optPresentation = viewState.presentation,
       });
     }
@@ -866,6 +1011,8 @@ namespace ao::rt
         return {};
       }
 
+      // Hosts can continue with a fallback view and checkpoint it on normal shutdown.
+      store.preserveGroup("workspace");
       return std::unexpected{loadedRes.error()};
     }
 

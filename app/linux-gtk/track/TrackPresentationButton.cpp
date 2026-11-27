@@ -278,7 +278,7 @@ namespace ao::gtk
 
     auto const& spec = foundRes->presentation;
 
-    auto const labelText = _catalog->labelForId(spec.id);
+    auto const labelText = _catalog->labelFor(spec.presetId);
     auto const label = i18n::requiredFormat(_textCatalog, MessageId::GtkPresentationCopyLabel, {{"label", labelText}});
     _customViewEditorPtr = std::make_unique<CustomViewEditor>(*parentWindow, _textCatalog, spec, label, targetViewId);
     auto& editor = *_customViewEditorPtr;
@@ -340,7 +340,7 @@ namespace ao::gtk
               }
             });
           _catalog->addCustomPresentation(*optPreset);
-          selectIfCurrent(optPreset->spec.id);
+          selectIfCurrent(rt::trackPresetKey(optPreset->presetId()));
         }
 
         return false;

@@ -467,9 +467,8 @@ namespace ao::rt::test
     REQUIRE(captured.optResolvedSuccessor == fixture.thirdTrackId);
 
     REQUIRE(fixture.views.setFilter(fixture.viewId, "$year < 2000"));
-    REQUIRE(fixture.views.setPresentation(
-      fixture.viewId,
-      TrackPresentationSpec{.id = "reverse-title", .sortBy = {{.field = TrackSortField::Title, .ascending = false}}}));
+    auto const reverseTitle = TrackColumnSort{.column = TrackField::Title, .ascending = false};
+    REQUIRE(fixture.views.setColumnSort(fixture.viewId, reverseTitle));
     REQUIRE(fixture.workspace.closeView(fixture.viewId));
 
     CHECK(succession.state() == captured);

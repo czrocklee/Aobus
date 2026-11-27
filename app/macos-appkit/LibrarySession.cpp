@@ -151,10 +151,7 @@ namespace ao::appkit
 
       if (auto const viewRes = optRuntime->views().findTrackListState(pickerState.activeViewId); viewRes)
       {
-        if (auto const optId = listPresentationsPtr->presentationIdForList(viewRes->listId); optId)
-        {
-          state.optListPresentationId = std::string{*optId};
-        }
+        state.optListPresentationId = listPresentationsPtr->presentationIdForList(viewRes->listId);
       }
 
       invalidate(DesktopInvalidation::Library);
@@ -522,6 +519,11 @@ namespace ao::appkit
     return *_storagePtr->mediaPlayerPtr;
   }
 
+  rt::ViewId LibrarySession::tableViewId() const noexcept
+  {
+    return _storagePtr->viewId;
+  }
+
   uimodel::TrackDisplayIndex const& LibrarySession::displayIndex() const noexcept
   {
     return _storagePtr->displayIndex;
@@ -674,13 +676,15 @@ namespace ao::appkit
     }
   }
 
-  Result<> LibrarySession::setPresentation(std::string const& id) const
+  Result<> LibrarySession::setPresentation(std::optional<rt::TrackPresetId> const& optPresetId) const
   {
     auto& storage = *_storagePtr;
 
-    if (!id.empty())
+    if (optPresetId)
     {
-      if (auto const optSelection = storage.presentationPickerPtr->selectPresentation(id); optSelection)
+      auto const key = rt::trackPresetKey(*optPresetId);
+
+      if (auto const optSelection = storage.presentationPickerPtr->selectPresentation(key); optSelection)
       {
         if (auto res = runtime().workspace().setActivePresentation(optSelection->spec); !res)
         {
@@ -698,7 +702,7 @@ namespace ao::appkit
         return std::unexpected{viewRes.error()};
       }
 
-      auto const eligibility = uimodel::trackPresentationEligibility(storage.catalog, viewRes->listId, id);
+      auto const eligibility = uimodel::trackPresentationEligibility(storage.catalog, viewRes->listId, key);
 
       if (!eligibility.enabled)
       {
@@ -706,7 +710,7 @@ namespace ao::appkit
       }
 
       // Let the runtime supply its ordinary unknown-id error; never pin a rejected choice.
-      auto res = runtime().workspace().setActivePresentation(id);
+      auto const res = runtime().workspace().setActivePresentation(*optPresetId);
       return res ? Result<>{} : std::unexpected{res.error()};
     }
 
@@ -723,30 +727,23 @@ namespace ao::appkit
     return runtime().workspace().setActivePresentation(storage.presentationForList(listId));
   }
 
-  Result<> LibrarySession::sort(rt::TrackSortField const field, bool const ascending) const
+  Result<> LibrarySession::toggleSort(rt::ViewId const renderedViewId, rt::TrackField const column) const
   {
-    auto const viewId = runtime().workspace().snapshot().activeViewId;
-    auto stateRes = runtime().views().findTrackListState(viewId);
+    // Focus changes commit before the session observes them and refreshes the native table.
+    if (renderedViewId == rt::kInvalidViewId || renderedViewId != runtime().workspace().snapshot().activeViewId)
+    {
+      return {};
+    }
+
+    auto& views = runtime().views();
+    auto const stateRes = views.findTrackListState(renderedViewId);
 
     if (!stateRes)
     {
       return std::unexpected{stateRes.error()};
     }
 
-    auto presentation = std::move(stateRes->presentation);
-    presentation.id = "appkit-column-sort";
-
-    if (field == rt::TrackSortField::TrackNumber)
-    {
-      presentation.sortBy = {{.field = rt::TrackSortField::DiscNumber, .ascending = ascending},
-                             {.field = rt::TrackSortField::TrackNumber, .ascending = ascending}};
-    }
-    else
-    {
-      presentation.sortBy = {{.field = field, .ascending = ascending}};
-    }
-
-    return runtime().views().setPresentation(viewId, presentation);
+    return views.setColumnSort(renderedViewId, stateRes->presentation.nextColumnSort(column));
   }
 
   void LibrarySession::filter(std::string const& text)

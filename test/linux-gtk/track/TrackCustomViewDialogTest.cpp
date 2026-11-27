@@ -6,6 +6,7 @@
 #include "test/MessageCatalogTestSupport.h"
 #include "test/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
@@ -13,9 +14,16 @@
 #include <gtkmm/button.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/stringlist.h>
+#include <gtkmm/stringobject.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::test
@@ -33,6 +41,12 @@ namespace ao::gtk::test
       }
 
       return nullptr;
+    }
+
+    std::string selectedSortLabel(Gtk::DropDown& dropdown)
+    {
+      auto const itemPtr = std::dynamic_pointer_cast<Gtk::StringObject>(dropdown.get_selected_item());
+      return itemPtr ? itemPtr->get_string().raw() : std::string{};
     }
   } // namespace
 
@@ -142,9 +156,80 @@ namespace ao::gtk::test
 
     auto const draft = dialog.collectState();
     CHECK(draft.label == "Edited View");
-    CHECK_FALSE(draft.spec.id.empty());
+    CHECK(std::holds_alternative<rt::CustomPresetId>(draft.spec.presetId));
     CHECK(draft.spec.groupBy == rt::TrackGroupKey::Album);
     CHECK(draft.spec.visibleFields == std::vector{rt::TrackField::Title});
+  }
+
+  TEST_CASE("TrackCustomViewDialog - keeps the sort choice in sync after duplicate rejection and rebuild")
+  {
+    using i18n::MessageId;
+    using i18n::requiredText;
+    using rt::TrackSortField;
+
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto window = Gtk::Window{};
+    auto const catalog = ao::test::messageCatalog("de-DE");
+    auto const& spec = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::ClassicalWorks).spec;
+    auto const sortIndex = [&spec](TrackSortField field)
+    {
+      auto const term = std::ranges::find(spec.sortBy, field, &rt::TrackSortTerm::field);
+      REQUIRE(term != spec.sortBy.end());
+      return static_cast<std::size_t>(term - spec.sortBy.begin());
+    };
+    auto const recordingYearIndex = sortIndex(TrackSortField::RecordingYear);
+    auto const workIndex = sortIndex(TrackSortField::Work);
+    auto const recordingYearLabel = requiredText(catalog, MessageId::TrackSortRecordingYear);
+    auto const dropdownCount = 1U + spec.sortBy.size() + spec.visibleFields.size();
+    auto dialog = TrackCustomViewDialog{window, catalog, spec, "Classical view"};
+
+    {
+      auto const dropdowns = collectAll<Gtk::DropDown>(dialog);
+      REQUIRE(dropdowns.size() == dropdownCount);
+      auto& recordingYear = *dropdowns[1U + recordingYearIndex]; // Skip the group selector.
+      auto& work = *dropdowns[1U + workIndex];
+      CHECK(selectedSortLabel(recordingYear) == recordingYearLabel);
+      REQUIRE(selectedSortLabel(work) == requiredText(catalog, MessageId::TrackFieldWork));
+      CHECK(dialog.collectState().spec.sortBy == spec.sortBy);
+
+      recordingYear.set_selected(work.get_selected());
+      CHECK(selectedSortLabel(recordingYear) == recordingYearLabel);
+      CHECK(dialog.collectState().spec.sortBy == spec.sortBy);
+    }
+
+    {
+      auto const buttons = collectAll<Gtk::Button>(dialog);
+      auto const addLabel = requiredText(catalog, MessageId::GtkCustomViewAddSortField);
+      auto const addButton = std::ranges::find_if(
+        buttons, [addLabel](auto const* button) { return button->get_tooltip_text().raw() == addLabel; });
+      REQUIRE(addButton != buttons.end());
+      emitClicked(**addButton);
+    }
+
+    // Borrow the RecordingYear row again from the replacement list.
+    auto const dropdowns = collectAll<Gtk::DropDown>(dialog);
+    REQUIRE(dropdowns.size() == dropdownCount + 1U);
+    auto& recordingYear = *dropdowns[1U + recordingYearIndex];
+    auto expectedSort = dialog.collectState().spec.sortBy;
+    REQUIRE(expectedSort.size() == spec.sortBy.size() + 1U);
+    CHECK(std::equal(spec.sortBy.begin(), spec.sortBy.end(), expectedSort.begin()));
+    CHECK(selectedSortLabel(recordingYear) == recordingYearLabel);
+
+    auto const optionsPtr = std::dynamic_pointer_cast<Gtk::StringList>(recordingYear.get_model());
+    REQUIRE(optionsPtr != nullptr);
+    auto const recordingDateLabel = requiredText(catalog, MessageId::TrackFieldRecordingDate);
+    guint index = 0;
+
+    while (index < optionsPtr->get_n_items() && optionsPtr->get_string(index).raw() != recordingDateLabel)
+    {
+      ++index;
+    }
+
+    REQUIRE(index < optionsPtr->get_n_items());
+    recordingYear.set_selected(index);
+    expectedSort[recordingYearIndex].field = TrackSortField::RecordingDate;
+    CHECK(selectedSortLabel(recordingYear) == recordingDateLabel);
+    CHECK(dialog.collectState().spec.sortBy == expectedSort);
   }
 
   TEST_CASE("TrackCustomViewDialog - renders locale-selected editor copy")

@@ -20,7 +20,9 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 
 - Presentation affects grouping, ordering, visible fields, and redundant-field suppression, never list membership.
 - A quick filter changes the source supplied to a presentation but does not select a new presentation.
-- A flat presentation with an empty sort preserves source order exactly.
+- Every spec has a `presetId`. `sortBy` is that preset's base order, a sequence of `TrackSortTerm` values. `optColumnSort` is an optional `TrackColumnSort`: the clicked `TrackField` and its direction, not another preset and not a sort term. Restored view state may include it; a custom-preset definition must not.
+- `effectiveSortBy()` projects that column through `trackSortFieldForColumn` and returns `TrackSortTerm`s. With no override it is `sortBy`. Otherwise the column's sort key is first, then each base term whose field is not already present. A column whose sort key is `TrackNumber`, including `DisplayTrackNumber`, inserts disc number ahead of track number, in the same direction. Ties follow the preset. The arrow follows the clicked column, so columns that share a sort key remain distinct overrides.
+- A flat presentation whose effective sort is empty preserves source order exactly.
 - Sorts are stable for equal keys relative to the current source order.
 - Every group identity occupies one contiguous row range, including when a
   custom sort omits its grouping field.
@@ -75,11 +77,17 @@ as deterministic UTF-8 bytes; group identity uses the same locale-independent
 fold over the unstripped value.
 
 Grouped comparison orders the grouping components first, then the complete
-unstripped identity, then the configured row sort terms. Configured grouping
+unstripped identity, then the effective row sort. Configured grouping
 terms retain their authored order and direction; missing compound components
 are supplied in the direction of the first authored grouping term, or ascending
 when none is authored. This keeps Album `(album artist, album)` and Work
 `(composer, work)` identities contiguous even for custom presentation shapes.
+
+Section order comes from `trackGroupSortBy` over the preset's base `sortBy`, not from a header override. A grouping-column arrow can therefore appear without reversing sections. Within a section, row order is the effective sequence with those grouping fields removed.
+
+Playback launch copies only that flat effective sequence. The detached projection has no groups, so succession does not follow section order. A descending grouping-column override can leave the table's groups unchanged while playback reverses those keys.
+
+Creating a custom preset from the live view copies the table order, not that flat playback order. `CustomPresentationEditorModel` folds a non-grouping override into the new base sort. If folding the override would change section order, it keeps the base sort instead. The saved definition has no `optColumnSort`. GTK Create Custom View is the shipping editor that saves this copy.
 
 Textual numeric characters remain lexical. Numeric track fields, including
 movement number, retain their typed numeric comparators and never enter locale
@@ -149,13 +157,14 @@ It neither compiles the predicate nor changes saved-List or transient-filter mem
 
 Manual Order is the built-in flat presentation whose `sortBy` is empty.
 It preserves the effective source sequence produced by the saved List's rank overlay.
+A header override temporarily takes precedence over the saved List order. If it is the only reason the user cannot edit that order, the unavailable-action message asks them to choose the current view again to clear the override.
 It is selected explicitly by the user or by the New Playlist template; storage does not classify a List as manual and recommendation does not infer Manual Order from an empty filter.
 All Tracks may still preserve source order in a custom flat unsorted presentation, but it has no writable rank overlay and its Manual Order choice is disabled.
 
 ## Failure and lifecycle
 
 An invalid custom spec is normalized at the presentation boundary where possible; query parsing failure falls back to the default recommendation rather than changing source content.
-Changing the active presentation triggers a projection rebuild as defined by [track-list projection](../library/track-list-projection.md).
+Header indicators follow the view's current presentation, not the arrival of a row delta. Switching between columns that compare by the same key can move the arrow without a [projection reset](../library/track-list-projection.md#grouping-and-reset-behavior).
 
 GTK identifies a list item by `TrackId`. As long as GTK holds the item, a reorder returns the same object so selection follows the track. GTK may inspect many items to find a selection or lay out a list; looking up an identity does not load or retain track metadata.
 At bind, cells load and observe the row's display fields. Views and Smart List preview share cached `TrackRowObject` data and its memoized display strings.
@@ -185,6 +194,7 @@ Each cell subscribes to `TrackListModel` playing changes once at setup, independ
 
 - [`TrackPresentationTest.cpp`](../../../test/runtime/TrackPresentationTest.cpp) locks built-ins and normalization.
 - Sorting and grouping tests under [`test/runtime/projection/`](../../../test/runtime/projection) lock compound groups and classical order.
+- [`CustomPresentationEditorModelTest.cpp`](../../../test/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp) locks a grouped copy's headings and row ids when a header override is folded or left out of the new base sort.
 - Presentation recommendation tests under [`test/uimodel/library/presentation/`](../../../test/uimodel/library/presentation) lock selection behavior.
 - [`TrackListItemTest.cpp`](../../../test/linux-gtk/track/TrackListItemTest.cpp) protects GTK item identity through native-only ownership, disposal, and pool retirement.
 - [`TrackListPublicationTest.cpp`](../../../test/linux-gtk/track/TrackListPublicationTest.cpp) checks field freshness during grouped reorder and filter entry notifications, and continued field delivery after a list-only restore.

@@ -32,6 +32,8 @@ namespace ao::tui
   struct TrackColumnResizeHandle final
   {
     rt::TrackField field = rt::TrackField::Title;
+    bool nextSortAscending = true;
+    // The full header cell, used for sorting as well as to locate its resize edge.
     ftxui::Box box{};
     std::int32_t columns = 0;
     std::int32_t availableColumns = 0;

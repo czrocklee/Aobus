@@ -283,13 +283,13 @@ namespace ao::tui
         return {};
       }
 
-      auto const activePresentationId = library.activePresentationId();
-      auto const panelColumns = presentationPanelColumns(
-        textCatalog, library.presentationEntries(), activePresentationId, keymapPlan, terminalColumns);
+      auto const& presetId = library.activePresentation().presetId;
+      auto const panelColumns =
+        presentationPanelColumns(textCatalog, library.presentationEntries(), presetId, keymapPlan, terminalColumns);
 
       return followingAnchoredOverlay(mousePanel(presentationPanel(textCatalog,
                                                                    library.presentationEntries(),
-                                                                   activePresentationId,
+                                                                   presetId,
                                                                    library.selectedPresentation(),
                                                                    keymapPlan,
                                                                    &hitRegions.presentationRows,
@@ -961,7 +961,8 @@ namespace ao::tui
                                                .markedTrackIds = &library.markedIds(),
                                                .emptyText = library.emptyStateText(),
                                                .focused = shell.isTracksFocused()});
-        auto const presentationTitle = trackPresentationDisplayId(textCatalog, presentation.id);
+        auto const presentationTitle =
+          trackPresentationDisplayLabel(textCatalog, presentation.presetId, library.presentationEntries());
         auto workspaceElementPtr = workspacePanel(std::move(tableElementPtr), presentationTitle, hoveredButton);
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
@@ -1527,9 +1528,10 @@ namespace ao::tui
     auto outputDevices =
       OutputDeviceController{playback, textCatalog, makeOutputDeviceIntent(*appConfigStorePtr), requestRefresh};
     auto filterCompleter = uimodel::TrackFilterCompleter{runtime.completion()};
-    auto const completeCommand = [&runtime, &textCatalog, &filterCompleter](
+    auto const completeCommand = [&runtime, &textCatalog, &filterCompleter, &library](
                                    std::string_view const draft, std::size_t const cursor)
     {
+      auto const sortableColumns = library.sortableTrackColumns();
       return completeCommandDraft(
         textCatalog,
         draft,
@@ -1537,6 +1539,7 @@ namespace ao::tui
         CommandCompletionContext{
           .builtinPresentations = rt::builtinTrackPresentationPresets(),
           .customPresentations = runtime.workspace().customPresets(),
+          .sortableColumns = sortableColumns,
           .filterCompleter = [&filterCompleter](
                                std::string_view const text, std::size_t const cursor, std::size_t const limit)
           { return filterCompleter.complete(text, cursor, limit); },

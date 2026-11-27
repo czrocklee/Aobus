@@ -35,9 +35,9 @@ aobus -C /music init
 4. Press `l` to focus pinned Lists or open the List chooser. Press uppercase `L` to pin or unpin the Lists pane. Use `p` for presentations.
 5. Press `?` or F1 for the effective shortcut list. Shortcuts can be changed, so Help is the authority for the current session.
 
-The current presentation determines visible and playback order. Up/Down changes table focus; it does not skip the playback sequence unless you press Enter.
+The current presentation determines the visible table. Playback follows a flat order from that sort. In a grouped view, Next does not follow the group headings. Up/Down changes table focus; it does not skip the playback sequence unless you press Enter.
 
-**Manual Order** is unavailable in **All Tracks**. To arrange the full library manually, open a saved root List with an empty filter, press `p`, and choose **Manual Order**. With no tracks marked, focus a track and run `:order top` to move it to the top of the List.
+**Manual Order** is unavailable in **All Tracks**. To arrange the full library manually, open a saved root List with an empty filter, press `p`, and choose **Manual Order**. If Manual Order is already selected and a header sort is blocking moves, choose it again to clear that temporary sort. With no tracks marked, focus a track and run `:order top` to move it to the top of the List.
 
 ## Filter and run commands
 
@@ -56,11 +56,14 @@ Press `:` for the Command Palette. It accepts commands such as:
 ```text
 :filter $composer = "Bach"
 :view classical-works
+:sort display-track-number
 :scan
 :scan cancel
 ```
 
-You may type commands with or without the leading colon. Command names are case-insensitive; filter and presentation arguments retain their text. Enter runs a complete typed command or the selected action, while Escape discards the command draft.
+You may type commands with or without the leading colon. Command names are case-insensitive. Filter and presentation arguments retain their text. A sort argument is a stable column id such as `display-track-number`, not the translated header; ASCII case does not matter. Enter on `:sort` alone opens the column choices. Enter then runs an exact eligible sort id, or the highlighted completion when the id is incomplete. Tab inserts that completion without running it. Escape discards the command draft.
+
+Click a header to sort that column. A click that does not move sorts even on the cells used to resize; drag those cells to resize.
 
 Useful aliases include `:lists`, `:detail`, `:quality`, `:output`, `:views`, `:notifications`, `:settings`, `:edit`, `:tags`, `:current`, `:back`, `:forward`, and `:quit`. See the [TUI command reference](../reference/tui/command.md) for the complete aliases, keys, and fixed input protocol.
 
@@ -155,7 +158,7 @@ A restored playback subject remains idle until you start playback. Unfinished in
 Enable **Mouse** under Settings → Interaction if your terminal forwards mouse input.
 
 - Click a track to focus it; double-click to play. Ctrl+click toggles a mark and Shift+click starts or extends a visual range.
-- Use the wheel in tables and panels. Drag a track-column edge to preview its width and release to save it for that List.
+- Use the wheel in tables and panels. A click that stays on a header sorts that column. Drag a track-column edge to preview its width and release to save it for that List.
 - Click rows in Lists, Presentation, or Output to activate them.
 - Clicking outside a floating panel closes it and consumes that click, so it does not also activate the workspace below.
 

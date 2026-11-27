@@ -12,7 +12,6 @@
 
 #include <algorithm>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -20,42 +19,42 @@ namespace ao::uimodel::test
   TEST_CASE("ListPresentationRecommendation - heuristics")
   {
     auto const syntheticAlbums = rt::TrackPresentationSpec{
-      .id = "albums",
+      .presetId = rt::BuiltinPreset::Albums,
       .groupBy = rt::TrackGroupKey::Album,
       .sortBy = {{.field = rt::TrackSortField::Album, .ascending = true}},
       .visibleFields = {rt::TrackField::Album, rt::TrackField::Title},
       .redundantFields = {rt::TrackField::AlbumArtist},
     };
     auto const syntheticArtists = rt::TrackPresentationSpec{
-      .id = "artists",
+      .presetId = rt::BuiltinPreset::Artists,
       .groupBy = rt::TrackGroupKey::AlbumArtist,
       .sortBy = {{.field = rt::TrackSortField::AlbumArtist, .ascending = true}},
       .visibleFields = {rt::TrackField::AlbumArtist, rt::TrackField::Album},
       .redundantFields = {rt::TrackField::Artist},
     };
     auto const syntheticClassicalComposers = rt::TrackPresentationSpec{
-      .id = "classical-composers",
+      .presetId = rt::BuiltinPreset::ClassicalComposers,
       .groupBy = rt::TrackGroupKey::Composer,
       .sortBy = {{.field = rt::TrackSortField::Composer, .ascending = false}},
       .visibleFields = {rt::TrackField::Composer, rt::TrackField::Work},
       .redundantFields = {rt::TrackField::Composer},
     };
     auto const syntheticClassicalWorks = rt::TrackPresentationSpec{
-      .id = "classical-works",
+      .presetId = rt::BuiltinPreset::ClassicalWorks,
       .groupBy = rt::TrackGroupKey::Work,
       .sortBy = {{.field = rt::TrackSortField::Work, .ascending = false}},
       .visibleFields = {rt::TrackField::Work, rt::TrackField::Movement},
       .redundantFields = {rt::TrackField::Work},
     };
     auto const syntheticTagging = rt::TrackPresentationSpec{
-      .id = "tagging",
+      .presetId = rt::BuiltinPreset::Tagging,
       .groupBy = rt::TrackGroupKey::Genre,
       .sortBy = {{.field = rt::TrackSortField::Genre, .ascending = false}},
       .visibleFields = {rt::TrackField::Tags, rt::TrackField::Title},
       .redundantFields = {rt::TrackField::Tags},
     };
     auto const syntheticTechnical = rt::TrackPresentationSpec{
-      .id = "technical",
+      .presetId = rt::BuiltinPreset::Technical,
       .groupBy = rt::TrackGroupKey::None,
       .sortBy = {{.field = rt::TrackSortField::Duration, .ascending = false}},
       .visibleFields = {rt::TrackField::TechnicalSummary, rt::TrackField::FilePath},
@@ -74,19 +73,18 @@ namespace ao::uimodel::test
                                 {.spec = syntheticTechnical},
                               }
                             : std::vector<rt::TrackPresentationPreset>{shipped.begin(), shipped.end()};
-    auto const requireExpectedSpec = [&](std::string_view const id) -> rt::TrackPresentationSpec const&
+    auto const requireExpectedSpec = [&](rt::BuiltinPreset const id) -> rt::TrackPresentationSpec const&
     {
-      auto const found = std::ranges::find_if(builtins, [id](auto const& preset) { return preset.spec.id == id; });
+      auto const found = std::ranges::find(builtins, id, &rt::TrackPresentationPreset::presetId);
       REQUIRE(found != builtins.end());
       return found->spec;
     };
-    auto const& expectedAlbums = requireExpectedSpec("albums");
-    auto const& expectedArtists = requireExpectedSpec("artists");
-    auto const& expectedClassicalComposers = requireExpectedSpec("classical-composers");
-    auto const& expectedClassicalWorks = requireExpectedSpec("classical-works");
-    auto const& expectedTagging = requireExpectedSpec("tagging");
-    auto const& expectedTechnical = requireExpectedSpec("technical");
-    auto const customs = std::vector<rt::CustomTrackPresentationPreset>{};
+    auto const& expectedAlbums = requireExpectedSpec(rt::BuiltinPreset::Albums);
+    auto const& expectedArtists = requireExpectedSpec(rt::BuiltinPreset::Artists);
+    auto const& expectedClassicalComposers = requireExpectedSpec(rt::BuiltinPreset::ClassicalComposers);
+    auto const& expectedClassicalWorks = requireExpectedSpec(rt::BuiltinPreset::ClassicalWorks);
+    auto const& expectedTagging = requireExpectedSpec(rt::BuiltinPreset::Tagging);
+    auto const& expectedTechnical = requireExpectedSpec(rt::BuiltinPreset::Technical);
 
     auto recommendSaved = [&](std::string const& filter)
     {
@@ -94,7 +92,7 @@ namespace ao::uimodel::test
         .sourceKind = ListPresentationSourceKind::SavedList,
         .listExpression = filter,
       };
-      return recommendListPresentation(context, builtins, customs);
+      return recommendListPresentation(context, builtins);
     };
 
     SECTION("saved list uses its expression")
@@ -104,7 +102,7 @@ namespace ao::uimodel::test
         .sourceKind = ListPresentationSourceKind::SavedList,
         .listExpression = "$composer = \"Bach\"",
       };
-      auto const result = recommendListPresentation(context, builtins, customs);
+      auto const result = recommendListPresentation(context, builtins);
 
       CHECK(result == expectedClassicalComposers);
     }
@@ -115,7 +113,7 @@ namespace ao::uimodel::test
         .listId = rt::kAllTracksListId,
         .sourceKind = ListPresentationSourceKind::AllTracks,
       };
-      auto const result = recommendListPresentation(context, builtins, customs);
+      auto const result = recommendListPresentation(context, builtins);
 
       CHECK(result == expectedAlbums);
     }
@@ -202,7 +200,7 @@ namespace ao::uimodel::test
         .listExpression = "$composer = \"Bach\"",
       };
 
-      CHECK(recommendListPresentation(context, albumsOnly, customs) == expectedAlbums);
+      CHECK(recommendListPresentation(context, albumsOnly) == expectedAlbums);
     }
   }
 } // namespace ao::uimodel::test

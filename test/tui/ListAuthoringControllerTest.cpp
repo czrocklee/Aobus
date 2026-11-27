@@ -410,7 +410,7 @@ namespace ao::tui::test
       fixture.listPresentations.presentationForList({.listId = savedIt->id,
                                                      .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
                                                      .listExpression = "$albumArtist = 'Queen'"});
-    CHECK(recommended.id == "artists");
+    CHECK(recommended.isPreset(rt::BuiltinPreset::Artists));
   }
 
   TEST_CASE("ListAuthoringController - update rewrites the definition and keeps the List identity")
@@ -450,7 +450,7 @@ namespace ao::tui::test
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
-    fixture.listPresentations.setPresentationIdForList(listId, "albums");
+    fixture.listPresentations.setPresentationIdForList(listId, rt::BuiltinPreset::Albums);
     auto controller = fixture.makeController();
 
     std::size_t changeCount = 0;
@@ -468,7 +468,7 @@ namespace ao::tui::test
     // without a change notification for the untouched preference.
     auto const optPresentationId = fixture.listPresentations.presentationIdForList(listId);
     REQUIRE(optPresentationId);
-    CHECK(*optPresentationId == "albums");
+    CHECK(*optPresentationId == rt::TrackPresetId{rt::BuiltinPreset::Albums});
     CHECK(changeCount == 0);
   }
 
@@ -478,7 +478,8 @@ namespace ao::tui::test
     auto const listId = fixture.addList("Roadsongs", "#live");
     // The saved id names no live preset, exactly like a preference left over
     // from a deleted custom presentation.
-    fixture.listPresentations.setPresentationIdForList(listId, "custom-deleted");
+    auto const deletedId = rt::CustomPresetId{17};
+    fixture.listPresentations.setPresentationIdForList(listId, deletedId);
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryOpenEdit(listId));
@@ -492,7 +493,7 @@ namespace ao::tui::test
     // as stored instead of being rewritten or dropped.
     auto const optPresentationId = fixture.listPresentations.presentationIdForList(listId);
     REQUIRE(optPresentationId);
-    CHECK(*optPresentationId == "custom-deleted");
+    CHECK(*optPresentationId == rt::TrackPresetId{deletedId});
   }
 
   TEST_CASE("ListAuthoringController - a save failure keeps the draft for retry")

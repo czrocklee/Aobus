@@ -65,14 +65,16 @@ CHECK(compact.text == "Partial import");
 Signal tests should check emission and, when available, payload:
 
 ```cpp
-std::vector<ChangeEvent> events;
-auto sub = model.signalChanged().connect([&](auto event) { events.push_back(event); });
+std::vector<ListId> changedLists;
+auto sub = preferences.signalChanged().connect([&](ListId id) { changedLists.push_back(id); });
 
-model.setActivePresentationId("albums");
-model.setActivePresentationId("albums");
+auto const albums = rt::TrackPresetId{rt::BuiltinPreset::Albums};
+preferences.setPresentationIdForList(listId, albums);
+preferences.setPresentationIdForList(listId, albums);
 
-REQUIRE(events.size() == 1);
-CHECK(model.activePresentationId() == "albums");
+REQUIRE(changedLists.size() == 1);
+CHECK(changedLists.front() == listId);
+CHECK(preferences.presentationIdForList(listId) == albums);
 ```
 
 ## GTK tests

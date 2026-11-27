@@ -220,17 +220,19 @@ namespace ao::rt::test
     CHECK(projectionPtr->size() == 0);
   }
 
-  TEST_CASE("ViewService - explicit initial order overrides the default presentation order")
+  TEST_CASE("ViewService - playback launch captures the explicit initial presentation order")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const order = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
-    auto const result = env.requireView({.sortBy = order});
+    auto presentation = defaultTrackPresentationSpec();
+    presentation.sortBy = order;
+    auto const result = env.requireView({.optPresentation = presentation});
 
     auto const state = service.trackListState(result);
     CHECK(state.groupBy == TrackGroupKey::None);
     CHECK(state.sortBy == order);
-    CHECK(state.presentation.id == kDefaultTrackPresentationId);
+    CHECK(state.presentation.isPreset(BuiltinPreset::Library));
     auto const launchSpecRes = service.capturePlaybackLaunchSpec(result);
     REQUIRE(launchSpecRes);
     CHECK(launchSpecRes->order.sortBy == order);

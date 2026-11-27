@@ -4,6 +4,7 @@
 zh_Hans:table {
   messages:table {
     track_field_recording_date { "录音日期" }
+    track_sort_recording_year { "录音年份" }
     track_credits_heading { "制作人员" }
     track_credit_performer { "表演者" }
     track_credit_lyricist { "作词" }
@@ -203,6 +204,8 @@ zh_Hans:table {
     create_custom_track_presentation { "创建自定义视图…" }
     track_presentation_picker_label { "视图" }
     track_presentation_all_tracks_manual_order_unavailable { "“所有曲目”没有已保存的顺序。请创建一个保存的列表以手动排列整个音乐库。" }
+    track_sort_column_unavailable { "无法按此列排序：{column}" }
+    track_sort_failed { "曲目排序失败：{detail}" }
     audio_backend_pipewire_description { "现代低延迟 Linux 音频服务器" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture（直接访问硬件）" }
     audio_backend_wasapi_description { "Windows 音频会话 API" }
@@ -299,6 +302,7 @@ zh_Hans:table {
     list_order_list_unavailable { "此列表已不再可用。" }
     list_order_fix_filter { "更改排序前，请先修复列表表达式或快速筛选条件。" }
     list_order_choose_flat_presentation { "请选择“手动排序”或其他未设置排序规则的平铺视图，以重新排列曲目。" }
+    list_order_choose_current_view { "请重新选择当前视图以清除列排序。" }
     list_order_clear_quick_filter { "清除快速筛选条件后才能拖动或相对移动；移至顶部或底部仍然可用。" }
     list_order_changed { "列表已更改。请重新启动排序操作。" }
     list_order_unchanged { "排序未更改。" }
@@ -593,6 +597,7 @@ zh_Hans:table {
     tui_shell_detail_track_detail { "曲目详情" }
     tui_shell_detail_audio_pipeline { "音频链路" }
     tui_shell_detail_output_device { "输出设备" }
+    tui_shell_detail_sort_column { "按列排序曲目" }
     tui_shell_detail_choose_view { "选择视图" }
     tui_shell_detail_notification_center { "通知中心" }
     tui_shell_detail_close_overlay { "关闭浮层" }
@@ -671,8 +676,6 @@ zh_Hans:table {
     tui_library_expression_filter_matched { "表达式筛选匹配 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     tui_presentation_custom { "自定义" }
     tui_presentation_custom_from { "基于 {id} 的自定义视图" }
-    tui_presentation_default { "默认" }
-    tui_presentation_badge { "视图:{id}" }
     tui_editor_title { "曲目属性" }
     tui_editor_title_multiple { "编辑 {count, plural, other {# 首曲目}}" }
     tui_editor_applies_to_all { "更改将应用于全部 {count, plural, other {# 首曲目}}" }
@@ -773,12 +776,9 @@ zh_Hans:table {
     winui_column_resize_failed { "调整列宽失败：{detail}" }
     winui_column_move_failed { "移动列失败：{detail}" }
     winui_column_visibility_failed { "更改列可见性失败：{detail}" }
-    winui_column_not_sortable { "列 ''{column}'' 不支持排序" }
-    winui_sort_failed { "排序失败：{detail}" }
     winui_unavailable_track { "不可用的曲目" }
     winui_theme_file_not_found { "未找到主题文件：{path}" }
     winui_startup_failure { "Aobus 无法启动：\n\n{detail}" }
-    track_presentation_column_sort { "列排序" }
     track_multiple_values { "<多个值>" }
     track_metadata_heading { "元数据" }
     track_audio_properties_heading { "音频属性" }

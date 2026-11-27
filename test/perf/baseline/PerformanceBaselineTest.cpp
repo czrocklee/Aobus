@@ -1054,8 +1054,11 @@ namespace ao::rt::test
       auto const t0 = std::chrono::steady_clock::now();
       auto proj = TrackListProjection{ViewId{1}, sourceLease, lib};
       auto const t1 = std::chrono::steady_clock::now();
-      proj.setPresentation(TrackPresentationSpec{
-        .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
+      // Songs is the real flat base. The timed order is this base sort, not the preset tie chain or a header override.
+      auto titleSort = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+      titleSort.sortBy = {TrackSortTerm{.field = TrackSortField::Title}};
+      titleSort.optColumnSort.reset();
+      proj.setPresentation(titleSort);
       auto const t2 = std::chrono::steady_clock::now();
 
       t.createProjectionDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
@@ -1255,8 +1258,11 @@ namespace ao::rt::test
       auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.musicLibrary};
 
       auto const start = std::chrono::steady_clock::now();
-      proj.setPresentation(TrackPresentationSpec{
-        .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = field, .ascending = true}}});
+      // Songs is the real flat base. Time this field as base sortBy, not a synthetic header identity.
+      auto spec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+      spec.sortBy = {TrackSortTerm{.field = field, .ascending = true}};
+      spec.optColumnSort.reset();
+      proj.setPresentation(spec);
       auto const end = std::chrono::steady_clock::now();
 
       REQUIRE(bench.ids.size() > 20001);
@@ -2523,8 +2529,9 @@ namespace ao::rt::test
     for (auto const& preset : builtinTrackPresentationPresets())
     {
       auto const duration = measureProjectionPresentationDuration(bench, preset.spec);
-      APP_LOG_INFO("  {:<20} {} ms", preset.spec.id, duration.count());
-      recordBaseline(std::format("projection-preset-timing/{}", preset.spec.id),
+      auto const presetKey = builtinPresetKey(preset.presetId());
+      APP_LOG_INFO("  {:<20} {} ms", presetKey, duration.count());
+      recordBaseline(std::format("projection-preset-timing/{}", presetKey),
                      {
                        metric("track_count", kN, "count"),
                        metric("duration", duration.count(), "ms"),

@@ -6,6 +6,7 @@
 #include "test/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -37,7 +38,7 @@ namespace ao::gtk::test
                                   .weight = 2.25,
                                   .visibility = uimodel::TrackColumnVisibility::Hide}}},
     };
-    auto const seededPreferences = uimodel::ListPresentations::Snapshot{{ListId{7}, "artists"}};
+    auto const seededPreferences = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Artists}};
 
     SECTION("Load non-existent config returns default")
     {
@@ -99,7 +100,10 @@ namespace ao::gtk::test
        {uimodel::TrackColumnState{
          .field = rt::TrackField::Duration, .width = 200, .visibility = uimodel::TrackColumnVisibility::Hide}}},
     };
-    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
+    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{
+      {ListId{10}, rt::BuiltinPreset::Albums},
+      {ListId{20}, rt::CustomPresetId{0xcafe}},
+    };
 
     {
       auto store = GtkLayoutStateStore{libraryPath, kLibraryId};
@@ -128,13 +132,15 @@ namespace ao::gtk::test
                         "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
                         "  preferences:\n"
                         "    - listId: 10\n"
-                        "      presentationId: \"albums\"\n");
+                        "      presentationId: \"albums\"\n"
+                        "    - listId: 20\n"
+                        "      presentationId: \"000000000000cafe\"\n");
 
     auto const freshStore = GtkLayoutStateStore{libraryPath, kLibraryId};
     auto state = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{99}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = 999}}},
     };
-    auto prefState = uimodel::ListPresentations::Snapshot{{ListId{99}, "negative-seed"}};
+    auto prefState = uimodel::ListPresentations::Snapshot{{ListId{99}, rt::BuiltinPreset::Songs}};
     freshStore.load(state, prefState);
 
     CHECK(state == expectedState);
@@ -160,10 +166,10 @@ namespace ao::gtk::test
     auto const expectedState = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123, .weight = -1.0}}},
     };
-    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{42}, "albums"}};
+    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{42}, rt::BuiltinPreset::Albums}};
     auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
     auto state = expectedState;
-    auto prefState = uimodel::ListPresentations::Snapshot{{ListId{7}, "artists"}};
+    auto prefState = uimodel::ListPresentations::Snapshot{{ListId{7}, rt::BuiltinPreset::Artists}};
     store.load(state, prefState);
 
     CHECK(state == expectedState);
@@ -188,7 +194,8 @@ namespace ao::gtk::test
           {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0}}},
           {rt::kAllTracksListId, allTracksColumns},
         },
-        uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}});
+        uimodel::ListPresentations::Snapshot{
+          {ListId{10}, rt::BuiltinPreset::Albums}, {rt::kAllTracksListId, rt::BuiltinPreset::Songs}});
     }
 
     auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
@@ -197,7 +204,7 @@ namespace ao::gtk::test
     store.load(state, prefState);
 
     CHECK(state == uimodel::TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, allTracksColumns}});
-    CHECK(prefState == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
+    CHECK(prefState == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, rt::BuiltinPreset::Songs}});
   }
 
   TEST_CASE("GtkLayoutStateStore - failed serialization leaves both durable groups unchanged")
@@ -207,7 +214,7 @@ namespace ao::gtk::test
     auto const expectedState = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 123, .weight = -1.0}}},
     };
-    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
+    auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, rt::BuiltinPreset::Albums}};
     auto store = GtkLayoutStateStore{libraryPath, kLibraryId};
     store.save(expectedState, expectedPrefState);
     auto const before = ao::test::readFile(libraryPath / "gtk_layout.yaml");
@@ -219,7 +226,7 @@ namespace ao::gtk::test
     // and rejects the column group; its valid sibling must not commit alone.
     candidateState.at(ListId{10}).at(0).field = rt::TrackField::Artist;
     candidateState.at(ListId{10}).at(0).width = 456;
-    candidatePrefState.at(ListId{10}) = "artists";
+    candidatePrefState.at(ListId{10}) = rt::BuiltinPreset::Artists;
     store.save(candidateState, candidatePrefState);
 
     CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == before);

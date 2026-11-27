@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 
@@ -27,6 +28,7 @@
 namespace Gtk
 {
   class ColumnView;
+  class ColumnViewSorter;
 }
 
 namespace ao::gtk
@@ -50,10 +52,14 @@ namespace ao::gtk
     // Column setup — calls factoryProvider for each presentable field
     void configureColumns(FactoryProvider const& factoryProvider);
     void prependUtilityColumn(Glib::RefPtr<Gtk::ColumnViewColumn> const& columnPtr);
+    void configureSorting(std::optional<rt::TrackColumnSort> optColumnSort,
+                          std::function<void(rt::TrackColumnSort)> onSort);
+    void disconnectSorting();
+    bool hasPendingSort() const noexcept { return _queuedSortConnection.connected(); }
 
     // Layout management
     void applyColumnLayout(std::span<rt::TrackField const> visibleFields);
-    void updateColumnVisibility(std::span<rt::TrackField const> visibleFields);
+    bool hasCurrentLayout() const noexcept;
     void queueSharedColumnLayoutUpdate();
     void queueColumnResolve();
 
@@ -71,6 +77,7 @@ namespace ao::gtk
     {
       rt::TrackField field = rt::TrackField::Title;
       Glib::RefPtr<Gtk::ColumnViewColumn> columnPtr;
+      bool sortable = false;
     };
 
     struct PendingUserResize final
@@ -79,11 +86,13 @@ namespace ao::gtk
       std::int32_t width = 0;
     };
 
+    void syncSortIndicator(Gtk::ColumnViewSorter const& sorter, std::optional<rt::TrackColumnSort> optColumnSort);
     void flushSharedColumnLayoutUpdate();
     void flushColumnResolve();
     void flushTitlePositionVariableUpdate();
     void connectHorizontalAdjustmentSignals();
     void updateSharedColumnLayout();
+    void updateColumnVisibility(std::span<rt::TrackField const> visibleFields);
     void applySolvedColumnWidths(std::span<uimodel::TrackColumnSolveSpec const> specs);
     std::int32_t resolvedViewportWidth() const;
     std::int32_t leadingUtilityWidth() const;
@@ -103,6 +112,7 @@ namespace ao::gtk
     i18n::MessageCatalog _textCatalog;
 
     std::vector<ColumnBinding> _columns;
+    std::vector<uimodel::TrackColumnState> _appliedLayout;
     std::size_t _leadingUtilityColumnCount = 0;
     sigc::scoped_connection _columnViewMappedConnection;
     sigc::scoped_connection _horizontalAdjustmentChangedConnection;
@@ -116,5 +126,7 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProviderPtr;
     std::string _lastTitleCss;
     std::vector<sigc::scoped_connection> _columnNotifyConnections;
+    sigc::scoped_connection _sortChangedConnection;
+    sigc::scoped_connection _queuedSortConnection;
   };
 } // namespace ao::gtk

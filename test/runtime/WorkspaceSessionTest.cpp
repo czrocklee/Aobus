@@ -11,6 +11,8 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
@@ -43,7 +45,7 @@ namespace
                             std::initializer_list<std::uint32_t> listIds,
                             std::uint32_t activeViewIndex,
                             std::string_view group = "none",
-                            std::uint32_t presentationVersion = 1)
+                            std::uint32_t presentationVersion = 3)
   {
     auto file = std::ofstream{path};
     file << "workspace:\n";
@@ -65,7 +67,8 @@ namespace
       file << "    - listId: " << listId << "\n";
       file << "      filterExpression: \"\"\n";
       file << "      presentation:\n";
-      file << "        id: library\n";
+      file << "        kind: builtin\n";
+      file << "        presetId: library\n";
       file << "        group: " << group << "\n";
       file << "        sort: []\n";
       file << "        visibleFields:\n";
@@ -193,12 +196,10 @@ namespace ao::rt::test
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
       listId = createList(*runtimePtr, "Shared list");
       nextListId = createList(*runtimePtr, "After restore");
-      auto const* songsPreset = builtinTrackPresentationPreset("songs");
-      auto const* albumsPreset = builtinTrackPresentationPreset("albums");
-      REQUIRE(songsPreset != nullptr);
-      REQUIRE(albumsPreset != nullptr);
-      firstPresentation = normalizeTrackPresentationSpec(songsPreset->spec);
-      secondPresentation = normalizeTrackPresentationSpec(albumsPreset->spec);
+      firstPresentation = normalizeTrackPresentationSpec(builtinTrackPresentationPreset(BuiltinPreset::Songs).spec);
+      secondPresentation = normalizeTrackPresentationSpec(builtinTrackPresentationPreset(BuiltinPreset::Albums).spec);
+      // The open view outlives its custom catalog entry; its stored fields and base order are authoritative.
+      secondPresentation.presetId = CustomPresetId{42};
       auto const firstViewId = ao::test::requireValue(runtimePtr->workspace().navigate({
         .target = FilteredListTarget{.listId = listId, .filterExpression = "$title ~ \"First\""},
         .optPresentation =
@@ -209,6 +210,10 @@ namespace ao::rt::test
         .optPresentation =
           NavigationPresentation{.mode = NavigationPresentationMode::Override, .spec = secondPresentation},
       }));
+
+      auto const columnSort = TrackColumnSort{.column = TrackField::DisplayTrackNumber, .ascending = false};
+      REQUIRE(runtimePtr->views().setColumnSort(secondViewId, columnSort));
+      secondPresentation.optColumnSort = columnSort;
 
       if (expectedActiveIndex == 0)
       {
@@ -235,6 +240,8 @@ namespace ao::rt::test
     CHECK(secondState.listId == listId);
     CHECK(secondState.filterExpression == "$title ~ \"Second\"");
     CHECK(secondState.presentation == secondPresentation);
+    CHECK(secondState.sortBy == secondPresentation.effectiveSortBy());
+    CHECK(runtimePtr->workspace().customPresets().empty());
 
     REQUIRE(runtimePtr->workspace().navigate({.target = nextListId}));
     REQUIRE(runtimePtr->workspace().goBack());
@@ -256,11 +263,10 @@ namespace ao::rt::test
       auto runtimePtr = makeStateOnlyRuntime(savedDir);
       savedListId = createList(*runtimePtr, "Saved");
       REQUIRE(runtimePtr->workspace().navigate({.target = savedListId}));
-      auto const* songsPreset = builtinTrackPresentationPreset("songs");
-      REQUIRE(songsPreset != nullptr);
-      auto customSpec = songsPreset->spec;
-      customSpec.id = "custom.portable";
-      customPreset = CustomTrackPresentationPreset{.label = "Portable", .basePresetId = "songs", .spec = customSpec};
+      auto customSpec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+      customSpec.presetId = CustomPresetId{42};
+      customPreset =
+        CustomTrackPresentationPreset{.label = "Portable", .optBasePresetId = BuiltinPreset::Songs, .spec = customSpec};
       REQUIRE(runtimePtr->workspace().addCustomPreset(customPreset));
       auto store = ConfigStore{configPath};
       runtimePtr->workspace().saveSession(store);
@@ -277,21 +283,19 @@ namespace ao::rt::test
     CHECK(restored.openViews.empty());
     CHECK(restored.activeViewId == kInvalidViewId);
     REQUIRE(runtimePtr->workspace().customPresets().size() == 1);
-    CHECK(runtimePtr->workspace().customPresets().front().spec.id == "custom.portable");
+    CHECK(runtimePtr->workspace().customPresets().front() == customPreset);
   }
 
   TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot")
   {
     auto tempDir = TempDir{};
-    auto const* songsPreset = builtinTrackPresentationPreset("songs");
-    REQUIRE(songsPreset != nullptr);
-    auto customSpec = songsPreset->spec;
-    customSpec.id = "custom.session-songs";
+    auto customSpec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+    customSpec.presetId = CustomPresetId{7};
     customSpec.visibleFields = {TrackField::Title, TrackField::Artist, TrackField::Duration};
     customSpec.redundantFields = {TrackField::Album};
     auto const expectedPreset = CustomTrackPresentationPreset{
       .label = "Session songs",
-      .basePresetId = "songs",
+      .optBasePresetId = BuiltinPreset::Songs,
       .spec = normalizeTrackPresentationSpec(customSpec),
     };
 
@@ -362,12 +366,10 @@ namespace ao::rt::test
     auto const storedListId = createList(*runtimePtr, "Stored");
     auto const nextListId = createList(*runtimePtr, "Next");
     auto const existingViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = existingListId}));
-    auto const* songsPreset = builtinTrackPresentationPreset("songs");
-    REQUIRE(songsPreset != nullptr);
-    auto customSpec = songsPreset->spec;
-    customSpec.id = "custom.keep";
+    auto customSpec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec;
+    customSpec.presetId = CustomPresetId{1};
     REQUIRE(runtimePtr->workspace().addCustomPreset(
-      CustomTrackPresentationPreset{.label = "Keep", .basePresetId = "songs", .spec = customSpec}));
+      CustomTrackPresentationPreset{.label = "Keep", .optBasePresetId = BuiltinPreset::Songs, .spec = customSpec}));
     settleRuntimeCallbacks(*runtimePtr);
     auto const beforeSnapshot = runtimePtr->workspace().snapshot();
     auto const configPath = tempDir.path() / "config.yaml";
@@ -587,6 +589,40 @@ namespace ao::rt::test
     settleRuntimeCallbacks(*runtimePtr);
     CHECK(runtimePtr->workspace().snapshot() == before);
     CHECK(changeCount == 0);
+  }
+
+  TEST_CASE("WorkspaceService - checkpointing a fallback view preserves a rejected session")
+  {
+    auto tempDir = TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    auto const path = tempDir.path() / "workspace.yaml";
+    auto const version = GENERATE(1U, 3U);
+    writeWorkspaceConfig(path, libraryIdOf(*runtimePtr), {kAllTracksListId.raw()}, 0, "unknown-group", version);
+    std::ofstream{path, std::ios::app} << "sibling: retained\n";
+    auto const original = readFile(path);
+    auto store = ConfigStore{path};
+    auto& workspace = runtimePtr->workspace();
+
+    auto const restoredRes = workspace.restoreSession(store);
+    REQUIRE_FALSE(restoredRes);
+    REQUIRE(workspace.navigate({.target = GlobalViewKind::AllTracks}));
+    workspace.saveSession(store);
+    CHECK(readFile(path) == original);
+
+    // A write to a different group still commits and leaves the rejected payload intact.
+    REQUIRE(store.removeGroup("sibling"));
+    auto afterSiblingWrite = ConfigStore{path};
+    CHECK_FALSE(requireValue(afterSiblingWrite.contains("sibling")));
+    auto const stillRejectedRes = workspace.restoreSession(afterSiblingWrite);
+    REQUIRE_FALSE(stillRejectedRes);
+    CHECK(stillRejectedRes.error().code == restoredRes.error().code);
+
+    // Explicitly discarding just this group permits a fresh checkpoint on the same store.
+    REQUIRE(store.removeGroup("workspace"));
+    workspace.saveSession(store);
+    auto replacement = ConfigStore{path};
+    REQUIRE(requireValue(replacement.contains("workspace")));
+    REQUIRE(workspace.restoreSession(replacement));
   }
 
   TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format")

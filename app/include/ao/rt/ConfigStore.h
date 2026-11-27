@@ -104,6 +104,10 @@ namespace ao::rt
     /// Whether a protected load or save has found @p group written by a newer version.
     bool hasNewerGroup(std::string_view group) const;
 
+    /// Prevent checkpoints from replacing a group whose contents the caller could not restore.
+    /// Other groups remain writable. A successful explicit removeGroup discards the retained group.
+    void preserveGroup(std::string_view group);
+
     Result<bool> contains(std::string_view group);
 
     /// Fails as `NotSupported`, removing nothing, for a group `hasNewerGroup` reports.
@@ -159,6 +163,7 @@ namespace ao::rt
 
   private:
     static Error withGroupContext(Error error, std::string_view operation, std::string_view group);
+    Result<> checkGroupReplacement(std::string_view group) const;
 
     /// Fails as `NotSupported`, and remembers @p group, when its stored `version` exceeds @p currentVersion.
     Result<> refuseNewerGroup(std::string_view group, std::uint32_t currentVersion);
@@ -166,6 +171,11 @@ namespace ao::rt
     template<typename T, ConfigSchema<T> Schema>
     Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)
     {
+      if (auto res = checkGroupReplacement(group); !res)
+      {
+        return res;
+      }
+
       if constexpr (ProtectedConfigSchema<Schema, T>)
       {
         if (auto const res = refuseNewerGroup(group, Schema::kVersion); !res)
@@ -240,6 +250,7 @@ namespace ao::rt
     std::vector<char> _inputBuffer;
     std::optional<std::size_t> _optMaxFileBytes;
     std::vector<std::string> _newerGroups;
+    std::vector<std::string> _preservedGroups;
     bool _hasLocation = true;
     bool _loaded = false;
   };

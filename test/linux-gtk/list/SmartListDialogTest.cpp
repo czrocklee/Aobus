@@ -815,7 +815,7 @@ namespace ao::gtk::test
 
     auto preset = rt::CustomTrackPresentationPreset{};
     preset.label = "My Albums View";
-    preset.spec.id = "custom-albums-view";
+    preset.spec.presetId = rt::CustomPresetId{0xa1};
     REQUIRE(runtime.workspace().addCustomPreset(preset));
 
     auto const optNode = runtime.library().snapshot().listNode(listId);
@@ -833,7 +833,7 @@ namespace ao::gtk::test
 
     // The list is assigned the custom presentation, so the editor must open
     // with that presentation selected instead of silently falling to Auto.
-    dialog.populate(listId, *optNode, std::optional<std::string>{"custom-albums-view"});
+    dialog.populate(listId, *optNode, std::optional<std::string>{"00000000000000a1"});
     drainGtkEvents();
 
     auto const dropDowns = collectAll<Gtk::DropDown>(dialog);
@@ -851,7 +851,7 @@ namespace ao::gtk::test
 
     // The id the editor hands back for saving round-trips the custom id
     // unchanged instead of rewriting it to the Auto recommendation.
-    CHECK(dialog.presentationId() == "custom-albums-view");
+    CHECK(dialog.presentationId() == "00000000000000a1");
   }
 
   TEST_CASE("SmartListDialog - a new list starts as Auto with an absent preference")
@@ -910,7 +910,7 @@ namespace ao::gtk::test
 
     // The stored id names no live preset, exactly like a preference left over
     // from a deleted custom presentation.
-    dialog.populate(listId, *optNode, std::optional<std::string>{"custom-gone"});
+    dialog.populate(listId, *optNode, std::optional<std::string>{"000000000000dead"});
     drainGtkEvents();
 
     auto const dropDowns = collectAll<Gtk::DropDown>(dialog);
@@ -921,9 +921,9 @@ namespace ao::gtk::test
 
     auto const unavailablePosition = static_cast<guint>(rt::builtinTrackPresentationPresets().size()) + 1U;
     CHECK(dropDown->get_selected() == unavailablePosition);
-    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: custom-gone (Auto)");
+    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: 000000000000dead (Auto)");
     CHECK(stringListPtr->get_n_items() == unavailablePosition + 1U);
-    CHECK(dialog.presentationId() == "custom-gone");
+    CHECK(dialog.presentationId() == "000000000000dead");
 
     // A rename keeps the unavailable selection, so the save still carries the
     // original opaque id.
@@ -941,7 +941,7 @@ namespace ao::gtk::test
     REQUIRE(nameEntry != nullptr);
     nameEntry->set_text("Renamed");
     drainGtkEvents();
-    CHECK(dialog.presentationId() == "custom-gone");
+    CHECK(dialog.presentationId() == "000000000000dead");
 
     // Intentionally switching to Auto clears the preference to absence.
     dropDown->set_selected(0U);
@@ -951,12 +951,12 @@ namespace ao::gtk::test
     // The unavailable row stays available; reselecting it restores the id.
     dropDown->set_selected(unavailablePosition);
     drainGtkEvents();
-    CHECK(dialog.presentationId() == "custom-gone");
+    CHECK(dialog.presentationId() == "000000000000dead");
 
     // A concrete builtin replaces the preference with that exact id.
     dropDown->set_selected(2U);
     drainGtkEvents();
-    CHECK(dialog.presentationId() == rt::kListOrderTrackPresentationId);
+    CHECK(dialog.presentationId() == rt::builtinPresetKey(rt::BuiltinPreset::ListOrder));
   }
 
   TEST_CASE("SmartListDialog - repopulating replaces the unavailable option without stale rows")
@@ -978,7 +978,7 @@ namespace ao::gtk::test
 
     auto preset = rt::CustomTrackPresentationPreset{};
     preset.label = "Labeled View";
-    preset.spec.id = "custom-labeled";
+    preset.spec.presetId = rt::CustomPresetId{0x1ab};
     REQUIRE(runtime.workspace().addCustomPreset(preset));
 
     auto const optNode = runtime.library().snapshot().listNode(listId);
@@ -1003,26 +1003,26 @@ namespace ao::gtk::test
     auto const baseRowCount = static_cast<guint>(rt::builtinTrackPresentationPresets().size()) + 2U;
     auto const unavailablePosition = baseRowCount;
 
-    dialog.populate(listId, *optNode, std::optional<std::string>{"custom-gone"});
+    dialog.populate(listId, *optNode, std::optional<std::string>{"000000000000dead"});
     drainGtkEvents();
     CHECK(stringListPtr->get_n_items() == baseRowCount + 1U);
     CHECK(dropDown->get_selected() == unavailablePosition);
-    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: custom-gone (Auto)");
+    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: 000000000000dead (Auto)");
 
     // A known custom id leaves no unavailable row behind.
-    dialog.populate(listId, *optNode, std::optional<std::string>{"custom-labeled"});
+    dialog.populate(listId, *optNode, std::optional<std::string>{"00000000000001ab"});
     drainGtkEvents();
     CHECK(stringListPtr->get_n_items() == baseRowCount);
     CHECK(dropDown->get_selected() == unavailablePosition - 1U);
-    CHECK(dialog.presentationId() == "custom-labeled");
+    CHECK(dialog.presentationId() == "00000000000001ab");
 
     // A different unknown id recreates exactly one unavailable row.
-    dialog.populate(listId, *optNode, std::optional<std::string>{"custom-other"});
+    dialog.populate(listId, *optNode, std::optional<std::string>{"000000000000cafe"});
     drainGtkEvents();
     CHECK(stringListPtr->get_n_items() == baseRowCount + 1U);
     CHECK(dropDown->get_selected() == unavailablePosition);
-    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: custom-other (Auto)");
-    CHECK(dialog.presentationId() == "custom-other");
+    CHECK(stringListPtr->get_string(unavailablePosition) == "Unavailable: 000000000000cafe (Auto)");
+    CHECK(dialog.presentationId() == "000000000000cafe");
 
     // Absence and an explicitly empty id both count as Auto, not unavailable.
     dialog.populate(listId, *optNode, std::nullopt);
@@ -1048,7 +1048,7 @@ namespace ao::gtk::test
 
     auto preset = rt::CustomTrackPresentationPreset{};
     preset.label = "";
-    preset.spec.id = "custom-unnamed";
+    preset.spec.presetId = rt::CustomPresetId{0xfee};
     REQUIRE(runtime.workspace().addCustomPreset(preset));
 
     auto dialog = SmartListDialog{window,
@@ -1069,11 +1069,11 @@ namespace ao::gtk::test
     REQUIRE(stringListPtr);
 
     auto const customPosition = static_cast<guint>(rt::builtinTrackPresentationPresets().size()) + 1U;
-    CHECK(stringListPtr->get_string(customPosition) == "custom-unnamed");
+    CHECK(stringListPtr->get_string(customPosition) == "0000000000000fee");
 
     dropDown->set_selected(customPosition);
     drainGtkEvents();
-    CHECK(dialog.presentationId() == "custom-unnamed");
+    CHECK(dialog.presentationId() == "0000000000000fee");
   }
 
   TEST_CASE("SmartListDialog - the selected presentation option ellipsizes and keeps its full text reachable")
@@ -1106,7 +1106,7 @@ namespace ao::gtk::test
                                   kInvalidListId,
                                   cache};
 
-    auto const unavailableId = std::string{"custom-unavailable-presentation-id-with-a-long-name"};
+    auto const unavailableId = std::string{"fedcba9876543210"};
     dialog.populate(listId, *optNode, std::optional<std::string>{unavailableId});
     drainGtkEvents();
 
@@ -1160,7 +1160,7 @@ namespace ao::gtk::test
     auto const popupFactoryPtr = dropDowns.front()->get_list_factory();
     REQUIRE(popupFactoryPtr != nullptr);
 
-    auto const unavailableText = std::string{"Unavailable: custom-gone (Auto)"};
+    auto const* const unavailableText = "Unavailable: 000000000000dead (Auto)";
     auto stringsPtr = Gtk::StringList::create({Glib::ustring{unavailableText}, "Auto"});
     auto selectionPtr = Gtk::SingleSelection::create(stringsPtr);
     auto listView = Gtk::ListView{selectionPtr};
@@ -1186,18 +1186,18 @@ namespace ao::gtk::test
       return nullptr;
     };
 
-    REQUIRE(rowCheck("Unavailable: custom-gone (Auto)") != nullptr);
+    REQUIRE(rowCheck(unavailableText) != nullptr);
     REQUIRE(rowCheck("Auto") != nullptr);
 
     // The list starts on the unavailable row: its check is visible from the
     // synchronized binding and the unselected row's check is hidden.
-    CHECK(rowCheck("Unavailable: custom-gone (Auto)")->get_visible());
+    CHECK(rowCheck(unavailableText)->get_visible());
     CHECK_FALSE(rowCheck("Auto")->get_visible());
 
     // Switching the selection moves the check to the Auto row.
     selectionPtr->set_selected(1U);
     drainGtkEvents();
-    CHECK_FALSE(rowCheck("Unavailable: custom-gone (Auto)")->get_visible());
+    CHECK_FALSE(rowCheck(unavailableText)->get_visible());
     CHECK(rowCheck("Auto")->get_visible());
   }
 } // namespace ao::gtk::test

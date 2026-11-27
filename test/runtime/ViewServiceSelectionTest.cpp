@@ -5,6 +5,7 @@
 #include "test/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -59,7 +60,9 @@ namespace ao::rt::test
     auto const firstSelected = fixture.addTrack({.title = "Zulu"});
     auto const nextSelected = fixture.addTrack({.title = "Alpha"});
     fixture.cachePtr->reloadAllTracks();
-    auto const viewId = fixture.requireView({.sortBy = {{.field = TrackSortField::Title, .ascending = true}}});
+    auto presentation = defaultTrackPresentationSpec();
+    presentation.sortBy = {{.field = TrackSortField::Title, .ascending = true}};
+    auto const viewId = fixture.requireView({.optPresentation = presentation});
     auto& views = fixture.service;
     auto const selection = std::vector{firstSelected, nextSelected};
     REQUIRE(views.setSelection(viewId, selection));

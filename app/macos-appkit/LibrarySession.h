@@ -13,7 +13,9 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -74,7 +76,7 @@ namespace ao::appkit
     uimodel::AobusSoulViewState soul{};
     uimodel::TrackFilterViewState filter{};
     uimodel::TrackPresentationPickerState presentation{};
-    std::optional<std::string> optListPresentationId{};
+    std::optional<rt::TrackPresetId> optListPresentationId{};
     uimodel::ActivityStatusViewState activity{};
     std::array<uimodel::TransportViewState, kPlaybackCommandCapacity> transport{};
     rt::ResourceBytes playingCover{};
@@ -106,6 +108,7 @@ namespace ao::appkit
     LibraryEditorModel& editor() const noexcept;
     i18n::MessageCatalog const& catalog() const noexcept;
     MediaPlayerAdapter& mediaPlayer() const noexcept;
+    rt::ViewId tableViewId() const noexcept;
     uimodel::TrackDisplayIndex const& displayIndex() const noexcept;
     rt::TrackRow const* rowAt(std::size_t displayIndex);
     uimodel::TrackGroupHeadingPresentation groupHeading(std::size_t groupIndex) const;
@@ -113,8 +116,8 @@ namespace ao::appkit
     std::optional<std::size_t> displayIndexOf(TrackId trackId) const;
     void select(std::vector<TrackId> ids);
     void navigate(ListId listId) const;
-    Result<> setPresentation(std::string const& id) const;
-    Result<> sort(rt::TrackSortField field, bool ascending) const;
+    Result<> setPresentation(std::optional<rt::TrackPresetId> const& optPresetId) const;
+    Result<> toggleSort(rt::ViewId renderedViewId, rt::TrackField column) const;
     void filter(std::string const& text);
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);

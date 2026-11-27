@@ -43,7 +43,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -73,11 +72,9 @@ namespace ao::rt::test
       }
     };
 
-    TrackPresentationSpec presetSpec(std::string_view id)
+    TrackPresentationSpec presetSpec(BuiltinPreset id)
     {
-      auto const* preset = builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      return normalizeTrackPresentationSpec(preset->spec);
+      return normalizeTrackPresentationSpec(builtinTrackPresentationPreset(id).spec);
     }
 
     bool hasVisibleTrack(AppRuntime& runtime, ViewId viewId, TrackId trackId)
@@ -136,9 +133,9 @@ namespace ao::rt::test
     auto fixture = TrackSourceNavigationFixture{};
     auto& runtime = *fixture.runtimePtr;
     auto& workspace = runtime.workspace();
-    auto const existingPresentation = presetSpec("songs");
-    auto const reopenPresentation = presetSpec("albums");
-    auto const previousPresentation = presetSpec("artists");
+    auto const existingPresentation = presetSpec(BuiltinPreset::Songs);
+    auto const reopenPresentation = presetSpec(BuiltinPreset::Albums);
+    auto const previousPresentation = presetSpec(BuiltinPreset::Artists);
     auto const sourceViewId =
       requireNavigation(runtime,
                         NavigationRequest{.target = fixture.sourceListId,
@@ -216,7 +213,7 @@ namespace ao::rt::test
     }
 
     REQUIRE(hasVisibleTrack(runtime, otherViewId, fixture.trackId));
-    auto const allTracksPresentation = presetSpec("albums");
+    auto const allTracksPresentation = presetSpec(BuiltinPreset::Albums);
     auto const defaultPresentation = [&](ListId listId)
     { return listId == kAllTracksListId ? allTracksPresentation : defaultTrackPresentationSpec(); };
 
@@ -264,7 +261,7 @@ namespace ao::rt::test
     auto& workspace = runtime.workspace();
     requireNavigation(
       runtime, FilteredListTarget{.listId = kAllTracksListId, .filterExpression = kMatchingTrackFilter});
-    auto const presentation = presetSpec("songs");
+    auto const presentation = presetSpec(BuiltinPreset::Songs);
     auto const allTracksViewId =
       requireNavigation(runtime,
                         NavigationRequest{.target = GlobalViewKind::AllTracks,
@@ -302,7 +299,7 @@ namespace ao::rt::test
     auto& workspace = runtime.workspace();
     auto const filteredViewId = requireNavigation(runtime, fixture.sourceListId);
     REQUIRE(hasVisibleTrack(runtime, filteredViewId, fixture.trackId));
-    auto const previousPresentation = presetSpec("artists");
+    auto const previousPresentation = presetSpec(BuiltinPreset::Artists);
     REQUIRE(workspace.setActivePresentation(previousPresentation, {.recordHistory = false}));
     auto const* const filter = R"($title = "Different Song")";
     REQUIRE(runtime.views().setFilter(filteredViewId, filter));
@@ -336,7 +333,7 @@ namespace ao::rt::test
       runtime, FilteredListTarget{.listId = fixture.sourceListId, .filterExpression = kMatchingTrackFilter});
     REQUIRE(views.setSelection(filteredViewId, {fixture.trackId}));
     auto const departureViewId = requireNavigation(runtime, fixture.otherListId);
-    auto const departurePresentation = presetSpec("artists");
+    auto const departurePresentation = presetSpec(BuiltinPreset::Artists);
     REQUIRE(views.setFilter(departureViewId, kMatchingTrackFilter));
     REQUIRE(workspace.setActivePresentation(departurePresentation, {.recordHistory = false}));
     settleRuntimeCallbacks(runtime);
@@ -378,7 +375,7 @@ namespace ao::rt::test
     auto const forwardViewId = requireNavigation(runtime, fixture.otherListId);
     REQUIRE(requireBackNavigation(runtime) == viewId);
     REQUIRE(hasVisibleTrack(runtime, viewId, fixture.trackId));
-    auto const presentation = presetSpec("artists");
+    auto const presentation = presetSpec(BuiltinPreset::Artists);
     REQUIRE(workspace.setActivePresentation(presentation, {.recordHistory = false}));
     auto const before = workspace.snapshot();
     bool requestedPresentation = false;
@@ -564,6 +561,76 @@ namespace ao::rt::test
     CHECK(changes.front().snapshot.revision == before.revision + 1);
   }
 
+  TEST_CASE("WorkspaceService - filtered navigation checkpoints the view recovered after list deletion")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& workspace = runtime.workspace();
+    auto const allTracks = requireNavigation(runtime, GlobalViewKind::AllTracks);
+    auto const deleted = requireNavigation(runtime, fixture.firstListId);
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteListAsync(fixture.firstListId)));
+    settleRuntimeCallbacks(runtime);
+    auto const recovered = workspace.snapshot();
+    REQUIRE(recovered.activeViewId == allTracks);
+    REQUIRE(recovered.openViews == std::vector{allTracks});
+    REQUIRE_FALSE(runtime.views().findTrackListState(deleted));
+    auto changes = std::vector<WorkspaceChanged>{};
+    auto const sub = workspace.onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
+    auto const* const artistFilter = R"($artist = "Example Artist")";
+
+    SECTION("A failed destination does not record recovery")
+    {
+      auto const res = workspace.navigate(
+        {.target = FilteredListTarget{.listId = fixture.firstListId, .filterExpression = artistFilter}});
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotFound);
+      settleRuntimeCallbacks(runtime);
+      CHECK(workspace.snapshot() == recovered);
+      CHECK(changes.empty());
+      CHECK_FALSE(workspace.canGoForward());
+      REQUIRE(requireBackNavigation(runtime) == allTracks);
+      CHECK_FALSE(workspace.canGoBack());
+      REQUIRE(workspace.canGoForward());
+      auto const beforeReplay = workspace.snapshot();
+      auto const forwardRes = workspace.goForward();
+      REQUIRE_FALSE(forwardRes);
+      CHECK(forwardRes.error().code == Error::Code::NotFound);
+      CHECK(workspace.snapshot() == beforeReplay);
+    }
+
+    SECTION("A successful destination records recovery and the requested target in one commit")
+    {
+      auto const artistView =
+        requireNavigation(runtime, FilteredListTarget{.listId = kAllTracksListId, .filterExpression = artistFilter});
+
+      auto const navigated = workspace.snapshot();
+      CHECK(navigated.activeViewId == artistView);
+      CHECK(navigated.openViews == std::vector{allTracks, artistView});
+      CHECK(navigated.revision == recovered.revision + 1);
+      auto const artistState = runtime.views().trackListState(artistView);
+      CHECK(artistState.listId == kAllTracksListId);
+      CHECK(artistState.filterExpression == artistFilter);
+      REQUIRE(changes.size() == 1);
+      CHECK(changes.front().cause == WorkspaceChangeCause::Navigation);
+      CHECK(changes.front().snapshot == navigated);
+
+      REQUIRE(requireBackNavigation(runtime) == allTracks);
+      CHECK(runtime.views().trackListState(allTracks).filterExpression.empty());
+      auto const beforeReplay = workspace.snapshot();
+      changes.clear();
+      auto const backRes = workspace.goBack();
+      REQUIRE_FALSE(backRes);
+      CHECK(backRes.error().code == Error::Code::NotFound);
+      settleRuntimeCallbacks(runtime);
+      CHECK(workspace.snapshot() == beforeReplay);
+      CHECK(changes.empty());
+      REQUIRE(workspace.canGoForward());
+      CHECK(requireForwardNavigation(runtime) == artistView);
+      CHECK_FALSE(workspace.canGoForward());
+    }
+  }
+
   TEST_CASE("WorkspaceService - a library restore closes the views of lists it replaced")
   {
     auto fixture = WorkspaceRuntimeFixture{};
@@ -636,14 +703,12 @@ namespace ao::rt::test
 
     auto const trackId =
       TrackId{100}; // jumpToAlbum doesn't validate if track exists in library, it just passes the ID to playback
-    auto const* songsPreset = builtinTrackPresentationPreset("songs");
-    REQUIRE(songsPreset != nullptr);
     auto const existingViewId = ao::test::requireValue(runtime.workspace().navigate({
       .target = GlobalViewKind::AllTracks,
       .optPresentation =
         NavigationPresentation{
           .mode = NavigationPresentationMode::Override,
-          .spec = songsPreset->spec,
+          .spec = builtinTrackPresentationPreset(BuiltinPreset::Songs).spec,
         },
     }));
 
@@ -662,7 +727,7 @@ namespace ao::rt::test
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(runtime.workspace().snapshot().activeViewId == existingViewId);
     CHECK(state.listId == kAllTracksListId);
-    CHECK(state.presentation.id == "albums");
+    CHECK(state.presentation.isPreset(BuiltinPreset::Albums));
   }
 
   TEST_CASE("WorkspaceService - invalid navigation targets return an error")
@@ -714,6 +779,40 @@ namespace ao::rt::test
     CHECK(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId == fixture.secondListId);
     requireBackNavigation(runtime);
     CHECK(runtime.workspace().snapshot().activeViewId == beforeLayout.activeViewId);
+  }
+
+  TEST_CASE("WorkspaceService - navigating to an open view commits its destination and edited departure together")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& workspace = runtime.workspace();
+    auto const first = requireNavigation(runtime, fixture.firstListId);
+    auto const second = requireNavigation(runtime, fixture.secondListId);
+    REQUIRE(requireBackNavigation(runtime) == first);
+    REQUIRE(runtime.views().setFilter(first, kMatchingTrackFilter));
+    settleRuntimeCallbacks(runtime);
+    auto const before = workspace.snapshot();
+    auto changes = std::vector<WorkspaceChanged>{};
+    auto const sub = workspace.onChanged([&](WorkspaceChanged const& change) noexcept { changes.push_back(change); });
+
+    auto const missingRes = workspace.navigateToOpenView(ViewId{999999});
+    REQUIRE_FALSE(missingRes);
+    CHECK(missingRes.error().code == Error::Code::InvalidInput);
+    CHECK(requireValue(workspace.navigateToOpenView(first)) == first);
+    settleRuntimeCallbacks(runtime);
+    CHECK(workspace.snapshot() == before);
+    CHECK(changes.empty());
+    CHECK_FALSE(workspace.canGoBack());
+    REQUIRE(workspace.canGoForward());
+
+    REQUIRE(requireValue(workspace.navigateToOpenView(second)) == second);
+    settleRuntimeCallbacks(runtime);
+    REQUIRE(changes.size() == 1);
+    CHECK(changes.front().cause == WorkspaceChangeCause::Navigation);
+    CHECK(changes.front().snapshot.activeViewId == second);
+    CHECK(changes.front().snapshot.revision == before.revision + 1);
+    REQUIRE(requireBackNavigation(runtime) == first);
+    CHECK(runtime.views().trackListState(first).filterExpression == kMatchingTrackFilter);
   }
 
   TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate")
@@ -768,6 +867,23 @@ namespace ao::rt::test
     CHECK(workspace.snapshot().activeViewId == firstViewId);
     CHECK(changed.cause == WorkspaceChangeCause::Focus);
     CHECK(changed.snapshot == workspace.snapshot());
+  }
+
+  TEST_CASE("WorkspaceService - recorded navigation does not append a deliberately focused departure")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& workspace = runtime.workspace();
+    auto const first = requireNavigation(runtime, fixture.firstListId);
+    auto const second = requireNavigation(runtime, fixture.secondListId);
+    REQUIRE(workspace.focusView(first));
+    CHECK(workspace.snapshot().activeViewId == first);
+
+    requireNavigation(runtime, fixture.thirdListId);
+
+    REQUIRE(requireBackNavigation(runtime) == second);
+    CHECK(requireBackNavigation(runtime) == first);
+    CHECK_FALSE(workspace.canGoBack());
   }
 
   TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers")

@@ -56,7 +56,7 @@ namespace ao::uimodel
     std::optional<std::size_t> groupKeyOptionIndex() const;
 
     std::span<rt::TrackSortTerm const> sortTerms() const noexcept { return _sortTerms; }
-    void addSortTerm();
+    bool tryAddSortTerm();
     bool tryRemoveSortTerm(std::size_t index);
     bool tryMoveSortTermUp(std::size_t index);
     bool tryMoveSortTermDown(std::size_t index);
@@ -72,7 +72,7 @@ namespace ao::uimodel
     bool trySetVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex);
     std::optional<std::size_t> optionIndexForVisibleField(rt::TrackField field) const;
 
-    rt::CustomTrackPresentationPreset collectState(std::string_view generatedId) const;
+    rt::CustomTrackPresentationPreset collectState(rt::CustomPresetId id) const;
 
   private:
     // The sort-term and visible-field lists offer the same reordering gestures,
@@ -132,6 +132,7 @@ namespace ao::uimodel
     static std::vector<TrackVisibleFieldOption> makeVisibleFieldOptions(i18n::MessageCatalog const& textCatalog);
 
     std::string _label;
+    std::optional<rt::TrackPresetId> _optBasePresetId;
     rt::TrackGroupKey _groupKey = rt::TrackGroupKey::None;
     std::vector<rt::TrackSortTerm> _sortTerms;
     std::vector<rt::TrackField> _visibleFields;

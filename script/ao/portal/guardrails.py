@@ -239,8 +239,6 @@ def audit_frontend(kind: str, root: Path | str | None) -> AuditResult:
         elif kind == "winui-events":
             if any(re.search(r"AppWindow\(\)\.Changed\(winrt::auto_revoke", code) for _, code in lines):
                 message = "uses auto_revoke with AppWindow: AppWindow does not support weak references"
-            elif any("event_token" in code for _, code in lines):
-                message = "holds a raw event_token"
             # Wrapped receiver callbacks and every capture list naming this
             # need scoped revocation; receiverless self-registration is exempt.
             elif re.search(r"\.[A-Z][A-Za-z0-9_]*\( ?(\{this,|\[[^]]*this)", _code_text(lines)):

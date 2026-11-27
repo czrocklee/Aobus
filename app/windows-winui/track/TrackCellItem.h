@@ -9,7 +9,9 @@
 
 #include "TrackCellItem.g.h"
 
+#include <winrt/Microsoft.UI.Xaml.Data.h>
 #include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/base.h>
 
 namespace winrt::Aobus::implementation
 {
@@ -34,7 +36,15 @@ namespace winrt::Aobus::implementation
     // NOLINTNEXTLINE(readability-identifier-naming)
     Microsoft::UI::Xaml::TextAlignment Alignment() const noexcept { return _alignment; }
 
+    // INotifyPropertyChanged fixes these names for the generated XAML binding.
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    event_token PropertyChanged(Microsoft::UI::Xaml::Data::PropertyChangedEventHandler const& handler);
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    void PropertyChanged(event_token const& token) noexcept;
+    void setText(hstring text);
+
   private:
+    winrt::event<Microsoft::UI::Xaml::Data::PropertyChangedEventHandler> _propertyChanged;
     hstring _text;
     hstring _fieldId;
     double _width = 0.0;

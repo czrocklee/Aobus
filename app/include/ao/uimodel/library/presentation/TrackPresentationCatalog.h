@@ -12,7 +12,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::rt
@@ -48,8 +47,8 @@ namespace ao::uimodel
     std::span<rt::TrackPresentationPreset const> builtinPresets() const noexcept;
     std::span<rt::CustomTrackPresentationPreset const> customPresentations() const noexcept;
 
-    std::optional<rt::TrackPresentationSpec> specForId(std::string_view id) const;
-    std::string labelForId(std::string_view id) const;
+    std::optional<rt::TrackPresentationSpec> specForId(rt::TrackPresetId const& id) const;
+    std::string labelFor(rt::TrackPresetId const& id) const;
     std::vector<TrackPresentationMenuItem> menuItems() const;
 
     void addCustomPresentation(rt::CustomTrackPresentationPreset const& state);
@@ -59,7 +58,7 @@ namespace ao::uimodel
     void setTextCatalog(i18n::MessageCatalog textCatalog);
 
   private:
-    rt::CustomTrackPresentationPreset const* findCustomPresetById(std::string_view id) const;
+    rt::CustomTrackPresentationPreset const* findCustomPresetById(rt::CustomPresetId id) const;
 
     rt::WorkspaceService& _workspace;
     async::Subscription _customPresetsSub;

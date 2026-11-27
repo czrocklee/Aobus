@@ -58,8 +58,10 @@ namespace
     SetVolume,
     WaitForVolume,
     SortTitle,
+    ReverseTitleSort,
     WaitForTitleSort,
-    WaitForColumnSortLabel,
+    ReselectAlbums,
+    WaitForAlbumsReset,
     ModernSearch,
     SelectClassic,
     WaitForClassic,
@@ -132,7 +134,6 @@ namespace
   NSString* _initialPlayingElapsed;
   NSString* _occludedElapsed;
   NSString* _unsortedFirstIdentity;
-  NSMenuItem* _openPresentationLabel;
   double _initialPlayingFraction;
   NSTextView* _searchEditor;
   NSSize _initialContentSize;
@@ -144,7 +145,7 @@ namespace
   std::int32_t _settleTicks;
   BOOL _successor;
   BOOL _completed;
-  BOOL _checkingTestOutput;
+  BOOL _trackingNativeMenu;
   BOOL _indexedReselectionMarkerReached;
 }
 - (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch
@@ -422,7 +423,7 @@ namespace
   __block BOOL observed = NO;
   __block BOOL matched = NO;
   __block NSMenuItem* replacement = nil;
-  _checkingTestOutput = YES;
+  _trackingNativeMenu = YES;
   auto const observer = [NSNotificationCenter.defaultCenter
     addObserverForName:NSMenuDidBeginTrackingNotification
                 object:nil
@@ -483,7 +484,7 @@ namespace
             }];
   [self activateControl:control obligation:@"inspect the selected native test output"];
   [NSNotificationCenter.defaultCenter removeObserver:observer];
-  _checkingTestOutput = NO;
+  _trackingNativeMenu = NO;
   AO_INVARIANT(observed != NO, "The native output action must open its observable menu");
 
   if (matched != NO && chooseReplacement != NO)
@@ -501,6 +502,44 @@ namespace
   }
 
   return matched;
+}
+
+- (void)selectAlbumsWhileTracking:(NSPopUpButton*)picker
+{
+  auto* const menu = picker.menu;
+  auto* const label = [picker itemAtIndex:0];
+  NSString* const oldTitle = [label.title copy];
+  auto* const automatic = [picker itemAtIndex:[picker indexOfItemWithRepresentedObject:NSNull.null]];
+  auto* const albums = [picker itemAtIndex:[picker indexOfItemWithRepresentedObject:@"albums"]];
+  AO_INVARIANT(
+    label != nil && automatic.state == NSControlStateValueOn && albums != nil && albums.state == NSControlStateValueOff,
+    "The fixture must start with a label, Auto checked, and Albums unpinned");
+  [picker selectItem:label];
+
+  __block BOOL selectedWhileTracking = NO;
+  _trackingNativeMenu = YES;
+  auto const observer = [NSNotificationCenter.defaultCenter
+    addObserverForName:NSMenuDidBeginTrackingNotification
+                object:menu
+                 queue:nil
+            usingBlock:^(NSNotification*) {
+              ::CFRunLoopPerformBlock(::CFRunLoopGetMain(), (__bridge ::CFStringRef)NSEventTrackingRunLoopMode, ^{
+                // Dispatch the real picker action while tracking, not as a consequence of dismissing the menu.
+                [picker selectItem:albums];
+                [self activateControl:picker obligation:@"pin Albums while the presentation menu tracks"];
+                AO_INVARIANT([picker itemAtIndex:0] == label && [label.title isEqual:oldTitle] != NO &&
+                               automatic.menu == menu && automatic.state == NSControlStateValueOn &&
+                               albums.menu == menu && albums.state == NSControlStateValueOff,
+                             "The tracking picker must keep its old label and Auto checkmark after choosing Albums");
+                selectedWhileTracking = YES;
+                [menu cancelTrackingWithoutAnimation];
+              });
+              ::CFRunLoopWakeUp(::CFRunLoopGetMain());
+            }];
+  [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, picker.bounds.size.height) inView:picker];
+  [NSNotificationCenter.defaultCenter removeObserver:observer];
+  _trackingNativeMenu = NO;
+  AO_INVARIANT(selectedWhileTracking != NO, "The native presentation menu must track before selecting Albums");
 }
 
 - (void)verifyStoppedEmptyAction
@@ -742,8 +781,8 @@ namespace
 {
   @autoreleasepool
   {
-    // The output popup runs a nested tracking loop; do not advance this driver on its stack.
-    if (_checkingTestOutput != NO)
+    // Native popups run a nested tracking loop; do not advance this driver on their stacks.
+    if (_trackingNativeMenu != NO)
     {
       return;
     }
@@ -759,6 +798,10 @@ namespace
       else if (_stage == Stage::VerifyIndexedReselection && _indexedReselectionMarkerReached == NO)
       {
         reason = "waiting for the common-modes block after same-root Open Recent";
+      }
+      else if (_stage == Stage::WaitForAlbums)
+      {
+        reason = "waiting for grouped Albums and the deferred picker refresh after tracking";
       }
 
       AO_INVARIANT(beforeDeadline,
@@ -883,7 +926,7 @@ namespace
         auto* const presentation = static_cast<NSPopUpButton*>(control);
         AO_INVARIANT(presentation.numberOfItems > 4, "The native presentation control must expose the shared catalog");
         auto* const manual = [presentation itemAtIndex:[presentation indexOfItemWithRepresentedObject:@"list-order"]];
-        auto* const automatic = [presentation itemAtIndex:[presentation indexOfItemWithRepresentedObject:@""]];
+        auto* const automatic = [presentation itemAtIndex:[presentation indexOfItemWithRepresentedObject:NSNull.null]];
         AO_INVARIANT(manual.enabled == NO && manual.toolTip.length > 0 && [automatic.title isEqual:@"Auto"] != NO,
                      "The native catalog must explain All Tracks Manual Order unavailability and expose Auto");
         auto const rowCount = _table.numberOfRows;
@@ -899,19 +942,23 @@ namespace
         [self activateControl:presentation obligation:@"ignore an unsupported presentation selection"];
         AO_INVARIANT(presentation.indexOfSelectedItem == unsupportedIndex && _table.numberOfRows == rowCount,
                      "An unsupported presentation selection must leave browsing unchanged");
+        [presentation itemAtIndex:unsupportedIndex].representedObject = @"invalid-preset-key";
+        [self activateControl:presentation obligation:@"ignore an invalid preset key"];
+        AO_INVARIANT(presentation.indexOfSelectedItem == unsupportedIndex && _table.numberOfRows == rowCount,
+                     "An invalid preset key must not select Auto or change the active view");
         [presentation removeItemAtIndex:unsupportedIndex];
-        auto const albumsIndex = [presentation indexOfItemWithRepresentedObject:@"albums"];
-        AO_INVARIANT(albumsIndex >= 0, "The native catalog must retain the Albums identity");
-        [presentation selectItemAtIndex:albumsIndex];
-        [self activateControl:presentation obligation:@"select Albums presentation"];
+        [self selectAlbumsWhileTracking:presentation];
         _stage = Stage::WaitForAlbums;
         break;
       }
       case Stage::WaitForAlbums:
-        if (selectableRowCount(_table) >= 3 && _table.numberOfRows > selectableRowCount(_table))
+      {
+        auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
+        auto* const albums = [picker itemAtIndex:[picker indexOfItemWithRepresentedObject:@"albums"]];
+
+        if (albums.state == NSControlStateValueOn && selectableRowCount(_table) >= 3 &&
+            _table.numberOfRows > selectableRowCount(_table))
         {
-          auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
-          auto* const albums = [picker itemAtIndex:[picker indexOfItemWithRepresentedObject:@"albums"]];
           NSInteger checkedCount = 0;
 
           for (NSInteger index = 0; index < picker.numberOfItems; ++index)
@@ -921,13 +968,13 @@ namespace
 
           AO_INVARIANT(picker.indexOfSelectedItem == 0 && [picker itemAtIndex:0].enabled == NO &&
                          [picker.title isEqual:albums.title] != NO,
-                       "The picker must show the active preset on its display-only label row");
-          AO_INVARIANT(checkedCount == 1 && albums.state == NSControlStateValueOn,
-                       "Only the pinned preset may carry a picker checkmark");
+                       "After tracking, the picker must show Albums on the display-only label row");
+          AO_INVARIANT(checkedCount == 1, "After tracking, only the newly pinned Albums preset may be checked");
           _stage = Stage::SelectTrack;
         }
 
         break;
+      }
       case Stage::SelectTrack:
       {
         auto const row = firstSelectableRow(_table);
@@ -1156,15 +1203,20 @@ namespace
       }
       case Stage::SortTitle:
       {
-        // Hold the picker menu open across the sort's Library refresh.
-        auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
-        _openPresentationLabel = [picker itemAtIndex:0];
-        [picker.menu.delegate menuWillOpen:picker.menu];
+        AO_INVARIANT(_table.sortDescriptors.count == 0, "Albums must not mark any header before a click");
         _unsortedFirstIdentity = [rowIdentity(_table, firstSelectableRow(_table)) copy];
+        _table.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Title" ascending:YES]];
+        _stage = Stage::ReverseTitleSort;
+        break;
+      }
+      case Stage::ReverseTitleSort:
+        AO_INVARIANT(_table.sortDescriptors.count == 1 &&
+                       [_table.sortDescriptors.firstObject.key isEqual:@"Title"] != NO &&
+                       _table.sortDescriptors.firstObject.ascending != 0,
+                     "The first Title sort must show an ascending indicator");
         _table.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Title" ascending:NO]];
         _stage = Stage::WaitForTitleSort;
         break;
-      }
       case Stage::WaitForTitleSort:
         if (_table.selectedRow >= 0 &&
             [rowIdentity(_table, firstSelectableRow(_table)) isEqual:_unsortedFirstIdentity] == NO &&
@@ -1174,19 +1226,26 @@ namespace
                          [_table.sortDescriptors.firstObject.key isEqual:@"Title"] != 0 &&
                          _table.sortDescriptors.firstObject.ascending == 0,
                        "The native Title header must retain descending sort state");
-          auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
-          AO_INVARIANT([picker itemAtIndex:0] == _openPresentationLabel && [picker.title isEqual:@"Column sort"] == NO,
-                       "An open presentation menu must keep its items through a Library refresh");
-          [picker.menu.delegate menuDidClose:picker.menu];
-          _openPresentationLabel = nil;
-          _stage = Stage::WaitForColumnSortLabel;
+          _stage = Stage::ReselectAlbums;
         }
 
         break;
-      case Stage::WaitForColumnSortLabel:
-        if ([static_cast<NSPopUpButton*>([self control:@"presentation-picker"]).title isEqual:@"Column sort"] != NO)
+      case Stage::ReselectAlbums:
+      {
+        auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
+        auto const index = [picker indexOfItemWithRepresentedObject:@"albums"];
+        AO_INVARIANT(index > 0 && [picker itemAtIndex:index].state == NSControlStateValueOn &&
+                       [picker.title isEqual:@"Albums"] != NO && [picker.toolTip isEqual:picker.title] != NO,
+                     "Sorting must keep the Albums label, tooltip, and pin");
+        [picker selectItemAtIndex:index];
+        [self activateControl:picker obligation:@"reselect the active Albums preset"];
+        _stage = Stage::WaitForAlbumsReset;
+        break;
+      }
+      case Stage::WaitForAlbumsReset:
+        if (_table.sortDescriptors.count == 0 &&
+            [rowIdentity(_table, firstSelectableRow(_table)) isEqual:_unsortedFirstIdentity] != NO)
         {
-          // A transient header sort must not leave the previous preset's native label selected.
           _stage = Stage::ModernSearch;
         }
 

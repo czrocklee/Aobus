@@ -46,6 +46,5 @@ namespace ao::appkit
 // The clicked context is independent of the selected List; headings and empty space have no List ID.
 - (ao::ListId)clickedListId;
 - (NSString*)activeListTitle;
-- (NSString*)presentationIdentifier;
 - (std::vector<ao::TrackId>)selectedTrackIds;
 @end

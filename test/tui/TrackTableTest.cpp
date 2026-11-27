@@ -220,7 +220,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar")
   {
     using namespace ftxui;
-    auto const presentation = rt::TrackPresentationSpec{.id = "padding", .visibleFields = {rt::TrackField::Title}};
+    auto const presentation = rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title}};
 
     for (auto const count : {0U, 2U, 40U})
     {
@@ -356,7 +356,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - presentation controls visible columns")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "tui-test", .visibleFields = {rt::TrackField::Title, rt::TrackField::Year, rt::TrackField::Duration}};
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Year, rt::TrackField::Duration}};
     auto row = rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}, .year = 2026};
     auto const tracks = std::vector{makeTrackListEntry(row)};
 
@@ -389,10 +389,29 @@ namespace ao::tui::test
     CHECK(trackIndexForVisualRow(4, 3, sections) == 2);
   }
 
+  TEST_CASE("TrackTable - only manual column sorting marks a header with its direction")
+  {
+    auto const tracks = std::vector{makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha"})};
+    auto presentation = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs).spec;
+    auto const tableText = [&] { return renderText(trackTableView(tracks, 0, kInvalidTrackId, presentation), 80); };
+
+    CHECK_FALSE(tableText().contains("↑"));
+    presentation.optColumnSort = rt::TrackColumnSort{.column = rt::TrackField::Duration, .ascending = false};
+    auto const durationSort = tableText();
+    CHECK(durationSort.contains("↓ Dur"));
+    CHECK_FALSE(durationSort.contains("↑"));
+
+    presentation.optColumnSort = rt::TrackColumnSort{.column = rt::TrackField::Artist};
+    auto const artistSort = tableText();
+    CHECK(artistSort.contains("↑ Artist"));
+    CHECK_FALSE(artistSort.contains("↑ Title"));
+    CHECK_FALSE(artistSort.contains("↓"));
+  }
+
   TEST_CASE("TrackTable - grouped sections render as non-selectable headers")
   {
     auto const presentation =
-      rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "A One", .duration = std::chrono::seconds{61}}),
       makeTrackListEntry(rt::TrackRow{.id = TrackId{2}, .title = "A Two", .duration = std::chrono::seconds{62}}),
@@ -434,7 +453,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - negative selection does not highlight section headers")
   {
     auto const presentation =
-      rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "A One", .duration = std::chrono::seconds{61}})};
     auto const sections = std::vector{TrackSection{.rowBegin = 0, .rowCount = 1, .primaryText = "Album A"}};
@@ -452,7 +471,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable credits - compact categories count every entry including duplicates")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "credits", .visibleFields = {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist}};
+      .visibleFields = {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist}};
     auto const tracks = std::vector{makeTrackListEntry(rt::TrackRow{.id = TrackId{1},
                                                                     .conductor = "A",
                                                                     .ensemble = "Group",
@@ -474,7 +493,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - projected column widths reposition following columns")
   {
     auto const presentation =
-      rt::TrackPresentationSpec{.id = "widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}})};
     auto const defaultText = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation), 120);
@@ -501,7 +520,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - available terminal width expands flexible columns")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "elastic-widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
     auto narrowHandles = std::vector<TrackColumnResizeHandle>{};
@@ -536,7 +555,6 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - renderer consumes projected widths without re-solving")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "override-elastic-widths",
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
@@ -597,7 +615,6 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - narrow available width clamps columns to terminal minimum")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "narrow-elastic-widths",
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
@@ -621,7 +638,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - header exposes resize handles")
   {
     auto const presentation =
-      rt::TrackPresentationSpec{.id = "handles", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}})};
     auto handles = std::vector<TrackColumnResizeHandle>{};
@@ -773,8 +790,8 @@ namespace ao::tui::test
                                   std::chrono::seconds{60}));
     }
 
-    auto const presentation = rt::TrackPresentationSpec{
-      .id = "short", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    auto const presentation =
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
     auto const rendered = renderElement(trackTableView(tracks, 24, kInvalidTrackId, presentation), 48, 7);
 
     CHECK(rendered.text.contains("Track 24"));
@@ -784,7 +801,6 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - missing field values render one dim dash per column")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "fallbacks",
       .visibleFields = {
         rt::TrackField::DisplayTrackNumber, rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration}};
     auto const tracks = std::vector{makeTrackListEntry(rt::TrackRow{.id = TrackId{9}})};
@@ -862,7 +878,6 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - a literal dash value keeps full emphasis and column alignment")
   {
     auto const presentation = rt::TrackPresentationSpec{
-      .id = "literal-dash",
       .visibleFields = {
         rt::TrackField::DisplayTrackNumber, rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration}};
     auto const tracks = std::vector{
@@ -934,7 +949,7 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - title column expands on wide terminals")
   {
     auto const presentation =
-      rt::TrackPresentationSpec{.id = "wide", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
     auto row = rt::TrackRow{
       .id = TrackId{1},
       .title = "A very long title that should still reveal the wide-terminal-tail marker",
@@ -1079,8 +1094,8 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - virtualized render is pixel-identical to the full build")
   {
     auto const tracks = manyTracks(5000);
-    auto const presentation = rt::TrackPresentationSpec{
-      .id = "virtualized", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    auto const presentation =
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
     std::int32_t const width = 80;
     std::int32_t const height = 30;
 
@@ -1111,8 +1126,8 @@ namespace ao::tui::test
   {
     auto const tracks = manyTracks(300);
     auto const sections = equalSections(10, 30);
-    auto const presentation = rt::TrackPresentationSpec{
-      .id = "virtualized-grouped", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    auto const presentation =
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
     std::int32_t const width = 80;
     std::int32_t const height = 24;
     std::int32_t const selected = 150; // deep in section 5
@@ -1159,8 +1174,8 @@ namespace ao::tui::test
   TEST_CASE("TrackTable - virtualized render without selection matches the full build")
   {
     auto const tracks = manyTracks(4000);
-    auto const presentation = rt::TrackPresentationSpec{
-      .id = "virtualized-noselect", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    auto const presentation =
+      rt::TrackPresentationSpec{.visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
     std::int32_t const width = 72;
     std::int32_t const height = 20;
 

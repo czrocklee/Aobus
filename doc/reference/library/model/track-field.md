@@ -78,13 +78,13 @@ Tags use dynamic `#name` variables rather than one fixed query-variable mapping.
 
 ### Synthetic fields
 
-| Raw | Field                | Id                     | Label     | Kind          | Meaning                                       |
-| --: | -------------------- | ---------------------- | --------- | ------------- | --------------------------------------------- |
-|  28 | `DisplayTrackNumber` | `display-track-number` | Track #   | TechnicalText | Formatted disc/track position                 |
-|  29 | `TechnicalSummary`   | `technical-summary`    | Technical | TechnicalText | Combined codec, rate, depth, and bitrate text |
-|  30 | `Quality`            | `quality`              | Quality   | TechnicalText | Derived quality label                         |
+| Raw | Field                | Id                     | Label     | Kind          | Sort key      | Meaning                                       |
+| --: | -------------------- | ---------------------- | --------- | ------------- | ------------- | --------------------------------------------- |
+|  28 | `DisplayTrackNumber` | `display-track-number` | Track #   | TechnicalText | `TrackNumber` | Formatted disc/track position                 |
+|  29 | `TechnicalSummary`   | `technical-summary`    | Technical | TechnicalText | —             | Combined codec, rate, depth, and bitrate text |
+|  30 | `Quality`            | `quality`              | Quality   | TechnicalText | —             | Derived quality label                         |
 
-All three rows have category `Synthetic`, set the synthetic capability, and are neither editable, sortable, groupable, value-completable, nor filter-mapped.
+All three rows have category `Synthetic` and are not editable, groupable, value-completable, or filter-mapped. Only `DisplayTrackNumber` is sortable; its sort key is `TrackNumber`. `TechnicalSummary` and `Quality` are not sortable.
 
 ### Sort fields
 
@@ -155,7 +155,8 @@ Adding a field requires coordinated decisions about persistence source, projecti
 ## Examples
 
 - `TrackField::Artist` is editable, sortable, groupable, value-completable, and maps to `$artist`.
-- `TrackField::MovementNumber` is editable and maps to `$movementNumber`, while its presentation sort key is `TrackSortField::Movement`.
+- `TrackField::MovementNumber` is editable and maps to `$movementNumber`, while its presentation sort key is `TrackSortField::Movement`. A header override records `MovementNumber`, not `Movement`.
+- `TrackField::DisplayTrackNumber` is a sortable synthetic column. It shares the `TrackNumber` order key with `TrackField::TrackNumber`, but a header override records the clicked column.
 - `TrackField::Codec` maps to the existing `@codec` query variable without becoming value-completable.
 - `TrackField::Tags` is presentable but has no fixed query-variable bridge because each tag is a distinct `#name` predicate.
 - `TrackField::Quality` is a synthetic presentation field with no library edit or query mapping.

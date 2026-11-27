@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -21,6 +22,7 @@ namespace ao::tui
   {
     std::span<rt::TrackPresentationPreset const> builtinPresentations{};
     std::span<rt::CustomTrackPresentationPreset const> customPresentations{};
+    std::span<rt::TrackField const> sortableColumns{};
     std::function<std::optional<rt::CompletionResult>(std::string_view text, std::size_t cursor, std::size_t limit)>
       filterCompleter{};
   };

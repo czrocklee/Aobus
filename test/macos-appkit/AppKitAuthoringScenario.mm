@@ -2301,7 +2301,8 @@ namespace ao::appkit::test
       id const retainedParent = [outline itemAtRow:parentRow];
       auto const listRevision = session.state().listRevision;
       auto const tableRevision = session.state().tableRevision;
-      auto const sortBeganRes = session.sort(rt::TrackSortField::Title, false);
+      auto const viewId = session.runtime().workspace().snapshot().activeViewId;
+      auto const sortBeganRes = session.toggleSort(viewId, rt::TrackField::Title);
       AO_INVARIANT(sortBeganRes, "The List-cache regression sort must begin");
       requireWaitUntil(
         [&] { return session.state().tableRevision != tableRevision; }, "Sorting tracks must publish a table revision");

@@ -18,6 +18,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
@@ -701,25 +702,25 @@ namespace
 
   void exerciseBrowserCells(ao::appkit::LibrarySession& session, AobusLibraryBrowser* browser)
   {
-    auto selectPresentation = [&](std::string const& identifier)
+    auto selectPresentation = [&](ao::rt::BuiltinPreset const preset)
     {
       auto const viewId = session.runtime().workspace().snapshot().activeViewId;
       auto viewRes = session.runtime().views().findTrackListState(viewId);
       AO_INVARIANT(viewRes, "browser cell scenario requires an active track-list view");
 
-      if (viewRes->presentation.id == identifier)
+      if (viewRes->presentation.isPreset(preset))
       {
         return;
       }
 
       auto const revision = session.state().tableRevision;
-      auto const presentationRes = session.setPresentation(identifier);
+      auto const presentationRes = session.setPresentation(preset);
       AO_INVARIANT(presentationRes, "The native presentation choice must be accepted");
       ao::appkit::test::requireWaitUntil(
         [&]
         {
           auto const stateRes = session.runtime().views().findTrackListState(viewId);
-          return stateRes && stateRes->presentation.id == identifier && session.state().tableRevision != revision;
+          return stateRes && stateRes->presentation.isPreset(preset) && session.state().tableRevision != revision;
         },
         "browser presentation did not publish");
     };
@@ -784,7 +785,7 @@ namespace
       return cells;
     };
 
-    selectPresentation("albums");
+    selectPresentation(ao::rt::BuiltinPreset::Albums);
     [browser layoutForModern:YES browserWidth:760];
     [browser refresh];
     [browser.trackScroll layoutSubtreeIfNeeded];
@@ -843,10 +844,24 @@ namespace
                  "classic mode must refresh group height and one-line cell state");
 
     auto const projectionRevision = session.state().tableRevision;
-    selectPresentation("songs");
+    selectPresentation(ao::rt::BuiltinPreset::Songs);
     AO_INVARIANT(session.state().tableRevision == projectionRevision + 1,
                  "A replacement projection's synchronous subscription reset must rebuild rows exactly once");
     [browser refresh];
+    AO_INVARIANT(
+      browser.tracks.sortDescriptors.count == 0, "Songs' ascending Title preset key must not mark the Title header");
+    // A descriptor change supplies the clicked column, not the domain sort direction.
+    browser.tracks.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Title" ascending:NO]];
+    auto const viewId = session.runtime().workspace().snapshot().activeViewId;
+    auto const titleAscending = ao::rt::TrackColumnSort{.column = ao::rt::TrackField::Title, .ascending = true};
+    ao::appkit::test::requireWaitUntil(
+      [&]
+      {
+        auto const* songs = session.runtime().views().findTrackListPresentation(viewId);
+        return songs != nullptr && songs->isPreset(ao::rt::BuiltinPreset::Songs) &&
+               songs->optColumnSort == titleAscending;
+      },
+      "The first Title click must start ascending even when Title is the preset's primary key");
 
     for (NSInteger row = 0; row < browser.tracks.numberOfRows; ++row)
     {
@@ -860,7 +875,7 @@ namespace
     [browser.tracks layoutSubtreeIfNeeded];
     [browser.tracks displayIfNeeded];
     AO_INVARIANT(visibleTitleCells().count >= 2, "projection refresh must repopulate identified title cells");
-    selectPresentation("albums");
+    selectPresentation(ao::rt::BuiltinPreset::Albums);
     [browser refresh];
     [browser layoutForModern:YES browserWidth:760];
   }
@@ -899,48 +914,85 @@ namespace
                  "browser selected-track state must reflect the session selection");
     AO_INVARIANT(delegate.selectionChangeCount > 0, "native library selection must notify its delegate");
 
+    using ao::rt::TrackColumnSort;
+    using ao::rt::TrackField;
+    using ao::rt::TrackSortField;
     auto const initialRevision = session.state().tableRevision;
-    auto* const titleSort = [[NSSortDescriptor alloc] initWithKey:@"Title" ascending:NO];
+    auto const activeViewId = session.runtime().workspace().snapshot().activeViewId;
+    auto const* preset = session.runtime().views().findTrackListPresentation(activeViewId);
+    AO_INVARIANT(preset != nullptr && preset->isPreset(ao::rt::BuiltinPreset::Albums) && !preset->optColumnSort,
+                 "The named Albums preset must start without a header sort");
+    auto expected = *preset;
+    AO_INVARIANT(browser.tracks.sortDescriptors.count == 0, "Preset ordering must not light a header indicator");
+    expected.optColumnSort = TrackColumnSort{.column = TrackField::Title, .ascending = true};
+    auto* const titleSort = [[NSSortDescriptor alloc] initWithKey:@"Title" ascending:YES];
     browser.tracks.sortDescriptors = @[titleSort];
     ao::appkit::test::requireWaitUntil(
       [&]
       {
-        auto const viewId = session.runtime().workspace().snapshot().activeViewId;
-        auto const viewRes = session.runtime().views().findTrackListState(viewId);
-        return viewRes && session.state().tableRevision != initialRevision &&
-               viewRes->presentation.id == "appkit-column-sort" && viewRes->presentation.sortBy.size() == 1 &&
-               viewRes->presentation.sortBy.front().field == ao::rt::TrackSortField::Title &&
-               !viewRes->presentation.sortBy.front().ascending;
+        auto const* presentation = session.runtime().views().findTrackListPresentation(activeViewId);
+        return presentation != nullptr && *presentation == expected && session.state().tableRevision != initialRevision;
       },
       "title column sort did not update the shared presentation state");
     [browser refresh];
-    AO_INVARIANT([browser.presentationIdentifier isEqualToString:@"appkit-column-sort"] != 0,
-                 "browser presentation identifier must reflect the shared sort state");
     AO_INVARIANT(browser.tracks.sortDescriptors.count == 1 &&
                    [browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"Title"] != 0 &&
-                   browser.tracks.sortDescriptors.firstObject.ascending == 0,
-                 "browser sort descriptor must reflect the shared presentation state");
+                   browser.tracks.sortDescriptors.firstObject.ascending != 0,
+                 "The first Title sort must be indicated as ascending");
     AO_INVARIANT(
       session.selection() == std::vector<ao::TrackId>{selectedId}, "sorting must preserve the selected track identity");
-    auto const titleRevision = session.state().tableRevision;
-    browser.tracks.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"#" ascending:YES]];
+    // A different frontend can sort the raw Track column, which AppKit does not show.
+    expected.optColumnSort = TrackColumnSort{.column = TrackField::TrackNumber, .ascending = true};
+    auto const aliasRes = session.runtime().views().setColumnSort(activeViewId, *expected.optColumnSort);
+    AO_INVARIANT(aliasRes, "The raw Track Number sort must be accepted");
+    [browser refresh];
+    auto const* aliasPresentation = session.runtime().views().findTrackListPresentation(activeViewId);
+    AO_INVARIANT(
+      aliasPresentation != nullptr && *aliasPresentation == expected && browser.tracks.sortDescriptors.count == 0,
+      "AppKit must keep the raw Track Number sort without showing an arrow on #");
+
+    auto const displayedRows = [&]
+    {
+      auto ids = std::vector<ao::TrackId>{};
+      auto const count = session.displayIndex().displayCount();
+      ids.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto const* row = session.rowAt(index);
+        ids.push_back(row != nullptr ? row->id : ao::kInvalidTrackId);
+      }
+
+      return ids;
+    };
+    auto const aliasRevision = session.state().tableRevision;
+    auto const aliasRowCount = browser.tracks.numberOfRows;
+    auto const aliasRows = displayedRows();
+    expected.optColumnSort = TrackColumnSort{.column = TrackField::DisplayTrackNumber, .ascending = true};
+    browser.tracks.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"#" ascending:NO]];
     ao::appkit::test::requireWaitUntil(
       [&]
       {
-        auto const viewId = session.runtime().workspace().snapshot().activeViewId;
-        auto const viewRes = session.runtime().views().findTrackListState(viewId);
-        return viewRes && session.state().tableRevision != titleRevision && viewRes->presentation.sortBy.size() == 2 &&
-               viewRes->presentation.sortBy[0].field == ao::rt::TrackSortField::DiscNumber &&
-               viewRes->presentation.sortBy[0].ascending &&
-               viewRes->presentation.sortBy[1].field == ao::rt::TrackSortField::TrackNumber &&
-               viewRes->presentation.sortBy[1].ascending;
+        auto const* presentation = session.runtime().views().findTrackListPresentation(activeViewId);
+        return presentation != nullptr && *presentation == expected;
       },
-      "The number column must sort disc before track within a multi-disc album");
+      "Clicking # must start ascending on the display-number column, not flip the raw Track column");
+    ao::appkit::test::settleNativeCallbacks();
+    auto const viewRes = session.runtime().views().findTrackListState(activeViewId);
+    AO_INVARIANT(viewRes);
+    auto const& effectiveSort = viewRes->sortBy;
+    AO_INVARIANT(effectiveSort.size() >= 2 && effectiveSort[0].field == TrackSortField::DiscNumber &&
+                   effectiveSort[0].ascending && effectiveSort[1].field == TrackSortField::TrackNumber &&
+                   effectiveSort[1].ascending,
+                 "The number column must sort disc before track within a multi-disc album");
     [browser refresh];
     AO_INVARIANT(browser.tracks.sortDescriptors.count == 1 &&
                    [browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"#"] != 0 &&
                    browser.tracks.sortDescriptors.firstObject.ascending != 0,
                  "The compound disc/track sort must reflect as one native number-column descriptor");
+    AO_INVARIANT(session.state().tableRevision == aliasRevision && browser.tracks.numberOfRows == aliasRowCount &&
+                   displayedRows() == aliasRows,
+                 "Switching number-column aliases must not reset or reorder the displayed rows");
     AO_INVARIANT(session.selection() == std::vector<ao::TrackId>{selectedId},
                  "The compound number-column sort must preserve the selected track identity");
     return selectedId;
@@ -1022,6 +1074,67 @@ namespace
     AO_INVARIANT(refreshedOperation == NSDragOperationCopy,
                  "Refreshing the List projection must restore admission for the same writable target");
     return listId;
+  }
+
+  void exerciseBrowserSortAcrossNavigation(ao::appkit::LibrarySession& session,
+                                           AobusLibraryBrowser* browser,
+                                           ao::ListId const nextListId)
+  {
+    using ao::rt::TrackColumnSort;
+    using ao::rt::TrackField;
+    auto& runtime = session.runtime();
+    auto& workspace = runtime.workspace();
+    auto& views = runtime.views();
+    auto const renderedViewId = workspace.snapshot().activeViewId;
+    auto const renderedRes = views.findTrackListState(renderedViewId);
+    AO_INVARIANT(renderedRes && [browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"#"] != 0,
+                 "The departing view must be rendered with its number-column sort");
+
+    auto const renderedRevision = session.state().tableRevision;
+    auto const navigationRes = workspace.navigate({.target = nextListId, .recordHistory = false});
+    AO_INVARIANT(
+      navigationRes && *navigationRes != renderedViewId && workspace.snapshot().activeViewId == *navigationRes,
+      "Navigation must synchronously activate a different view");
+    auto const activeViewId = *navigationRes;
+    auto const activeRes = views.findTrackListState(activeViewId);
+    AO_INVARIANT(
+      activeRes && !activeRes->presentation.optColumnSort, "The incoming view must start without a header sort");
+    auto const requireUnchanged = [&](char const* obligation)
+    {
+      auto const* rendered = views.findTrackListPresentation(renderedViewId);
+      auto const* active = views.findTrackListPresentation(activeViewId);
+      AO_INVARIANT(rendered != nullptr && *rendered == renderedRes->presentation && active != nullptr &&
+                     *active == activeRes->presentation,
+                   "{}",
+                   obligation);
+    };
+
+    AO_INVARIANT(session.state().tableRevision == renderedRevision,
+                 "The first stale click must arrive before the workspace observation rebinds the table projection");
+    auto* const titleSort = [[NSSortDescriptor alloc] initWithKey:@"Title" ascending:YES];
+    browser.tracks.sortDescriptors = @[titleSort];
+    requireUnchanged("A header click before projection rebinding must not sort either view");
+    [browser refresh];
+    AO_INVARIANT([browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"#"] != 0,
+                 "Refreshing before projection rebinding must still show the rendered view's sort");
+
+    ao::appkit::test::requireWaitUntil([&] { return session.state().tableRevision != renderedRevision; },
+                                       "The session must bind the incoming projection before the next native refresh");
+    browser.tracks.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Artist" ascending:YES]];
+    requireUnchanged("A header click after rebinding but before rendering must not sort either view");
+
+    [browser refresh];
+    AO_INVARIANT(browser.tracks.sortDescriptors.count == 0, "The incoming view must render without a header sort");
+    browser.tracks.sortDescriptors = @[titleSort];
+    auto expected = activeRes->presentation;
+    expected.optColumnSort = TrackColumnSort{.column = TrackField::Title, .ascending = true};
+    auto const* sorted = views.findTrackListPresentation(activeViewId);
+    AO_INVARIANT(sorted != nullptr && *sorted == expected, "A click on the refreshed table must sort the current view");
+
+    auto const restoredRes = workspace.focusView(renderedViewId);
+    AO_INVARIANT(restoredRes);
+    ao::appkit::test::settleNativeCallbacks();
+    [browser refresh];
   }
 
   void exerciseDetachedBrowser(AobusLibraryBrowser* browser,
@@ -1136,12 +1249,14 @@ namespace
     auto secondId = kInvalidListId;
     auto deletedId = kInvalidListId;
     auto exactWorkspaceSpec = rt::TrackPresentationSpec{};
+    constexpr auto kCustomId = rt::CustomPresetId{0xa1};
+    constexpr auto kUnavailableId = rt::CustomPresetId{0xdead};
     auto custom = rt::CustomTrackPresentationPreset{
       .label = "Native custom presentation",
-      .basePresetId = "songs",
-      .spec = rt::builtinTrackPresentationPreset("songs")->spec,
+      .optBasePresetId = rt::BuiltinPreset::Songs,
+      .spec = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs).spec,
     };
-    custom.spec.id = "appkit-preference-custom";
+    custom.spec.presetId = kCustomId;
     custom.spec.sortBy.front().ascending = false;
 
     {
@@ -1164,58 +1279,75 @@ namespace
       secondId = createList("Second preference List");
       deletedId = createList("Deleted preference List");
       session.navigate(firstId);
-      auto const songsRes = session.setPresentation("songs");
-      AO_INVARIANT(songsRes && readPreferences(musicRoot, runtime).at(firstId) == "songs",
-                   "An accepted normal choice must durably pin only the base List");
+      auto const songsRes = session.setPresentation(rt::BuiltinPreset::Songs);
+      AO_INVARIANT(
+        songsRes && readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{rt::BuiltinPreset::Songs},
+        "An accepted normal choice must durably pin only the base List");
       auto const plainViewId = runtime.workspace().snapshot().activeViewId;
-      auto const sortRes = session.sort(rt::TrackSortField::Title, false);
-      AO_INVARIANT(sortRes && readPreferences(musicRoot, runtime).at(firstId) == "songs",
-                   "A native column sort must not overwrite the pinned presentation");
+      auto const sortRes = session.toggleSort(plainViewId, rt::TrackField::Title);
+      AO_INVARIANT(
+        sortRes && readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{rt::BuiltinPreset::Songs},
+        "A native column sort must not overwrite the pinned presentation");
+      auto const sortedStateRes = runtime.views().findTrackListState(plainViewId);
+      auto expectedSorted = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Songs).spec;
+      expectedSorted.optColumnSort = rt::TrackColumnSort{.column = rt::TrackField::Title, .ascending = true};
+      AO_INVARIANT(sortedStateRes && sortedStateRes->presentation == expectedSorted,
+                   "Sorting must preserve Songs and add only an ascending Title override");
       session.navigate(secondId);
-      auto const artistsRes = session.setPresentation("artists");
+      auto const artistsRes = session.setPresentation(rt::BuiltinPreset::Artists);
       AO_INVARIANT(artistsRes);
       session.navigate(firstId);
       auto reusedRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
-      AO_INVARIANT(reusedRes && reusedRes->id == plainViewId && reusedRes->presentation.id == "appkit-column-sort",
+      AO_INVARIANT(reusedRes && reusedRes->id == plainViewId && reusedRes->presentation == sortedStateRes->presentation,
                    "Normal navigation must preserve an existing plain view's exact transient presentation");
       appkit::test::settleNativeCallbacks();
-      session.filter("no matching preference probe");
+      auto const filter = std::string{"$title = \"No matching preference probe\""};
+      session.filter(filter);
       appkit::test::requireWaitUntil(
         [&]
         {
           auto const stateRes = runtime.views().findTrackListState(plainViewId);
-          return stateRes && !stateRes->filterExpression.empty();
+          return stateRes && stateRes->filterExpression == filter && !stateRes->optFilterError;
         },
         "The quick filter must be applied before navigating to a new plain view");
       session.navigate(firstId);
-      auto newPlainRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
+      auto const newPlainRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
       AO_INVARIANT(newPlainRes && newPlainRes->id != plainViewId && newPlainRes->filterExpression.empty() &&
-                     newPlainRes->presentation.id == "songs",
+                     newPlainRes->presentation.isPreset(rt::BuiltinPreset::Songs),
                    "A filtered view must not replace the new plain view's saved default");
+      auto const pinsBeforeReplay = readPreferences(musicRoot, runtime);
       auto const backRes = runtime.workspace().goBack();
       AO_INVARIANT(backRes);
-      auto replayRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
-      AO_INVARIANT(replayRes && replayRes->presentation.id == "appkit-column-sort" &&
-                     replayRes->filterExpression.empty() && readPreferences(musicRoot, runtime).at(firstId) == "songs",
-                   "History must replay exact specs without pinning them");
+      auto const replayRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
+      AO_INVARIANT(replayRes && replayRes->id == plainViewId && replayRes->filterExpression == filter &&
+                     replayRes->presentation == sortedStateRes->presentation &&
+                     readPreferences(musicRoot, runtime) == pinsBeforeReplay,
+                   "Back must restore the departing view's exact filter and column sort without changing any pin");
       auto const forwardRes = runtime.workspace().goForward();
       AO_INVARIANT(forwardRes);
-      auto const beforeRejected = readPreferences(musicRoot, runtime);
-      auto const unknownRes = session.setPresentation("unknown-preference-probe");
-      AO_INVARIANT(!unknownRes && readPreferences(musicRoot, runtime) == beforeRejected,
-                   "A rejected selection must leave the preference map unchanged");
-      auto const autoRes = session.setPresentation("");
+      auto const forwardStateRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
+      AO_INVARIANT(forwardStateRes && forwardStateRes->id == newPlainRes->id &&
+                     forwardStateRes->filterExpression.empty() &&
+                     forwardStateRes->presentation == newPlainRes->presentation &&
+                     readPreferences(musicRoot, runtime) == pinsBeforeReplay,
+                   "Forward must restore the new plain view without changing any pin");
+      auto const unknownRes = session.setPresentation(kUnavailableId);
+      AO_INVARIANT(!unknownRes && unknownRes.error().code == Error::Code::NotFound &&
+                     readPreferences(musicRoot, runtime) == pinsBeforeReplay,
+                   "An unavailable custom preset must leave the preference map unchanged");
+      auto const autoRes = session.setPresentation(std::nullopt);
       AO_INVARIANT(
         autoRes && !readPreferences(musicRoot, runtime).contains(firstId), "Auto must clear rather than pin its spec");
       auto autoViewRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
-      AO_INVARIANT(autoViewRes && autoViewRes->presentation.id == "tagging",
+      AO_INVARIANT(autoViewRes && autoViewRes->presentation.isPreset(rt::BuiltinPreset::Tagging),
                    "A tag-backed List's Auto command must apply its recommendation");
       auto const customRes = runtime.workspace().addCustomPreset(custom);
       AO_INVARIANT(customRes);
       session.navigate(secondId);
-      auto const selectedCustomRes = session.setPresentation(custom.spec.id);
-      AO_INVARIANT(selectedCustomRes && readPreferences(musicRoot, runtime).at(secondId) == custom.spec.id,
-                   "Restorable custom presets must be eligible normal choices");
+      auto const selectedCustomRes = session.setPresentation(kCustomId);
+      AO_INVARIANT(
+        selectedCustomRes && readPreferences(musicRoot, runtime).at(secondId) == rt::TrackPresetId{kCustomId},
+        "Restorable custom presets must be eligible normal choices");
       auto const deletionAdmissionRes = model.beginDeletion(deletedId);
       AO_INVARIANT(deletionAdmissionRes);
       appkit::test::requireWaitUntil([&] { return !model.state().busy && model.state().optDeletion; },
@@ -1224,13 +1356,17 @@ namespace
       appkit::test::requireWaitUntil([&] { return model.state().completed; }, "The stale preference List must delete");
       model.cancel();
       session.navigate(rt::kAllTracksListId);
-      auto const unavailableManualRes = session.setPresentation(std::string{rt::kListOrderTrackPresentationId});
+      auto const unavailableManualRes = session.setPresentation(rt::BuiltinPreset::ListOrder);
       AO_INVARIANT(!unavailableManualRes, "All Tracks must reject the shared unavailable Manual Order choice");
-      auto const allSortRes = session.sort(rt::TrackSortField::Title, false);
-      AO_INVARIANT(allSortRes);
-      exactWorkspaceSpec =
-        runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId)->presentation;
       auto const allViewId = runtime.workspace().snapshot().activeViewId;
+      auto const allSortRes = session.toggleSort(allViewId, rt::TrackField::DisplayTrackNumber);
+      AO_INVARIANT(allSortRes);
+      auto const* presentation = runtime.views().findTrackListPresentation(allViewId);
+      AO_INVARIANT(presentation != nullptr && presentation->optColumnSort &&
+                     presentation->optColumnSort->column == rt::TrackField::DisplayTrackNumber &&
+                     !presentation->isPreset(rt::BuiltinPreset::Songs),
+                   "The checkpoint fixture must retain the display-number override and a preset distinct from Songs");
+      exactWorkspaceSpec = *presentation;
 
       for (auto const viewId : runtime.workspace().snapshot().openViews)
       {
@@ -1244,14 +1380,14 @@ namespace
       // Hand-authored state through the same retained writer, including an offline deletion.
       auto const seededRes = runtime.workspaceConfigStore().save(
         uimodel::kListPresentationsConfigGroup,
-        uimodel::ListPresentations::Snapshot{{firstId, "unavailable-custom"},
-                                             {secondId, custom.spec.id},
-                                             {deletedId, "songs"},
-                                             {rt::kAllTracksListId, "songs"}},
+        uimodel::ListPresentations::Snapshot{{firstId, kUnavailableId},
+                                             {secondId, kCustomId},
+                                             {deletedId, rt::BuiltinPreset::Songs},
+                                             {rt::kAllTracksListId, rt::BuiltinPreset::Songs}},
         uimodel::ListPresentationPreferenceYamlSchema{runtime.library().snapshot().libraryId()});
       AO_INVARIANT(seededRes);
       session.checkpoint();
-      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == "unavailable-custom",
+      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{kUnavailableId},
                    "A later workspace checkpoint must preserve the preference sibling group");
     }
 
@@ -1263,11 +1399,18 @@ namespace
       AO_INVARIANT(restoredRes && restoredRes->presentation == exactWorkspaceSpec,
                    "Workspace restore must retain its exact spec instead of applying a different saved default");
       session.navigate(firstId);
-      appkit::test::requireWaitUntil([&] { return session.state().optListPresentationId == "unavailable-custom"; },
-                                     "The new view's picker must observe its unavailable saved preference");
-      auto fallbackRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
-      AO_INVARIANT(fallbackRes && fallbackRes->presentation.id == "tagging" &&
-                     session.state().optListPresentationId == "unavailable-custom",
+      auto const taggingLabel = i18n::requiredText(session.catalog(), i18n::MessageId::TrackPresentationTagging);
+      appkit::test::requireWaitUntil(
+        [&]
+        {
+          auto const& state = session.state();
+          return state.optListPresentationId == rt::TrackPresetId{kUnavailableId} &&
+                 state.presentation.label == taggingLabel;
+        },
+        "The picker must display the localized fallback while retaining the unavailable pin");
+      auto const fallbackRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
+      AO_INVARIANT(fallbackRes && fallbackRes->presentation.isPreset(rt::BuiltinPreset::Tagging) &&
+                     session.state().optListPresentationId == rt::TrackPresetId{kUnavailableId},
                    "A new view must fall back while retaining the unavailable opaque id for its picker");
       auto& model = session.editor();
       auto const editRes = model.beginList(firstId);
@@ -1276,17 +1419,18 @@ namespace
       model.save();
       appkit::test::requireWaitUntil([&] { return model.state().completed; }, "The picker-less List edit must save");
       model.cancel();
-      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == "unavailable-custom",
+      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{kUnavailableId},
                    "A picker-less editor must not replace a dangling presentation choice");
       session.navigate(secondId);
       auto customViewRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
       AO_INVARIANT(customViewRes && customViewRes->presentation == custom.spec,
                    "The restored catalog must resolve a saved custom specification exactly");
-      auto const songsRes = session.setPresentation("songs");
+      auto const songsRes = session.setPresentation(rt::BuiltinPreset::Songs);
       AO_INVARIANT(songsRes);
       auto const loadedPreferences = readPreferences(musicRoot, runtime);
-      AO_INVARIANT(loadedPreferences.at(firstId) == "unavailable-custom" &&
-                     loadedPreferences.at(rt::kAllTracksListId) == "songs" && !loadedPreferences.contains(deletedId),
+      AO_INVARIANT(loadedPreferences.at(firstId) == rt::TrackPresetId{kUnavailableId} &&
+                     loadedPreferences.at(rt::kAllTracksListId) == rt::TrackPresetId{rt::BuiltinPreset::Songs} &&
+                     !loadedPreferences.contains(deletedId),
                    "An unrelated save must retain opaque/virtual ids and omit deleted ids pruned at restore");
       auto const deletionRes = model.beginDeletion(secondId);
       AO_INVARIANT(deletionRes);
@@ -1298,7 +1442,7 @@ namespace
       AO_INVARIANT(!readPreferences(musicRoot, runtime).contains(secondId),
                    "A live committed List deletion must retire and persist its preference");
       session.navigate(firstId);
-      auto const autoRes = session.setPresentation("");
+      auto const autoRes = session.setPresentation(std::nullopt);
       AO_INVARIANT(autoRes && !readPreferences(musicRoot, runtime).contains(firstId),
                    "Explicit Auto must clear even an unavailable persisted id");
       session.navigate(rt::kAllTracksListId);
@@ -1311,10 +1455,11 @@ namespace
       auto fixture = appkit::test::SessionFixture{musicRoot, stateRoot};
       auto& session = fixture.session();
       session.navigate(firstId);
-      auto const songsRes = session.setPresentation("songs");
+      auto const songsRes = session.setPresentation(rt::BuiltinPreset::Songs);
       AO_INVARIANT(songsRes, "A rejected preference group must still accept a presentation choice");
-      appkit::test::requireWaitUntil([&] { return session.state().optListPresentationId == "songs"; },
-                                     "A rejected preference group must still pin the choice in memory");
+      appkit::test::requireWaitUntil(
+        [&] { return session.state().optListPresentationId == rt::TrackPresetId{rt::BuiltinPreset::Songs}; },
+        "A rejected preference group must still pin the choice in memory");
       session.checkpoint();
       auto const persisted = readText(workspaceStorePath(musicRoot));
       AO_INVARIANT(persisted.contains(futureGroupPrefix + "version: 99"),
@@ -1368,6 +1513,7 @@ namespace ao::appkit::test
       [root addSubview:browser.trackScroll];
       auto const selectedId = exerciseBrowser(session, browser, browserDelegate);
       dropListId = exerciseBrowserDrops(session, browser, browserDelegate, info, selectedId);
+      exerciseBrowserSortAcrossNavigation(session, browser, dropListId);
       exerciseActivity(session, window, activityAnchor, stateRoot);
       exerciseInspector(session, window, selectedId, stateRoot);
       exercisePlaybackPresentation(session, window, root, stateRoot);

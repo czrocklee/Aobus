@@ -13,6 +13,7 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -365,26 +366,19 @@ namespace ao::uimodel::test
     CHECK(renderLog.last().tooltip.empty());
   }
 
-  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation")
+  TEST_CASE("TrackFilterViewModel - filter edits preserve the focused view's column sort")
   {
     auto fixture = TrackFilterFixture{};
-    auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
-    config.optPresentation = rt::defaultTrackPresentationSpec();
-    config.optPresentation->id = "custom";
-    auto const viewId = ao::test::requireValue(fixture.workspaceService.navigate({
-      .target = rt::GlobalViewKind::AllTracks,
-      .optPresentation =
-        rt::NavigationPresentation{
-          .mode = rt::NavigationPresentationMode::Override,
-          .spec = *config.optPresentation,
-        },
-    }));
+    auto const viewId = fixture.focusAllTracksView();
+    auto const columnSort = rt::TrackColumnSort{.column = rt::TrackField::DisplayTrackNumber, .ascending = false};
+    REQUIRE(fixture.viewService.setColumnSort(viewId, columnSort));
+    auto const presentation = fixture.viewService.trackListState(viewId).presentation;
 
     fixture.viewModel.updateFilter("$artist = \"Muse\"");
 
     auto const state = fixture.viewService.trackListState(viewId);
     CHECK(state.filterExpression == "$artist = \"Muse\"");
-    CHECK(state.presentation.id == "custom");
+    CHECK(state.presentation == presentation);
     CHECK(fixture.renderLog.last().entryText == "$artist = \"Muse\"");
     CHECK(fixture.renderLog.last().resolvedExpression == "$artist = \"Muse\"");
   }

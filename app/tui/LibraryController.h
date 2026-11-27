@@ -14,6 +14,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
@@ -89,7 +90,6 @@ namespace ao::tui
 
     std::string emptyStateText() const;
     std::string currentListTitle() const;
-    std::string activePresentationId() const;
     // Borrowed from the active view (or the process-stable default); consume
     // before the active view can be replaced or destroyed.
     rt::TrackPresentationSpec const& activePresentation() const;
@@ -129,8 +129,11 @@ namespace ao::tui
     Result<> navigateHistory(bool forward);
     Result<> navigateToArtist(std::string_view artist);
     Result<> revealAlbum(TrackId trackId);
-    PresentationSelectionResult setPresentation(std::string_view presentationId);
+    PresentationSelectionResult setPresentation(rt::TrackPresetId const& id);
+    PresentationSelectionResult setPresentationKey(std::string_view key);
     PresentationSelectionResult selectSelectedPresentation();
+    std::vector<rt::TrackField> sortableTrackColumns() const;
+    Result<> sortByColumn(std::string_view columnId);
     Result<bool> openList(ListId id);
     std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
@@ -157,7 +160,7 @@ namespace ao::tui
     void publishFocusMove();
     void afterFocusMove();
     void focusActiveView();
-    void syncSelectedPresentation(std::string_view presentationId);
+    void syncSelectedPresentation();
     void refreshPresentationNavigation();
     void refreshFilterError();
     void refreshNavigationTree();

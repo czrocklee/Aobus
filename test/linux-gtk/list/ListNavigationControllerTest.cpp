@@ -184,7 +184,7 @@ namespace ao::gtk::test
       /// Seeded per-list preference the production edit path reads through
       /// listPresentationCallback, mirroring MainWindow's ListPresentations
       /// wiring; absence is Auto.
-      std::map<ListId, std::string> presentationPreferences;
+      std::map<ListId, rt::TrackPresetId> presentationPreferences;
       ThemeCoordinator themeCoordinator;
       ListNavigationController controller{
         window,
@@ -212,7 +212,7 @@ namespace ao::gtk::test
          .listPresentationCallback = [this](ListId id) -> std::optional<std::string>
          {
            auto const it = presentationPreferences.find(id);
-           return it != presentationPreferences.end() ? std::optional<std::string>{it->second} : std::nullopt;
+           return it != presentationPreferences.end() ? std::optional{rt::trackPresetKey(it->second)} : std::nullopt;
          }},
         themeCoordinator};
       utility::ScopedRegistration widgetRetirement = retireNavigationWidgets(window);
@@ -610,10 +610,8 @@ namespace ao::gtk::test
     drainGtkEvents();
     REQUIRE(state.selectedId == browsedListId);
     state.selectedId = kInvalidListId;
-    auto const* const albums = rt::builtinTrackPresentationPreset("albums");
-    REQUIRE(albums != nullptr);
-
-    REQUIRE(state.runtimeFixture.runtime().workspace().setActivePresentation(albums->spec));
+    auto const& albums = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec;
+    REQUIRE(state.runtimeFixture.runtime().workspace().setActivePresentation(albums));
     drainGtkEvents();
 
     CHECK(state.selectedId == kInvalidListId);
@@ -798,33 +796,33 @@ namespace ao::gtk::test
     {
       auto preset = rt::CustomTrackPresentationPreset{};
       preset.label = "Road View";
-      preset.spec.id = "custom-road-view";
+      preset.spec.presetId = rt::CustomPresetId{0xa1};
       REQUIRE(state.runtimeFixture.runtime().workspace().addCustomPreset(preset));
-      state.presentationPreferences[listId] = "custom-road-view";
+      state.presentationPreferences[listId] = preset.presetId();
 
       auto* const dialog = openEditor();
       REQUIRE(dialog != nullptr);
-      CHECK(saveWithRename(*dialog) == "custom-road-view");
+      CHECK(saveWithRename(*dialog) == "00000000000000a1");
 
       CHECK(state.savedPresentationListId == listId);
-      CHECK(state.savedPresentationId == "custom-road-view");
+      CHECK(state.savedPresentationId == "00000000000000a1");
     }
 
     SECTION("a dangling preference is saved back unchanged")
     {
-      state.presentationPreferences[listId] = "custom-deleted";
+      state.presentationPreferences[listId] = rt::CustomPresetId{0xdead};
 
       auto* const dialog = openEditor();
       REQUIRE(dialog != nullptr);
-      CHECK(saveWithRename(*dialog) == "custom-deleted");
+      CHECK(saveWithRename(*dialog) == "000000000000dead");
 
       CHECK(state.savedPresentationListId == listId);
-      CHECK(state.savedPresentationId == "custom-deleted");
+      CHECK(state.savedPresentationId == "000000000000dead");
     }
 
     SECTION("selecting Auto clears a dangling preference")
     {
-      state.presentationPreferences[listId] = "custom-deleted";
+      state.presentationPreferences[listId] = rt::CustomPresetId{0xdead};
       auto* const dialog = openEditor();
       REQUIRE(dialog != nullptr);
       auto const dropDowns = collectAll<Gtk::DropDown>(*dialog);

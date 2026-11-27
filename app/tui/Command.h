@@ -31,6 +31,7 @@ namespace ao::tui
     OpenCurrentArtist,
     OpenCurrentAlbum,
     SetPresentation,
+    SortColumn,
     ClearFilter,
     Reload,
     Scan,

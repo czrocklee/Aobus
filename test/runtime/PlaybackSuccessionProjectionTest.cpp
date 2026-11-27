@@ -67,8 +67,8 @@ namespace ao::rt::test
       fixture.commands().createListAsync(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
     fixture.viewId = ao::test::requireValue(fixture.workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = fixture.listId,
-      .optPresentation =
-        TrackPresentationSpec{.id = "year-order", .sortBy = {{.field = TrackSortField::Year, .ascending = true}}}})));
+      .optPresentation = TrackPresentationSpec{
+        .presetId = CustomPresetId{1}, .sortBy = {{.field = TrackSortField::Year, .ascending = true}}}})));
     fixture.successionPtr = std::make_unique<PlaybackSuccession>(fixture.executor,
                                                                  fixture.views,
                                                                  fixture.sources,

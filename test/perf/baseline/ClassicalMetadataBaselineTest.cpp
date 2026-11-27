@@ -296,21 +296,21 @@ namespace ao::rt::test
 
     TrackPresentationSpec classicalPresentation()
     {
-      // Keep the pre-format chain fixed for a like-for-like after comparison.
-      return TrackPresentationSpec{
-        .groupBy = TrackGroupKey::Work,
-        .sortBy =
-          {
-            {TrackSortField::Composer},
-            {TrackSortField::Work},
-            {TrackSortField::Year},
-            {TrackSortField::Album},
-            {TrackSortField::Movement},
-            {TrackSortField::DiscNumber},
-            {TrackSortField::TrackNumber},
-            {TrackSortField::Title},
-          },
+      // Real Classical Works base. Pin the pre-RecordingYear chain so this
+      // workload stays comparable; the measured order is base sortBy, not a header override.
+      auto spec = builtinTrackPresentationPreset(BuiltinPreset::ClassicalWorks).spec;
+      spec.sortBy = {
+        {TrackSortField::Composer},
+        {TrackSortField::Work},
+        {TrackSortField::Year},
+        {TrackSortField::Album},
+        {TrackSortField::Movement},
+        {TrackSortField::DiscNumber},
+        {TrackSortField::TrackNumber},
+        {TrackSortField::Title},
       };
+      spec.optColumnSort.reset();
+      return spec;
     }
 
     void measureProjectionRebuilds(ClassicalMetadataFixture& fixture,

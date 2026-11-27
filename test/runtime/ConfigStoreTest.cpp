@@ -614,6 +614,28 @@ unprotected:
     CHECK(ao::test::readFile(configPath) == kNewerProtectedDocument);
   }
 
+  TEST_CASE("ConfigStore - preserving an unreadable group allows independent sibling checkpoints")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto store = ConfigStore{configPath};
+    auto const checkpoint = State{.count = 3};
+    writeFile(configPath, "draft: {unknown: original}\n");
+    store.preserveGroup("draft");
+
+    auto const batchRes = store.saveTogether(
+      configWrite("sibling", checkpoint, StateYamlSchema{}), configWrite("draft", checkpoint, StateYamlSchema{}));
+    REQUIRE_FALSE(batchRes);
+    CHECK_FALSE(ao::test::requireValue(store.contains("sibling")));
+    REQUIRE(store.save("sibling", checkpoint, StateYamlSchema{}));
+
+    auto reloaded = ConfigStore{configPath};
+    auto sibling = State{};
+    REQUIRE(ao::test::requireValue(reloaded.load("sibling", sibling, StateYamlSchema{})));
+    CHECK(sibling.count == checkpoint.count);
+    CHECK(ao::test::readFile(configPath).contains("original"));
+  }
+
   TEST_CASE("ConfigStore - protection covers only protected schemas and newer versions")
   {
     auto const tempDir = ao::test::TempDir{};

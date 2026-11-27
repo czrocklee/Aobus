@@ -35,9 +35,14 @@ The Windows frontend keeps its database beneath the selected music root. Network
    A List with descendants offers **Delete List and Descendants...** and shows the complete subtree before committing; deleting a List never deletes music files.
    Use the Modern back button, `Alt+Left`/`Alt+Right`, or the mouse back/forward buttons to revisit earlier views without changing the List's preference.
 4. Type in **Filter tracks** to narrow the active view. Select one or more rows
-   with ordinary Windows list gestures, use a sortable column header to change
-   ordering, and double-click a track row to start playback. Drag a header's
-   right edge to resize it, right-click a header to move it, and use
+   with ordinary Windows list gestures, use a sortable column header to sort by
+   that field, and double-click a track row to start playback. In a grouped view
+   the header reorders tracks inside each group and does not reverse the groups,
+   even when the arrow is on the grouping column. Playback follows a flat order
+   from that sort and does not follow the group headings, so Next can leave a
+   group in an order the table does not show. The presentation
+   button keeps the current view name; choose that view again to restore its order.
+   Drag a header's right edge to resize it, right-click a header to move it, and use
    **More → Columns...** in Modern or **View → Columns...** in Classic to show
    or hide fields.
    In **Albums**, check **Album** to show the album name in each track row as
@@ -58,6 +63,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    **Audio Properties** remain read-only, and **Save** becomes available only after a valid change.
    The same row menu can add tracks to eligible Playlists or explicitly remove them from the active tag-backed Playlist.
    On a saved List using a flat unsorted presentation, its **Manual Order** submenu moves the selection up, down, to the top, or to the bottom and can reset saved positions; the movement shortcuts are `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End`.
+   If Manual Order is already selected and a header sort is the only reason moves are blocked, choose Manual Order again to clear that temporary sort.
 5. Inspect the selected track in the details pane. Drag either inline pane
    boundary to resize navigation or details; Aobus remembers both widths. On
    medium or narrow windows, use the details button to open it as an overlay;

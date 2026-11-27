@@ -33,8 +33,6 @@ namespace ao::rt
   {
     ListId listId = kAllTracksListId;
     std::string filterExpression{};
-    TrackGroupKey groupBy = TrackGroupKey::None;
-    std::vector<TrackSortTerm> sortBy{};
     std::optional<TrackPresentationSpec> optPresentation{};
   };
 

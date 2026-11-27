@@ -138,6 +138,7 @@ namespace ao::tui
       {.descriptionId = i18n::MessageId::TuiShellHelpPreviousNextGroup},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuickFilter, .command = ":filter <text>"},
       {.descriptionId = i18n::MessageId::TuiShellHelpClearFilter, .command = ":clear"},
+      {.descriptionId = i18n::MessageId::TuiShellDetailSortColumn, .command = ":sort <column-id>"},
       {.descriptionId = i18n::MessageId::TuiShellHelpReloadList, .command = ":reload"},
       {.descriptionId = i18n::MessageId::TuiShellHelpScan, .command = ":scan / :scan cancel"},
       {.groupId = i18n::MessageId::TrackPresentationListOrder,

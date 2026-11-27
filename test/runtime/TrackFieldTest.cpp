@@ -100,6 +100,7 @@ namespace
     ao::rt::TrackField::TrackNumber,
     ao::rt::TrackField::MovementNumber,
     ao::rt::TrackField::Duration,
+    ao::rt::TrackField::DisplayTrackNumber,
     ao::rt::TrackField::RecordingDate,
   });
 
@@ -406,24 +407,25 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField - definitions map fields to sort keys")
+  TEST_CASE("TrackField - sortable columns map to comparison keys")
   {
-    CHECK(trackFieldDefinition(TrackField::Title)->optSortField == TrackSortField::Title);
-    CHECK(trackFieldDefinition(TrackField::Artist)->optSortField == TrackSortField::Artist);
-    CHECK(trackFieldDefinition(TrackField::Album)->optSortField == TrackSortField::Album);
-    CHECK(trackFieldDefinition(TrackField::AlbumArtist)->optSortField == TrackSortField::AlbumArtist);
-    CHECK(trackFieldDefinition(TrackField::Genre)->optSortField == TrackSortField::Genre);
-    CHECK(trackFieldDefinition(TrackField::Composer)->optSortField == TrackSortField::Composer);
-    CHECK(trackFieldDefinition(TrackField::Conductor)->optSortField == TrackSortField::Conductor);
-    CHECK(trackFieldDefinition(TrackField::Ensemble)->optSortField == TrackSortField::Ensemble);
-    CHECK(trackFieldDefinition(TrackField::Work)->optSortField == TrackSortField::Work);
-    CHECK(trackFieldDefinition(TrackField::Movement)->optSortField == TrackSortField::Movement);
-    CHECK(trackFieldDefinition(TrackField::Soloist)->optSortField == TrackSortField::Soloist);
-    CHECK(trackFieldDefinition(TrackField::MovementNumber)->optSortField == TrackSortField::Movement);
-    CHECK(trackFieldDefinition(TrackField::Year)->optSortField == TrackSortField::Year);
-    CHECK(trackFieldDefinition(TrackField::DiscNumber)->optSortField == TrackSortField::DiscNumber);
-    CHECK(trackFieldDefinition(TrackField::TrackNumber)->optSortField == TrackSortField::TrackNumber);
-    CHECK(trackFieldDefinition(TrackField::Duration)->optSortField == TrackSortField::Duration);
+    CHECK(trackSortFieldForColumn(TrackField::Title) == TrackSortField::Title);
+    CHECK(trackSortFieldForColumn(TrackField::Artist) == TrackSortField::Artist);
+    CHECK(trackSortFieldForColumn(TrackField::Album) == TrackSortField::Album);
+    CHECK(trackSortFieldForColumn(TrackField::AlbumArtist) == TrackSortField::AlbumArtist);
+    CHECK(trackSortFieldForColumn(TrackField::Genre) == TrackSortField::Genre);
+    CHECK(trackSortFieldForColumn(TrackField::Composer) == TrackSortField::Composer);
+    CHECK(trackSortFieldForColumn(TrackField::Conductor) == TrackSortField::Conductor);
+    CHECK(trackSortFieldForColumn(TrackField::Ensemble) == TrackSortField::Ensemble);
+    CHECK(trackSortFieldForColumn(TrackField::Work) == TrackSortField::Work);
+    CHECK(trackSortFieldForColumn(TrackField::Movement) == TrackSortField::Movement);
+    CHECK(trackSortFieldForColumn(TrackField::Soloist) == TrackSortField::Soloist);
+    CHECK(trackSortFieldForColumn(TrackField::MovementNumber) == TrackSortField::Movement);
+    CHECK(trackSortFieldForColumn(TrackField::Year) == TrackSortField::Year);
+    CHECK(trackSortFieldForColumn(TrackField::DiscNumber) == TrackSortField::DiscNumber);
+    CHECK(trackSortFieldForColumn(TrackField::TrackNumber) == TrackSortField::TrackNumber);
+    CHECK(trackSortFieldForColumn(TrackField::DisplayTrackNumber) == TrackSortField::TrackNumber);
+    CHECK(trackSortFieldForColumn(TrackField::Duration) == TrackSortField::Duration);
   }
 
   TEST_CASE("TrackField - definitions map fields to group keys")

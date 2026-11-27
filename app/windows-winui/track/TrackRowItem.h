@@ -36,6 +36,8 @@ namespace ao::winui
   {
     rt::TrackField field = rt::TrackField::Title;
     double width = 0.0;
+
+    bool operator==(TrackColumnCellSpec const&) const = default;
   };
 } // namespace ao::winui
 

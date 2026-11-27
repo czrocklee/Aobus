@@ -150,6 +150,12 @@ A group that is not a mapping, or whose `version` is missing or not an unsigned 
 Sibling groups stay writable: each complete-document replacement carries the newer group through unchanged.
 An older build recognizes a newer group only by its `version`, so a save whose schema writes another version, or none, stops the process through the fatal facility.
 
+### Retained unread groups
+
+`preserveGroup(group)` is a caller mark, not a schema and not a version check. A later `save` or `saveTogether` that includes the marked group returns `InvalidState` and writes nothing. Other groups in the same file remain writable. A successful `removeGroup` clears the mark and may delete the group. The mark does not set `hasNewerGroup` and does not refuse removal. It is not inherited by another store opened on the same file.
+
+Workspace restore is the current caller. It marks `workspace` only when load fails for a reason other than `NotFound`. A missing group and a successful decode are not marked. This is not [protected configuration](#protected-groups) and not a migration.
+
 ### Save
 
 `save()` replaces one group.
@@ -196,6 +202,7 @@ Repeated removal is idempotent.
 | YAML syntax parsing or root mapping validation fails                  | `Result` with `FormatRejected` and backing-file context.                                                              |
 | A schema returns an error                                             | That error code with bounded group/operation context.                                                                 |
 | A protected group's stored `version` exceeds the schema's `kVersion`  | `Result` with `NotSupported`; the value, the live document, and the backing file remain unchanged.                    |
+| A save includes a group marked by `preserveGroup`                     | `Result` with `InvalidState`; the live document and backing file remain unchanged. Sibling groups can still be saved. |
 | An exception escapes deserialization                                  | The exception propagates; assignment has not occurred, so the seeded value remains unchanged.                         |
 | An exception escapes serialization, candidate assembly, or emission   | The exception propagates; replacement has not been attempted, so the live document and backing file remain unchanged. |
 | Atomic replacement fails                                              | The helper's recoverable error, currently `IoError`; the live document remains unchanged.                             |
@@ -211,7 +218,7 @@ Every effective mutation of a located store replaces one complete YAML file; gro
 The [atomic file replacement specification](atomic-replacement.md) owns temporary files, permissions, write barriers, replacement, cleanup, and platform-specific guarantees.
 
 `ConfigStore` defines no file-level schema identifier, schema version, group registry, field alias, enum representation, migration, or compatibility window.
-It reads a group's `version` field only for a protected schema, as described above, and leaves its meaning to that schema.
+It reads a group's `version` field only for a protected schema, as described above, and leaves its meaning to that schema. Unread-group retention is separate and does not read `version`.
 Group names and payload schemas belong to their semantic owners and exact serialized references.
 The store has no reflected read path or compatibility fallback.
 
@@ -230,7 +237,7 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, protected-group refusal of load, save, batch save, and removal, and the no-location session's same-instance live groups and lack of filesystem output.
+- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, protected-group refusal of load, save, batch save, and removal, retained unread groups with independent sibling writes, and the no-location session's same-instance live groups and lack of filesystem output.
 - [`RymlAdapterTest.cpp`](../../../test/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
 - Payload schema tests protect field vocabulary, versions, unknown and missing fields, enum membership, semantic rejection, and representative documents at their owning layers.
 - [`AtomicFileTest.cpp`](../../../test/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.

@@ -156,11 +156,10 @@ namespace ao::rt::test
     auto projection = fixture.createProjection(ViewId{1});
     auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
-    for (auto const* id : {"classical-composers", "classical-conductors", "classical-works"})
+    for (auto const id :
+         {BuiltinPreset::ClassicalComposers, BuiltinPreset::ClassicalConductors, BuiltinPreset::ClassicalWorks})
     {
-      auto const* preset = builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      projection.setPresentation(preset->spec);
+      projection.setPresentation(builtinTrackPresentationPreset(id).spec);
       checkOrder(projection, {olderFirst, olderSecond, newerFirst, newerSecond});
       CHECK(projection.groupCount() == 1);
       CHECK(std::ranges::contains(projection.presentation().visibleFields, TrackField::RecordingDate));
@@ -189,11 +188,10 @@ namespace ao::rt::test
     auto projection = fixture.createProjection(ViewId{1});
     auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
-    for (auto const* id : {"classical-composers", "classical-conductors", "classical-works"})
+    for (auto const id :
+         {BuiltinPreset::ClassicalComposers, BuiltinPreset::ClassicalConductors, BuiltinPreset::ClassicalWorks})
     {
-      auto const* preset = builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      projection.setPresentation(preset->spec);
+      projection.setPresentation(builtinTrackPresentationPreset(id).spec);
       checkOrder(projection, {alphaFirst, alphaSecond, betaFirst, betaSecond});
     }
   }
@@ -209,14 +207,14 @@ namespace ao::rt::test
     auto projection = fixture.createProjection(ViewId{1});
     auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
-    for (auto const* id : {"classical-composers", "classical-conductors", "classical-works"})
+    for (auto const id :
+         {BuiltinPreset::ClassicalComposers, BuiltinPreset::ClassicalConductors, BuiltinPreset::ClassicalWorks})
     {
-      auto const* preset = builtinTrackPresentationPreset(id);
-      REQUIRE(preset != nullptr);
-      projection.setPresentation(preset->spec);
+      auto const& spec = builtinTrackPresentationPreset(id).spec;
+      projection.setPresentation(spec);
       checkOrder(projection, {alphaFirst, alphaSecond, beta, later});
       auto const heading = projection.groupAt(0).heading;
-      auto former = preset->spec;
+      auto former = spec;
       std::erase_if(
         former.sortBy, [](TrackSortTerm const& term) { return term.field == TrackSortField::RecordingYear; });
       projection.setPresentation(former);

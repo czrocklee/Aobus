@@ -169,13 +169,6 @@ namespace ao::tui
                                  : optNode->name;
   }
 
-  std::string LibraryController::activePresentationId() const
-  {
-    // Reached from the workspace observer via refreshPresentationNavigation().
-    auto const* presentation = _views.findTrackListPresentation(_activeViewId);
-    return presentation == nullptr ? std::string{} : presentation->id;
-  }
-
   rt::TrackPresentationSpec const& LibraryController::activePresentation() const
   {
     if (auto const* presentation = _views.findTrackListPresentation(_activeViewId); presentation != nullptr)
@@ -183,9 +176,7 @@ namespace ao::tui
       return *presentation;
     }
 
-    auto const* fallback = rt::builtinTrackPresentationPreset(rt::kDefaultTrackPresentationId);
-    AO_INVARIANT(fallback != nullptr, "The default track presentation must be registered");
-    return fallback->spec;
+    return rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Library).spec;
   }
 
   SelectedTrackView LibraryController::selectedTrackView() const noexcept
@@ -694,22 +685,25 @@ namespace ao::tui
         Error::Code::NotFound, chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView));
     }
 
-    if (!containsTrackId(trackId))
+    if (containsTrackId(trackId))
     {
-      auto target = rt::kInvalidViewId;
-      auto const workspace = _workspace.snapshot();
+      return revealLoadedTrack(trackId);
+    }
 
-      for (auto const viewId : workspace.openViews)
+    auto target = rt::kInvalidViewId;
+    auto const workspace = _workspace.snapshot();
+
+    for (auto const viewId : workspace.openViews)
+    {
+      if (auto const stateRes = _views.findTrackListState(viewId);
+          !stateRes || (viewId != preferredViewId && stateRes->listId != preferredListId))
       {
-        auto const stateRes = _views.findTrackListState(viewId);
-        auto const projectionRes = _views.findTrackListProjection(viewId);
+        continue;
+      }
 
-        if (!stateRes || !projectionRes || !(*projectionRes)->indexOf(trackId) ||
-            (viewId != preferredViewId && stateRes->listId != preferredListId))
-        {
-          continue;
-        }
-
+      if (auto const projectionRes = _views.findTrackListProjection(viewId);
+          projectionRes && (*projectionRes)->indexOf(trackId))
+      {
         target = viewId;
 
         if (viewId == preferredViewId)
@@ -717,50 +711,22 @@ namespace ao::tui
           break;
         }
       }
+    }
 
-      // Quick Filter changes a live view directly. Checkpoint its current
-      // presentation and filter in the existing workspace history before leaving.
-      auto const stateRes = _views.findTrackListState(_activeViewId);
+    auto const targetRes = target != rt::kInvalidViewId
+                             ? _workspace.navigateToOpenView(target)
+                             : _workspace.navigateToTrackSource(
+                                 trackId, rt::kAllTracksListId, [this](ListId id) { return presentationForList(id); });
 
-      if (!stateRes)
-      {
-        return std::unexpected{formatNavigationFailedError(stateRes.error())};
-      }
+    if (!targetRes)
+    {
+      return std::unexpected{formatNavigationFailedError(targetRes.error())};
+    }
 
-      if (auto const res = _workspace.setActivePresentation(stateRes->presentation); !res)
-      {
-        return std::unexpected{formatNavigationFailedError(res.error())};
-      }
-
-      commitVisualSelection();
-      auto navigationRes = Result<>{};
-
-      if (target != rt::kInvalidViewId)
-      {
-        navigationRes = _workspace.focusView(target);
-
-        if (navigationRes)
-        {
-          navigationRes = attachView(target);
-        }
-
-        if (navigationRes)
-        {
-          navigationRes = _workspace.setActivePresentation(_views.trackListState(target).presentation);
-        }
-      }
-      else
-      {
-        // Plain navigation reuses an unfiltered view or opens a new one; it
-        // never clears the old view's filter or edits a saved List predicate.
-        navigationRes = navigateToList(rt::kAllTracksListId);
-      }
-
-      if (!navigationRes)
-      {
-        recoverWorkspaceView();
-        return std::unexpected{formatNavigationFailedError(navigationRes.error())};
-      }
+    if (auto res = syncRevealView(*targetRes); !res)
+    {
+      recoverWorkspaceView();
+      return std::unexpected{formatNavigationFailedError(res.error())};
     }
 
     return revealLoadedTrack(trackId);
@@ -837,7 +803,7 @@ namespace ao::tui
       // Commit the existing range, not a new range in the new order.
       endVisualSelection();
       restoreSelection(previousTrackId);
-      syncSelectedPresentation(activePresentationId());
+      syncSelectedPresentation();
     }
 
     return {};
@@ -909,19 +875,12 @@ namespace ao::tui
       return makeError(Error::Code::NotFound, "Cannot reveal an unavailable track's album");
     }
 
-    auto const* albums = rt::builtinTrackPresentationPreset("albums");
-
-    if (albums == nullptr)
-    {
-      return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
-    }
-
     auto res = navigateFromActiveView({
       .target = rt::GlobalViewKind::AllTracks,
       .optPresentation =
         rt::NavigationPresentation{
           .mode = rt::NavigationPresentationMode::Override,
-          .spec = albums->spec,
+          .spec = rt::builtinTrackPresentationPreset(rt::BuiltinPreset::Albums).spec,
         },
     });
 
@@ -939,7 +898,17 @@ namespace ao::tui
     return {};
   }
 
-  PresentationSelectionResult LibraryController::setPresentation(std::string_view const presentationId)
+  PresentationSelectionResult LibraryController::setPresentationKey(std::string_view const key)
+  {
+    if (auto const optId = rt::parseTrackPresetId(key); optId)
+    {
+      return setPresentation(*optId);
+    }
+
+    return std::unexpected{PresentationSelectionError{.message = libraryUnknownView(_textCatalog, key)}};
+  }
+
+  PresentationSelectionResult LibraryController::setPresentation(rt::TrackPresetId const& id)
   {
     if (_activeViewId == rt::kInvalidViewId)
     {
@@ -954,7 +923,9 @@ namespace ao::tui
         .severity = rt::NotificationSeverity::Warning}};
     }
 
-    if (auto eligibility = uimodel::trackPresentationEligibility(_textCatalog, _currentListId, presentationId);
+    auto const key = rt::trackPresetKey(id);
+
+    if (auto eligibility = uimodel::trackPresentationEligibility(_textCatalog, _currentListId, key);
         !eligibility.enabled)
     {
       return std::unexpected{PresentationSelectionError{.message = std::move(eligibility.disabledReason)}};
@@ -962,23 +933,21 @@ namespace ao::tui
 
     auto const selectedBefore = selectedTrackView();
     auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
-    auto const res = _workspace.setActivePresentation(presentationId);
 
-    if (!res)
+    if (auto const res = _workspace.setActivePresentation(id); !res)
     {
       // Both an unknown preset and a missing target view return NotFound.
       if (res.error().code == Error::Code::NotFound && _views.findTrackListPresentation(_activeViewId) != nullptr)
       {
-        return std::unexpected{PresentationSelectionError{.message = libraryUnknownView(_textCatalog, presentationId)}};
+        return std::unexpected{PresentationSelectionError{.message = libraryUnknownView(_textCatalog, key)}};
       }
 
-      APP_LOG_WARN("TUI could not apply presentation '{}': {}", presentationId, res.error().message);
+      APP_LOG_WARN("TUI could not apply presentation '{}': {}", key, res.error().message);
       return std::unexpected{PresentationSelectionError{
         .message = chromeText(_textCatalog, i18n::MessageId::TuiLibraryPresentationApplyFailed),
         .severity = rt::NotificationSeverity::Warning}};
     }
 
-    auto const& spec = *res;
     auto snapshotRes = materializeView(_activeViewId);
 
     if (!snapshotRes)
@@ -989,9 +958,8 @@ namespace ao::tui
     }
 
     installRows(std::move(*snapshotRes));
-    syncSelectedPresentation(spec.id);
-
-    _listPresentations.setPresentationIdForList(_currentListId, spec.id);
+    syncSelectedPresentation();
+    _listPresentations.setPresentationIdForList(_currentListId, id);
 
     if (!trySetSelectedTrackById(previousTrackId))
     {
@@ -1002,7 +970,7 @@ namespace ao::tui
     // range is derived from the anchor and the focused row.
     reconcileMarks();
     publishSelection();
-    return libraryView(_textCatalog, spec.id);
+    return libraryView(_textCatalog, key);
   }
 
   PresentationSelectionResult LibraryController::selectSelectedPresentation()
@@ -1015,7 +983,80 @@ namespace ao::tui
 
     auto const selectedIndex =
       clampSelection(static_cast<std::size_t>(std::max(0, _selectedPresentation)), _presentationEntries.size());
-    return setPresentation(_presentationEntries[selectedIndex].id);
+    return setPresentationKey(_presentationEntries[selectedIndex].id);
+  }
+
+  std::vector<rt::TrackField> LibraryController::sortableTrackColumns() const
+  {
+    auto const* presentation = _views.findTrackListPresentation(_activeViewId);
+
+    if (presentation == nullptr)
+    {
+      return {};
+    }
+
+    auto columns =
+      uimodel::visibleTrackFieldsInStoredLayout(*presentation, _trackColumnLayouts.layoutForList(_currentListId));
+    std::erase_if(columns, [](rt::TrackField column) { return !rt::trackSortFieldForColumn(column); });
+    return columns;
+  }
+
+  Result<> LibraryController::sortByColumn(std::string_view const columnId)
+  {
+    using i18n::MessageId;
+
+    auto const viewId = _activeViewId;
+    auto const* presentation = _views.findTrackListPresentation(viewId);
+
+    if (presentation == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, chromeText(_textCatalog, MessageId::TuiLibraryNoActiveTrackView));
+    }
+
+    if (_workspace.snapshot().activeViewId != viewId)
+    {
+      return makeError(
+        Error::Code::InvalidState, chromeText(_textCatalog, MessageId::TuiLibraryPresentationViewChanged));
+    }
+
+    auto const optColumn = rt::trackFieldFromId(columnId);
+
+    if (!optColumn || !std::ranges::contains(sortableTrackColumns(), *optColumn))
+    {
+      return makeError(
+        Error::Code::InvalidInput,
+        i18n::requiredFormat(_textCatalog, MessageId::TrackSortColumnUnavailable, {{"column", columnId}}));
+    }
+
+    auto const previousTrackId = focusedTrackId();
+
+    if (auto const res = _views.setColumnSort(viewId, presentation->nextColumnSort(*optColumn)); !res)
+    {
+      return makeError(
+        res.error().code,
+        i18n::requiredFormat(_textCatalog, MessageId::TrackSortFailed, {{"detail", res.error().message}}));
+    }
+
+    if (auto const projectionRes = _views.findTrackListProjection(viewId);
+        projectionRes && *projectionRes && _loadedProjectionPtr.lock() == *projectionRes && !_loadedRowsDirty)
+    {
+      // The projection changed only the header marker; the visual range still uses the same row coordinates.
+      return {};
+    }
+
+    auto snapshotRes = materializeView(viewId);
+
+    if (!snapshotRes)
+    {
+      AO_FATAL("TUI could not materialize a view after sorting its tracks: {}", snapshotRes.error().message);
+    }
+
+    // Keep the marked identities; the old range's bounds have no meaning in the new order.
+    endVisualSelection();
+    installRows(std::move(*snapshotRes));
+    restoreSelection(previousTrackId);
+    publishSelection();
+    return {};
   }
 
   void LibraryController::selectListRow(std::int32_t const index)
@@ -1222,9 +1263,13 @@ namespace ao::tui
     return chromeText(_textCatalog, i18n::MessageId::TuiLibraryFilterApplied);
   }
 
-  void LibraryController::syncSelectedPresentation(std::string_view const presentationId)
+  void LibraryController::syncSelectedPresentation()
   {
-    auto const it = std::ranges::find(_presentationEntries, presentationId, &TrackPresentationNavEntry::id);
+    auto const* presentation = _views.findTrackListPresentation(_activeViewId);
+    auto const it = presentation != nullptr ? std::ranges::find(_presentationEntries,
+                                                                rt::trackPresetKey(presentation->presetId),
+                                                                &TrackPresentationNavEntry::id)
+                                            : _presentationEntries.end();
 
     if (it == _presentationEntries.end())
     {
@@ -1239,7 +1284,7 @@ namespace ao::tui
   {
     _presentationEntries = makeTrackPresentationNavigation(
       _textCatalog, _currentListId, rt::builtinTrackPresentationPresets(), _workspace.customPresets());
-    syncSelectedPresentation(activePresentationId());
+    syncSelectedPresentation();
   }
 
   void LibraryController::refreshFilterError()
@@ -1509,19 +1554,6 @@ namespace ao::tui
 
   Result<> LibraryController::navigateFromActiveView(rt::NavigationRequest const& request)
   {
-    auto const stateRes = _views.findTrackListState(_activeViewId);
-
-    if (!stateRes)
-    {
-      return std::unexpected{stateRes.error()};
-    }
-
-    // Quick Filter edits the live view; save its state in history before leaving.
-    if (auto const res = _workspace.setActivePresentation(stateRes->presentation); !res)
-    {
-      return res;
-    }
-
     auto const navigationRes = _workspace.navigate(request);
 
     if (!navigationRes)

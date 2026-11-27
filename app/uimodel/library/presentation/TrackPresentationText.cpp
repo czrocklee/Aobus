@@ -5,15 +5,18 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::uimodel
 {
@@ -72,54 +75,32 @@ namespace ao::uimodel
 
     static_assert(kMissingTrackValueMessageIds.size() == rt::kMissingTrackValueKindCount);
 
-    struct BuiltinTrackPresentationDefinition final
+    struct BuiltinPresetMessageIds final
     {
-      std::string_view id;
-      MessageId labelId;
-      MessageId descriptionId;
+      MessageId label;
+      MessageId description;
     };
 
-    constexpr auto kBuiltinTrackPresentationDefinitions = std::to_array<BuiltinTrackPresentationDefinition>({
-      {.id = "library",
-       .labelId = MessageId::TrackPresentationLibrary,
-       .descriptionId = MessageId::TrackPresentationLibraryDescription},
-      {.id = "list-order",
-       .labelId = MessageId::TrackPresentationListOrder,
-       .descriptionId = MessageId::TrackPresentationListOrderDescription},
-      {.id = "songs",
-       .labelId = MessageId::TrackPresentationSongs,
-       .descriptionId = MessageId::TrackPresentationSongsDescription},
-      {.id = "albums",
-       .labelId = MessageId::TrackPresentationAlbums,
-       .descriptionId = MessageId::TrackPresentationAlbumsDescription},
-      {.id = "artists",
-       .labelId = MessageId::TrackPresentationArtists,
-       .descriptionId = MessageId::TrackPresentationArtistsDescription},
-      {.id = "performers",
-       .labelId = MessageId::TrackPresentationPerformers,
-       .descriptionId = MessageId::TrackPresentationPerformersDescription},
-      {.id = "genres",
-       .labelId = MessageId::TrackPresentationGenres,
-       .descriptionId = MessageId::TrackPresentationGenresDescription},
-      {.id = "years",
-       .labelId = MessageId::TrackPresentationYears,
-       .descriptionId = MessageId::TrackPresentationYearsDescription},
-      {.id = "classical-composers",
-       .labelId = MessageId::TrackPresentationClassicalComposers,
-       .descriptionId = MessageId::TrackPresentationClassicalComposersDescription},
-      {.id = "classical-conductors",
-       .labelId = MessageId::TrackPresentationClassicalConductors,
-       .descriptionId = MessageId::TrackPresentationClassicalConductorsDescription},
-      {.id = "classical-works",
-       .labelId = MessageId::TrackPresentationClassicalWorks,
-       .descriptionId = MessageId::TrackPresentationClassicalWorksDescription},
-      {.id = "tagging",
-       .labelId = MessageId::TrackPresentationTagging,
-       .descriptionId = MessageId::TrackPresentationTaggingDescription},
-      {.id = "technical",
-       .labelId = MessageId::TrackPresentationTechnical,
-       .descriptionId = MessageId::TrackPresentationTechnicalDescription},
+    constexpr auto kBuiltinPresetMessageIds = std::to_array<BuiltinPresetMessageIds>({
+      {.label = MessageId::TrackPresentationLibrary, .description = MessageId::TrackPresentationLibraryDescription},
+      {.label = MessageId::TrackPresentationListOrder, .description = MessageId::TrackPresentationListOrderDescription},
+      {.label = MessageId::TrackPresentationSongs, .description = MessageId::TrackPresentationSongsDescription},
+      {.label = MessageId::TrackPresentationAlbums, .description = MessageId::TrackPresentationAlbumsDescription},
+      {.label = MessageId::TrackPresentationArtists, .description = MessageId::TrackPresentationArtistsDescription},
+      {.label = MessageId::TrackPresentationPerformers,
+       .description = MessageId::TrackPresentationPerformersDescription},
+      {.label = MessageId::TrackPresentationGenres, .description = MessageId::TrackPresentationGenresDescription},
+      {.label = MessageId::TrackPresentationYears, .description = MessageId::TrackPresentationYearsDescription},
+      {.label = MessageId::TrackPresentationClassicalComposers,
+       .description = MessageId::TrackPresentationClassicalComposersDescription},
+      {.label = MessageId::TrackPresentationClassicalConductors,
+       .description = MessageId::TrackPresentationClassicalConductorsDescription},
+      {.label = MessageId::TrackPresentationClassicalWorks,
+       .description = MessageId::TrackPresentationClassicalWorksDescription},
+      {.label = MessageId::TrackPresentationTagging, .description = MessageId::TrackPresentationTaggingDescription},
+      {.label = MessageId::TrackPresentationTechnical, .description = MessageId::TrackPresentationTechnicalDescription},
     });
+    static_assert(kBuiltinPresetMessageIds.size() == std::to_underlying(rt::BuiltinPreset::Technical) + 1);
   } // namespace
   using i18n::MessageCatalog;
   using i18n::MessageId;
@@ -131,6 +112,19 @@ namespace ao::uimodel
     auto const index = static_cast<std::size_t>(field);
     return index < kTrackFieldMessageIds.size() ? requiredText(catalog, kTrackFieldMessageIds[index])
                                                 : std::string_view{};
+  }
+
+  std::string_view trackSortFieldLabel(MessageCatalog const& catalog, rt::TrackSortField const field) noexcept
+  {
+    if (field == rt::TrackSortField::RecordingYear)
+    {
+      return requiredText(catalog, MessageId::TrackSortRecordingYear);
+    }
+
+    // Use the first field's label for comparison keys shared by multiple columns.
+    auto const definitions = rt::trackFieldDefinitions();
+    auto const iter = std::ranges::find(definitions, std::optional{field}, &rt::TrackFieldDefinition::optSortField);
+    return iter != definitions.end() ? trackFieldLabel(catalog, iter->field) : std::string_view{};
   }
 
   std::string_view trackGroupKeyLabel(MessageCatalog const& catalog, rt::TrackGroupKey const key) noexcept
@@ -159,21 +153,13 @@ namespace ao::uimodel
                                                        : std::string_view{};
   }
 
-  std::optional<TrackPresentationText> builtinTrackPresentation(MessageCatalog const& catalog,
-                                                                std::string_view const id) noexcept
+  TrackPresentationText builtinTrackPresentation(MessageCatalog const& catalog, rt::BuiltinPreset const preset)
   {
-    for (auto const& definition : kBuiltinTrackPresentationDefinitions)
-    {
-      if (definition.id == id)
-      {
-        return TrackPresentationText{
-          .label = requiredText(catalog, definition.labelId),
-          .description = requiredText(catalog, definition.descriptionId),
-        };
-      }
-    }
-
-    return std::nullopt;
+    auto const& ids = kBuiltinPresetMessageIds.at(std::to_underlying(preset));
+    return {
+      .label = requiredText(catalog, ids.label),
+      .description = requiredText(catalog, ids.description),
+    };
   }
 
   std::string completionDetail(MessageCatalog const& catalog, rt::CompletionDetail const& detail)

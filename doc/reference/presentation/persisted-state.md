@@ -38,8 +38,7 @@ Workspace sort directions use exactly:
 | `ascending`  | Apply the sort field in ascending order.  |
 | `descending` | Apply the sort field in descending order. |
 
-Presentation and preset ids are nonempty opaque strings.
-Built-in ids are enumerated by the [track-preset reference](track-preset.md); custom ids may be temporarily unavailable and are not a closed enum vocabulary.
+A preset key is either a closed built-in slug or exactly 16 lowercase hexadecimal digits encoding a custom `uint64_t` id. The [track-preset reference](track-preset.md) defines both forms. A header override is not a preset key.
 
 ## Column-layout group
 
@@ -131,18 +130,18 @@ trackView.presentations:
 
 ### Preference fields
 
-| Field            | Type                     | Requirement                                                        |
-| ---------------- | ------------------------ | ------------------------------------------------------------------ |
-| `listId`         | Unsigned 32-bit integer. | Required, nonzero, and unique in the document.                     |
-| `presentationId` | String.                  | Required and nonempty. It need not resolve in the current catalog. |
+| Field            | Type                     | Requirement                                    |
+| ---------------- | ------------------------ | ---------------------------------------------- |
+| `listId`         | Unsigned 32-bit integer. | Required, nonzero, and unique in the document. |
+| `presentationId` | String.                  | Required canonical preset key.                 |
 
-An unavailable `presentationId` survives deserialization and follows the recommendation fallback in the [list-preference specification](../../system/presentation/list-preference.md).
-This extensible-reference rule does not apply to closed field, sort, group, or direction tokens.
+The codec parses each textual `presentationId` into a `TrackPresetId` in `ListPresentations::Snapshot` and emits its canonical key on save. A malformed key, including an unknown built-in slug or an arbitrary custom name, rejects the group. A valid custom key need not resolve to a live preset: its typed id survives deserialization and follows the recommendation rules in the [List preference specification](../../system/presentation/list-preference.md).
 
 ## Workspace relationship
 
-The workspace group carries `presentationVersion: 1` and uses the same stable field, sort, group, direction, and preset-id vocabulary.
-Its root and nested fields are exhaustively defined by the [workspace session-state reference](../workspace/session-state.md).
+The workspace group carries `presentationVersion: 3` and uses the same stable field, sort, group, direction, and preset-id vocabulary.
+Workspace presentations use `kind: builtin` or `kind: custom` with a matching `presetId`. A view may also store an optional `columnSort` mapping whose `column` is a track-field id. Base `sort` terms continue to use `field`. That override is exact view state, not a choice in the version-1 preference group, and a custom-preset definition must not contain it.
+The [workspace session-state reference](../workspace/session-state.md) defines its root and nested fields.
 
 `presentationVersion` versions only the nested presentation serialization.
 It is not a complete workspace root schema version.
@@ -158,7 +157,7 @@ It is not a complete workspace root schema version.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
 - WinUI loads each group into a temporary typed candidate when the runtime graph binds, once the library is open, and retains the corresponding default when a candidate is missing or rejected.
 - TUI loads each group independently before connecting model-save observers, preserving a seeded group when its sibling succeeds or it is rejected.
-- Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
+- Serialization rejects invalid live list ids, invalid preset keys, duplicate fields, and noncanonical column dimensions.
 - GTK and TUI submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI writes each group by itself, from the persist port of the store that changed.
 - Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, and, because a library never reuses a list id, entries for lists a restore replaced.
 - Layout documents are frontend-local: no writer converts or copies a positive `width` between desktop pixel units and terminal cells.
@@ -201,7 +200,7 @@ Each literal group carries and gates its own payload version.
 
 - [`TrackFieldTest.cpp`](../../../test/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
-- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects canonical preset keys, unavailable custom references, and rejection.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries; the GTK test also protects a file saved for another library.
 - [`LibraryRestoreStateIdentityTest.cpp`](../../../test/runtime/LibraryRestoreStateIdentityTest.cpp) protects that neither group resumes another list after a library restore into the same or a new database.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
