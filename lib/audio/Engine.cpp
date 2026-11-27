@@ -1158,8 +1158,9 @@ namespace ao::audio
     }
 
     // ── Playback State Transitions ──────────────────────────────────
-    Notifications completeCurrentPlayback(std::uint64_t playbackGeneration)
+    Notifications completeCurrentPlayback(std::uint64_t playbackGeneration, bool const endedWithoutPcm = false)
     {
+      auto receipt = NaturalEndReceipt{};
       auto onTrackEndedCallback = OnTrackEnded{};
       auto onRouteChangedCallback = OnRouteChanged{};
       auto stateChanged = std::function<void()>{};
@@ -1169,7 +1170,8 @@ namespace ao::audio
         retireRenderTarget();
         onRouteChangedCallback = onRouteChanged;
         AO_INVARIANT(optCurrentItem, "Natural completion requires a current playback item");
-        optLastTerminal = NaturalEndReceipt{.itemId = optCurrentItem->id, .generation = playbackGeneration};
+        receipt = {.itemId = optCurrentItem->id, .generation = playbackGeneration, .endedWithoutPcm = endedWithoutPcm};
+        optLastTerminal = receipt;
         resetPlaybackStatePreservingOutput();
         onTrackEndedCallback = onTrackEnded;
         stateChanged = onStateChanged;
@@ -1182,8 +1184,9 @@ namespace ao::audio
       appendStateChangedNotification(notifications, std::move(stateChanged));
       appendRouteNotification(
         notifications, std::move(onRouteChangedCallback), RouteStatus{.generation = playbackGeneration});
-      appendTrackEndedNotification(
-        notifications, std::move(onTrackEndedCallback), TrackEnded{.generation = playbackGeneration});
+      appendTrackEndedNotification(notifications,
+                                   std::move(onTrackEndedCallback),
+                                   TrackEnded{.generation = playbackGeneration, .optNaturalEnd = receipt});
 
       return notifications;
     }
@@ -1226,7 +1229,7 @@ namespace ao::audio
       }
 
       auto notifications = Notifications{};
-      std::ignore = trySettlePositioning(notifications, true);
+      std::ignore = trySettlePositioning(notifications, PositioningOrigin::SourceReady);
       return notifications;
     }
 
@@ -1762,8 +1765,15 @@ namespace ao::audio
     std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
-    bool trySettlePositioning(Notifications& notifications, bool notifyPlaying);
-    bool trySettlePositioningFromCommand();
+    enum class PositioningOrigin : std::uint8_t
+    {
+      ZeroOffsetStart,
+      OtherCommand,
+      SourceReady,
+    };
+
+    bool trySettlePositioning(Notifications& notifications, PositioningOrigin origin);
+    bool trySettlePositioningFromCommand(PositioningOrigin origin = PositioningOrigin::OtherCommand);
     void stopPlaybackUnlocked();
     void stopUnlocked();
     Result<bool> startInspectedPlaybackUnlocked(
@@ -2255,7 +2265,9 @@ namespace ao::audio
     }
 
     publishCurrentNode(std::make_unique<TrackNode>(std::move(*openedTrackRes)));
-    return trySettlePositioningFromCommand();
+    auto const origin = initialOffset == std::chrono::milliseconds{0} ? PositioningOrigin::ZeroOffsetStart
+                                                                      : PositioningOrigin::OtherCommand;
+    return trySettlePositioningFromCommand(origin);
   }
 
   std::optional<Engine::PlaybackItemId> Engine::Impl::clearNextUnlocked()
@@ -2304,10 +2316,10 @@ namespace ao::audio
     std::ignore = trySettlePositioningFromCommand();
   }
 
-  bool Engine::Impl::trySettlePositioningFromCommand()
+  bool Engine::Impl::trySettlePositioningFromCommand(PositioningOrigin const origin)
   {
     auto notifications = Notifications{};
-    auto const active = trySettlePositioning(notifications, false);
+    auto const active = trySettlePositioning(notifications, origin);
 
     if (!notifications.empty())
     {
@@ -2317,7 +2329,7 @@ namespace ao::audio
     return active;
   }
 
-  bool Engine::Impl::trySettlePositioning(Notifications& notifications, bool notifyPlaying)
+  bool Engine::Impl::trySettlePositioning(Notifications& notifications, PositioningOrigin const origin)
   {
     auto const sourcePtr = currentSource();
     auto lock = std::unique_lock{stateMutex};
@@ -2334,7 +2346,8 @@ namespace ao::audio
     if (!sourcePtr || sourcePtr->isDrained())
     {
       lock.unlock();
-      notifications = completeCurrentPlayback(currentPlaybackGeneration.load(std::memory_order_acquire));
+      notifications = completeCurrentPlayback(currentPlaybackGeneration.load(std::memory_order_acquire),
+                                              sourcePtr && origin == PositioningOrigin::ZeroOffsetStart);
       return false;
     }
 
@@ -2343,7 +2356,7 @@ namespace ao::audio
       status.transport = Transport::Playing;
       backendStarted = true;
 
-      if (notifyPlaying)
+      if (origin == PositioningOrigin::SourceReady)
       {
         appendStateChangedNotification(notifications, onStateChanged);
       }
@@ -2738,7 +2751,9 @@ namespace ao::audio
       auto const& preparedTrack = *preparationImpl->optPreparedTrack;
       auto const nextMode =
         OpenedPcmMode{.clientFormat = preparedTrack.backendFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
-      capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
+      // Successful zero-offset preroll has no render consumer yet. Drained means clean EOF with no PCM to splice;
+      // leave it to the ordinary boundary start instead of announcing a gapless winner.
+      capable = !preparedTrack.sourcePtr->isDrained() && Engine::Impl::isGaplessCapable(preparedTrack.info) &&
                 engine._implPtr->backendPtr->canReuseFormat(currentBackendFormat, preparedTrack.backendFormat) &&
                 detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value();
 

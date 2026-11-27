@@ -28,6 +28,8 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -63,6 +65,13 @@ namespace ao::rt
     {
       Forward,
       Backward,
+    };
+
+    enum class DecodeRecovery : std::uint8_t
+    {
+      Inactive,
+      NoStartedCandidate,
+      StartedCandidate,
     };
 
     struct RestorableCursorSnapshot final
@@ -271,9 +280,7 @@ namespace ao::rt
       std::ignore = pending.sessionPtr->setPlaybackMode(shuffleMode, repeatMode);
       sessionPtr = std::move(pending.sessionPtr);
       startObservingCurrentSession();
-      // An explicit user start begins a fresh failure streak once per action.
-      // A correlated final-setup failure counts afterward; automatic recovery
-      // preserves the streak until playback actually starts.
+      // An accepted user start begins a fresh streak, even if final setup failed.
       resetFailureState();
       restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted && isClockRunning());
       tryReprepareNext(false);
@@ -343,6 +350,7 @@ namespace ao::rt
     {
       optSkipReportKey.reset();
       skippedFailureCount = 0;
+      decodeRecovery = DecodeRecovery::Inactive;
 
       if (sessionPtr)
       {
@@ -612,10 +620,19 @@ namespace ao::rt
         return std::unexpected{adoptedRes.error()};
       }
 
-      // Acceptance owns the candidate and cancellation proof. Only a real
-      // start breaks the failure streak; a queued failure or natural end
-      // still settles through its existing callback path.
       if (startRes->playbackStarted)
+      {
+        sessionPtr->resetEmptyTraversal();
+      }
+
+      if (decodeRecovery != DecodeRecovery::Inactive)
+      {
+        // Navigation starts at offset zero with synchronous preroll. Its receipt distinguishes a start
+        // from immediate EOF even if a short track has already finished by the time we observe transport.
+        decodeRecovery =
+          startRes->playbackStarted ? DecodeRecovery::StartedCandidate : DecodeRecovery::NoStartedCandidate;
+      }
+      else if (startRes->playbackStarted)
       {
         resetFailureState();
       }
@@ -794,6 +811,11 @@ namespace ao::rt
           return true;
         }
 
+        if (sessionPtr)
+        {
+          sessionPtr->resetEmptyTraversal();
+        }
+
         reportSkippedTrack();
         auto const failureCount =
           sessionPtr ? sessionPtr->incrementConsecutiveFailureCount() : kMaxConsecutivePlaybackFailures;
@@ -828,7 +850,7 @@ namespace ao::rt
       return false;
     }
 
-    void advanceNatural()
+    void advanceNatural(std::optional<PlaybackTransport::EmptyPlayback> const& optEmpty)
     {
       if (!sessionPtr)
       {
@@ -844,10 +866,21 @@ namespace ao::rt
         return;
       }
 
-      std::ignore = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
-                                        ShuffleHistory::TransitionOrigin::Forward,
-                                        NavigationDirection::Forward,
-                                        true);
+      // A clean end breaks the streak before the successor is tried; an end without a start does not.
+      if (decodeRecovery == DecodeRecovery::StartedCandidate)
+      {
+        resetFailureState();
+      }
+
+      if (!optEmpty)
+      {
+        sessionPtr->resetEmptyTraversal();
+      }
+
+      auto const next =
+        optEmpty ? sessionPtr->resolveAfterEmpty(optEmpty->input, library) : sessionPtr->cursor().resolveNext();
+      std::ignore =
+        tryHandleNavigation(next, ShuffleHistory::TransitionOrigin::Forward, NavigationDirection::Forward, true);
     }
 
     void handleNowPlayingChanged(PlaybackTransport::NowPlayingChanged const& event)
@@ -879,6 +912,7 @@ namespace ao::rt
       // establishes the winning live context. Prevent that older candidate
       // from committing over the accepted transition.
       cancelPendingStart();
+      sessionPtr->resetEmptyTraversal();
       resetFailureState();
       // A prepared successor starts a new timeline; an explicit resume may reopen at its held offset.
       auto const elapsed = event.optPreparedNextToken ? std::chrono::milliseconds{0} : transport.state().elapsed;
@@ -917,6 +951,8 @@ namespace ao::rt
         return PlaybackFailureDisposition::Unhandled;
       }
 
+      sessionPtr->resetEmptyTraversal();
+
       if (!transport.state().ready || !isRecoverableTrackFailure(failure) ||
           sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Invalidated)
       {
@@ -938,6 +974,11 @@ namespace ao::rt
         return PlaybackFailureDisposition::Stopped;
       }
 
+      if (failure.kind == PlaybackFailureKind::Decode)
+      {
+        decodeRecovery = DecodeRecovery::NoStartedCandidate;
+      }
+
       reportSkippedTrack();
       auto const recovered = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
                                                  ShuffleHistory::TransitionOrigin::Forward,
@@ -946,11 +987,22 @@ namespace ao::rt
       return recovered && sessionPtr ? PlaybackFailureDisposition::Recovered : PlaybackFailureDisposition::Stopped;
     }
 
-    void synchronizeRestartClock(bool positionChanged = false)
+    void synchronizeSessionWithTransport(bool positionChanged = false)
     {
       if (isClosing() || !sessionPtr)
       {
         return;
+      }
+
+      // A deferred hold has released the decoder. Only an explicit resume can reopen it.
+      if (transport.hasDeferredResume())
+      {
+        sessionPtr->resetEmptyTraversal();
+
+        if (decodeRecovery != DecodeRecovery::Inactive)
+        {
+          resetFailureState();
+        }
       }
 
       // A route reopen or resume can leave play intent active without a running clock.
@@ -987,6 +1039,23 @@ namespace ao::rt
       }
     }
 
+    template<typename Operation>
+    auto runAutomaticTransition(Operation operation)
+    {
+      auto const wasActive = std::exchange(automaticTransitionActive, true);
+      auto const finish = gsl_lite::finally(
+        [this, wasActive]
+        {
+          automaticTransitionActive = wasActive;
+
+          if (!wasActive)
+          {
+            automaticTransitionSettledSignal.emit();
+          }
+        });
+      return operation();
+    }
+
     void start()
     {
       transport.bindPlaybackFailureRecovery(
@@ -994,17 +1063,19 @@ namespace ao::rt
         {
           if (!isClosing())
           {
-            return handlePlaybackFailure(failure);
+            return runAutomaticTransition([&] { return handlePlaybackFailure(failure); });
           }
 
           return PlaybackFailureDisposition::Unhandled;
         });
       idleSubscription = transport.onIdle(
-        [this]
+        [this](std::optional<PlaybackTransport::EmptyPlayback> const& optEmpty)
         {
-          if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
+          if (!isClosing() && sessionPtr && !stoppingTransport &&
+              transport.state().transport == audio::Transport::Idle &&
+              (!optEmpty || optEmpty->trackId == sessionPtr->cursor().currentTrackId()))
           {
-            advanceNatural();
+            runAutomaticTransition([&] { advanceNatural(optEmpty); });
           }
         });
       nowPlayingSubscription = transport.onNowPlayingChanged(
@@ -1021,7 +1092,7 @@ namespace ao::rt
           if (!isClosing())
           {
             cancelPendingStart();
-            synchronizeRestartClock();
+            synchronizeSessionWithTransport();
             tryReprepareNext(true);
           }
         });
@@ -1031,7 +1102,8 @@ namespace ao::rt
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
             cancelPendingStart();
-            synchronizeRestartClock(true);
+            sessionPtr->resetEmptyTraversal();
+            synchronizeSessionWithTransport(true);
             tryReprepareNext(true);
           }
           else if (!isClosing() && event.mode == PlaybackTransport::SeekMode::Final)
@@ -1039,10 +1111,10 @@ namespace ao::rt
             cancelPendingStart();
           }
         });
-      auto const clockChanged = [this] { synchronizeRestartClock(); };
-      startedSubscription = transport.onStarted(clockChanged);
-      bufferingFinishedSubscription = transport.onBufferingFinished(clockChanged);
-      pausedSubscription = transport.onPaused(clockChanged);
+      auto const transportChanged = [this] { synchronizeSessionWithTransport(); };
+      startedSubscription = transport.onStarted(transportChanged);
+      bufferingFinishedSubscription = transport.onBufferingFinished(transportChanged);
+      pausedSubscription = transport.onPaused(transportChanged);
       stoppedSubscription = transport.onStopped(
         [this]
         {
@@ -1078,6 +1150,7 @@ namespace ao::rt
       sessionPtr.reset();
       changedSignal.disconnectAll();
       explicitStartSettledSignal.disconnectAll();
+      automaticTransitionSettledSignal.disconnectAll();
       shuffleModeChangedSignal.disconnectAll();
       repeatModeChangedSignal.disconnectAll();
       restorableStateChangedSignal.disconnectAll();
@@ -1098,6 +1171,7 @@ namespace ao::rt
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
     async::Signal<PlaybackSuccessionState const&> changedSignal;
     async::Signal<> explicitStartSettledSignal;
+    async::Signal<> automaticTransitionSettledSignal;
     async::Signal<PlaybackSuccession::ShuffleModeChanged const&> shuffleModeChangedSignal;
     async::Signal<PlaybackSuccession::RepeatModeChanged const&> repeatModeChangedSignal;
     async::Signal<> restorableStateChangedSignal;
@@ -1113,8 +1187,10 @@ namespace ao::rt
     std::optional<NotificationReportKey> optSkipReportKey;
     std::uint64_t nextSkipReportKey = 0;
     std::size_t skippedFailureCount = 0;
+    DecodeRecovery decodeRecovery = DecodeRecovery::Inactive;
     bool closing = false;
     bool stoppingTransport = false;
+    bool automaticTransitionActive = false;
   };
 
   PlaybackSuccession::Impl* PlaybackSuccession::checkedImpl(std::source_location const location) const
@@ -1201,6 +1277,7 @@ namespace ao::rt
       return false;
     }
 
+    impl->sessionPtr->resetEmptyTraversal();
     impl->resetFailureState();
     return impl->tryHandleNavigation(impl->sessionPtr->cursor().resolveNext(),
                                      ShuffleHistory::TransitionOrigin::Forward,
@@ -1219,6 +1296,7 @@ namespace ao::rt
       return false;
     }
 
+    impl->sessionPtr->resetEmptyTraversal();
     impl->resetFailureState();
     auto const shufflePrevious = impl->sessionPtr->cursor().shuffleMode() == ShuffleMode::On &&
                                  !impl->sessionPtr->cursor().isPreviousRestartAvailable();
@@ -1323,6 +1401,16 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
     return impl->repeatModeChangedSignal.connect(std::move(handler));
+  }
+
+  bool PlaybackSuccession::isAutomaticTransitionActive() const noexcept
+  {
+    return checkedImpl()->automaticTransitionActive;
+  }
+
+  async::Subscription PlaybackSuccession::onAutomaticTransitionSettled(compat::MoveOnlyFunction<void()> handler)
+  {
+    return checkedImpl()->automaticTransitionSettledSignal.connect(std::move(handler));
   }
 
   bool PlaybackSuccession::hasActivePlaybackSession() const

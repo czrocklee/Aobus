@@ -14,16 +14,22 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/PreparedPlayback.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -250,6 +256,90 @@ namespace ao::rt::test
     CHECK(startedEvents == 0);
     CHECK(nowPlayingEvents == 0);
     CHECK(fixture.notificationService.feed().entries.empty());
+  }
+
+  TEST_CASE("PlaybackTransport token - a retired empty end preserves idle delivery and yields to a reentrant replay",
+            "[concurrency]")
+  {
+    auto const replayDuringIdle = GENERATE(false, true);
+    CAPTURE(replayDuringIdle);
+    auto const empty = request(TrackId{34}, "empty.flac", "Empty");
+    auto const replay = request(empty.item.trackId, "playable.flac", "Replay");
+    auto const info = audio::test::makeScriptedStreamInfo(audio::test::makeEngineTestFormat());
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{audio::test::makePathScriptedDecoderFactory({
+      {.path = empty.input.filePath, .info = info, .data = {}},
+      {.path = replay.input.filePath, .info = info, .data = std::vector(48, std::byte{0x21})},
+    })};
+    auto& transport = fixture.playbackTransport;
+    auto devices = fixture.status.devices;
+    auto const alternate = audio::Device{.id = audio::DeviceId{"alternate"}, .backendId = fixture.status.descriptor.id};
+    devices.push_back(alternate);
+    fixture.onDevicesChangedCb(devices);
+    fixture.executor.drain();
+    auto selection = transport.state().output.selectedDevice;
+    REQUIRE(selection.deviceId != alternate.id);
+    selection.deviceId = alternate.id;
+
+    auto replayOccurrence = PlaybackOccurrenceId{};
+    auto const firstIdle = transport.onIdle(
+      [&]
+      {
+        if (replayDuringIdle && replayOccurrence == PlaybackOccurrenceId{} && transport.play(replay, kSourceListId))
+        {
+          replayOccurrence = transport.state().occurrenceId;
+        }
+      });
+    auto ends = std::vector<std::optional<PlaybackTransport::EmptyPlayback>>{};
+    auto const endPolicy =
+      transport.onIdle([&](std::optional<PlaybackTransport::EmptyPlayback> const& optEnd) { ends.push_back(optEnd); });
+    auto idleOccurrences = std::vector<PlaybackOccurrenceId>{};
+    auto const lastIdle = transport.onIdle([&] { idleOccurrences.push_back(transport.state().occurrenceId); });
+
+    REQUIRE(transport.play(empty, kSourceListId));
+    auto const emptyOccurrence = transport.state().occurrenceId;
+    REQUIRE(emptyOccurrence != PlaybackOccurrenceId{});
+    REQUIRE_FALSE(transport.canAdvanceFrom(emptyOccurrence));
+    REQUIRE(idleOccurrences.empty());
+    REQUIRE(ends.empty());
+
+    // No executor turn can deliver the ordinary EOF. The output barrier must settle it before this call returns.
+    transport.setOutputDevice(selection);
+    REQUIRE(transport.state().output.selectedDevice == selection);
+    REQUIRE(transport.state().ready);
+    REQUIRE(idleOccurrences.size() == 1);
+    REQUIRE(ends.size() == (replayDuringIdle ? 0U : 1U));
+    fixture.executor.drain();
+    REQUIRE(idleOccurrences.size() == 1);
+
+    if (!replayDuringIdle)
+    {
+      REQUIRE(ends.size() == 1);
+      REQUIRE(ends.front());
+      CHECK(ends.front()->trackId == empty.item.trackId);
+      CHECK(ends.front()->input == empty.input);
+      CHECK(idleOccurrences.front() == PlaybackOccurrenceId{});
+      CHECK(transport.state().transport == audio::Transport::Idle);
+      return;
+    }
+
+    REQUIRE(replayOccurrence != PlaybackOccurrenceId{});
+    REQUIRE(replayOccurrence != emptyOccurrence);
+    CHECK(idleOccurrences.front() == replayOccurrence);
+    REQUIRE(ends.empty()); // Not even a null payload: the retired end no longer belongs to this occurrence.
+    REQUIRE(transport.state().occurrenceId == replayOccurrence);
+    REQUIRE(transport.state().transport == audio::Transport::Playing);
+
+    // The replay's own PCM end, unlike the superseded empty end, still reaches the policy observer.
+    REQUIRE(fixture.renderTarget != nullptr);
+    auto output = std::array<std::byte, 256>{};
+    REQUIRE(fixture.renderTarget->renderPcm(output).bytesWritten > 0);
+    REQUIRE(fixture.renderTarget->renderPcm(output).drained);
+    fixture.renderTarget->handleDrainComplete();
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return !ends.empty(); }));
+    REQUIRE(ends.size() == 1);
+    CHECK_FALSE(ends.front());
+    CHECK(idleOccurrences.size() == 2);
+    CHECK(transport.state().occurrenceId == PlaybackOccurrenceId{});
   }
 
   TEST_CASE("PlaybackTransport token - drain fallback returns exact disarm acknowledgement")

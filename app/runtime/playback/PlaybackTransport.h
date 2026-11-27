@@ -27,6 +27,7 @@
 namespace ao::library
 {
   class MusicLibrary;
+  class ReadTransaction;
 }
 
 namespace ao::async
@@ -77,6 +78,12 @@ namespace ao::rt
       TrackId trackId = kInvalidTrackId;
       ListId sourceListId = kInvalidListId;
       std::optional<PreparedNextToken> optPreparedNextToken{};
+    };
+
+    struct EmptyPlayback final
+    {
+      TrackId trackId = kInvalidTrackId;
+      audio::PlaybackInput input;
     };
 
     struct QualityChanged final
@@ -144,7 +151,10 @@ namespace ao::rt
     async::Subscription onStarted(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onBufferingFinished(compat::MoveOnlyFunction<void()> handler);
     async::Subscription onPaused(compat::MoveOnlyFunction<void()> handler);
+    // Lifecycle observers receive every published idle edge in registration order. The typed observer
+    // checks occurrence ownership for succession and reports empty playback only on matching native proof.
     async::Subscription onIdle(compat::MoveOnlyFunction<void()> handler);
+    async::Subscription onIdle(compat::MoveOnlyFunction<void(std::optional<EmptyPlayback> const&)> handler);
     async::Subscription onNowPlayingChanged(compat::MoveOnlyFunction<void(NowPlayingChanged const&)> handler);
     async::Subscription onOutputDeviceChanged(
       compat::MoveOnlyFunction<void(audio::OutputDeviceSelection const&)> handler);
@@ -245,5 +255,8 @@ namespace ao::rt
   // the transport's own track-addressed entry points and by succession, which
   // resolves requests ahead of time to stage them off the executor.
   Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     TrackId trackId);
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     library::ReadTransaction const& transaction,
                                                                      TrackId trackId);
 } // namespace ao::rt

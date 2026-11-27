@@ -270,7 +270,11 @@ After inspection, Engine queries the backend's installed-mode reuse contract und
 If reuse is authorized and the installed encoding and retained confirmed endpoint preserve the successor's inspected signal, a worker opens the final successor decoder in that encoding and prerolls it.
 The worker retains only values, not a backend reference.
 Engine adopts the result only after Player's task remains admissible and Engine's captured playback, route, and mode context still matches.
-Successful adoption starts the decode thread, retains the node as lookahead, and arms its raw pointer for realtime consumption.
+If preroll reaches clean EOF with no buffered PCM, even an otherwise compatible
+lossless successor gets `DrainFallback` instead of a splice. A short successor
+that reaches EOF with PCM still buffered remains eligible. For an admitted
+splice, adoption starts the decode thread, retains the node as lookahead, and
+arms its raw pointer for realtime consumption.
 
 When the current session is lossy, unknown, or otherwise not gapless-capable,
 preparation produces a logical `DrainFallback` result on the callback executor
@@ -351,7 +355,10 @@ Failure of this optimistic final-decoder step discards only the prepared source 
 Commit revalidates the token, accepts a new playback generation, retires the old render target, and opens the backend from the inspected `SignalFormat`.
 When the returned `clientFormat` exactly matches the optimistic prepared mode, commit activates that source without repeating preparation. Otherwise commit discards it and synchronously opens and prepares a fresh source in the returned `SampleEncoding`.
 Ordinarily preparation applies the initial offset and prerolls the selected decoder. For an extended initial seek it records the offset instead, without prerolling from zero or starting a worker for an uncommitted candidate.
-Activation installs the Engine callbacks before the decode thread begins its pending seek or steady-state decode. A committed source awaiting an extended seek is an accepted active start, not proof that native rendering has begun; the backend remains stopped pending readiness.
+Activation installs the Engine callbacks before the decode thread begins its
+pending seek or steady-state decode. A committed source awaiting an extended
+seek receives `playbackStarted == true` while the backend is still stopped
+pending readiness. The receipt is not proof that PCM has rendered.
 
 For `startFromView`, Player captures a move-only preparation value from Engine and runs inspection on the async worker pool.
 The first callback-executor resumption checks cancellation and owner lifetime before the short Engine/Backend hint query; the value then returns to a worker for optional final-decoder open and source preparation.
@@ -383,11 +390,16 @@ remains a non-recoverable `RouteActivation` failure. Error codes or diagnostic
 text alone do not decide whether succession may skip the candidate.
 A destructive commit whose source is already naturally complete also returns an
 accepted receipt with `playbackStarted == false`, but it is not a failed start:
-Engine remains idle and the queued `TrackEnded` event drives normal succession
-without a playback-failure notification.
+Engine remains idle and queues `TrackEnded` rather than a playback failure.
+`NaturalEndReceipt::endedWithoutPcm` identifies clean EOF during initial
+positioning at offset zero, before playback started. `TrackEnded` carries that
+receipt, as does the matching retired terminal outcome if a barrier wins the
+race. A synthetic end from an endpoint seek is not such a receipt.
 A pre-commit `Conflict` or `InvalidState` does not advance the generation and therefore preserves the active session and prepared-request registry.
 
 The source never prerolls the unpositioned decoder and then seeks it, so an error from a discarded pre-seek read cannot invalidate a healthy candidate. An extended initial seek can fail after activation instead of during final setup; Engine then reports the current source's `Decode` failure, not a synchronous `TrackOpen` rejection.
+The [playback cursor](cursor.md#failure-and-cancellation) owns how these
+outcomes affect succession's recovery budget and grouped skip reports.
 
 ### Identity and callback fences
 
@@ -467,10 +479,6 @@ an empty lossless encoding set, including zero source precision, is an explicit
 Deterministic source refusal precedes that backend's own close/native configuration where possible. Engine already closes
 its old stream before invoking open, so these guards do not retain or resurrect
 Engine's previous playback.
-
-[Application succession](cursor.md#failure-and-cancellation) stops after three consecutive unplayable candidates.
-An accepted automatic start attempt resets the streak only if playback actually starts, not merely because the backend opened or Engine accepted the attempt.
-An accepted explicit launch starts a fresh streak even if final setup fails; manual Next and Previous reset the streak before resolving navigation in an active session.
 
 The `clientFormat` must preserve the source precision whether or not endpoint evidence exists.
 When a `ConfirmedEndpoint` is present, its rate, channels, sample domain, and effective precision must agree with the configured client mode and preserve the source as well.
@@ -955,7 +963,12 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineTest.cpp`](../../../test/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
 - [`EngineSeekErrorTest.cpp`](../../../test/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
   [`EngineControlErrorTest.cpp`](../../../test/audio/EngineControlErrorTest.cpp) protects terminal stop-callback delivery across a later successful seek sequence and old-target rejection during explicit replacement; its backend fake does not reproduce an SDK stop failure.
-- [`EngineGaplessTest.cpp`](../../../test/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
+- [`EngineGaplessTest.cpp`](../../../test/audio/EngineGaplessTest.cpp) protects
+  splice, cross-precision mode reuse, and drain fallback for a successor with
+  no buffered PCM. [`EngineDrainTest.cpp`](../../../test/audio/EngineDrainTest.cpp)
+  protects drain and natural-end receipts;
+  [`AudioBackendRenderProgressTest.cpp`](../../../test/audio/backend/detail/AudioBackendRenderProgressTest.cpp)
+  protects mixed-buffer progress.
 - [`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) protects backend-authorized WAV/ALAC and FLAC/ALAC stereo mask-alias transport reuse, real FLAC/ALAC strict draining, identity preservation, retained endpoint precision, and adoption-time rechecking; native value tests separately protect the transport proof, not physical routing.
 - [`EngineFlacChannelLayoutTest.cpp`](../../../test/audio/EngineFlacChannelLayoutTest.cpp) owns real WAV/FLAC transition coverage: matching default identities permit strict reuse for counts 1/2/3/4/7/8, while absent-mask five/six-channel FLAC versus inferred WAV drains/reopens. It also covers captured PCM, successor interpretation publication, different-role drain/reopen, malformed-outer-metadata refusal before backend open, and rejected lookahead replacement.
 - [`EngineFlacTransitionTest.cpp`](../../../test/audio/EngineFlacTransitionTest.cpp) covers six-channel real-FLAC producer transitions with equal-known and equal-unknown reuse controls, known↔unknown and different-role drain/reopen, captured PCM, and successor evidence publication.

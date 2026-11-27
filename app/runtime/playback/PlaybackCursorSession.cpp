@@ -3,11 +3,14 @@
 
 #include "runtime/playback/PlaybackCursorSession.h"
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "runtime/playback/ProjectionAnchor.h"
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
@@ -18,10 +21,12 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <memory>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -101,6 +106,12 @@ namespace ao::rt
                                                      std::move(candidateChooser));
     }
   } // namespace
+
+  struct PlaybackCursorSession::EmptyTraversal final
+  {
+    std::unordered_map<TrackId, audio::PlaybackInput> triedInputs;
+    std::optional<std::uint64_t> optVerifiedRevision;
+  };
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackCursorSession::create(
     PlaybackLaunchSpec launchSpec,
@@ -206,12 +217,146 @@ namespace ao::rt
 
   PlaybackCursor::Changes PlaybackCursorSession::setPlaybackMode(ShuffleMode const shuffle, RepeatMode const repeat)
   {
-    return _cursor.setPlaybackMode(shuffle, repeat, *this);
+    auto const changes = _cursor.setPlaybackMode(shuffle, repeat, *this);
+    refreshEmptyMembership();
+    return changes;
   }
 
   PlaybackCursor::CommandResolution PlaybackCursorSession::resolvePrevious()
   {
     return _cursor.resolvePrevious(*this);
+  }
+
+  void PlaybackCursorSession::resetEmptyTraversal() noexcept
+  {
+    _emptyTraversalPtr.reset();
+  }
+
+  void PlaybackCursorSession::refreshEmptyMembership()
+  {
+    if (!_emptyTraversalPtr)
+    {
+      return;
+    }
+
+    std::erase_if(_emptyTraversalPtr->triedInputs,
+                  [this](auto const& entry)
+                  {
+                    return !indexOf(entry.first) &&
+                           !(_cursor.repeatMode() == RepeatMode::One && entry.first == _cursor.currentTrackId());
+                  });
+  }
+
+  std::optional<TrackId> PlaybackCursorSession::untriedShuffleCandidate()
+  {
+    auto candidates = projectionSnapshot();
+    auto const excludeCurrent = _cursor.anchor().state() == ProjectionAnchor::State::Bound &&
+                                (candidates.size() != 1 || _cursor.repeatMode() != RepeatMode::All);
+    std::erase_if(
+      candidates,
+      [this, excludeCurrent](TrackId const id)
+      { return (excludeCurrent && id == _cursor.currentTrackId()) || _emptyTraversalPtr->triedInputs.contains(id); });
+
+    if (candidates.empty())
+    {
+      return std::nullopt;
+    }
+
+    auto const selected = _shuffleHistory.chooseCandidate(candidates);
+    AO_INVARIANT(std::ranges::contains(candidates, selected), "Shuffle candidate chooser returned an ineligible track");
+    return selected;
+  }
+
+  void PlaybackCursorSession::rememberEmptyInput(audio::PlaybackInput const& endedInput,
+                                                 library::MusicLibrary const& library)
+  {
+    if (!_emptyTraversalPtr)
+    {
+      _emptyTraversalPtr = std::make_unique<EmptyTraversal>();
+    }
+
+    auto& traversal = *_emptyTraversalPtr;
+
+    if (auto const current = _cursor.currentTrackId(); _cursor.repeatMode() == RepeatMode::One || indexOf(current))
+    {
+      traversal.triedInputs.insert_or_assign(current, endedInput);
+    }
+
+    // The first open may predate this traversal. Later automatic opens occur after
+    // the preceding resolution: if its library revision is unchanged, their inputs
+    // still match. Revalidate relinks, segment/manifest changes, etc. in one snapshot.
+    auto const transaction = library.readTransaction();
+
+    if (auto const revision = library.libraryRevision(transaction); traversal.optVerifiedRevision != revision)
+    {
+      std::erase_if(traversal.triedInputs,
+                    [&](auto const& entry)
+                    {
+                      auto const requestRes = playbackRequestForTrack(library, transaction, entry.first);
+                      return !requestRes || requestRes->input != entry.second;
+                    });
+      traversal.optVerifiedRevision = revision;
+    }
+  }
+
+  std::optional<TrackId> PlaybackCursorSession::untriedSequentialCandidate(TrackId const first) const
+  {
+    // resolveNext already applied Bound/Gap eligibility to the first row.
+    auto const optFirstIndex = indexOf(first);
+    AO_INVARIANT(optFirstIndex, "Resolved sequential successor is missing from the live projection");
+
+    auto index = *optFirstIndex;
+    auto const size = projectionSize();
+
+    for (std::size_t offset = 1; offset < size; ++offset)
+    {
+      if (++index == size)
+      {
+        if (_cursor.repeatMode() != RepeatMode::All)
+        {
+          break;
+        }
+
+        index = 0;
+      }
+
+      if (auto const id = trackIdAt(index); !_emptyTraversalPtr->triedInputs.contains(id))
+      {
+        return id;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  PlaybackCursor::CommandResolution PlaybackCursorSession::resolveAfterEmpty(audio::PlaybackInput const& endedInput,
+                                                                             library::MusicLibrary const& library)
+  {
+    auto const next = _cursor.resolveNext();
+
+    if (next.action != PlaybackCursor::CommandAction::StartTrack)
+    {
+      return next;
+    }
+
+    rememberEmptyInput(endedInput, library);
+
+    if (!_emptyTraversalPtr->triedInputs.contains(next.trackId))
+    {
+      return next;
+    }
+
+    auto optUntried = std::optional<TrackId>{};
+
+    if (_cursor.repeatMode() != RepeatMode::One)
+    {
+      optUntried =
+        _cursor.shuffleMode() == ShuffleMode::On ? untriedShuffleCandidate() : untriedSequentialCandidate(next.trackId);
+    }
+
+    return optUntried ? PlaybackCursor::CommandResolution{.action = PlaybackCursor::CommandAction::StartTrack,
+                                                          .trackId = *optUntried}
+                      : PlaybackCursor::CommandResolution{.action = PlaybackCursor::CommandAction::Stop};
   }
 
   std::optional<TrackId> PlaybackCursorSession::rerollShuffleForward(std::span<TrackId const> const excludedTrackIds)
@@ -288,6 +433,7 @@ namespace ao::rt
 
     if (sourceInvalidated)
     {
+      resetEmptyTraversal();
       changes = _cursor.invalidateSource(*this);
     }
     else
@@ -295,6 +441,7 @@ namespace ao::rt
       _preparedNextRegistry.applyBatch(
         batch, projectionSize(), [this](TrackId const trackId) { return indexOf(trackId); });
       changes = _cursor.applyProjectionBatch(batch, *this);
+      refreshEmptyMembership();
     }
 
     _projectionBatchHandler(changes, sourceInvalidated);

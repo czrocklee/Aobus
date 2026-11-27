@@ -22,6 +22,16 @@
 #include <span>
 #include <vector>
 
+namespace ao::audio
+{
+  struct PlaybackInput;
+}
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
   class TrackListProjection;
@@ -85,6 +95,9 @@ namespace ao::rt
     PlaybackCursor::Changes setPreviousRestartAvailable(bool available);
     PlaybackCursor::Changes setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat);
     PlaybackCursor::CommandResolution resolvePrevious();
+    PlaybackCursor::CommandResolution resolveAfterEmpty(audio::PlaybackInput const& endedInput,
+                                                        library::MusicLibrary const& library);
+    void resetEmptyTraversal() noexcept;
     Result<PlaybackCursor::Changes> adoptCurrent(TrackId trackId,
                                                  std::optional<PreparedNextToken> optPreparedNextToken,
                                                  ShuffleHistory::TransitionOrigin origin);
@@ -105,7 +118,13 @@ namespace ao::rt
                           ShuffleHistory::CandidateChooser candidateChooser);
 
   private:
+    struct EmptyTraversal;
+
     void handleProjectionBatch(TrackListProjectionDeltaBatch const& batch);
+    void refreshEmptyMembership();
+    void rememberEmptyInput(audio::PlaybackInput const& endedInput, library::MusicLibrary const& library);
+    std::optional<TrackId> untriedShuffleCandidate();
+    std::optional<TrackId> untriedSequentialCandidate(TrackId first) const;
     std::vector<TrackId> projectionSnapshot() const;
 
     std::optional<TrackId> shuffleForwardCandidate(TrackId currentTrackId,
@@ -124,5 +143,6 @@ namespace ao::rt
     ProjectionBatchHandler _projectionBatchHandler;
     async::Subscription _projectionSubscription;
     std::size_t _consecutiveFailureCount = 0;
+    std::unique_ptr<EmptyTraversal> _emptyTraversalPtr;
   };
 } // namespace ao::rt

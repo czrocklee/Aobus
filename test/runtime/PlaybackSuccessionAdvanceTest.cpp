@@ -11,6 +11,7 @@
 #include "test/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include "test/runtime/PlaybackSuccessionSeekTestSupport.h"
 #include "test/runtime/PlaybackSuccessionTransportTestSupport.h"
+#include "test/runtime/PlaybackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -31,6 +32,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <fakeit.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -123,6 +125,173 @@ namespace ao::rt::test
     }
 
     CHECK(fixture.transport.notificationService.feed().entries.empty());
+  }
+
+  TEST_CASE("PlaybackSuccession - a healthy single item repeats after each natural end", "[concurrency]")
+  {
+    auto const repeatMode = GENERATE(RepeatMode::One, RepeatMode::All);
+    CAPTURE(repeatMode);
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .lossyFileName = "transport-playable-0.flac",
+    }};
+    auto const track = fixture.addPlayableTrack("Healthy repeat");
+    fixture.openManualView(std::array{track});
+    auto& succession = *fixture.successionPtr;
+    auto& transport = fixture.transport.playbackTransport;
+    auto& executor = fixture.transport.executor;
+    succession.setRepeatMode(repeatMode);
+    REQUIRE(playback_succession::playFromViewAndWait(succession, executor, fixture.viewId, track));
+    REQUIRE(transport.state().transport == audio::Transport::Playing);
+    REQUIRE(transport.state().nowPlaying.trackId == track);
+    auto occurrences = std::vector{transport.state().occurrenceId};
+    REQUIRE(occurrences.front() != PlaybackOccurrenceId{});
+
+    auto output = std::array<std::byte, 4096>{};
+
+    for (std::size_t transition = 0; transition < 4; ++transition)
+    {
+      CAPTURE(transition);
+      auto* const renderTarget = fixture.transport.renderTarget;
+      REQUIRE(renderTarget != nullptr);
+      REQUIRE(executor.tryDrainUntil([&] { return renderTarget->renderPcm(output).drained; }));
+      renderTarget->handleDrainComplete();
+
+      REQUIRE(executor.tryDrainUntil(
+        [&]
+        {
+          return succession.state().sourceState == PlaybackSuccessionSourceState::Inactive ||
+                 (transport.state().transport == audio::Transport::Playing &&
+                  transport.state().occurrenceId != occurrences.back());
+        }));
+      REQUIRE(succession.state().sourceState == PlaybackSuccessionSourceState::Live);
+      REQUIRE(transport.state().transport == audio::Transport::Playing);
+      CHECK(succession.state().currentTrackId == track);
+      CHECK(transport.state().nowPlaying.trackId == track);
+      auto const occurrence = transport.state().occurrenceId;
+      CHECK(occurrence != PlaybackOccurrenceId{});
+      CHECK_FALSE(std::ranges::contains(occurrences, occurrence));
+      occurrences.push_back(occurrence);
+    }
+
+    CHECK(fixture.transport.notificationService.feed().entries.empty());
+  }
+
+  TEST_CASE("PlaybackSuccession - a gapless advance clears consecutive active decode failures", "[concurrency]")
+  {
+    auto failureGate = audio::test::StagedFailureGate{};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .stagedFailureFileNames = {"transport-playable-0.flac", "transport-playable-1.flac"},
+      .stagedFailureGate = &failureGate,
+      // Only C -> A can splice; B never takes the read gate as a lookahead.
+      .lossyFileName = "transport-playable-1.flac",
+    }};
+    auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
+    fixture.buildThreeTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    auto& transport = fixture.transport.playbackTransport;
+    auto& executor = fixture.transport.executor;
+    succession.setRepeatMode(RepeatMode::All);
+    REQUIRE(playback_succession::playFromViewAndWait(succession, executor, fixture.viewId, fixture.firstTrackId));
+    REQUIRE(transport.state().transport == audio::Transport::Playing);
+    REQUIRE(transport.state().nowPlaying.trackId == fixture.firstTrackId);
+
+    auto const failCurrentAndReach = [&](TrackId const next)
+    {
+      REQUIRE(failureGate.tryWaitForRead());
+      failureGate.release();
+      REQUIRE(executor.tryDrainUntil(
+        [&]
+        {
+          auto const& state = transport.state();
+          return succession.state().sourceState == PlaybackSuccessionSourceState::Inactive ||
+                 (state.transport == audio::Transport::Playing && state.nowPlaying.trackId == next);
+        }));
+      REQUIRE(succession.state().currentTrackId == next);
+    };
+    failCurrentAndReach(fixture.secondTrackId);
+    failCurrentAndReach(fixture.thirdTrackId);
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(fixture.firstTrackId, 1));
+
+    auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
+    auto const subscription = transport.onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const& event)
+                                                            { events.push_back(event); });
+    auto output = std::array<std::byte, 4096>{};
+    REQUIRE(fixture.transport.renderTarget != nullptr);
+    REQUIRE(tryDriveRenderUntil(*fixture.transport.renderTarget, executor, output, [&] { return !events.empty(); }));
+    REQUIRE(events.front().optPreparedNextToken);
+    REQUIRE(events.front().trackId == fixture.firstTrackId);
+    REQUIRE(succession.state().currentTrackId == fixture.firstTrackId);
+
+    // Fail A only after its splice was accepted. Without a reset this would be the third failure.
+    failCurrentAndReach(fixture.secondTrackId);
+    auto skipCounts = std::vector<std::size_t>{};
+
+    for (auto const& entry : fixture.transport.notificationService.feed().entries)
+    {
+      auto const* report = std::get_if<NotificationReport>(&entry.message);
+      REQUIRE(report != nullptr);
+      REQUIRE(report->templateId == NotificationReportTemplate::PlaybackTracksSkipped);
+      skipCounts.push_back(report->count);
+    }
+
+    CHECK(skipCounts == std::vector<std::size_t>{2, 1});
+  }
+
+  TEST_CASE("PlaybackSuccession - a prepared repeat of the same track starts a new decode failure group",
+            "[concurrency]")
+  {
+    auto const repeatMode = GENERATE(RepeatMode::One, RepeatMode::All);
+    CAPTURE(repeatMode);
+    auto seed = audio::test::StagedFailureGate{};
+    auto incoming = audio::test::StagedFailureGate{};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .stagedFailureFileNames = {"transport-playable-0.flac"},
+      // Initial current | its healthy lookahead | recovery current | its incoming repeat. Later reads stay healthy.
+      .stagedFailureGateSequence = {&seed, nullptr, nullptr, &incoming},
+    }};
+    auto releaseSeed = audio::test::StagedFailureReleaseGuard{seed};
+    auto releaseIncoming = audio::test::StagedFailureReleaseGuard{incoming};
+    auto const track = fixture.addPlayableTrack("Repeated FLAC");
+    fixture.openManualView(std::array{track});
+    auto& succession = *fixture.successionPtr;
+    auto& transport = fixture.transport.playbackTransport;
+    auto& executor = fixture.transport.executor;
+    succession.setRepeatMode(repeatMode);
+    REQUIRE(playback_succession::playFromViewAndWait(succession, executor, fixture.viewId, track));
+    REQUIRE(seed.tryWaitForRead());
+    REQUIRE(fixture.tryWaitForDecoderActivationAfter(track, 1)); // Let both readers activate without rendering.
+    auto const initial = transport.state().occurrenceId;
+    releaseSeed.release();
+    REQUIRE(executor.tryDrainUntil([&] { return incoming.tryWaitForRead(std::chrono::milliseconds{0}); }));
+    auto const recovery = transport.state().occurrenceId;
+    REQUIRE(recovery != initial);
+    REQUIRE(recovery != PlaybackOccurrenceId{});
+
+    auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
+    auto const subscription = transport.onNowPlayingChanged([&](auto const& event) { events.push_back(event); });
+    auto output = std::array<std::byte, 4096>{};
+    REQUIRE(fixture.transport.renderTarget != nullptr);
+    REQUIRE(tryDriveRenderUntil(*fixture.transport.renderTarget, executor, output, [&] { return !events.empty(); }));
+    REQUIRE(events.front().trackId == track);
+    REQUIRE(events.front().optPreparedNextToken);
+    auto const winner = transport.state().occurrenceId;
+    REQUIRE(winner != recovery);
+    REQUIRE(winner != PlaybackOccurrenceId{});
+
+    releaseIncoming.release();
+    REQUIRE(executor.tryDrainUntil([&] { return transport.state().occurrenceId != winner; }));
+    CHECK(transport.state().transport == audio::Transport::Playing);
+    CHECK(transport.state().nowPlaying.trackId == track);
+    auto const feed = fixture.transport.notificationService.feed();
+    REQUIRE(feed.entries.size() == 2);
+
+    for (auto const& entry : feed.entries)
+    {
+      auto const* report = std::get_if<NotificationReport>(&entry.message);
+      REQUIRE(report != nullptr);
+      CHECK(report->templateId == NotificationReportTemplate::PlaybackTracksSkipped);
+      CHECK(report->count == 1);
+    }
   }
 
   TEST_CASE("PlaybackSuccession - output and final seek replace the disarmed lookahead token")
@@ -398,7 +567,7 @@ namespace ao::rt::test
     auto failureGate = audio::test::StagedFailureGate{};
     auto renderMutex = std::mutex{};
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
-      .stagedFailureFileName = "transport-playable-1.flac",
+      .stagedFailureFileNames = {"transport-playable-1.flac"},
       .stagedFailureGate = decodeFailure ? &failureGate : nullptr,
     }};
     auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};

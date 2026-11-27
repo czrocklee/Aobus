@@ -134,8 +134,6 @@ it does not emit a transport `NowPlayingChanged` position-anchor event. Commands
 submitted by metadata observers obey the same reentrancy and shutdown rules as
 other snapshot observers. An invalidation delivered reentrantly during command
 settlement schedules another publication after the outer commit closes.
-Synchronous service destruction or shutdown inside its command/publication
-boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 ## Commands and transitions
 
@@ -155,10 +153,13 @@ Activating a row explicitly requests playback from that row rather than resuming
 
 ### Admission and execution
 
-Outside a commit or publication, and with no queued backlog, a command executes
-synchronously. During a commit or publication, or while a backlog exists, it is
-appended to the FIFO. One deferred task consumes one command and schedules the
-next drain after settlement.
+The command boundary covers service commits, publication turns, and automatic
+succession while it handles a playback failure or resolves the next track after
+natural Idle. An admitted ordinary command executes synchronously only outside
+that boundary with no queued backlog. Otherwise it joins the FIFO. For example,
+Next requested by a skip-report observer is evaluated after recovery settles,
+not in the middle of the failure walk. One deferred task consumes one command
+and schedules the next drain after settlement.
 
 `startFromView` reports synchronous view, membership, request, readiness, and
 worker-task admission. Success does not mean that decoder preparation completed
@@ -167,7 +168,7 @@ initially reports successful command-queue admission; it has no separate public
 completion token.
 
 The occurrence-bearing `seek` overload is a guarded queued positioning command. It keeps
-normal FIFO ordering through an active commit, publication, or backlog, captures
+normal FIFO ordering across the command boundary and any backlog, captures
 occurrence, elapsed position, and mode by value, and validates occurrence and
 range in Transport when the operation executes. A stale queued Preview or Final
 issues no seek and publishes no seek update; a valid queued Preview therefore retains its matching Final
@@ -185,22 +186,23 @@ Sequential queued relative commands therefore accumulate from each execution's l
 The live query and seek are separate observations: an intervening realtime replacement is rejected by the existing Engine item guard, not treated as a new target.
 
 `trySeek` is a synchronous-only guarded final seek. It returns `false` without
-queuing when admission is closed, a commit or publication is active, or the
-command FIFO has a backlog. Otherwise it runs through normal commit settlement
+queuing when admission is closed, the command boundary is active, or the
+FIFO has a backlog. Otherwise it runs through normal commit settlement
 without changing the command-invalidating generation and returns whether
 Transport and Engine accepted the expected occurrence/audio-item chain.
 
-`tryNext` is likewise synchronous-only. It requires a ready output and validates the nonzero runtime
-occurrence and subject. Active playback then asks Player and Engine whether the
-settled realtime timeline still exposes Transport's expected audio item; an
-exact deferred occurrence (restored Idle or a held paused position) is the no-active-audio exception. Only a
-match advances the invalidating generation and enters normal synchronous Next
+`tryNext` has the same synchronous admission rules. It requires a ready output
+and validates the nonzero runtime occurrence and subject. Active playback then
+asks Player and Engine whether the settled realtime timeline still exposes
+Transport's expected audio item; an exact deferred occurrence (restored Idle or
+a held paused position) is the no-active-audio exception. Only a match advances
+the invalidating generation and enters normal synchronous Next
 planning. The Engine observation releases its control lock before succession
 runs. This admission observation does not replace `trySeek`'s mutation-time
 identity guards.
 
 Session restore keeps its call-level result on `AppRuntime` and is rejected
-while a commit, publication, or backlog is active.
+while the command boundary is active or the FIFO has a backlog.
 
 ### Supersession
 
@@ -242,7 +244,9 @@ the candidate and emits `Started` and the now-playing observation. `Started`
 means playback was accepted; it does not mean the backend is already rendering. A source
 that is already naturally complete returns `playbackStarted == false`, installs
 the candidate provenance, emits no started/now-playing observation or failure,
-and lets its queued track-ended settlement drive normal succession. If backend
+and lets its queued track-ended settlement drive
+[cursor succession](cursor.md#failure-and-cancellation), including when no
+eligible track remains after clean ends at offset zero. If backend
 activation or final decoder setup fails after Engine accepts the generation,
 the receipt also reports `playbackStarted == false`: transport still installs
 the candidate provenance and settles its cancellation barrier, emits no
@@ -253,8 +257,12 @@ from remaining the semantic current subject.
 
 Unprepared Next and Previous retain their synchronous navigation start path.
 
-Natural advance remains driven by accepted Engine/Player evidence. Its lower
-observations are coalesced into one external-settlement publication.
+Natural advance remains driven by accepted Engine/Player evidence.
+When failure recovery or natural advance runs outside a service commit, its
+lower observations follow the usual
+[deferred snapshot publication](#quick-mutations-and-external-settlement).
+Finishing the transition allows queued commands to drain; it does not itself
+publish a snapshot.
 
 ### Quick mutations and external settlement
 
@@ -316,7 +324,7 @@ publishes nothing. Restore never advances `PlaybackFinalSeekRevision`.
 Snapshot observers are ordinary callables behind the owning signal boundary (see [signal delivery](../execution/signal.md)),
 so contract-fulfilling observers run synchronously in connection order.
 An escaping exception enters AO fatal handling at that boundary and provides no later-observer guarantee.
-Observer-issued commands join the queue.
+Ordinary observer-issued commands follow the [command admission rules](#admission-and-execution).
 
 A seek preview carries an elapsed position without changing the snapshot. Canceling a gesture never issues a seek. On cancellation or a rejected Final, the service notifies `onSeekPreviewEnded` subscribers only if that gesture still owns the preview on the current occurrence. The slider and clock can then resample live elapsed without changing either seek revision or clearing a newer preview.
 
@@ -371,6 +379,10 @@ fault and enters AO fatal handling before service state is read or mutated.
 
 ## Shutdown
 
+Service shutdown and destruction require the callback executor. Owners must
+defer teardown until any active commit, publication, or automatic succession
+transition returns.
+
 `AppRuntime` first shuts down session persistence. It then closes
 `PlaybackService`, which rejects new commands, invalidates and clears queued
 commands, disconnects lower observations, and revokes deferred service tasks.
@@ -394,6 +406,10 @@ producers while succession and the remaining runtime graph are alive.
 - [`PlaybackServiceTest.cpp`](../../../test/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
   terminal exception closure, scheduler rejection, and queued-command lifetime.
+- [`PlaybackFailureObserverTest.cpp`](../../../test/runtime/PlaybackFailureObserverTest.cpp)
+  checks that Next and clear requested by a grouped-skip observer act on the
+  recovered track, and that Next requested at the failure limit leaves playback
+  stopped.
 - [`PlaybackGuardedSeekTest.cpp`](../../../test/runtime/PlaybackGuardedSeekTest.cpp)
   protects guarded-seek identity, validation, synchronous backlog rejection,
   consecutive issuance, and same-track lower/publication lag.

@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace ao::rt::test
@@ -104,6 +105,53 @@ namespace ao::rt::test
     CHECK(stoppedFired);
     CHECK(idleFired);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("PlaybackTransport control - stop reports idle after reentrant play")
+  {
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto& transport = fixture.playbackTransport;
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const first = playbackRequest(TrackId{1}, fixturePath, "First", "Artist", std::chrono::minutes{2});
+    auto const replacement = playbackRequest(TrackId{2}, fixturePath, "Replacement", "Artist", std::chrono::minutes{2});
+    REQUIRE(transport.play(first, ListId{1}));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return transport.state().transport == audio::Transport::Playing; }));
+    auto const firstOccurrence = transport.state().occurrenceId;
+
+    auto replacementOccurrence = PlaybackOccurrenceId{};
+    auto idleOccurrence = PlaybackOccurrenceId{};
+    std::int32_t idleCount = 0;
+    std::int32_t endPolicyCount = 0;
+    auto const stoppedSub = transport.onStopped(
+      [&]
+      {
+        if (transport.play(replacement, ListId{1}))
+        {
+          replacementOccurrence = transport.state().occurrenceId;
+        }
+      });
+    auto const idleSub = transport.onIdle(
+      [&] noexcept
+      {
+        ++idleCount;
+        idleOccurrence = transport.state().occurrenceId;
+      });
+    auto const endPolicySub =
+      transport.onIdle([&](std::optional<PlaybackTransport::EmptyPlayback> const&) noexcept { ++endPolicyCount; });
+
+    transport.stop();
+
+    REQUIRE(replacementOccurrence != PlaybackOccurrenceId{});
+    CHECK(replacementOccurrence != firstOccurrence);
+    CHECK(fixture.executor.tryDrainUntil([&] { return transport.state().transport == audio::Transport::Playing; }));
+    CHECK(idleCount == 1);
+    CHECK(idleOccurrence == replacementOccurrence);
+    CHECK(endPolicyCount == 0);
+    CHECK(transport.state().occurrenceId == replacementOccurrence);
+    CHECK(transport.state().nowPlaying.trackId == TrackId{2});
   }
 
   TEST_CASE("PlaybackTransport control - pause and resume publish only real transitions")

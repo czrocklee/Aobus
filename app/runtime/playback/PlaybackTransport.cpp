@@ -331,7 +331,13 @@ namespace ao::rt
   Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
                                                                      TrackId trackId)
   {
-    auto const transaction = library.readTransaction();
+    return playbackRequestForTrack(library, library.readTransaction(), trackId);
+  }
+
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     library::ReadTransaction const& transaction,
+                                                                     TrackId trackId)
+  {
     auto reader = library.tracks().reader(transaction);
     auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
@@ -457,7 +463,11 @@ namespace ao::rt
     struct PausedEvent final
     {};
     struct IdleEvent final
-    {};
+    {
+      // A lifecycle edge may no longer authorize an advance. A retired occurrence expects ID zero.
+      std::optional<PlaybackOccurrenceId> optExpectedOccurrence{};
+      std::optional<audio::Engine::NaturalEndReceipt> optNaturalEnd{};
+    };
     struct RetiredTerminalEvent final
     {
       PlaybackOccurrenceId occurrenceId;
@@ -554,7 +564,7 @@ namespace ao::rt
     async::Signal<> startedSignal;
     async::Signal<> bufferingFinishedSignal;
     async::Signal<> pausedSignal;
-    async::Signal<> idleSignal;
+    async::Signal<IdleEvent const&> idleSignal;
     async::Signal<PlaybackTransport::NowPlayingChanged const&> nowPlayingChangedSignal;
     async::Signal<audio::OutputDeviceSelection const&> outputDeviceChangedSignal;
     async::Signal<> stoppedSignal;
@@ -628,7 +638,7 @@ namespace ao::rt
             }
             else if constexpr (std::same_as<Value, IdleEvent>)
             {
-              idleSignal.emit();
+              idleSignal.emit(value);
             }
             else if constexpr (std::same_as<Value, RetiredTerminalEvent>)
             {
@@ -1459,24 +1469,36 @@ namespace ao::rt
       return true;
     }
 
-    void publishTrackEnd()
+    bool isCurrentNaturalEnd(audio::Engine::NaturalEndReceipt const& end) const noexcept
     {
-      if (isTerminalTrackTransport(state.transport))
-      {
-        if (state.transport == audio::Transport::Idle && !optDeferredResume)
-        {
-          currentOccurrenceId = {};
-          state.occurrenceId = {};
-        }
-
-        enqueueOutbound(IdleEvent{});
-      }
+      return end.itemId == currentPlaybackItemId && end.generation == currentPlaybackGeneration;
     }
 
-    void handleTrackEnded()
+    IdleEvent acceptIdle(std::optional<audio::Engine::NaturalEndReceipt> optNaturalEnd)
+    {
+      if (optNaturalEnd && (currentOccurrenceId == PlaybackOccurrenceId{} || !isCurrentNaturalEnd(*optNaturalEnd) ||
+                            state.transport != audio::Transport::Idle || optDeferredResume))
+      {
+        return {}; // Preserve the lifecycle edge without retiring or advancing a replacement.
+      }
+
+      if (state.transport == audio::Transport::Idle && !optDeferredResume)
+      {
+        currentOccurrenceId = {};
+        state.occurrenceId = {};
+      }
+
+      return IdleEvent{.optExpectedOccurrence = currentOccurrenceId, .optNaturalEnd = std::move(optNaturalEnd)};
+    }
+
+    void handleTrackEnded(std::optional<audio::Engine::NaturalEndReceipt> optNaturalEnd = {})
     {
       refreshState();
-      publishTrackEnd();
+
+      if (isTerminalTrackTransport(state.transport))
+      {
+        enqueueOutbound(acceptIdle(std::move(optNaturalEnd)));
+      }
     }
 
     bool trySettleRetiredTerminal(audio::Player::Status const& status, std::uint64_t const generation)
@@ -1545,9 +1567,7 @@ namespace ao::rt
         return;
       }
 
-      currentOccurrenceId = {};
-      state.occurrenceId = {};
-      idleSignal.emit();
+      idleSignal.emit(acceptIdle(std::get<audio::Engine::NaturalEndReceipt>(event.terminal)));
     }
 
     explicit Impl(async::Executor& callbackExecutor,
@@ -1568,11 +1588,11 @@ namespace ao::rt
       // drops queued work after shutdown; synchronous teardown from an observer
       // is rejected by the facade's Debug contract.
       playerPtr->setOnTrackEnded(
-        [this](audio::Engine::TrackEnded const&)
+        [this](audio::Engine::TrackEnded const& end)
         {
           if (!isClosing())
           {
-            handleTrackEnded();
+            handleTrackEnded(end.optNaturalEnd);
           }
         });
 
@@ -1756,7 +1776,44 @@ namespace ao::rt
   async::Subscription PlaybackTransport::onIdle(compat::MoveOnlyFunction<void()> handler)
   {
     auto* const impl = checkedImpl();
-    return impl->idleSignal.connect(std::move(handler));
+
+    if (!handler)
+    {
+      return {};
+    }
+
+    return impl->idleSignal.connect([handler = std::move(handler)](Impl::IdleEvent const&) mutable { handler(); });
+  }
+
+  async::Subscription PlaybackTransport::onIdle(
+    compat::MoveOnlyFunction<void(std::optional<EmptyPlayback> const&)> handler)
+  {
+    auto* const impl = checkedImpl();
+
+    if (!handler)
+    {
+      return {};
+    }
+
+    return impl->idleSignal.connect(
+      [impl, handler = std::move(handler)](Impl::IdleEvent const& event) mutable
+      {
+        // An earlier observer can replace the occurrence before this subscriber's turn.
+        if (event.optExpectedOccurrence != impl->currentOccurrenceId ||
+            (event.optNaturalEnd && !impl->isCurrentNaturalEnd(*event.optNaturalEnd)))
+        {
+          return;
+        }
+
+        if (event.optNaturalEnd && event.optNaturalEnd->endedWithoutPcm)
+        {
+          handler(EmptyPlayback{.trackId = impl->currentRequest.item.trackId, .input = impl->currentRequest.input});
+        }
+        else
+        {
+          handler(std::nullopt);
+        }
+      });
   }
 
   async::Subscription PlaybackTransport::onNowPlayingChanged(
@@ -2274,7 +2331,7 @@ namespace ao::rt
 
     impl->refreshState();
     impl->enqueueOutbound(Impl::StoppedEvent{});
-    impl->enqueueOutbound(Impl::IdleEvent{});
+    impl->enqueueOutbound(Impl::IdleEvent{.optExpectedOccurrence = PlaybackOccurrenceId{}});
     impl->enqueueOutbound(PlaybackTransport::NowPlayingChanged{
       .trackId = kInvalidTrackId,
       .sourceListId = kInvalidListId,

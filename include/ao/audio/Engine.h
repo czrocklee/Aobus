@@ -47,6 +47,8 @@ namespace ao::audio
     {
       PlaybackItemId itemId;
       std::uint64_t generation = 0;
+      /// A zero-offset start reached clean EOF in preroll without producing any PCM.
+      bool endedWithoutPcm = false;
 
       bool operator==(NaturalEndReceipt const&) const = default;
     };
@@ -209,6 +211,8 @@ namespace ao::audio
     struct TrackEnded final
     {
       std::uint64_t generation = 0;
+      /// Empty for a track-ended notification following a playback failure.
+      std::optional<NaturalEndReceipt> optNaturalEnd{};
     };
 
     struct PlaybackFailure final

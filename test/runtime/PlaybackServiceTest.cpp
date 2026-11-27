@@ -10,6 +10,7 @@
 #include "test/audio/AudioFixtureSupport.h"
 #include "test/runtime/ApplicationPlaybackTestSupport.h"
 #include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include "test/runtime/PlaybackTestSupport.h"
 #include "test/runtime/PlaybackTransportTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
@@ -17,6 +18,8 @@
 #include <ao/Error.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -39,6 +42,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -661,6 +665,65 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
+  }
+
+  TEST_CASE("PlaybackService - a scheduled command drain waits for automatic succession to finish")
+  {
+    auto tracks = playback_succession::PlaybackSuccessionTransportFixture{};
+    auto const trackId = tracks.addPlayableTrack("Last track");
+    tracks.openManualView(std::array{trackId});
+    REQUIRE(tracks.playAndWait(trackId));
+    auto& transport = tracks.transport.playbackTransport;
+    REQUIRE(tracks.transport.executor.tryDrainUntil(
+      [&] { return transport.state().transport == audio::Transport::Playing; }));
+    auto const occurrence = transport.state().occurrenceId;
+
+    // Both executors have the same owner; step service tasks independently of Player callbacks.
+    auto serviceTurns = ManualExecutor{};
+    auto playback = PlaybackBootstrap{transport}.createPlaybackService(
+      serviceTurns, *tracks.successionPtr, tracks.transport.libraryFixture.library(), tracks.changes);
+    auto settlements = std::string{};
+    auto const reveal = playback.events().onRevealTrackRequested(
+      [&](PlaybackRevealTrackRequest const&)
+      {
+        for (auto const label : std::to_array<char>({'A', 'B'}))
+        {
+          playback.commands().seek(
+            occurrence, {}, PlaybackSeekMode::Final, [&settlements, label] { settlements += label; });
+        }
+      });
+    playback.commands().revealTrack(trackId);
+    REQUIRE(serviceTurns.queuedCount() == 1);
+
+    bool ranDrain = false;
+    std::size_t pendingDuringFinish = 0;
+    auto const feed = tracks.transport.notificationService.onFeedUpdated(
+      [&](NotificationFeedUpdate const& update)
+      {
+        for (auto const& entry : update.feedPtr->entries)
+        {
+          if (auto const* report = std::get_if<NotificationReport>(&entry.message);
+              entry.id == update.id && update.mutationKind == NotificationFeedMutationKind::Posted &&
+              report != nullptr && report->templateId == NotificationReportTemplate::PlaybackSequenceFinished)
+          {
+            ranDrain = serviceTurns.tryRunOne();
+            pendingDuringFinish = serviceTurns.queuedCount();
+          }
+        }
+      });
+    // Complete the track without opening a public command or publication around succession.
+    REQUIRE(transport.trySeek(occurrence, transport.state().duration));
+    REQUIRE(ranDrain);
+    REQUIRE(settlements.empty());
+    // Automatic exit must rearm the drain before any pending publication can rescue it.
+    REQUIRE(serviceTurns.queuedCount() == pendingDuringFinish + 1);
+
+    for (std::size_t turn = 0; serviceTurns.tryRunOne(); ++turn)
+    {
+      REQUIRE(turn < 32); // Fail rather than hang if a drain keeps rescheduling itself.
+    }
+
+    CHECK(settlements == "AB");
   }
 
   TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start")

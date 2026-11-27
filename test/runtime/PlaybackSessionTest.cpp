@@ -4,7 +4,9 @@
 #include "lib/audio/NullBackend.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
+#include "runtime/playback/PlaybackCursor.h"
 #include "runtime/playback/PlaybackCursorSession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "runtime/playback/ShuffleHistory.h"
 #include "test/TestFixtureSupport.h"
 #include "test/audio/AudioFixtureSupport.h"
@@ -680,6 +682,46 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("PlaybackCursorSession - shuffle tries the remaining track when its successor already ended empty")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack("A");
+    auto const second = libraryFixture.addTrack("B");
+    auto const third = libraryFixture.addTrack("C");
+    auto const& library = libraryFixture.library();
+    auto changes = makeStateOnlyLibraryChanges(library);
+    auto sources = TrackSourceCache{library, changes};
+    sources.reloadAllTracks();
+    auto views = ViewService{stateOnlyLibraryExecutor(), library, sources, changes};
+    auto const launchSpec = PlaybackLaunchSpec{
+      .sourceListId = kAllTracksListId,
+      .order = {.sortBy = {{.field = TrackSortField::Title, .ascending = true}}},
+    };
+    auto sessionPtr = ao::test::requireValue(PlaybackCursorSession::create(launchSpec,
+                                                                           first,
+                                                                           sources,
+                                                                           views,
+                                                                           RepeatMode::Off,
+                                                                           ShuffleMode::On,
+                                                                           [](std::span<TrackId const> const candidates)
+                                                                           { return candidates.front(); }));
+    auto const endCurrent = [&]
+    {
+      auto const request =
+        ao::test::requireValue(playbackRequestForTrack(library, sessionPtr->cursor().currentTrackId()));
+      return sessionPtr->resolveAfterEmpty(request.input, library);
+    };
+    auto const start = [](TrackId const id)
+    { return PlaybackCursor::CommandResolution{.action = PlaybackCursor::CommandAction::StartTrack, .trackId = id}; };
+
+    REQUIRE(endCurrent() == start(second));
+    REQUIRE(sessionPtr->adoptCurrent(second, std::nullopt, ShuffleHistory::TransitionOrigin::Forward));
+    REQUIRE(sessionPtr->cursor().resolveNext() == start(first));
+    REQUIRE(endCurrent() == start(third));
+    REQUIRE(sessionPtr->adoptCurrent(third, std::nullopt, ShuffleHistory::TransitionOrigin::Forward));
+    CHECK(endCurrent().action == PlaybackCursor::CommandAction::Stop);
+  }
+
   TEST_CASE("PlaybackCursorSession - stale lookahead keeps a latched prepared winner resolvable", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -1224,6 +1266,54 @@ namespace ao::rt::test
     CHECK(restoredRes.error().code == Error::Code::InvalidState);
     executor->drain();
     CHECK(runtimePtr->playback().snapshot().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackSession - a natural finish report rejects synchronous restore", "[concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    auto captureStatePtr = std::make_shared<RenderCaptureState>();
+    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Last track");
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, createView(*runtimePtr), trackId));
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      {.sourceListId = kAllTracksListId, .currentTrackId = trackId, .positionMs = 250});
+
+    auto optRestoreRes = std::optional<Result<PlaybackSessionRestoreResult>>{};
+    auto const subscription = runtimePtr->notifications().onFeedUpdated(
+      [&](NotificationFeedUpdate const& update)
+      {
+        for (auto const& entry : update.feedPtr->entries)
+        {
+          if (auto const* report = std::get_if<NotificationReport>(&entry.message);
+              entry.id == update.id && update.mutationKind == NotificationFeedMutationKind::Posted &&
+              report != nullptr && report->templateId == NotificationReportTemplate::PlaybackSequenceFinished)
+          {
+            optRestoreRes = runtimePtr->restorePlaybackSession();
+            return;
+          }
+        }
+      });
+
+    // Drive the natural end from audio, not from a public seek with its own command boundary.
+    auto* const target = captureStatePtr->renderTarget;
+    REQUIRE(target != nullptr);
+    auto pcm = std::array<std::byte, 4096>{};
+    REQUIRE(executor->tryDrainUntil([&] { return target->renderPcm(pcm).drained; }));
+    target->handleDrainComplete();
+    REQUIRE(executor->tryDrainUntil([&] { return optRestoreRes.has_value(); }));
+    REQUIRE_FALSE(*optRestoreRes);
+    CHECK(optRestoreRes->error().code == Error::Code::InvalidState);
+    executor->drain();
+    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == trackId);
+    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{250});
   }
 
   TEST_CASE("PlaybackSession - same-subject restore publishes a changed offset")

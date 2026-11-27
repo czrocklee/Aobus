@@ -44,6 +44,9 @@ namespace ao::rt
                                             bool repeatAll,
                                             std::span<TrackId const> excludedTrackIds = {});
 
+    /** Draws from a nonempty domain supplied by a caller that owns its eligibility checks. */
+    TrackId chooseCandidate(std::span<TrackId const> candidates);
+
     /**
      * Relevant repeat/shuffle mode changes invalidate the sticky candidate.
      * History remains intact because it records the actual navigation path.
