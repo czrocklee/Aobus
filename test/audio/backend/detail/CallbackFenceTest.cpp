@@ -211,6 +211,8 @@ namespace ao::audio::backend::detail::test
                                 else
                                 {
                                   rejectedCount.fetch_add(1, std::memory_order_release);
+                                  // Let the controller reopen without waiting out a worker time slice per round.
+                                  std::this_thread::yield();
                                 }
                               }
                             }};
