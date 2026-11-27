@@ -4,10 +4,11 @@ id: architecture.interactive-session-lifecycle
 
 # Interactive session lifecycle architecture
 
-This page owns final placement and lifetime of a library-bound `AppRuntime` in
-GTK, WinUI, AppKit, and TUI. It explains which objects may borrow the graph,
-when restoration and callback admission begin, and how each frontend proves
-that callbacks cannot reach retired state.
+This page owns final placement of `AppRuntimeOwner` and the lifetime of its
+library-bound graph and `AppRuntime` service borrows in GTK, WinUI, AppKit, and
+TUI. It explains which objects may borrow the graph, when restoration and
+callback admission begin, and how each frontend proves that callbacks cannot
+reach retired state.
 
 Cross-desktop root selection and the complete process-restart transaction are
 owned by [desktop library lifecycle](desktop-library-lifecycle.md). Exact GTK
@@ -18,46 +19,59 @@ exact WinUI adaptation is in the
 
 ## Interactive runtime composition
 
-`AppRuntime` is the interactive lifetime root. Its pinned implementation owns a
+`AppRuntimeOwner` is the interactive lifetime root. Its pinned implementation owns a
 `CoreRuntime` first, then resource delivery, views, playback transport and
 succession, workspace state, the owning workspace `ConfigStore`, and playback
 session persistence. Core-borrowing members are constructed only after Core has
 reached its final implementation address and are destroyed before Core.
 
-`AppRuntime::create()` requires an executor and owning workspace store. It first
+`AppRuntimeOwner::open()` requires an executor and owning workspace store. It first
 opens and validates `CoreRuntime`, materializes initial library state, moves Core
 into the final App implementation, and only then constructs interactive
-borrowers. The public `AppRuntime` and `CoreRuntime` values are move-only PImpl
-handles: moving a factory result transfers the implementation pointer rather
-than relocating internal services. A moved-from destructor is inert.
+borrowers. `AppRuntimeOwner` and `CoreRuntime` are move-only handles: moving either
+transfers the implementation pointer rather than relocating internal services.
+A moved-from destructor is inert. A mutable owner lvalue supplies a stable
+`AppRuntime&` through `runtime()`, and separate capability borrows through
+`libraryCommands()` and `libraryJobs()`. Ordinary callers use `AppRuntime&` to
+read and observe the library, observe job progress, and control playback. Only
+the owner supplies the editing and maintenance capabilities or initiates
+coordinated graph shutdown; no service borrow leads back to it.
+Calling `async().requestStop()` through the service borrow closes callback
+resumption and task futures and requests worker stop. It neither seals library
+write admission nor joins workers, so it is not a substitute for coordinated
+shutdown.
 
 The playback-session store is either the owned workspace store or an explicit
 borrowed override. An override must outlive the runtime. `CoreRuntime` is the
 smaller graph used by CLI and does not own interactive workspace/playback
 lifecycle.
 
-A frontend must place the returned value in its final session storage before it
-registers providers, restores state, subscribes observers, or publishes any
-borrow. This rule is independent of the PImpl's stable internal address: it
-keeps composition-root ownership and destruction order explicit.
+A frontend must place the returned owner in named, mutable session storage
+before it registers providers, restores state, subscribes observers, or
+publishes any borrow. The owner must outlive every service and capability
+borrow. A temporary factory result's `operator->` does not extend its owner's
+lifetime past the statement. Final placement keeps composition-root ownership
+and destruction order explicit even though moving the handle does not relocate
+the graph.
 
 ## Shared placement and teardown shape
 
 ```text
 select and validate paths
   -> create callback executor and stores
-  -> create AppRuntime factory value
+  -> open AppRuntimeOwner
   -> move once into final frontend storage
-  -> register providers
-  -> restore workspace and playback according to startup mode
-  -> construct UIModel/frontend borrowers and callbacks
+  -> register providers, restore state, and wire borrowers in frontend order
   -> run
-  -> checkpoint or terminally retire persistence while state and stores exist
-  -> retire observers and callback admission
+  -> checkpoint or terminally retire persistence, and retire observers
+     and callback admission in frontend order, while targets and stores exist
   -> stop and join producers
   -> destroy runtime graph
-  -> release stores, executor dependencies, and logger
+  -> release external stores, executor dependencies, and logger
 ```
+
+The frontend proofs below give the setup and teardown order for each platform,
+including playback restoration according to startup mode.
 
 One graph is bound to one music root and database for its whole lifetime. A
 frontend never retargets a live `MusicLibrary`. Desktop replacement uses the
@@ -69,9 +83,9 @@ transaction. TUI has no in-process or successor switch command.
 
 ### GTK
 
-GTK places one `AppRuntime` in a `unique_ptr` before constructing `MainWindow`.
-A shared `WindowOwner` holds the application config store, runtime, and C++
-window owner; the returned `Glib::RefPtr` aliases that owner to the window.
+GTK moves its `AppRuntimeOwner` into a shared `WindowOwner` before constructing
+`MainWindow`. `WindowOwner` holds the application config store, runtime owner,
+and C++ window owner; the returned `Glib::RefPtr` aliases it to the window.
 Reverse member destruction releases the window and its frontend observers before
 the runtime, then the borrowed config store. GObject finalization alone does not
 prove that the unmanaged C++ window wrapper and its collaborators retired.
@@ -98,7 +112,7 @@ replacement overlap, are specified by
 
 `App` owns one `LibraryWindowSession`. Its heap-pinned session storage owns the
 dispatcher, global stores, and one phase-local `optional<RuntimeGraph>`.
-`RuntimeGraph` directly owns the final `AppRuntime`; a later
+`RuntimeGraph` directly owns the final `AppRuntimeOwner`; a later
 `optional<InteractiveBorrowers>` owns UIModel/runtime borrowers. The graph is
 emplaced before provider registration, restoration, or callback binding and is
 never replaced in place.
@@ -107,7 +121,7 @@ Destructive lifecycle work is posted to the dispatcher, so a picker coroutine
 returns before its owners can be released. Shutdown first begins dispatcher
 closing, retires the owner callback generation, clears outward callbacks, and
 requests task cancellation. The window and interactive borrowers are released
-before `AppRuntime::shutdown()`. After runtime producers join,
+before `AppRuntimeOwner::shutdown()`. After runtime producers join,
 `completeClosing()` performs the bounded final executor drain. The graph is
 then released while its stores and dispatcher still exist.
 
@@ -130,7 +144,7 @@ shared startup contract, not a smoke-only override. The production helper is in
 merge/preservation regression is in
 [`AppKitSmokeMain.mm`](../../test/macos-appkit/AppKitSmokeMain.mm).
 
-`LibrarySession` emplaces its returned `AppRuntime` before providers, workspace
+`LibrarySession` emplaces its returned `AppRuntimeOwner` before providers, workspace
 restore, playback restore, or UIModel borrowers. The runtime-owned
 `MainRunLoopExecutor` targets the main run loop; session storage remains alive
 through runtime join and the executor's final drain.
@@ -179,7 +193,7 @@ turn. The same prohibition applies to native callbacks that own the object being
 retired; GTK picker completion, WinUI dispatcher work, and AppKit service turns
 all separate admission from destruction.
 
-`AppRuntime::shutdown()` is idempotent. It stops playback-session scheduling and
+`AppRuntimeOwner::shutdown()` is idempotent. It stops playback-session scheduling and
 quiesces audio callbacks before its first-member `CoreRuntime` shuts down.
 `CoreRuntime::shutdown()` seals library mutation/publication admission, then
 closes callback resumption, stops and joins workers while library and

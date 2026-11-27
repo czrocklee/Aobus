@@ -18,7 +18,7 @@ Runtime `TrackDetailProjection` owns the authoritative aggregate snapshot and ob
 `LibraryWriteLane` owns admission, commit, and change publication; `LibraryCommands` exposes bound metadata/tag commands.
 UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, `library/track/`, and `field/` owns schema, visibility, display formatting, validation, edit decoding, and patch construction.
 
-`TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the bound runtime commands supplied by composition.
+`TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits. Starting it requires a `LibraryEditing` borrow, constructed from `LibraryCommands&` at composition. The session binds and submits against the same library; neither an `AppRuntime&` nor a `Library` borrow can start it alone.
 It does not open transactions or mutate `MusicLibrary` stores directly.
 Interactive GTK, WinUI, TUI, and AppKit frontends may render and collect edit intent but cannot call `LibraryCommands` directly, replace the bound targets, or reinterpret patch semantics.
 The non-interactive CLI may bind command-selected ids immediately before invoking the runtime commands, as defined by the [CLI execution specification](../frontend/cli.md).
@@ -32,7 +32,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - A **common tag** is present on every selected track.
 - An **undo-eligible deletion** removes a custom key present on every selected track with one common stored value, including a present empty value. Mixed or missing values are not undo-eligible. UIModel does not return this prior value.
 - An **authoring binding** identifies one runtime instance, one committed library revision, and one exact ordered target-id set.
-- **Session State** is the independently retained asynchronous binding/invalidation state behind a move-only authoring facade; it borrows the runtime `Library`.
+- **Session State** is the independently retained asynchronous binding/invalidation state behind a move-only authoring facade; it retains the editing borrow, not the runtime owner.
 
 ## Invariants
 
@@ -46,7 +46,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
 - One open editor owns one move-only `TrackAuthoringSession` value; changing selection or recycling a row cannot retarget that session.
-- A submitted operation retains Session State and may settle after the public facade is moved or destroyed, but it cannot outlive the borrowed runtime `Library`.
+- A submitted operation retains Session State and may settle after the public facade is moved or destroyed, but the runtime that owns its commands must outlive the operation.
 - A WinUI window admits at most one track-properties dialog, and that dialog retains the selection captured when it opened.
 - Any intervening effective library commit, maintenance entry, fault, or runtime replacement invalidates an open session.
 - Missing targets reject the complete metadata/tag command; multi-selection authoring never applies a surviving subset.
@@ -215,7 +215,7 @@ An `Applied` reply clears the status but does not write the submitted text back 
 GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
 Detail undo returns a stale, unavailable, or operational terminal failure, clears that same opportunity, and the undo bar publishes that failure as an error notification. A completion bound to a displaced opportunity does not clear its replacement. A `Busy` result reports temporary resource contention without clearing the pending undo.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.
-Destroying or moving the facade after submission does not itself cancel the command, because the coroutine retains Session State; the owning frontend workflow must settle that task before destroying the runtime `Library` borrowed by the State.
+Destroying or moving the facade after submission does not itself cancel the command, because the coroutine retains Session State; the owning frontend workflow must settle that task before destroying the runtime that owns the reader and commands borrowed through its editing grant.
 
 Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
 Missing targets are rejected with `NotFound` while creating the binding.

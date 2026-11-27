@@ -262,8 +262,8 @@ AppKit restores while constructing its library session before native components
 bind to the runtime snapshot.
 TUI restores after workspace attachment and leaves the restored subject Idle for ordinary Play/PlayPause consumption; it does not force workspace navigation or selection.
 On normal exit, GTK, WinUI, and TUI explicitly checkpoint playback before requesting stop.
-Stop checkpoints the frozen restorable snapshots as it enters Idle, frontend observers are then destroyed, and `AppRuntime::shutdown()` may rewrite the same frozen payload as its final observing-lifecycle checkpoint.
-AppKit explicitly checkpoints its workspace and desktop settings, detaches native consumers, and releases its library session. That session destroys UIModel observers before `AppRuntime::shutdown()` performs the final Observing playback save and stops playback. AppKit does not issue a separate pre-stop playback checkpoint; a sealed or retired session cannot write during shutdown.
+Stop checkpoints the frozen restorable snapshots as it enters Idle, frontend observers are then destroyed, and `AppRuntimeOwner::shutdown()` may rewrite the same frozen payload as its final observing-lifecycle checkpoint.
+AppKit explicitly checkpoints its workspace and desktop settings, detaches native consumers, and releases its library session. That session destroys UIModel observers before `AppRuntimeOwner::shutdown()` performs the final Observing playback save and stops playback. AppKit does not issue a separate pre-stop playback checkpoint; a sealed or retired session cannot write during shutdown.
 Failure of the explicit TUI checkpoint is logged and teardown continues.
 The exact ordering belongs to interactive lifecycle architecture.
 

@@ -43,7 +43,7 @@ It owns library access, sources and projections, workspace/view state, playback,
 It derives canonical per-library paths from a supplied music root; composition roots, not runtime, discover platform application and cache directories.
 
 `CoreRuntime` is the minimum composition for non-interactive clients such as CLI.
-`AppRuntime` composes a Core runtime with the interactive workspace and playback graph; it does not inherit from or publicly expose that Core owner.
+`AppRuntimeOwner` composes a Core runtime with the interactive workspace and playback graph. Its `AppRuntime&` service borrow exposes neither owner nor library write commands.
 Application commands may compose workspace and playback operations without making those services depend on each other.
 Interactive consumers also share read-through resource-byte delivery rather than duplicating it in frontends.
 

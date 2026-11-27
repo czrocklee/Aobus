@@ -17,7 +17,7 @@ Application-owned `PreferencesWindow` is a non-modal top-level GTK window.
 Object editors such as `SmartListDialog`, `TrackPropertiesDialog`, `TrackCustomViewDialog`, and `LayoutEditorDialog` retain modal commit/cancel semantics.
 Native `Gtk::FileDialog`, `Gtk::AboutDialog`, and `Gtk::MessageDialog` remain desktop/GTK-owned.
 
-No dialog directly replaces `AppRuntime` or mutates a shell layout store outside its owning workflow.
+No dialog directly replaces the runtime graph or mutates a shell layout store outside its owning workflow.
 
 ### Saved-List dialog assembly
 
@@ -28,8 +28,8 @@ It borrows the already-placed `AppRuntime` to keep this wiring together:
 - It uses `rt::Library` to read the List tree and edit targets and follows selection through `rt::WorkspaceService` observations and `rt::ViewService` reads.
   It reports List selection and reads or saves per-List presentation preferences through `MainWindow` callbacks; it does not own workspace navigation or preference persistence.
 - It constructs `SmartListDialog` with the library, views, `rt::TrackSourceCache`, `rt::CompletionService`, and workspace custom presets, plus the window-owned `TrackRowCache` for the preview.
-  The dialog receives those dependencies, not `AppRuntime`. The panel receives the library facade to build the tree, not the runtime graph.
-- It uses `async::Runtime` and a controller-owned task scope for save and deletion workflows, delegating List operations to UIModel authoring functions over the library facade.
+  Neither the dialog nor the panel needs a write grant; the panel uses the library reader to build the tree.
+- It uses `async::Runtime` and a controller-owned task scope for save and deletion workflows, passing its `LibraryEditing` borrow to UIModel List operations.
   It wires dialog responses and theme registration and configures the child dialogs as transient for and destroyed with the parent.
 
 Destroying the dialog invalidates its guarded save-result presentation callback, but does not cancel the controller's save workflow.

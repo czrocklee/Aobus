@@ -15,7 +15,7 @@ MusicLibrary storage and transactions
 ```
 
 One `CoreRuntime` owns the storage, runtime library facade, change bus, and source cache for a music root.
-Interactive `AppRuntime` composition adds `ViewService`, live projections, workspace, and playback consumers above that core; CLI operations do not construct the interactive projection layer.
+`AppRuntimeOwner` composes `ViewService`, live projections, workspace, and playback consumers above that core; CLI operations do not construct the interactive projection layer.
 [Structure and storage ownership](structure.md) explains these capabilities, dependency boundaries, and lifetime owners; the [system overview](../overview.md) places them within Aobus.
 
 ## Change or investigate a behavior

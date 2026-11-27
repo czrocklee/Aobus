@@ -11,7 +11,7 @@ It owns transaction scope, previews, no-op behavior, authoring bindings, validat
 
 `ao::library::MusicLibrary` is the physical storage facade: it opens transactions and exposes specialized stores.
 It does not own application commands such as metadata edits, list operations, file import, scanning, or relinking.
-`ao::rt::Library` is the runtime facade that groups reader, writer, task, and change roles; callers select a role instead of adding unrelated public methods to `MusicLibrary`.
+`ao::rt::Library` is the runtime read interface. The [library owner](structure.md#runtime-library-facade) supplies commands and jobs separately; observing state or binding targets does not grant submission authority.
 
 Change delivery belongs to [library change publication](change-publication.md); exact entity fields belong to the [Track](../../reference/library/model/track.md) and [List](../../reference/library/model/list.md) references.
 
@@ -270,7 +270,7 @@ Exact records and identifier allocation belong to the [library database referenc
 
 ## Implementation map
 
-- [`Library.h`](../../../app/include/ao/rt/library/Library.h) composes the runtime roles.
+- [`LibraryOwner.h`](../../../app/runtime/library/LibraryOwner.h) composes the runtime roles and owns the write lane; [`Library.h`](../../../app/include/ao/rt/library/Library.h) defines the reader role.
 - [`LibrarySnapshot.h`](../../../app/include/ao/rt/library/LibrarySnapshot.h) defines the scoped read surface.
 - [`LibraryCommands.h`](../../../app/include/ao/rt/library/LibraryCommands.h) defines commands and reply values.
 - [`LibraryCommands.cpp`](../../../app/runtime/library/LibraryCommands.cpp) owns the public command surface and write-lane submission; [`LibraryCommandsInternal.h`](../../../app/runtime/library/LibraryCommandsInternal.h) holds the shared execution scaffolding.

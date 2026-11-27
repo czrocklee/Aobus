@@ -76,9 +76,10 @@ GTK displays that state in the track-page status surface, while WinUI displays i
 Live source-error changes refresh exported action state and the page's drag capability surface.
 
 `ListOrderAuthoringSession::begin()` returns a move-only value facade over shared asynchronous State.
-That State owns one `BoundListOrder`, the matching projection, capability snapshot, subscriptions, and one-pending-submission flag, while borrowing `Library` and `ViewService` from the runtime graph.
-A submitted operation retains State and may settle after the facade is moved or destroyed; composition must keep both borrowed services alive until settlement.
-It becomes invalid when any of these occurs:
+That State owns one `BoundListOrder`, a capability snapshot, a catalog handle, subscriptions, and a one-pending-submission flag. It shares ownership of the matching projection.
+State copies the `LibraryEditing` grant, which borrows commands and gives access to their library reader. It also borrows `ViewService`.
+A submitted operation retains State and may settle after the facade is moved or destroyed. The command owner and `ViewService` must outlive the operation.
+The session becomes invalid when any of these occurs:
 
 - authoring leaves `Available`, runtime identity changes, or committed revision changes;
 - presentation changes;
@@ -95,9 +96,10 @@ The session does not silently rebind to newer rows.
 
 ### Binding
 
-`begin(library, views, viewId)` reads one coherent view state, describes capability, obtains the complete effective saved-List source sequence, asks runtime for a revision-bound order binding, and retains the current projection.
-Failure returns a typed error with the capability reason where applicable.
-The writer can refuse a binding for availability that the published snapshot has not caught up with yet, such as a write that has committed but has not been announced; that refusal reports the same localized unavailable reason as the capability check instead of the runtime's diagnostic.
+`begin(editing, views, viewId, textCatalog)` reads one coherent view state, describes capability, obtains the complete effective saved-List source sequence, asks runtime for a revision-bound order binding, and retains the current projection.
+Starting a session requires the editing grant; the library reader alone is not enough.
+If the capability check rejects the operation, `begin()` returns its disabled reason.
+The read interface can also refuse the binding if the write lane is already unavailable, for example after a commit that has not yet been announced. A bind-time `InvalidState` reports the localized authoring-unavailable reason rather than the runtime diagnostic.
 
 The bound sequence is the complete base List sequence, not only quick-filter-visible projection rows.
 That distinction makes top/bottom movement unambiguous while a quick filter is active.

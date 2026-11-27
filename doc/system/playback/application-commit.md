@@ -383,11 +383,12 @@ Service shutdown and destruction require the callback executor. Owners must
 defer teardown until any active commit, publication, or automatic succession
 transition returns.
 
-`AppRuntime` first shuts down session persistence. It then closes
-`PlaybackService`, which rejects new commands, invalidates and clears queued
-commands, disconnects lower observations, and revokes deferred service tasks.
-`PlaybackBootstrap` subsequently shuts down transport and Player callback
-producers while succession and the remaining runtime graph are alive.
+`AppRuntimeOwner::shutdown()` first shuts down session persistence. It then
+closes `PlaybackService`, which rejects new commands, invalidates and clears
+queued commands, disconnects lower observations, and revokes deferred service
+tasks. `PlaybackBootstrap` subsequently shuts down transport and Player
+callback producers while succession and the remaining runtime graph are alive.
+Only then does the owner shut down `CoreRuntime`.
 
 ## Implementation map
 
