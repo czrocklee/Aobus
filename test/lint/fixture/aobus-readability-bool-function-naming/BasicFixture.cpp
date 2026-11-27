@@ -23,6 +23,8 @@ DECLARE_BOOL(isMacroPredicate)
 // NEGATIVE
 bool isReady();
 // NEGATIVE
+bool wasResumed();
+// NEGATIVE
 bool hasItems();
 // NEGATIVE
 bool canOpen();
@@ -64,6 +66,8 @@ bool open();
 bool filter();
 // POSITIVE
 bool history();
+// POSITIVE
+bool waste();
 // POSITIVE
 bool MoveNext();
 

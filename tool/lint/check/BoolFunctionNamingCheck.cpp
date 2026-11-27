@@ -129,6 +129,7 @@ namespace clang::tidy::readability
     bool hasBoolFunctionVocabulary(StringRef name)
     {
       static constexpr auto kPrefixes = std::to_array<StringRef>({"is",
+                                                                  "was",
                                                                   "has",
                                                                   "can",
                                                                   "should",

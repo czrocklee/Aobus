@@ -160,7 +160,8 @@ Make any compatibility or generated-file constraint explicit.
 Accessors name the value: `library()`, `rootPath()`, `trackCount()`.
 Use `get*` only when the operation retrieves externally, performs meaningful work, or matches an external API.
 
-A project-owned named function whose source contract fixes a direct `bool` result uses a predicate prefix: `is*`, `has*`, `can*`, `should*`, `supports*`, `needs*`, `matches*`, `accepts*`, or `covers*`.
+A project-owned named function whose source contract fixes a direct `bool` result uses a predicate prefix: `is*`, `was*`, `has*`, `can*`, `should*`, `supports*`, `needs*`, `matches*`, `accepts*`, or `covers*`.
+Use `is*` for current state and `was*` for a recorded outcome, such as `wasResumed()` after a wait.
 An action that reports true on success uses `try*`; `handle*` and other generic action verbs are not blanket exceptions.
 Do not use a bare adjective predicate.
 
