@@ -46,6 +46,8 @@
 #include <ao/utility/String.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <boost/filesystem/cstdio.hpp>
+#include <boost/filesystem/path.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <c4/yml/node.hpp>
 
@@ -54,6 +56,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -1476,6 +1479,56 @@ namespace ao::rt
 
       return list;
     }
+
+    Result<bool> matchesPreviewBytes(std::filesystem::path const& path, std::span<char const> remaining)
+    {
+      auto ec = std::error_code{};
+
+      if (auto const status = std::filesystem::status(path, ec);
+          !ec && std::filesystem::exists(status) && !std::filesystem::is_regular_file(status))
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Cannot reread '{}': not a regular file", utility::pathToUtf8(path)));
+      }
+
+      auto filePtr = std::unique_ptr<std::FILE, int (*)(std::FILE*)>{
+        boost::filesystem::fopen(boost::filesystem::path{path.native()}, "rb"), &std::fclose};
+
+      if (!filePtr)
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Failed to open '{}' for rereading", utility::pathToUtf8(path)));
+      }
+
+      constexpr std::size_t kChunkBytes = 8192;
+      auto buffer = std::array<char, kChunkBytes>{};
+
+      for (;;)
+      {
+        auto const count = std::fread(buffer.data(), 1, buffer.size(), filePtr.get());
+        bool const atEnd = std::feof(filePtr.get()) != 0;
+
+        if (std::ferror(filePtr.get()) != 0 || (count < buffer.size() && !atEnd))
+        {
+          return makeError(
+            Error::Code::IoError, std::format("Read error while rereading '{}'", utility::pathToUtf8(path)));
+        }
+
+        auto const bytes = std::span<char const>{buffer.data(), count};
+
+        if (bytes.size() > remaining.size() || !std::ranges::equal(bytes, remaining.first(bytes.size())))
+        {
+          return false;
+        }
+
+        remaining = remaining.subspan(bytes.size());
+
+        if (atEnd)
+        {
+          return remaining.empty();
+        }
+      }
+    }
   } // namespace
 
   struct LibraryYamlImportOperation::PreparedImport::Impl final
@@ -1770,17 +1823,14 @@ namespace ao::rt
       }
     }
 
-    auto currentBytesRes = yaml::readFileResult(prepared._implPtr->sourcePath);
+    auto const matchesRes = matchesPreviewBytes(prepared._implPtr->sourcePath, prepared._implPtr->sourceBytes);
 
-    if (!currentBytesRes)
+    if (!matchesRes)
     {
-      return makeError(Error::Code::IoError,
-                       std::format("Failed to reread '{}': {}",
-                                   utility::pathToUtf8(prepared._implPtr->sourcePath),
-                                   currentBytesRes.error().message));
+      return std::unexpected{matchesRes.error()};
     }
 
-    if (*currentBytesRes != prepared._implPtr->sourceBytes)
+    if (!*matchesRes)
     {
       return makeError(Error::Code::Conflict, "Import file changed after its preview was prepared");
     }

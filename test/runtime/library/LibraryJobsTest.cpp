@@ -51,6 +51,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -60,6 +61,10 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace ao::rt::test
 {
@@ -132,6 +137,41 @@ namespace ao::rt::test
            << "\"\n"
               "  lists: []\n";
     }
+
+#ifdef _WIN32
+    using ImportHandle = std::unique_ptr<void, decltype(&::CloseHandle)>;
+
+    ImportHandle lockImportByte(std::filesystem::path const& path, DWORD const offset)
+    {
+      auto const openReader = [&path]
+      {
+        auto* const handle = ::CreateFileW(path.c_str(),
+                                           GENERIC_READ,
+                                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                           nullptr,
+                                           OPEN_EXISTING,
+                                           FILE_ATTRIBUTE_NORMAL,
+                                           nullptr);
+        REQUIRE(handle != INVALID_HANDLE_VALUE);
+        return ImportHandle{handle, &::CloseHandle};
+      };
+      auto lockPtr = openReader();
+      REQUIRE(::LockFile(lockPtr.get(), offset, 0, 1, 0) != 0);
+
+      // A second handle must open and read the entire prefix; only the following read may fail.
+      auto probePtr = openReader();
+      auto prefix = std::vector<char>(offset);
+      DWORD count = 0;
+      REQUIRE(::ReadFile(probePtr.get(), prefix.data(), offset, &count, nullptr) != 0);
+      REQUIRE(count == offset);
+      char byte = 0;
+      auto const readSucceeded = ::ReadFile(probePtr.get(), &byte, 1, &count, nullptr);
+      auto const error = ::GetLastError();
+      REQUIRE_FALSE(readSucceeded);
+      REQUIRE(error == ERROR_LOCK_VIOLATION);
+      return lockPtr;
+    }
+#endif
 
     template<typename T>
     auto spawnFuture(async::Runtime& runtime,
@@ -500,14 +540,29 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const existingTrackId =
       libraryFixture.addTrack(library::test::TrackSpec{.title = "Existing", .uri = "existing.flac"});
+    auto& storage = libraryFixture.library();
     auto executor = QueuedExecutor{};
-    auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto changes = makeLibraryChanges(executor, storage);
+    auto runtimeFixture = LibraryCommandsFixture{storage, changes, executor};
     auto& runtime = runtimeFixture.runtime();
     auto& runtimeLibrary = runtimeFixture.library();
     auto& jobs = runtimeLibrary.jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
+
+    // 64 KiB fills eight 8 KiB reread blocks. Apply must check for EOF after the last full block
+    // or it will accept the extra byte in the append case below.
+    constexpr std::size_t kFileBytes = 65'536;
+    {
+      auto const prefixBytes = std::filesystem::file_size(yamlPath);
+      REQUIRE(prefixBytes < kFileBytes - 2);
+      auto yaml = std::ofstream{yamlPath, std::ios::binary | std::ios::app};
+      yaml << '#' << std::string(kFileBytes - static_cast<std::size_t>(prefixBytes) - 2, '.') << '\n';
+      yaml.close();
+      REQUIRE(yaml.good());
+    }
+
+    auto const initialRevision = storage.libraryRevision(storage.readTransaction());
     auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
     REQUIRE(planRes);
@@ -516,31 +571,92 @@ namespace ao::rt::test
     CHECK(planRes->report().targetScope == ImportTargetScope::Library);
     CHECK(planRes->report().tracksCreated == 1);
 
-    SECTION("unchanged preview applies")
+    SECTION("unchanged multi-block preview applies")
     {
       auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       INFO((res ? "import applied" : res.error().message));
       REQUIRE(res);
       CHECK(res->tracksCreated == 1);
+      auto const read = storage.readTransaction();
+      CHECK(storage.manifest().reader(read).get("imported.flac"));
     }
 
-    SECTION("changed source is rejected")
+    SECTION("a changed or inaccessible source is rejected without publication")
     {
-      writeImportPayload(yamlPath, "Changed");
+      auto expectedCode = Error::Code::Conflict;
+#ifdef _WIN32
+      auto lockPtr = ImportHandle{nullptr, &::CloseHandle};
+#endif
+
+      SECTION("a late comment edit preserves the file length")
+      {
+        // Change the period in the last comment, leaving its newline intact.
+        auto yaml = std::fstream{yamlPath, std::ios::binary | std::ios::in | std::ios::out};
+        yaml.seekp(-2, std::ios::end);
+        yaml.put('!');
+        yaml.close();
+        REQUIRE(yaml.good());
+      }
+
+      SECTION("the source is truncated after an identical prefix")
+      {
+        std::filesystem::resize_file(yamlPath, std::filesystem::file_size(yamlPath) - 1);
+      }
+
+      SECTION("the source has bytes appended to an identical prefix")
+      {
+        auto yaml = std::ofstream{yamlPath, std::ios::binary | std::ios::app};
+        yaml.put('\n');
+        yaml.close();
+        REQUIRE(yaml.good());
+      }
+
+      SECTION("the source is missing")
+      {
+        REQUIRE(std::filesystem::remove(yamlPath));
+        expectedCode = Error::Code::IoError;
+      }
+
+      SECTION("the source is replaced with a directory")
+      {
+        REQUIRE(std::filesystem::remove(yamlPath));
+        REQUIRE(std::filesystem::create_directory(yamlPath));
+        expectedCode = Error::Code::IoError;
+      }
+
+#ifdef _WIN32
+      SECTION("a native read error interrupts rereading the preview bytes")
+      {
+        lockPtr = lockImportByte(yamlPath, kFileBytes / 2);
+        expectedCode = Error::Code::IoError;
+      }
+
+      SECTION("a native read error interrupts the EOF check after all preview bytes")
+      {
+        // Put a real byte at the probe offset; a lock beyond physical EOF need not fail a read.
+        auto yaml = std::ofstream{yamlPath, std::ios::binary | std::ios::app};
+        yaml.put('\n');
+        yaml.close();
+        REQUIRE(yaml.good());
+        lockPtr = lockImportByte(yamlPath, kFileBytes);
+        expectedCode = Error::Code::IoError;
+      }
+#endif
+
+      bool published = false;
+      auto const sub = changes.onChanged([&published](LibraryChangeSet const&) { published = true; });
       auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
       REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::Conflict);
-    }
-
-    SECTION("a missing source reports an I/O error when the target is unchanged")
-    {
-      REQUIRE(std::filesystem::remove(yamlPath));
-      auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
-
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::IoError);
+      CHECK(res.error().code == expectedCode);
+      CHECK_FALSE(published);
+      auto const read = storage.readTransaction();
+      CHECK(storage.libraryRevision(read) == initialRevision);
+      CHECK_FALSE(storage.manifest().reader(read).get("imported.flac"));
+      auto const optExisting = storage.tracks().reader(read).get(existingTrackId);
+      REQUIRE(optExisting);
+      CHECK(optExisting->metadata().title() == "Existing");
     }
 
     SECTION("a changed target revision takes precedence over a missing source")
