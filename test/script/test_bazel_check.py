@@ -293,6 +293,24 @@ class RequiredScopeTest(unittest.TestCase):
         self.assertEqual(standalone | native, default.required - default.optional)
         self.assertEqual(default.targets, ("//...",))
 
+    def test_short_test_timeout_applies_only_to_github_hosted_windows_native_checks(self):
+        for platform, native_only, runner, override in (
+            ("windows", True, "github-hosted", True),
+            ("windows", True, None, False),
+            ("windows", True, "self-hosted", False),
+            ("windows", False, "github-hosted", False),
+            ("linux", True, "github-hosted", False),
+            ("macos", True, "github-hosted", False),
+        ):
+            environment = {} if runner is None else {"RUNNER_ENVIRONMENT": runner}
+            with (
+                self.subTest(platform=platform, native_only=native_only, runner=runner),
+                mock.patch.dict(os.environ, environment, clear=True),
+            ):
+                selection = completion._selection(platform, completion.Request(native_only=native_only))
+                timeouts = tuple(option for option in selection.options if option.partition("=")[0] == "--test_timeout")
+                self.assertEqual(timeouts, ("--test_timeout=300,300,900,3600",) if override else ())
+
     def test_scoped_lint_waives_only_full_lint_evidence(self):
         request = completion.Request(native_only=True, desktop_tests=True)
         full = completion._selection("windows", request)

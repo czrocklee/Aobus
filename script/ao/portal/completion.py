@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -153,12 +154,16 @@ def _selection(platform: str, request: Request, *, scoped_lint: bool = False) ->
         # The wildcard also builds non-tests: the public alias and result/log providers reach the gate.
         exclusions.append("-//:production_lint")
         exclusions.extend("-" + _PRODUCTION_LINT + suffix for suffix in ("", ".gate", ".gate_result", ".gate_log"))
+    options: tuple[str, ...] = ("--keep_going",) if request.native_only else ()
+    if request.native_only and platform == "windows" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
+        # Short tests have timed out at 60 s during cold Windows builds. Keep the other three class limits.
+        options += ("--test_timeout=300,300,900,3600",)
     return _CheckSelection(
         suites,
         required,
         optional,
         targets=("--", "//...", *exclusions) if exclusions else ("//...",),
-        options=("--keep_going",) if request.native_only else (),
+        options=options,
     )
 
 
