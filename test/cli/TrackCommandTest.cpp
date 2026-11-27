@@ -3,13 +3,19 @@
 
 #include "CliTestSupport.h"
 #include "test/library/TrackTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <format>
 #include <fstream>
+#include <initializer_list>
 #include <ios>
+#include <limits>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -94,6 +100,75 @@ namespace ao::cli::test
     REQUIRE(firstOffset != std::string::npos);
     CHECK(thirdOffset < firstOffset);
     CHECK_FALSE(contains(result.out, "Second"));
+  }
+
+  TEST_CASE("CLI - track show pages only the matches after the offset")
+  {
+    auto fixture = CliFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "First", .uri = "first.flac"});
+    fixture.addTrack(library::test::TrackSpec{.title = "Second", .uri = "second.flac"});
+    struct Row
+    {
+      TrackId id;
+      std::string_view title;
+    };
+    auto const third = Row{fixture.addTrack(library::test::TrackSpec{.title = "Third", .uri = "third.flac"}), "Third"};
+    auto const fourth =
+      Row{fixture.addTrack(library::test::TrackSpec{.title = "Fourth", .uri = "fourth.flac"}), "Fourth"};
+
+    auto const checkPage =
+      [&](std::size_t offset, std::size_t limit, std::initializer_list<Row> rows, std::string_view footer)
+    {
+      CAPTURE(offset, limit);
+      auto const skip = std::to_string(offset);
+      auto const take = std::to_string(limit);
+      auto constexpr kFilter = std::string_view{"$title != First"};
+      auto const plain = fixture.run({"track", "show", "--filter", kFilter, "--offset", skip, "--limit", take});
+      auto const formatted =
+        fixture.run({"track", "show", "--filter", kFilter, "--offset", skip, "--limit", take, "--format", "$title"});
+      auto const yamlPage =
+        fixture.run({"-O", "yaml", "track", "show", "--filter", kFilter, "--offset", skip, "--limit", take});
+      auto const jsonPage =
+        fixture.run({"-O", "json", "track", "show", "--filter", kFilter, "--offset", skip, "--limit", take});
+      REQUIRE(plain.status == 0);
+      REQUIRE(formatted.status == 0);
+      REQUIRE(yamlPage.status == 0);
+      REQUIRE(jsonPage.status == 0);
+
+      auto const tree = parseYaml(yamlPage.out);
+      auto const tracks = yaml::findChild(tree.rootref(), "tracks");
+      REQUIRE(tracks.readable());
+      REQUIRE(tracks.is_seq());
+      REQUIRE(tracks.num_children() == rows.size());
+      auto jsonLines = std::istringstream{jsonPage.out};
+      auto line = std::string{};
+      auto expectedPlain = std::string{};
+      auto expectedFormatted = std::string{};
+      std::size_t index = 0;
+
+      for (auto const& [id, title] : rows)
+      {
+        expectedPlain += std::format("{:>5} {}\n", id.raw(), title);
+        expectedFormatted += std::format("{}\n", title);
+        CHECK(yaml::scalarView(yaml::findChild(tracks[index], "title")) == title);
+        ++index;
+        REQUIRE(std::getline(jsonLines, line));
+        auto const record = parseYaml(line);
+        REQUIRE(record.rootref().is_map());
+        CHECK(yaml::scalarView(yaml::findChild(record.rootref(), "title")) == title);
+      }
+
+      CHECK(plain.out == expectedPlain + std::string{footer});
+      CHECK(formatted.out == expectedFormatted);
+      CHECK_FALSE(contains(yamlPage.out, "... ("));
+      CHECK_FALSE(std::getline(jsonLines, line));
+    };
+
+    auto constexpr kMax = std::numeric_limits<std::size_t>::max();
+    checkPage(1, 1, {third}, "... (1 more)\n");
+    checkPage(1, 0, {third, fourth}, "");
+    checkPage(1, kMax, {third, fourth}, "");
+    checkPage(kMax, 0, {}, "");
   }
 
   TEST_CASE("CLI - track create imports one file")

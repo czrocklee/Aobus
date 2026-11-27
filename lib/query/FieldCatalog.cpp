@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <span>
 #include <string_view>
 
@@ -156,6 +157,25 @@ namespace ao::query
        .canonicalName = "codec",
        .aliases = std::span{kNoAliases}},
     });
+
+    constexpr bool hasUniqueCanonicalNames(std::span<QueryVariableDescriptor const> descriptors)
+    {
+      for (std::size_t index = 0; index < descriptors.size(); ++index)
+      {
+        if (std::ranges::contains(descriptors.subspan(index + 1),
+                                  descriptors[index].canonicalName,
+                                  &QueryVariableDescriptor::canonicalName))
+        {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    // Completion emits each canonical spelling at most once within its sigil's catalog.
+    static_assert(hasUniqueCanonicalNames(kMetadataDescriptors));
+    static_assert(hasUniqueCanonicalNames(kPropertyDescriptors));
 
     // TagBloom also encodes a literal operand in query bytecode; no public name may resolve to it.
     static_assert(!std::ranges::contains(kMetadataDescriptors, Field::TagBloom, &QueryVariableDescriptor::field));

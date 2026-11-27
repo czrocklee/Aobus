@@ -51,6 +51,8 @@ namespace ao::query
    *
    * The binding borrows the plan and, when supplied, the dictionary context; each
    * borrowed object must outlive the binding. Reuse one binding for a batch.
+   * Concurrent batches must use separate DictionaryReadCache instances or
+   * cache-free dictionary contexts.
    */
   class FormatBinding final
   {

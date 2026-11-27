@@ -80,6 +80,12 @@ namespace ao::query::test
       CHECK(context.replacement.prefix == "Mo");
     }
 
+    SECTION("Does not suggest list elements for a scalar comparison")
+    {
+      auto const text = std::string{"$artist = [Ma"};
+      CHECK_FALSE(analyzeQueryCompletion(text, text.size()));
+    }
+
     SECTION("Handles quoted custom keys before values")
     {
       auto const text = std::string{R"(%"Mood" = Br)"};

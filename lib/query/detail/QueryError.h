@@ -16,18 +16,9 @@
 
 namespace ao::query::detail
 {
-  // Short-range control-flow exception internal to the query-compilation layer.
-  // It carries a recoverable Error raised with throwQueryError and caught once
-  // by the source-private compiler directly below the public compileQuery or
-  // compileFormat Result boundary.
-  // It replaces the previous pattern of threading Result<T> through every
-  // private compile helper.
-  //
-  // Implementation detail (detail/ and ao::query::detail): never catch it
-  // outside the query subsystem; keep the boundary catch narrow to this leaf
-  // so a non-domain fault (e.g. std::bad_alloc or a real invariant throw from
-  // a transitive helper) fail-fast terminates instead of being laundered into
-  // FormatRejected.
+  // Private transport for recoverable compiler errors, caught at the
+  // compileQuery/compileFormat Result boundary. Other exceptions are not
+  // translated to user-input failures.
   class QueryException final : public std::exception
   {
   public:

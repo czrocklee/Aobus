@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/query/detail/FieldResolver.h"
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
-#include <ao/query/detail/FieldResolver.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -48,7 +48,7 @@ namespace ao::query::test
                                  });
     }
 
-    std::optional<QueryCompletionToken> variableCompletionAtCursor(std::string_view text, std::size_t cursor)
+    std::optional<QueryVariableCompletion> variableCompletionAtCursor(std::string_view text, std::size_t cursor)
     {
       auto optAnalysis = analyzeQueryCompletion(text, cursor);
 
@@ -57,7 +57,7 @@ namespace ao::query::test
         return std::nullopt;
       }
 
-      if (auto const* token = std::get_if<QueryCompletionToken>(&*optAnalysis); token != nullptr)
+      if (auto const* token = std::get_if<QueryVariableCompletion>(&*optAnalysis); token != nullptr)
       {
         return *token;
       }
@@ -75,30 +75,30 @@ namespace ao::query::test
       auto optMetadata = variableCompletionAtCursor(text, 4);
       REQUIRE(optMetadata);
       CHECK(optMetadata->type == VariableType::Metadata);
-      CHECK(optMetadata->replaceBegin == 0);
-      CHECK(optMetadata->replaceEnd == 4);
-      CHECK(optMetadata->prefix == "art");
+      CHECK(optMetadata->replacement.replaceBegin == 0);
+      CHECK(optMetadata->replacement.replaceEnd == 4);
+      CHECK(optMetadata->replacement.prefix == "art");
 
       auto optProperty = variableCompletionAtCursor(text, 9);
       REQUIRE(optProperty);
       CHECK(optProperty->type == VariableType::Property);
-      CHECK(optProperty->replaceBegin == 5);
-      CHECK(optProperty->replaceEnd == 9);
-      CHECK(optProperty->prefix == "bit");
+      CHECK(optProperty->replacement.replaceBegin == 5);
+      CHECK(optProperty->replacement.replaceEnd == 9);
+      CHECK(optProperty->replacement.prefix == "bit");
 
       auto optTag = variableCompletionAtCursor(text, 15);
       REQUIRE(optTag);
       CHECK(optTag->type == VariableType::Tag);
-      CHECK(optTag->replaceBegin == 10);
-      CHECK(optTag->replaceEnd == 15);
-      CHECK(optTag->prefix == "rock");
+      CHECK(optTag->replacement.replaceBegin == 10);
+      CHECK(optTag->replacement.replaceEnd == 15);
+      CHECK(optTag->replacement.prefix == "rock");
 
       auto optCustom = variableCompletionAtCursor(text, text.size());
       REQUIRE(optCustom);
       CHECK(optCustom->type == VariableType::Custom);
-      CHECK(optCustom->replaceBegin == 16);
-      CHECK(optCustom->replaceEnd == text.size());
-      CHECK(optCustom->prefix == "replay");
+      CHECK(optCustom->replacement.replaceBegin == 16);
+      CHECK(optCustom->replacement.replaceEnd == text.size());
+      CHECK(optCustom->replacement.prefix == "replay");
     }
 
     SECTION("Supports an empty prefix after a trigger")
@@ -106,9 +106,9 @@ namespace ao::query::test
       auto optToken = variableCompletionAtCursor("$", 1);
       REQUIRE(optToken);
       CHECK(optToken->type == VariableType::Metadata);
-      CHECK(optToken->replaceBegin == 0);
-      CHECK(optToken->replaceEnd == 1);
-      CHECK(optToken->prefix.empty());
+      CHECK(optToken->replacement.replaceBegin == 0);
+      CHECK(optToken->replacement.replaceEnd == 1);
+      CHECK(optToken->replacement.prefix.empty());
     }
   }
 
@@ -139,18 +139,18 @@ namespace ao::query::test
     CHECK_FALSE(analyzeQueryCompletion(R"($artist = "Mil)", 14));
   }
 
-  TEST_CASE("Completion - keeps cursors inside tag tokens as variable completions")
+  TEST_CASE("Completion - prefers a variable completion at the end of a tag")
   {
     auto const text = std::string{"#rock"};
     auto const optContext = analyzeQueryCompletion(text, text.size());
 
     REQUIRE(optContext);
-    auto const* token = std::get_if<QueryCompletionToken>(&*optContext);
+    auto const* token = std::get_if<QueryVariableCompletion>(&*optContext);
     REQUIRE(token != nullptr);
     CHECK(token->type == VariableType::Tag);
-    CHECK(token->replaceBegin == 0);
-    CHECK(token->replaceEnd == text.size());
-    CHECK(token->prefix == "rock");
+    CHECK(token->replacement.replaceBegin == 0);
+    CHECK(token->replacement.replaceEnd == text.size());
+    CHECK(token->replacement.prefix == "rock");
   }
 
   TEST_CASE("Completion - preserves mid-input variable and malformed-tail analysis")
@@ -163,9 +163,21 @@ namespace ao::query::test
 
       REQUIRE(optToken);
       CHECK(optToken->type == VariableType::Metadata);
-      CHECK(optToken->replaceBegin == 0);
-      CHECK(optToken->replaceEnd == cursor);
-      CHECK(optToken->prefix == "ar");
+      CHECK(optToken->replacement.replaceBegin == 0);
+      CHECK(optToken->replacement.replaceEnd == cursor);
+      CHECK(optToken->replacement.prefix == "ar");
+    }
+
+    SECTION("Variable after a logical operator replaces only its own text")
+    {
+      constexpr auto kText = std::string_view{R"($album = "Kind" and $ye)"};
+      auto const optContext = variableCompletionAtCursor(kText, kText.size());
+      REQUIRE(optContext);
+      CHECK(optContext->replacement.replaceBegin == 20);
+      CHECK(optContext->replacement.replaceEnd == kText.size());
+      CHECK(optContext->replacement.prefix == "ye");
+      CHECK(canonicalNames(completeQueryVariable(optContext->type, optContext->replacement.prefix)) ==
+            std::vector<std::string_view>{"year"});
     }
 
     SECTION("Malformed partial tail remains blocked before a suffix")
@@ -176,31 +188,8 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("FieldCatalog - lists query variable descriptors in UI order")
+  TEST_CASE("FieldCatalog - tag and custom names do not come from the system catalog")
   {
-    auto const metadata = queryVariableDescriptors(VariableType::Metadata);
-    REQUIRE(metadata.size() == 22);
-    CHECK(metadata[0].canonicalName == "title");
-    CHECK(metadata[1].canonicalName == "artist");
-    CHECK(metadata[2].canonicalName == "album");
-    CHECK(metadata[3].canonicalName == "albumArtist");
-    CHECK(metadata[5].canonicalName == "conductor");
-    CHECK(metadata[6].canonicalName == "ensemble");
-    CHECK(metadata[8].canonicalName == "movement");
-    CHECK(metadata[9].canonicalName == "soloist");
-    CHECK(metadata[10].canonicalName == "recordingDate");
-    CHECK(metadata[11].canonicalName == "performer");
-    CHECK(metadata[12].canonicalName == "credit");
-    CHECK(metadata[13].canonicalName == "genre");
-    CHECK(metadata[19].canonicalName == "movementNumber");
-    CHECK(metadata[21].canonicalName == "coverArt");
-
-    auto const properties = queryVariableDescriptors(VariableType::Property);
-    REQUIRE(properties.size() == 6);
-    CHECK(properties[0].canonicalName == "duration");
-    CHECK(properties[1].canonicalName == "bitrate");
-    CHECK(properties[5].canonicalName == "codec");
-
     CHECK(queryVariableDescriptors(VariableType::Tag).empty());
     CHECK(queryVariableDescriptors(VariableType::Custom).empty());
   }
@@ -309,159 +298,71 @@ namespace ao::query::test
     CHECK_FALSE(detail::lookupVariableField(VariableType::Property, "not_a_field").has_value());
   }
 
-  TEST_CASE("Completion - documents query variable aliases in the catalog surface")
+  TEST_CASE("FieldCatalog - exposes canonical names, fields and exact aliases in UI order")
   {
     struct Case final
     {
-      VariableType type = VariableType::Metadata;
-      std::string_view canonicalName;
-      Field field = Field::Title;
-      std::span<std::string_view const> aliases;
+      std::string_view name;
+      Field field;
+      std::string_view alias{};
     };
 
-    constexpr auto kNoAliases = std::array<std::string_view, 0>{};
-    constexpr auto kT = std::array{std::string_view{"t"}};
-    constexpr auto kA = std::array{std::string_view{"a"}};
-    constexpr auto kAl = std::array{std::string_view{"al"}};
-    constexpr auto kAa = std::array{std::string_view{"aa"}};
-    constexpr auto kC = std::array{std::string_view{"c"}};
-    constexpr auto kW = std::array{std::string_view{"w"}};
-    constexpr auto kM = std::array{std::string_view{"m"}};
-    constexpr auto kG = std::array{std::string_view{"g"}};
-    constexpr auto kY = std::array{std::string_view{"y"}};
-    constexpr auto kTn = std::array{std::string_view{"tn"}};
-    constexpr auto kTt = std::array{std::string_view{"tt"}};
-    constexpr auto kDn = std::array{std::string_view{"dn"}};
-    constexpr auto kTd = std::array{std::string_view{"td"}};
-    constexpr auto kMn = std::array{std::string_view{"mn"}};
-    constexpr auto kMt = std::array{std::string_view{"mt"}};
-    constexpr auto kCa = std::array{std::string_view{"ca"}};
-    constexpr auto kL = std::array{std::string_view{"l"}};
-    constexpr auto kBr = std::array{std::string_view{"br"}};
-    constexpr auto kSr = std::array{std::string_view{"sr"}};
-    constexpr auto kBd = std::array{std::string_view{"bd"}};
-
-    // This intentionally locks the public catalog surface; update these expectations with catalog changes.
-    auto const expectedMetadata = std::array{
-      Case{.type = VariableType::Metadata, .canonicalName = "title", .field = Field::Title, .aliases = std::span{kT}},
-      Case{
-        .type = VariableType::Metadata, .canonicalName = "artist", .field = Field::ArtistId, .aliases = std::span{kA}},
-      Case{
-        .type = VariableType::Metadata, .canonicalName = "album", .field = Field::AlbumId, .aliases = std::span{kAl}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "albumArtist",
-           .field = Field::AlbumArtistId,
-           .aliases = std::span{kAa}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "composer",
-           .field = Field::ComposerId,
-           .aliases = std::span{kC}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "conductor",
-           .field = Field::Conductor,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "ensemble",
-           .field = Field::Ensemble,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata, .canonicalName = "work", .field = Field::WorkId, .aliases = std::span{kW}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "movement",
-           .field = Field::MovementId,
-           .aliases = std::span{kM}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "soloist",
-           .field = Field::Soloist,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "recordingDate",
-           .field = Field::RecordingDate,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "performer",
-           .field = Field::Performer,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "credit",
-           .field = Field::Credit,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Metadata, .canonicalName = "genre", .field = Field::GenreId, .aliases = std::span{kG}},
-      Case{.type = VariableType::Metadata, .canonicalName = "year", .field = Field::Year, .aliases = std::span{kY}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "trackNumber",
-           .field = Field::TrackNumber,
-           .aliases = std::span{kTn}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "trackTotal",
-           .field = Field::TrackTotal,
-           .aliases = std::span{kTt}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "discNumber",
-           .field = Field::DiscNumber,
-           .aliases = std::span{kDn}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "discTotal",
-           .field = Field::DiscTotal,
-           .aliases = std::span{kTd}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "movementNumber",
-           .field = Field::MovementNumber,
-           .aliases = std::span{kMn}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "movementTotal",
-           .field = Field::MovementTotal,
-           .aliases = std::span{kMt}},
-      Case{.type = VariableType::Metadata,
-           .canonicalName = "coverArt",
-           .field = Field::CoverArtId,
-           .aliases = std::span{kCa}},
-    };
-    auto const expectedProperties = std::array{
-      Case{.type = VariableType::Property,
-           .canonicalName = "duration",
-           .field = Field::Duration,
-           .aliases = std::span{kL}},
-      Case{
-        .type = VariableType::Property, .canonicalName = "bitrate", .field = Field::Bitrate, .aliases = std::span{kBr}},
-      Case{.type = VariableType::Property,
-           .canonicalName = "sampleRate",
-           .field = Field::SampleRate,
-           .aliases = std::span{kSr}},
-      Case{.type = VariableType::Property,
-           .canonicalName = "channels",
-           .field = Field::Channels,
-           .aliases = std::span{kNoAliases}},
-      Case{.type = VariableType::Property,
-           .canonicalName = "bitDepth",
-           .field = Field::BitDepth,
-           .aliases = std::span{kBd}},
-      Case{.type = VariableType::Property,
-           .canonicalName = "codec",
-           .field = Field::Codec,
-           .aliases = std::span{kNoAliases}},
-    };
-
-    auto const checkDescriptors = [&](std::span<QueryVariableDescriptor const> actual, auto const& expected)
+    auto const check = [](VariableType type, std::span<Case const> expected)
     {
-      REQUIRE(actual.size() == expected.size());
+      auto const descriptors = queryVariableDescriptors(type);
+      REQUIRE(descriptors.size() == expected.size());
 
-      for (std::size_t index = 0; auto const& descriptor : actual)
+      for (std::size_t i = 0; i < expected.size(); ++i)
       {
-        DYNAMIC_SECTION("Descriptor: " << descriptor.canonicalName)
-        {
-          auto const& exp = expected.at(index);
-          CHECK(descriptor.type == exp.type);
-          CHECK(descriptor.canonicalName == exp.canonicalName);
-          CHECK(descriptor.field == exp.field);
-          CHECK(std::ranges::equal(descriptor.aliases, exp.aliases));
-        }
+        auto const& [name, field, alias] = expected[i];
+        CAPTURE(name);
+        auto const& descriptor = descriptors[i];
+        CHECK(descriptor.type == type);
+        CHECK(descriptor.canonicalName == name);
+        CHECK(descriptor.field == field);
 
-        ++index;
+        if (alias.empty())
+        {
+          CHECK(descriptor.aliases.empty());
+        }
+        else
+        {
+          REQUIRE(descriptor.aliases.size() == 1);
+          CHECK(descriptor.aliases.front() == alias);
+        }
       }
     };
 
-    checkDescriptors(queryVariableDescriptors(VariableType::Metadata), expectedMetadata);
-    checkDescriptors(queryVariableDescriptors(VariableType::Property), expectedProperties);
+    check(VariableType::Metadata,
+          std::to_array<Case>({{"title", Field::Title, "t"},
+                               {"artist", Field::ArtistId, "a"},
+                               {"album", Field::AlbumId, "al"},
+                               {"albumArtist", Field::AlbumArtistId, "aa"},
+                               {"composer", Field::ComposerId, "c"},
+                               {"conductor", Field::Conductor},
+                               {"ensemble", Field::Ensemble},
+                               {"work", Field::WorkId, "w"},
+                               {"movement", Field::MovementId, "m"},
+                               {"soloist", Field::Soloist},
+                               {"recordingDate", Field::RecordingDate},
+                               {"performer", Field::Performer},
+                               {"credit", Field::Credit},
+                               {"genre", Field::GenreId, "g"},
+                               {"year", Field::Year, "y"},
+                               {"trackNumber", Field::TrackNumber, "tn"},
+                               {"trackTotal", Field::TrackTotal, "tt"},
+                               {"discNumber", Field::DiscNumber, "dn"},
+                               {"discTotal", Field::DiscTotal, "td"},
+                               {"movementNumber", Field::MovementNumber, "mn"},
+                               {"movementTotal", Field::MovementTotal, "mt"},
+                               {"coverArt", Field::CoverArtId, "ca"}}));
+    check(VariableType::Property,
+          std::to_array<Case>({{"duration", Field::Duration, "l"},
+                               {"bitrate", Field::Bitrate, "br"},
+                               {"sampleRate", Field::SampleRate, "sr"},
+                               {"channels", Field::Channels},
+                               {"bitDepth", Field::BitDepth, "bd"},
+                               {"codec", Field::Codec}}));
   }
 
   TEST_CASE("FieldCatalog - finds descriptors by canonical name, alias, and field")

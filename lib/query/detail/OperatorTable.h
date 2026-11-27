@@ -3,12 +3,8 @@
 
 #pragma once
 
-// Single source of truth for per-Operator attributes (source spelling and the
-// predicate class that decides whether an operator yields a boolean). The query
-// compilers previously each carried their own parallel switch over Operator;
-// routing them through this table means a new operator forces exactly one edit
-// here (guarded by the size static_assert below) instead of silently leaving one
-// switch stale.
+// Canonical serialized spelling and predicate shape for each AST operator.
+// Accepted spellings and precedence are defined by the parser grammar.
 
 #include <ao/Contract.h>
 #include <ao/query/Expression.h>

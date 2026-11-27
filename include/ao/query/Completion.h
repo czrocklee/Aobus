@@ -16,20 +16,19 @@
 
 namespace ao::query
 {
-  struct QueryCompletionToken final
-  {
-    VariableType type = VariableType::Metadata;
-    std::size_t replaceBegin = 0;
-    std::size_t replaceEnd = 0;
-    // Owns its text so the token can safely outlive the source string it was parsed from.
-    std::string prefix;
-  };
-
+  // [replaceBegin, replaceEnd) is a half-open range of UTF-8 byte offsets into the original input.
+  // The prefix owns its text and may outlive the input.
   struct QueryCompletionReplacement final
   {
     std::size_t replaceBegin = 0;
     std::size_t replaceEnd = 0;
     std::string prefix;
+  };
+
+  struct QueryVariableCompletion final
+  {
+    VariableType type = VariableType::Metadata;
+    QueryCompletionReplacement replacement;
   };
 
   struct QueryOperatorCompletion final
@@ -49,8 +48,8 @@ namespace ao::query
     QueryCompletionReplacement replacement;
   };
 
-  using QueryCompletionAnalysis =
-    std::variant<QueryCompletionToken, QueryOperatorCompletion, QueryValueCompletion, QueryLogicalOperatorCompletion>;
+  using QueryCompletionAnalysis = std::
+    variant<QueryVariableCompletion, QueryOperatorCompletion, QueryValueCompletion, QueryLogicalOperatorCompletion>;
 
   enum class QueryVariableCompletionMatchKind : std::uint8_t
   {
@@ -66,6 +65,7 @@ namespace ao::query
     QueryVariableCompletionMatchKind kind = QueryVariableCompletionMatchKind::CanonicalPrefix;
   };
 
+  // cursor is a UTF-8 byte offset into text.
   std::optional<QueryCompletionAnalysis> analyzeQueryCompletion(std::string_view text, std::size_t cursor);
 
   std::vector<QueryVariableCompletionMatch> completeQueryVariable(VariableType type, std::string_view prefix);

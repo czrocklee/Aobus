@@ -29,19 +29,19 @@ namespace ao::query::test
 {
   TEST_CASE("PlanEvaluator - matches work metadata equality and LIKE expressions")
   {
-    auto trackWithWork = TestTrack{
-      "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
-    auto trackWithoutWork =
-      TestTrack{"Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
+    auto trackWithWork = TrackFixture{TrackSpec{.work = "Symphony No. 5"}};
+    // Intern the query literal even on the row whose Work value differs.
+    auto trackWithOtherWork = TrackFixture{TrackSpec{.artist = "Symphony No. 5", .work = "Piano Concerto"}};
     auto evaluator = PlanEvaluator{};
 
     SECTION("$work Equality")
     {
       auto expr = parseOk("$work = 'Symphony No. 5'");
       auto plan = compileOk(expr);
-      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
-      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) ==
-            false);
+      REQUIRE(trackWithOtherWork.dictionary().findId("Symphony No. 5"));
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()));
+      CHECK_FALSE(
+        matchesFullPlanWithDictionary(evaluator, plan, trackWithOtherWork.view(), trackWithOtherWork.dictionary()));
     }
 
     SECTION("$w Equality (shorthand)")
@@ -55,25 +55,17 @@ namespace ao::query::test
     {
       auto expr = parseOk("$work ~ Symphony");
       auto plan = compileOk(expr);
-      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
-      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) ==
-            false);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()));
+      CHECK_FALSE(
+        matchesFullPlanWithDictionary(evaluator, plan, trackWithOtherWork.view(), trackWithOtherWork.dictionary()));
     }
   }
 
   TEST_CASE("PlanEvaluator - matches movement metadata equality existence and LIKE expressions")
   {
-    auto specWithMovement = TrackSpec{};
-    specWithMovement.movement = "Finale";
-    specWithMovement.movementNumber = 4;
-    specWithMovement.movementTotal = 4;
-    auto trackWithMovement = TestTrack{specWithMovement};
-
-    auto specWithoutMovement = TrackSpec{};
-    specWithoutMovement.movement = "";
-    specWithoutMovement.movementNumber = 0;
-    specWithoutMovement.movementTotal = 0;
-    auto trackWithoutMovement = TestTrack{specWithoutMovement};
+    auto trackWithMovement = TrackFixture{TrackSpec{.movement = "Finale", .movementNumber = 4, .movementTotal = 4}};
+    // The name resolves in this dictionary but is not the stored Movement.
+    auto trackWithOtherMovement = TrackFixture{TrackSpec{.artist = "Finale", .movement = "Adagio"}};
 
     auto evaluator = PlanEvaluator{};
 
@@ -81,10 +73,10 @@ namespace ao::query::test
     {
       auto expr = parseOk("$movement = Finale");
       auto plan = compileOk(expr);
-      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()) ==
-            true);
-      CHECK(matchesFullPlanWithDictionary(
-              evaluator, plan, trackWithoutMovement.view(), trackWithoutMovement.dictionary()) == false);
+      REQUIRE(trackWithOtherMovement.dictionary().findId("Finale"));
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()));
+      CHECK_FALSE(matchesFullPlanWithDictionary(
+        evaluator, plan, trackWithOtherMovement.view(), trackWithOtherMovement.dictionary()));
     }
 
     SECTION("$m LIKE")
@@ -100,14 +92,13 @@ namespace ao::query::test
       auto expr = parseOk("$movementNumber? and $movementTotal?");
       auto plan = compileOk(expr);
       CHECK(evaluator.matchesFullPlan(plan, trackWithMovement.view()) == true);
-      CHECK(evaluator.matchesFullPlan(plan, trackWithoutMovement.view()) == false);
+      CHECK(evaluator.matchesFullPlan(plan, trackWithOtherMovement.view()) == false);
     }
   }
 
   TEST_CASE("PlanEvaluator - matches composer metadata equality and LIKE expressions")
   {
-    auto trackWithComposer = TestTrack{
-      "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
+    auto trackWithComposer = TrackFixture{TrackSpec{.composer = "Beethoven"}};
     auto evaluator = PlanEvaluator{};
 
     SECTION("$composer Equality")
@@ -343,16 +334,6 @@ namespace ao::query::test
         {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Custom), .operand = 1, .constValue = 0});
       // Bytecode without a bound custom-key symbol represents an unresolved key.
       CHECK_FALSE(PlanEvaluator{}.matchesFullPlan(planManual, track2.view()));
-    }
-
-    SECTION("Invalid Field")
-    {
-      auto plan = ExecutionPlan{};
-      plan.stringConstants.emplace_back("pattern");
-      plan.instructions.push_back({.op = OpCode::LoadField, .field = 255, .operand = 0});
-      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
-      plan.instructions.push_back({.op = OpCode::Like, .operand = 1});
-      CHECK(evaluator.matchesFullPlan(plan, track.view()) == false);
     }
   }
 

@@ -21,7 +21,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -185,17 +184,17 @@ namespace ao::rt
       CompletionService& vocabulary;
       std::size_t limit = 0;
 
-      void operator()(query::QueryCompletionToken const& token) const
+      void operator()(query::QueryVariableCompletion const& context) const
       {
-        switch (token.type)
+        switch (auto const& prefix = context.replacement.prefix; context.type)
         {
           case query::VariableType::Metadata:
-          case query::VariableType::Property: appendSystemVariableItems(items, token.type, token.prefix, limit); break;
+          case query::VariableType::Property: appendSystemVariableItems(items, context.type, prefix, limit); break;
           case query::VariableType::Tag:
-            appendUserVariableItems(items, token.type, vocabulary.tags(), token.prefix, limit);
+            appendUserVariableItems(items, context.type, vocabulary.tags(), prefix, limit);
             break;
           case query::VariableType::Custom:
-            appendUserVariableItems(items, token.type, vocabulary.customKeys(), token.prefix, limit);
+            appendUserVariableItems(items, context.type, vocabulary.customKeys(), prefix, limit);
             break;
         }
       }
@@ -215,23 +214,6 @@ namespace ao::rt
         appendLogicalOperatorItems(items, context.replacement.prefix, limit);
       }
     };
-
-    std::pair<std::size_t, std::size_t> replacementRange(query::QueryCompletionAnalysis const& context)
-    {
-      return std::visit(
-        [](auto const& value) -> std::pair<std::size_t, std::size_t>
-        {
-          if constexpr (std::is_same_v<std::decay_t<decltype(value)>, query::QueryCompletionToken>)
-          {
-            return {value.replaceBegin, value.replaceEnd};
-          }
-          else
-          {
-            return {value.replacement.replaceBegin, value.replacement.replaceEnd};
-          }
-        },
-        context);
-    }
   } // namespace
 
   QueryExpressionCompleter::QueryExpressionCompleter(CompletionService& vocabulary)
@@ -260,10 +242,11 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    auto const [replaceBegin, replaceEnd] = replacementRange(*optContext);
+    auto const& replacement = std::visit(
+      [](auto const& context) -> query::QueryCompletionReplacement const& { return context.replacement; }, *optContext);
     return CompletionResult{
-      .replaceBegin = replaceBegin,
-      .replaceEnd = replaceEnd,
+      .replaceBegin = replacement.replaceBegin,
+      .replaceEnd = replacement.replaceEnd,
       .items = std::move(items),
     };
   }

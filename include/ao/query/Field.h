@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::library
 {
@@ -85,13 +86,18 @@ namespace ao::query
    */
   enum class AccessProfile : std::uint8_t
   {
-    NoTrackData, // Does not access track fields
-    HotOnly,     // Only accesses hot data (metadata, property, tags)
-    ColdOnly,    // Only accesses cold data (custom KV)
-    HotAndCold   // Mixed access
+    NoTrackData = 0,
+    HotOnly = 1,
+    ColdOnly = 2,
+    HotAndCold = 3
   };
 
-  bool isColdField(Field field);
+  constexpr AccessProfile combineAccessProfiles(AccessProfile lhs, AccessProfile rhs) noexcept
+  {
+    return static_cast<AccessProfile>(std::to_underlying(lhs) | std::to_underlying(rhs));
+  }
+
+  AccessProfile accessProfile(Field field);
   bool isDictionaryField(Field field);
   bool isCreditField(Field field);
   bool isStringField(Field field);
@@ -109,7 +115,5 @@ namespace ao::query
   std::string variableDisplayName(VariableType type, std::string_view name);
   std::string variableDisplayName(VariableExpression const& variable);
 
-  bool isHotDataRequired(AccessProfile profile);
-  bool isColdDataRequired(AccessProfile profile);
   bool hasRequiredTrackData(AccessProfile profile, library::TrackView const& track);
 } // namespace ao::query

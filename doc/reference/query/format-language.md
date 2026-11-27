@@ -39,7 +39,8 @@ before accepting its expression superset.
 Constants use predicate-language tokenization.
 Booleans format canonically as `true` or `false`; integers format in decimal; unit constants preserve their original lexeme.
 String constants are validated as scalar UTF-8 and retained byte-exactly during compilation.
-Keyword strings such as `and` or `in` must be quoted.
+Keyword strings such as `and` or `in` must be quoted. Also quote text such as
+`"TRUE_9"` to avoid the shared parser's [Boolean boundary limitation](predicate-language.md#grammar).
 
 ### Supported metadata variables
 
@@ -151,7 +152,7 @@ Representative invalid forms are:
 ## Test authority
 
 - [`FormatExpressionTest.cpp`](../../../test/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, pure compilation, explicit binding, access profiles, and rejected forms.
-- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) locks the `track show --format` workflow.
+- [`TrackCommandTest.cpp`](../../../test/cli/TrackCommandTest.cpp) covers the `track show --format` workflow.
 - [`TerminalTitleTest.cpp`](../../../test/tui/TerminalTitleTest.cpp) locks TUI preference compilation and terminal-title evaluation through the same language.
 - [`RecordingDatePredicateTest.cpp`](../../../test/query/RecordingDatePredicateTest.cpp) locks `$recordingDate` formatting at each stored precision, empty output for absence, and its dictionary-free cold access.
 

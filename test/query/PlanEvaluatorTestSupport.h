@@ -94,13 +94,6 @@ namespace ao::query::test
     std::uint8_t bitDepth = 16;
     ResourceId coverArtId{kInvalidResourceId};
     AudioCodec codec = AudioCodec::Unknown;
-    std::uint32_t artistId = 0;
-    std::uint32_t albumId = 0;
-    std::uint32_t genreId = 0;
-    std::uint32_t albumArtistId = 0;
-    std::uint32_t composerId = 0;
-    std::uint32_t workId = 0;
-    std::uint32_t movementId = 0;
     std::vector<std::string> tags = {};
     std::vector<std::pair<std::string, std::string>> customPairs = {};
     library::RecordingDate recordingDate{};
@@ -111,7 +104,7 @@ namespace ao::query::test
   {
   public:
     TrackFixture();
-    explicit TrackFixture(TrackSpec const& spec, DictionaryStore const* dictionary = nullptr);
+    explicit TrackFixture(TrackSpec const& spec);
 
     TrackFixture(std::string title,
                  std::string artist = "Test Artist",
@@ -123,13 +116,7 @@ namespace ao::query::test
                  std::uint32_t bitrate = 320000,
                  std::uint32_t sampleRate = 44100,
                  std::uint8_t channels = 2,
-                 std::uint8_t bitDepth = 16,
-                 std::uint32_t artistId = 0,
-                 std::uint32_t albumId = 0,
-                 std::uint32_t genreId = 0,
-                 std::vector<std::uint32_t> const& tagIds = {},
-                 std::string composer = "",
-                 std::string work = "");
+                 std::uint8_t bitDepth = 16);
 
     ~TrackFixture();
 

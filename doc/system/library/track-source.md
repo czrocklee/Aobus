@@ -91,7 +91,7 @@ A reset clears the overlay and restores filtered-parent order.
 
 Expression syntax and per-track truth belong to the [predicate language](../../reference/query/predicate-language.md) and [predicate evaluation](../query/predicate-evaluation.md) contracts.
 
-`SmartListEvaluator` unions the plans' access profiles for each batch and maps that semantic requirement to one physical TrackStore mode: `NoTrackData` and `HotOnly` use `Hot`, `ColdOnly` uses `Cold`, and `HotAndCold` uses `Both`.
+`SmartListEvaluator` reads and combines the plans' access profiles through the query API without inspecting their bytecode. It maps the combined requirement for each batch to one physical TrackStore mode: `NoTrackData` and `HotOnly` use `Hot`, `ColdOnly` uses `Cold`, and `HotAndCold` uses `Both`.
 `NoTrackData` still uses the least expensive concrete row side because source traversal and point updates must confirm Track existence, while the predicate itself reads no Track fields and TrackStore has no no-row mode.
 For a metadata-only batch, the evaluator reads and evaluates only the touched tracks, derives membership edits against the installed buckets, and installs every bucket's final state before publishing any one bucket.
 Structural insert, remove, and move batches retain the general rebuild path.

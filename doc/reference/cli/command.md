@@ -19,12 +19,12 @@ CLI11 help is the executable syntax authority; this document is the durable repo
 
 ### Global options
 
-| Option               | Meaning                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| `-C, --root <dir>`   | music root; falls back to `AOBUS_ROOT`, then the current directory; database is `<root>/.aobus/library` |
-| `-O, --output <plain | yaml                                                                                                    | json>` | output format; default `plain`; names are case-insensitive |
-| `--help-all`         | recursive complete command help                                                                         |
-| `--version`          | application version                                                                                     |
+| Option                                 | Meaning                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `-C, --root <dir>`                     | music root; falls back to `AOBUS_ROOT`, then the current directory; database is `<root>/.aobus/library` |
+| `-O, --output <plain \| yaml \| json>` | output format; default `plain`; names are case-insensitive                                              |
+| `--help-all`                           | recursive complete command help                                                                         |
+| `--version`                            | application version                                                                                     |
 
 An unset or empty `AOBUS_ROOT` falls back to the current directory when `-C` is omitted. An explicitly empty argument (`-C ""`) is rejected before opening or creating the database, even if `AOBUS_ROOT` is set.
 
@@ -36,39 +36,39 @@ Exactly one top-level command is required.
 
 ### Command inventory
 
-| Command                    | Arguments/options                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------------- |
-| `init`                     | `[--dry-run]`                                                                                 |
-| `scan`                     | `[--dry-run] [--verbose] [--defer-fingerprint]`                                               |
-| `track show`               | `[<id>...] [-f, --filter <expr>] [-l, --limit N] [-o, --offset N] [--format <expr>]`          |
-| `track create`             | `<path> [--dry-run]`                                                                          |
-| `track update`             | `(<id>...                                                                                     | -f, --filter <expr>) [<field-option>...] [--add-tag <tag>...] [--remove-tag <tag>...] [--dry-run]` |
-| `track delete`             | `<id> [--dry-run]`                                                                            |
-| `track dump`               | `[--id <id>] [--raw]`                                                                         |
-| `list show`                | `[<id>]`                                                                                      |
-| `list create`              | `-n, --name <name> [-f, --filter <expr>] [-d, --desc <text>] [-p, --parent <id>] [--dry-run]` |
-| `list update`              | `<id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>] [--dry-run]`          |
-| `list add`                 | `<listId> <trackId>... [--dry-run]`                                                           |
-| `list remove`              | `<listId> <trackId>... [--dry-run]`                                                           |
-| `list order move`          | `<listId> <trackId>... [--before <trackId>]`                                                  |
-| `list order reset`         | `<listId>`                                                                                    |
-| `list order forget-hidden` | `<listId>`                                                                                    |
-| `list delete`              | `<id> [--descendants] [--dry-run]`                                                            |
-| `list dump`                | `[--raw]`                                                                                     |
-| `tag list`                 | none                                                                                          |
-| `tag show`                 | `(<id>...                                                                                     | -f, --filter <expr>)`                                                                              |
-| `tag add`                  | `<tag> (<id>...                                                                               | -f, --filter <expr>) [--dry-run]`                                                                  |
-| `tag remove`               | `<tag> (<id>...                                                                               | -f, --filter <expr>) [--dry-run]`                                                                  |
-| `lib show`                 | none                                                                                          |
-| `lib stats`                | none                                                                                          |
-| `lib verify`               | none                                                                                          |
-| `lib relink`               | `[--from <old-uri> --to <new-uri>] [--dry-run]`                                               |
-| `lib fingerprint`          | `--pending [--verbose]` or `--verify <uri> [--confirm <token>]`                               |
-| `lib export`               | `(<output>                                                                                    | -o, --output-file <file>) [-m, --mode delta                                                        | metadata                                                                     | full | list-only]`; default mode is `full` |
-| `lib import`               | `(<input>                                                                                     | -i, --input <file>) [-m, --mode restore                                                            | merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
-| `lib dump`                 | `[--dict] [--manifest] [--meta] [--resources] [--raw]`                                        |
-| `lib resource list`        | none                                                                                          |
-| `lib resource export`      | `<id> -o, --output-file <file>`                                                               |
+| Command                    | Arguments/options                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `init`                     | `[--dry-run]`                                                                                                                        |
+| `scan`                     | `[--dry-run] [--verbose] [--defer-fingerprint]`                                                                                      |
+| `track show`               | `[<id>... \| -f, --filter <expr>] [-l, --limit N] [-o, --offset N] [--format <expr>]`                                                |
+| `track create`             | `<path> [--dry-run]`                                                                                                                 |
+| `track update`             | `(<id>... \| -f, --filter <expr>) [<field-option>...] [--add-tag <tag>...] [--remove-tag <tag>...] [--dry-run]`                      |
+| `track delete`             | `<id> [--dry-run]`                                                                                                                   |
+| `track dump`               | `[--id <id>] [--raw]`                                                                                                                |
+| `list show`                | `[<id>]`                                                                                                                             |
+| `list create`              | `-n, --name <name> [-f, --filter <expr>] [-d, --desc <text>] [-p, --parent <id>] [--dry-run]`                                        |
+| `list update`              | `<id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>] [--dry-run]`                                                 |
+| `list add`                 | `<listId> <trackId>... [--dry-run]`                                                                                                  |
+| `list remove`              | `<listId> <trackId>... [--dry-run]`                                                                                                  |
+| `list order move`          | `<listId> <trackId>... [--before <trackId>]`                                                                                         |
+| `list order reset`         | `<listId>`                                                                                                                           |
+| `list order forget-hidden` | `<listId>`                                                                                                                           |
+| `list delete`              | `<id> [--descendants] [--dry-run]`                                                                                                   |
+| `list dump`                | `[--raw]`                                                                                                                            |
+| `tag list`                 | none                                                                                                                                 |
+| `tag show`                 | `(<id>... \| -f, --filter <expr>)`                                                                                                   |
+| `tag add`                  | `<tag> (<id>... \| -f, --filter <expr>) [--dry-run]`                                                                                 |
+| `tag remove`               | `<tag> (<id>... \| -f, --filter <expr>) [--dry-run]`                                                                                 |
+| `lib show`                 | none                                                                                                                                 |
+| `lib stats`                | none                                                                                                                                 |
+| `lib verify`               | none                                                                                                                                 |
+| `lib relink`               | `[--from <old-uri> --to <new-uri>] [--dry-run]`                                                                                      |
+| `lib fingerprint`          | `--pending [--verbose]` or `--verify <uri> [--confirm <token>]`                                                                      |
+| `lib export`               | `(<output> \| -o, --output-file <file>) [-m, --mode delta \| metadata \| full \| list-only]`; default mode is `full`                 |
+| `lib import`               | `(<input> \| -i, --input <file>) [-m, --mode restore \| merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
+| `lib dump`                 | `[--dict] [--manifest] [--meta] [--resources] [--raw]`                                                                               |
+| `lib resource list`        | none                                                                                                                                 |
+| `lib resource export`      | `<id> -o, --output-file <file>`                                                                                                      |
 
 Presence flags such as `--dry-run`, `--descendants`, `--clear-credits`, and `--confirm-destructive-restore` take no value.
 An attached `=true` means the same as the bare flag; every other attached value, including `=false`, is rejected with CLI11 argument-mismatch status `114` before the command runs.
@@ -126,6 +126,14 @@ The same tag in both `--add-tag` and `--remove-tag` is rejected with an InvalidI
 `--dry-run` does not support tag changes yet; combined with tag options it is rejected with an InvalidInput error.
 An explicitly empty `list update --filter ''` installs the identity predicate, so the List inherits all parent members.
 It does not change a persisted List kind because no such kind exists.
+
+### Track show selection and pagination
+
+Select tracks by explicit ids or `--filter`, not both. If neither is supplied, the command selects all tracks.
+All output modes select first, then skip `--offset` rows in that selection, then emit up to `--limit` rows.
+`--limit 0` (the default) emits the entire tail after the offset.
+Only plain output without a format expression prints the `... (N more)` footer to stdout, and only when selected rows remain after the page. Skipped rows do not count toward that footer.
+A nonempty `--format` expression requires plain output. An explicitly empty `--format` value is treated as omitted, including with YAML or JSON.
 
 ### Structured output rules
 
@@ -266,7 +274,6 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 
 ## Validation rules
 
-- `track show --format` is mutually exclusive with YAML/JSON.
 - `track create` of a CUE image emits every created id in `trackIds`. `trackId` is the first of those ids when the commit allocated one; a dry-run omits `trackId` and emits an empty `trackIds` array because allocation is not durable. Plain output prints one `added track` line per id.
 - Plain `scan` counts `missing-segments` separately from `new`. Structured output uses `missingSegments`, and a dry-run item of that class has `type: missing-segments`.
 - Plain `scan` counts `spelling-changed` separately from `moved`; structured output uses `spellingChanged`. Structured dry-run items include `oldUri` only when `type` is `moved` or `spelling-changed`; `uri` is the destination. A filename or directory spelling pair resolved by its constrained fingerprint fallback is `moved`. See [path spelling reconciliation](../../system/library/scan-and-identity.md#plan-classification) for the rules for filenames and directories.

@@ -23,11 +23,6 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace ao::query
-{
-  enum class AccessProfile : std::uint8_t;
-}
-
 namespace ao::rt
 {
   namespace detail
@@ -145,7 +140,6 @@ namespace ao::rt
     static bool isPublicationCurrent(SourceBucket const& bucket,
                                      SmartListSource const* list,
                                      std::uint64_t installToken) noexcept;
-    static query::AccessProfile unionAccessProfile(std::span<SmartListSource* const> lists);
 
     void eraseRetiredBuckets();
 

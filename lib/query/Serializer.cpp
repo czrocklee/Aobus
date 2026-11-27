@@ -3,8 +3,9 @@
 
 #include <ao/query/Serializer.h>
 
+#include "detail/OperatorTable.h"
 #include <ao/query/Expression.h>
-#include <ao/query/detail/OperatorTable.h>
+#include <ao/utility/String.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <algorithm>
@@ -24,47 +25,39 @@ namespace ao::query
   {
     bool isSimpleUserVariableName(std::string_view name)
     {
-      return !name.empty() && std::ranges::all_of(name,
-                                                  [](char ch)
-                                                  {
-                                                    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-                                                           (ch >= '0' && ch <= '9') || ch == '_';
-                                                  });
+      return !name.empty() &&
+             std::ranges::all_of(name, [](char ch) { return utility::isAsciiAlphaNumeric(ch) || ch == '_'; });
     }
 
-    template<typename... Args>
-    void appendFormatted(std::ostringstream& oss, std::format_string<Args...> fmt, Args&&... args)
+    void appendQuotedString(std::ostringstream& oss, std::string_view str)
     {
-      oss << std::format(fmt, std::forward<Args>(args)...);
-    }
+      oss.put('"');
 
-    void appendEscapedString(std::ostringstream& oss, std::string_view str)
-    {
       for (auto const ch : str)
       {
         switch (ch)
         {
-          case '\\': appendFormatted(oss, "\\\\"); break;
-          case '"': appendFormatted(oss, "\\\""); break;
-          case '\n': appendFormatted(oss, "\\n"); break;
-          case '\t': appendFormatted(oss, "\\t"); break;
-          case '\r': appendFormatted(oss, "\\r"); break;
-          default: appendFormatted(oss, "{}", ch); break;
+          case '\\': oss << "\\\\"; break;
+          case '"': oss << "\\\""; break;
+          case '\n': oss << "\\n"; break;
+          case '\t': oss << "\\t"; break;
+          case '\r': oss << "\\r"; break;
+          default: oss.put(ch); break;
         }
       }
+
+      oss.put('"');
     }
 
     void serializeUserVariableName(std::ostringstream& oss, std::string_view name)
     {
       if (isSimpleUserVariableName(name))
       {
-        appendFormatted(oss, "{}", name);
+        oss << name;
         return;
       }
 
-      appendFormatted(oss, "\"");
-      appendEscapedString(oss, name);
-      appendFormatted(oss, "\"");
+      appendQuotedString(oss, name);
     }
 
     struct Serializer final
@@ -121,11 +114,11 @@ namespace ao::query
             oss.put(')');
           }
 
-          appendFormatted(oss, "?");
+          oss.put('?');
           return;
         }
 
-        appendFormatted(oss, "not ");
+        oss << "not ";
         // A binary operand is nested even when this negation is the root.
         ++counter;
         std::visit(*this, unaryPtr->operand);
@@ -135,10 +128,10 @@ namespace ao::query
       {
         switch (variable.type)
         {
-          case VariableType::Metadata: appendFormatted(oss, "${}", variable.name); return;
-          case VariableType::Property: appendFormatted(oss, "@{}", variable.name); return;
-          case VariableType::Tag: appendFormatted(oss, "#"); break;
-          case VariableType::Custom: appendFormatted(oss, "%"); break;
+          case VariableType::Metadata: oss << '$' << variable.name; return;
+          case VariableType::Property: oss << '@' << variable.name; return;
+          case VariableType::Tag: oss.put('#'); break;
+          case VariableType::Custom: oss.put('%'); break;
         }
 
         serializeUserVariableName(oss, variable.name);
@@ -148,7 +141,7 @@ namespace ao::query
 
       void operator()(ListExpression const& list)
       {
-        appendFormatted(oss, "[");
+        oss.put('[');
 
         bool first = true;
 
@@ -156,44 +149,36 @@ namespace ao::query
         {
           if (!first)
           {
-            appendFormatted(oss, ", ");
+            oss << ", ";
           }
 
           serializeConstant(value);
           first = false;
         }
 
-        appendFormatted(oss, "]");
+        oss.put(']');
       }
 
       void operator()(RangeExpression const& range)
       {
         serializeConstant(range.lower);
-        appendFormatted(oss, "..");
+        oss << "..";
         serializeConstant(range.upper);
       }
 
       void serializeBinary(Operator op, Expression const& rhs)
       {
-        // serializeBinary only ever receives binary (infix) operators, so the
-        // canonical token from the table reproduces the original spacing exactly.
-        appendFormatted(oss, " {} ", detail::operatorDescriptor(op).spelling);
+        oss << ' ' << detail::operatorDescriptor(op).spelling << ' ';
         std::visit(*this, rhs);
       }
 
       void serializeConstant(ConstantExpression const& constant)
       {
-        std::visit(
-          utility::makeVisitor([this](bool val) { appendFormatted(oss, "{}", val ? "true" : "false"); },
-                               [this](std::int64_t val) { appendFormatted(oss, "{}", val); },
-                               [this](UnitConstantExpression const& val) { appendFormatted(oss, "{}", val.lexeme); },
-                               [this](std::string_view val)
-                               {
-                                 appendFormatted(oss, "\"");
-                                 appendEscapedString(oss, val);
-                                 appendFormatted(oss, "\"");
-                               }),
-          constant);
+        std::visit(utility::makeVisitor([this](bool val) { oss << (val ? "true" : "false"); },
+                                        [this](std::int64_t val) { oss << std::format("{}", val); },
+                                        [this](UnitConstantExpression const& val) { oss << val.lexeme; },
+                                        [this](std::string_view val) { appendQuotedString(oss, val); }),
+                   constant);
       }
 
       std::ostringstream oss;
@@ -205,6 +190,6 @@ namespace ao::query
   {
     auto serializer = Serializer{};
     std::visit(serializer, expr);
-    return serializer.oss.str();
+    return std::move(serializer.oss).str();
   }
 } // namespace ao::query

@@ -23,7 +23,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <memory>
 #include <span>
 #include <string>
@@ -45,13 +44,7 @@ namespace ao::query::test
                             std::uint32_t bitrate,
                             std::uint32_t sampleRate,
                             std::uint8_t channels,
-                            std::uint8_t bitDepth,
-                            std::uint32_t artistId,
-                            std::uint32_t albumId,
-                            std::uint32_t genreId,
-                            std::vector<std::uint32_t> const& tagIds,
-                            std::string composer,
-                            std::string work)
+                            std::uint8_t bitDepth)
     {
       auto spec = TrackSpec{};
       spec.title = std::move(title);
@@ -65,17 +58,6 @@ namespace ao::query::test
       spec.sampleRate = sampleRate;
       spec.channels = channels;
       spec.bitDepth = bitDepth;
-      spec.artistId = artistId;
-      spec.albumId = albumId;
-      spec.genreId = genreId;
-
-      for (auto id : tagIds)
-      {
-        spec.tags.push_back(std::format("tag{}", id));
-      }
-
-      spec.composer = std::move(composer);
-      spec.work = std::move(work);
       return spec;
     }
   } // namespace
@@ -138,16 +120,10 @@ namespace ao::query::test
 
   struct TrackFixture::Impl final
   {
-    explicit Impl(TrackSpec const& spec, DictionaryStore const* externalDictionary)
+    explicit Impl(TrackSpec const& spec)
       : library{library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db")}
-      , transaction{library::test::writeTransaction(library)}
-      , dictionary{externalDictionary != nullptr ? externalDictionary : &library.dictionary()}
     {
-      setup(spec, externalDictionary);
-    }
-
-    void setup(TrackSpec const& spec, DictionaryStore const* externalDictionary)
-    {
+      auto transaction = library::test::writeTransaction(library);
       auto builder = TrackBuilder::makeEmpty();
       builder.metadata().title(spec.title);
       builder.metadata().artist(spec.artist);
@@ -194,60 +170,15 @@ namespace ao::query::test
       REQUIRE(hotDataRes);
       auto coldDataRes = library::test::physicalSerializeColdTrack(builder, transaction, library.resources());
       REQUIRE(coldDataRes);
-      hotData = *hotDataRes;
-      coldData = *coldDataRes;
+      hotData = std::move(*hotDataRes);
+      coldData = std::move(*coldDataRes);
       REQUIRE(transaction.commit());
-
-      auto* header = utility::layout::viewMutable<library::TrackHotHeader>(hotData);
-
-      if (externalDictionary != nullptr && !spec.tags.empty())
-      {
-        auto const tagByteCount = spec.tags.size() * sizeof(DictionaryId);
-        auto tagBytes = std::span<std::byte>{hotData}.subspan(sizeof(library::TrackHotHeader), tagByteCount);
-        auto tagIds = std::span<DictionaryId>{utility::layout::viewMutable<DictionaryId>(tagBytes), spec.tags.size()};
-        header->tagBloom = 0;
-
-        for (std::size_t index = 0; index < spec.tags.size(); ++index)
-        {
-          auto const optTagId = externalDictionary->findId(spec.tags[index]);
-          REQUIRE(optTagId);
-          tagIds[index] = *optTagId;
-          header->tagBloom |= std::uint32_t{1} << (tagIds[index].raw() & 31U);
-        }
-      }
-
-      if (spec.artistId != 0)
-      {
-        header->artistId = DictionaryId{spec.artistId};
-      }
-
-      if (spec.albumId != 0)
-      {
-        header->albumId = DictionaryId{spec.albumId};
-      }
-
-      if (spec.genreId != 0)
-      {
-        header->genreId = DictionaryId{spec.genreId};
-      }
-
-      if (spec.albumArtistId != 0)
-      {
-        header->albumArtistId = DictionaryId{spec.albumArtistId};
-      }
-
-      if (spec.composerId != 0)
-      {
-        header->composerId = DictionaryId{spec.composerId};
-      }
     }
 
     // Declared before the LMDB-backed members so their mappings are closed
     // before the temporary directory is removed on Windows.
     ao::test::TempDir temp;
     MusicLibrary library;
-    WriteTransaction transaction;
-    DictionaryStore const* dictionary;
     std::vector<std::byte> hotData;
     std::vector<std::byte> coldData;
   };
@@ -257,8 +188,8 @@ namespace ao::query::test
   {
   }
 
-  TrackFixture::TrackFixture(TrackSpec const& spec, DictionaryStore const* dictionary)
-    : _implPtr{std::make_unique<Impl>(spec, dictionary)}
+  TrackFixture::TrackFixture(TrackSpec const& spec)
+    : _implPtr{std::make_unique<Impl>(spec)}
   {
   }
 
@@ -272,13 +203,7 @@ namespace ao::query::test
                              std::uint32_t bitrate,
                              std::uint32_t sampleRate,
                              std::uint8_t channels,
-                             std::uint8_t bitDepth,
-                             std::uint32_t artistId,
-                             std::uint32_t albumId,
-                             std::uint32_t genreId,
-                             std::vector<std::uint32_t> const& tagIds,
-                             std::string composer,
-                             std::string work)
+                             std::uint8_t bitDepth)
     : TrackFixture{makeTrackSpec(std::move(title),
                                  std::move(artist),
                                  std::move(album),
@@ -289,13 +214,7 @@ namespace ao::query::test
                                  bitrate,
                                  sampleRate,
                                  channels,
-                                 bitDepth,
-                                 artistId,
-                                 albumId,
-                                 genreId,
-                                 tagIds,
-                                 std::move(composer),
-                                 std::move(work))}
+                                 bitDepth)}
   {
   }
 
@@ -320,7 +239,7 @@ namespace ao::query::test
 
   DictionaryStore const& TrackFixture::dictionary()
   {
-    return *_implPtr->dictionary;
+    return _implPtr->library.dictionary();
   }
 
   std::vector<std::byte> makeHotOnlyTrack(DictionaryId artistId,

@@ -128,6 +128,7 @@ For example, on Linux:
 AOBUS_AUDIT_OBSERVATIONS=1000 ./ao measure performance --filter 'PerformanceReview - graph bursts*' --samples 40 --warmups 2 --output /tmp/observations.json
 AOBUS_AUDIT_COMPLETION_HISTORY=200000 ./ao measure performance --filter 'CompletionVocabularyBaseline - *' --samples 40 --warmups 2 --output /tmp/completion-history.json
 AOBUS_AUDIT_QUERY_ATOMS=512 ./ao measure performance --filter 'PerformanceReview - query expression*' --samples 40 --warmups 2 --output /tmp/query-boundary.json
+./ao measure performance --filter 'PerformanceReview - query completion analyzer edits' --samples 40 --warmups 2 --output /tmp/query-completion.json
 ```
 
 On Windows, set the corresponding environment variable before `ao.bat measure performance`
@@ -164,6 +165,11 @@ and write reports to the guest's local temporary directory.
   that did not execute. Total duration includes timing bookkeeping. Probe both
   sides of structural and byte limits, as well as much larger rejected inputs;
   parser correctness tests remain the authority for expected admission.
+- The query completion analyzer measures individual calls to `analyzeQueryCompletion`
+  for a typed field operator, a standalone tag, and compound predicates with
+  end-of-input and mid-input cursors. Input cardinality is the full input byte
+  count. Context assertions and destruction of the returned result are outside
+  the timed region; runtime vocabulary lookup and rendering are not measured.
 
 ### Classical metadata baseline
 

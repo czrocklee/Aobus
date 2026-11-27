@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -99,8 +100,11 @@ namespace ao::query::test
   TEST_CASE("FormatExpression - preserves valid Unicode output literals")
   {
     auto const plan = compileFormatOk(parseOk("'Cafe\u0301'"));
+    auto const binding = FormatBinding{plan};
+    auto output = std::string{};
+    FormatEvaluator{}.evaluate(binding, TrackView{{}, {}}, output);
 
-    REQUIRE(plan.literals == std::vector<std::string>{"Cafe\u0301"});
+    CHECK(output == "Cafe\u0301");
   }
 
   TEST_CASE("FormatExpression - formats cold fields custom metadata and properties")
@@ -158,7 +162,6 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - rejects track ids as format fields")
   {
-    auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($id + ": " + $title)");
     auto const error = compileFormatError(ast);
     CHECK(error.message.contains("unknown metadata field '$id'"));
@@ -207,8 +210,6 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - reports access profile")
   {
-    auto fixture = TrackFixture{formatTrackSpec()};
-
     SECTION("HotOnly")
     {
       auto ast = parseOk(R"($artist + " - " + $title)");
@@ -273,7 +274,6 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - rejects query-only expressions")
   {
-    auto fixture = TrackFixture{formatTrackSpec()};
     std::ignore = compileFormatError(parseOk("$artist = Bach"));
     std::ignore = compileFormatError(parseOk("$year?"));
     std::ignore = compileFormatError(parseOk("not $title"));
@@ -282,9 +282,30 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - rejects non-scalar fields")
   {
-    auto fixture = TrackFixture{formatTrackSpec()};
     std::ignore = compileFormatError(parseOk("#favorite"));
     std::ignore = compileFormatError(parseOk("$coverArt"));
+  }
+
+  TEST_CASE("FormatExpression - rejects a missing binary node in a supplied AST")
+  {
+    auto const expression = Expression{std::unique_ptr<BinaryExpression>{}};
+
+    std::ignore = compileFormatError(expression);
+  }
+
+  TEST_CASE("FormatExpression - rejects malformed UTF-8 in supplied AST text")
+  {
+    auto const malformed = std::string{"\xC0\xAF", 2};
+
+    std::ignore = compileFormatError(ConstantExpression{malformed});
+    std::ignore = compileFormatError(VariableExpression{.type = VariableType::Custom, .name = malformed});
+  }
+
+  TEST_CASE("FormatExpression - binds canonically equivalent custom keys")
+  {
+    auto fixture = TrackFixture{TrackSpec{.customPairs = {{"Café", "stored value"}}}};
+
+    CHECK(evaluate("%\"Cafe\u0301\"", fixture) == "stored value");
   }
 
   TEST_CASE("FormatExpression - marks dictionary-backed plans for binding")

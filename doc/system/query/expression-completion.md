@@ -16,7 +16,8 @@ Classification and completion of a mixed Quick-filter/expression input surface b
 ## Code boundary
 
 This contract spans the **core libraries**, **application runtime**, and frontend adapter layers from the [system architecture](../overview.md), as refined by the [track expression](README.md) and [presentation](../presentation/README.md) architectures.
-Core analysis is public under `include/ao/query/`; runtime composition is public under `app/include/ao/rt/completion/`; GTK and TUI adapt `CompletionResult` without owning grammar or vocabulary.
+Core analysis is public under `include/ao/query/`; runtime composition is public under `app/include/ao/rt/completion/`.
+Frontend controls adapt `CompletionResult` without owning grammar or vocabulary.
 
 ## Terminology
 
@@ -54,12 +55,12 @@ Insertion uses the query serializer so names that require quoting produce valid 
 
 After a complete left-hand variable, completion offers the valid operator family for that field:
 
-| Field family               | Suggestions                                |
-| -------------------------- | ------------------------------------------ |
-| String, dictionary, custom | `=`, `!=`, `~`, `in`, `?`                  |
-| Numeric and duration       | `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `?` |
-| Tag                        | `?`                                        |
-| Other scalar fallback      | `=`, `!=`, `in`, `?`                       |
+| Field family                              | Suggestions                                |
+| ----------------------------------------- | ------------------------------------------ |
+| String, dictionary, custom, credit member | `=`, `!=`, `~`, `in`, `?`                  |
+| Numeric, duration, recording date         | `=`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `?` |
+| Tag                                       | `?`                                        |
+| Other scalar fallback                     | `=`, `!=`, `in`, `?`                       |
 
 An empty operator prefix is valid after whitespace.
 A completed `~` enters value completion. Text and URI fields share that surface token even though predicate evaluation keeps their Unicode-caseless and byte-exact semantics distinct.
@@ -67,14 +68,16 @@ Binary operators replace the typed prefix with a space-padded token; `?` appends
 
 ### Logical operators
 
-After a complete predicate, completion offers `and`, `or`, `&&`, and `||` by ASCII-insensitive prefix.
+Completion offers `and`, `or`, `&&`, and `||` by ASCII-insensitive prefix when the entire text before the operator prefix parses as an expression with predicate shape.
+This checks the whole preceding expression, not just its last group or clause, but does not compile it to validate field or operand semantics.
 An empty prefix after the complete expression is valid.
 Prefix negation is not offered at this connection point.
 
 ### Values
 
 After a complete binary operator, and inside subsequent elements of an `in [...]` list, completion retains the left-hand query field as context.
-Runtime suggestions are currently provided only for query fields whose typed reverse bridge resolves to a value-completable runtime track field.
+Runtime suggests names from all credit kinds for `$credit` and only Performer names for `$performer`.
+For other query fields, it uses the typed reverse bridge to a value-completable runtime track field; category fields such as `$conductor` use all names in that category, not just the first name on each track.
 
 Insertion serializes the suggested value as a string constant, so a value such as `Massive Attack` becomes `"Massive Attack"`.
 When a completion alias matches, the same serializer receives the original admitted source text rather than the typed alias.
@@ -102,10 +105,8 @@ Live vocabulary access is confined to the `CompletionService` owner thread as de
 
 Runtime returns frontend-neutral display syntax, insertion syntax, a typed detail role or argument, rank, and one replacement range.
 Field, alias, operator, logical-operator, and frequency details resolve through the UIModel presentation catalog.
-GTK's entry adapter owns popover, keyboard, pointer, and borrowed-entry lifetime behavior.
-UIModel's `TrackFilterCompleter` delegates text with an explicit leading query variable to `QueryExpressionCompleter` and otherwise applies Quick-filter completion policy.
-GTK's Quick-filter entry and TUI command completion both consume that composition; TUI offsets its nested replacement range into the command line before applying it.
-
+The [shared track filter](../presentation/track-filter.md#completion) owns delegation between Quick-filter and expression completion.
+[Frontend contracts](../frontend/README.md) own suggestion rendering, input handling, and how the replacement range is translated into each control.
 Frontends cannot invent additional query fields or operators that the core completion catalog does not expose.
 
 ## Implementation map
@@ -117,14 +118,12 @@ Frontends cannot invent additional query fields or operators that the core compl
 - [`QueryExpressionCompleter.cpp`](../../../app/runtime/completion/QueryExpressionCompleter.cpp) composes core analysis with live vocabularies.
 - [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves semantic completion details into shared interactive copy.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) composes expression completion into the interactive filter surface.
-- [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK adapter.
-- [`App.cpp`](../../../app/tui/App.cpp) composes the TUI command and live-filter completion callbacks from the shared completion owners.
 
 ## Test map
 
-- Completion tests under [`test/query/`](../../../test/query) prove cursor contexts, lexical agreement, operator families, logical boundaries, aliases, values, and correctness of representative repeated-analysis inputs. Their diagnostic timing is not optimized performance evidence.
+- Completion tests under [`test/query/`](../../../test/query) cover cursor contexts, tokenization, field operators, aliases, and value contexts.
+- [`CompletionLogicalOperatorTest.cpp`](../../../test/query/CompletionLogicalOperatorTest.cpp) covers replacement ranges and logical suggestions after a complete predicate, including the whole-expression boundary and rejection of incomplete, invalid, or non-predicate prefixes.
 - Runtime completion tests under [`test/runtime/completion/`](../../../test/runtime/completion) prove live composition and replacement output.
-- [`EntryCompletionControllerTest.cpp`](../../../test/linux-gtk/completion/EntryCompletionControllerTest.cpp) and TUI command-completion tests protect adapters.
 - [`TrackFilterCompleterTest.cpp`](../../../test/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the mode boundary around this expression completer.
 
 ## Related documents

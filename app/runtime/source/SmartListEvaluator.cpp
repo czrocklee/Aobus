@@ -13,7 +13,6 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
@@ -28,7 +27,6 @@
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <optional>
 #include <span>
 #include <tuple>
 #include <utility>
@@ -52,6 +50,32 @@ namespace ao::rt
       }
 
       AO_FATAL("Unknown query access profile");
+    }
+
+    struct ProfiledPlanBinding final
+    {
+      ProfiledPlanBinding(std::size_t const index,
+                          query::ExecutionPlan const& plan,
+                          library::DictionaryReadContext& dictionary)
+        : listIndex{index}, profile{query::accessProfile(plan)}, binding{plan, dictionary}
+      {
+      }
+
+      std::size_t listIndex;
+      query::AccessProfile profile;
+      query::PlanBinding binding;
+    };
+
+    query::AccessProfile unionAccessProfile(std::span<ProfiledPlanBinding const> bindings)
+    {
+      auto profile = query::AccessProfile::NoTrackData;
+
+      for (auto const& entry : bindings)
+      {
+        profile = query::combineAccessProfiles(profile, entry.profile);
+      }
+
+      return profile;
     }
 
     std::vector<TrackId> snapshotSource(TrackSource const& source)
@@ -333,21 +357,10 @@ namespace ao::rt
     std::span<SmartListSource* const> const lists,
     std::span<TrackId const> const touchedTrackIds) const
   {
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-    evaluatableLists.reserve(lists.size());
-
-    for (auto* const list : lists)
-    {
-      if (isEvaluatable(*list))
-      {
-        evaluatableLists.push_back(list);
-      }
-    }
-
     auto matchesByTrackId = TrackMatches{};
     matchesByTrackId.reserve(touchedTrackIds.size());
 
-    if (touchedTrackIds.empty() || evaluatableLists.empty())
+    if (touchedTrackIds.empty() || std::ranges::none_of(lists, [](auto const* list) { return isEvaluatable(*list); }))
     {
       for (auto const trackId : touchedTrackIds)
       {
@@ -359,18 +372,20 @@ namespace ao::rt
 
     auto const transaction = _ml.readTransaction();
     auto const reader = _ml.tracks().reader(transaction);
-    auto const storeMode = loadModeForAccessProfile(unionAccessProfile(evaluatableLists));
     auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
     auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
-    auto bindings = std::vector<std::optional<query::PlanBinding>>(lists.size());
+    auto bindings = std::vector<ProfiledPlanBinding>{};
+    bindings.reserve(lists.size());
 
     for (std::size_t index = 0; index < lists.size(); ++index)
     {
       if (auto* const list = lists[index]; isEvaluatable(*list))
       {
-        bindings[index].emplace(*list->_current.planPtr, dictionaryContext);
+        bindings.emplace_back(index, *list->_current.planPtr, dictionaryContext);
       }
     }
+
+    auto const storeMode = loadModeForAccessProfile(unionAccessProfile(bindings));
 
     for (auto const trackId : touchedTrackIds)
     {
@@ -378,17 +393,11 @@ namespace ao::rt
 
       if (auto const optView = reader.get(trackId, storeMode); optView)
       {
-        for (std::size_t index = 0; index < lists.size(); ++index)
+        for (auto const& entry : bindings)
         {
-          if (auto* const list = lists[index]; isEvaluatable(*list))
+          if (query::hasRequiredTrackData(entry.profile, *optView))
           {
-            auto const& binding = bindings[index];
-            AO_INVARIANT(binding);
-
-            if (query::hasRequiredTrackData(list->_current.planPtr->accessProfile, *optView))
-            {
-              matches[index] = list->_planEvaluator.matches(*binding, *optView);
-            }
+            matches[entry.listIndex] = lists[entry.listIndex]->_planEvaluator.matches(entry.binding, *optView);
           }
         }
       }
@@ -712,50 +721,40 @@ namespace ao::rt
     }
 
     auto const timer = rt::ScopedTimer{"SmartListEvaluator::rebuildLists"};
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-
-    for (auto* const list : lists)
+    auto const isInstalled = [](SmartListSource const* list)
     {
-      if (list->state() == TrackSourceState::Live && !list->_current.optError && list->_current.planPtr != nullptr)
-      {
-        evaluatableLists.push_back(list);
-      }
-    }
-
+      return list->state() == TrackSourceState::Live && !list->_current.optError && list->_current.planPtr != nullptr;
+    };
     auto nextMembers = std::vector<std::vector<TrackId>>(lists.size());
 
-    if (!evaluatableLists.empty())
+    if (std::ranges::any_of(lists, isInstalled))
     {
       auto const transaction = _ml.readTransaction();
       auto const reader = _ml.tracks().reader(transaction);
-      auto const storeMode =
-        loadModeForAccessProfile(unionAccessProfile(std::span<SmartListSource* const>{evaluatableLists}));
       auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
       auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
-      auto bindings = std::vector<std::optional<query::PlanBinding>>(lists.size());
+      auto bindings = std::vector<ProfiledPlanBinding>{};
+      bindings.reserve(lists.size());
 
       for (std::size_t index = 0; index < lists.size(); ++index)
       {
-        if (auto* const list = lists[index];
-            list->state() == TrackSourceState::Live && !list->_current.optError && list->_current.planPtr != nullptr)
+        if (auto* const list = lists[index]; isInstalled(list))
         {
-          bindings[index].emplace(*list->_current.planPtr, dictionaryContext);
+          bindings.emplace_back(index, *list->_current.planPtr, dictionaryContext);
         }
       }
 
+      auto const storeMode = loadModeForAccessProfile(unionAccessProfile(bindings));
       reader.visitTracks(bucket.upstreamTracks.ids(),
                          storeMode,
                          [&](TrackId trackId, library::TrackView const& view)
                          {
-                           for (std::size_t index = 0; index < lists.size(); ++index)
+                           for (auto const& entry : bindings)
                            {
-                             if (auto* const list = lists[index];
-                                 list->state() == TrackSourceState::Live && !list->_current.optError &&
-                                 list->_current.planPtr != nullptr &&
-                                 query::hasRequiredTrackData(list->_current.planPtr->accessProfile, view) &&
-                                 list->_planEvaluator.matches(*bindings[index], view))
+                             if (query::hasRequiredTrackData(entry.profile, view) &&
+                                 lists[entry.listIndex]->_planEvaluator.matches(entry.binding, view))
                              {
-                               nextMembers[index].push_back(trackId);
+                               nextMembers[entry.listIndex].push_back(trackId);
                              }
                            }
                          });
@@ -794,41 +793,6 @@ namespace ao::rt
   {
     return std::ranges::contains(bucket.lists, list) && list->_installToken == installToken &&
            list->state() == TrackSourceState::Live;
-  }
-
-  query::AccessProfile SmartListEvaluator::unionAccessProfile(std::span<SmartListSource* const> const lists)
-  {
-    bool needsHot = false;
-    bool needsCold = false;
-
-    for (auto* const list : lists)
-    {
-      if (!list->_current.planPtr)
-      {
-        continue;
-      }
-
-      auto const profile = list->_current.planPtr->accessProfile;
-      needsHot = needsHot || query::isHotDataRequired(profile);
-      needsCold = needsCold || query::isColdDataRequired(profile);
-    }
-
-    if (needsHot && needsCold)
-    {
-      return query::AccessProfile::HotAndCold;
-    }
-
-    if (needsCold)
-    {
-      return query::AccessProfile::ColdOnly;
-    }
-
-    if (needsHot)
-    {
-      return query::AccessProfile::HotOnly;
-    }
-
-    return query::AccessProfile::NoTrackData;
   }
 
   namespace detail

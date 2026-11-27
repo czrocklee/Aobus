@@ -44,12 +44,12 @@ Changing it later may change both membership and the unranked fallback order.
 
 1. In GTK, choose **New Playlist...**, enter the name, and confirm the separate **Membership Tag** field.
    The name initially suggests the tag, but you can choose another visible tag.
-   In Windows, choose **New List...**, enter one positive tag such as `#road-trip` as the local filter, and choose **Manual Order** as the presentation.
+   In Windows, choose **New List...**, enter one positive tag such as `#"road-trip"` as the local filter, and choose **Manual Order** as the presentation.
 2. Create the Playlist.
 3. Select tracks, right-click, and choose the Playlist under **Add to Playlist**.
 
-Direct Add/Remove is available only when the complete local filter is one positive tag, such as `#road-trip`.
-For a computed expression such as `#road-trip and $year >= 2020`, edit the expression or the track tags instead.
+Direct Add/Remove is available only when the complete local filter is one positive tag, such as `#"road-trip"`.
+For a computed expression such as `#"road-trip" and $year >= 2020`, edit the expression or the track tags instead.
 **Add to Playlist** shows other writable Playlists by name and tag. If there are none, the submenu reads **No Playlists to add to**. GTK also offers **Create a Playlist...** in that case, or **Manage Lists...** if there are targets but some Lists were omitted because their membership is computed.
 For a nested Playlist, every selected track must already belong to the parent List before you can add it.
 

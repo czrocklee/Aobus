@@ -903,14 +903,12 @@ namespace ao::cli
       emitDocument(os, OutputFormat::Json, toTrackRecordDto(id, view, dictionary));
     }
 
-    void formatStructuredTracks(std::vector<TrackId> const& trackIds,
-                                std::size_t offset,
-                                std::size_t limit,
+    void formatStructuredTracks(std::span<TrackId const> trackIds,
                                 library::MusicLibrary const& ml,
                                 OutputFormat format,
                                 std::ostream& os)
     {
-      if (offset >= trackIds.size())
+      if (trackIds.empty())
       {
         if (format == OutputFormat::Yaml)
         {
@@ -920,7 +918,6 @@ namespace ao::cli
         return;
       }
 
-      std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
       auto const transaction = ml.readTransaction();
       auto const reader = ml.tracks().reader(transaction);
       auto const& dictionary = ml.dictionary();
@@ -929,9 +926,8 @@ namespace ao::cli
       {
         auto dto = TrackListDto{};
 
-        for (std::size_t i = offset; i < end; ++i)
+        for (auto const id : trackIds)
         {
-          auto const id = trackIds[i];
           auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
           if (optView)
@@ -944,9 +940,8 @@ namespace ao::cli
         return;
       }
 
-      for (std::size_t i = offset; i < end; ++i)
+      for (auto const id : trackIds)
       {
-        auto const id = trackIds[i];
         auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
         if (optView)
@@ -957,23 +952,20 @@ namespace ao::cli
     }
 
     void formatPlain(library::MusicLibrary const& ml,
-                     std::vector<TrackId> const& trackIds,
-                     std::size_t offset,
-                     std::size_t limit,
+                     std::span<TrackId const> trackIds,
+                     std::size_t remaining,
                      std::ostream& os)
     {
-      if (offset >= trackIds.size())
+      if (trackIds.empty())
       {
         return;
       }
 
-      std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
       auto const transaction = ml.readTransaction();
       auto const reader = ml.tracks().reader(transaction);
 
-      for (std::size_t i = offset; i < end; ++i)
+      for (auto const id : trackIds)
       {
-        auto const id = trackIds[i];
         // Only the cold record says whether a Track is a segment, and plain output prints its range.
         auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
@@ -989,20 +981,23 @@ namespace ao::cli
         }
       }
 
-      if (limit > 0 && offset + limit < trackIds.size())
+      if (remaining != 0)
       {
-        std::println(os, "... ({} more)", trackIds.size() - offset - limit);
+        std::println(os, "... ({} more)", remaining);
       }
     }
 
     void show(library::MusicLibrary const& ml,
-              std::vector<TrackId> const& trackIds,
+              std::span<TrackId const> trackIds,
               OutputFormat format,
               std::string const& formatExpression,
               std::size_t limit,
               std::size_t offset,
               std::ostream& os)
     {
+      auto const tail = trackIds.subspan(std::min(offset, trackIds.size()));
+      auto const page = limit == 0 ? tail : tail.first(std::min(limit, tail.size()));
+
       if (!formatExpression.empty())
       {
         if (format != OutputFormat::Plain)
@@ -1026,7 +1021,7 @@ namespace ao::cli
           throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
-        if (offset >= trackIds.size())
+        if (page.empty())
         {
           return;
         }
@@ -1038,11 +1033,9 @@ namespace ao::cli
         auto dictionaryCache = library::DictionaryReadCache{ml.dictionary()};
         auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
         auto binding = query::FormatBinding{*planRes, dictionaryContext};
-        std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
 
-        for (std::size_t i = offset; i < end; ++i)
+        for (auto const id : page)
         {
-          auto const id = trackIds[i];
           auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
           if (optView)
@@ -1062,11 +1055,11 @@ namespace ao::cli
 
       if (format == OutputFormat::Plain)
       {
-        formatPlain(ml, trackIds, offset, limit, os);
+        formatPlain(ml, page, tail.size() - page.size(), os);
       }
       else
       {
-        formatStructuredTracks(trackIds, offset, limit, ml, format, os);
+        formatStructuredTracks(page, ml, format, os);
       }
     }
 

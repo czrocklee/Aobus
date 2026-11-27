@@ -3,6 +3,8 @@
 
 #include <ao/query/ExecutionPlan.h>
 
+#include "detail/FieldResolver.h"
+#include "detail/Predicate.h"
 #include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
@@ -13,8 +15,6 @@
 #include <ao/query/Field.h>
 #include <ao/query/QueryCompilation.h>
 #include <ao/query/detail/Bytecode.h>
-#include <ao/query/detail/FieldResolver.h>
-#include <ao/query/detail/Predicate.h>
 #include <ao/utility/String.h>
 #include <ao/utility/UnicodeText.h>
 #include <ao/utility/VariantVisitor.h>
@@ -59,10 +59,6 @@ namespace ao::query
 {
   namespace
   {
-    // The Phase 0 Query IN threshold sweep shows the membership plan is faster
-    // than repeated field-load/equality expansion even for a one-item list.
-    constexpr std::size_t kInSetCompilationThreshold = 1;
-
     // Context-free scalars share kTextLiteralField's encoding because TagBloom is not a query variable.
     // Only OperandKind::Text makes that value a string literal when compiling a comparison.
     constexpr Field kNoFieldContext = kTextLiteralField;
@@ -234,9 +230,6 @@ namespace ao::query
 
       ExecutionPlan _plan;
       std::uint32_t _nextReg = 0;
-      bool _hasHotAccess = false;
-      bool _hasColdAccess = false;
-      bool _hasDictionaryAccess = false;
     };
 
     OpCode toOpCode(Operator op)
@@ -558,8 +551,7 @@ namespace ao::query
         return std::nullopt;
       }
 
-      auto const parsed = parsedValue;
-      return parsed;
+      return parsedValue;
     }
 
     std::optional<std::uint64_t> checkedMul(std::uint64_t lhs, std::uint64_t rhs)
@@ -710,6 +702,11 @@ namespace ao::query
       if (negative)
       {
         lexeme.remove_prefix(1);
+      }
+
+      if (lexeme.empty())
+      {
+        detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
       std::uint64_t total = 0;
@@ -1059,21 +1056,14 @@ namespace ao::query
 
     auto const field = *fieldRes;
 
-    if (isColdField(field))
-    {
-      _hasColdAccess = true;
-    }
-    else
-    {
-      _hasHotAccess = true;
-    }
+    _plan.accessProfile = combineAccessProfiles(_plan.accessProfile, accessProfile(field));
 
     auto dictionarySymbol = kNoDictionarySymbol;
 
     if (var->type == VariableType::Custom || var->type == VariableType::Tag)
     {
       dictionarySymbol = addDictionarySymbol(var->name);
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
     }
 
     auto const reg = pushReg();
@@ -1108,13 +1098,12 @@ namespace ao::query
 
   QueryCompiler::CompiledOperand QueryCompiler::compileVariable(VariableExpression const& var)
   {
-    // Tags are hot data
     if (var.type == VariableType::Tag)
     {
-      _hasHotAccess = true;
+      _plan.accessProfile = combineAccessProfiles(_plan.accessProfile, accessProfile(Field::Tag));
 
       auto const dictionarySymbol = addDictionarySymbol(var.name);
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
 
       // Generate implicit tag comparison: track.tags().has(bound tag id).
       auto const fieldReg = pushReg();
@@ -1151,26 +1140,18 @@ namespace ao::query
 
     auto const field = *fieldRes;
 
-    // Track access profile for hot/cold determination based on field storage location
-    if (isColdField(field))
-    {
-      _hasColdAccess = true;
-    }
-    else
-    {
-      _hasHotAccess = true;
-    }
+    _plan.accessProfile = combineAccessProfiles(_plan.accessProfile, accessProfile(field));
 
     auto dictionarySymbol = kNoDictionarySymbol;
 
     if (var.type == VariableType::Custom)
     {
       dictionarySymbol = addDictionarySymbol(var.name);
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
     }
     else if (isDictionaryField(field) || isCreditField(field))
     {
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
     }
 
     auto const reg = pushReg();
@@ -1300,12 +1281,10 @@ namespace ao::query
       detail::throwQueryError("operator 'in' expects a non-empty list");
     }
 
-    if (list.values.size() >= kInSetCompilationThreshold)
+    // Use a membership set for eligible fields even for a single item.
+    if (auto const optCompiled = compileInSetList(lhs, list); optCompiled)
     {
-      if (auto const optCompiled = compileInSetList(lhs, list); optCompiled)
-      {
-        return *optCompiled;
-      }
+      return *optCompiled;
     }
 
     // Not eligible for set compilation: expand into a chain of OR-ed equalities,
@@ -1382,7 +1361,7 @@ namespace ao::query
     {
       set.valueKind = InSetValueKind::Dictionary;
     }
-    else if (isStringField(field) || field == Field::Custom)
+    else if (isStringField(field))
     {
       set.valueKind = InSetValueKind::String;
     }
@@ -1446,6 +1425,8 @@ namespace ao::query
 
   try
   {
+    _plan.accessProfile = AccessProfile::NoTrackData;
+
     for (auto const& tagName : requiredTagNamesInSourceOrder(expr))
     {
       _plan.requiredTagSymbols.push_back(addDictionarySymbol(tagName));
@@ -1465,31 +1446,16 @@ namespace ao::query
 
     compilePredicate(expr);
 
-    // Set access profile based on what data was accessed
-    if (_hasHotAccess && _hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::HotAndCold;
-    }
-    else if (_hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::ColdOnly;
-    }
-    else if (_hasHotAccess)
-    {
-      _plan.accessProfile = AccessProfile::HotOnly;
-    }
-    else
-    {
-      _plan.accessProfile = AccessProfile::NoTrackData;
-    }
-
-    _plan.requiresDictionary = _hasDictionaryAccess;
-
-    return _plan;
+    return std::move(_plan);
   }
   catch (detail::QueryException const& ex)
   {
     return std::unexpected{ex.error()};
+  }
+
+  AccessProfile accessProfile(ExecutionPlan const& plan) noexcept
+  {
+    return plan.accessProfile;
   }
 
   Result<ExecutionPlan> compileQuery(Expression const& expr)

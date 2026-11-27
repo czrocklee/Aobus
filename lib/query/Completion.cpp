@@ -3,14 +3,13 @@
 
 #include <ao/query/Completion.h>
 
+#include "detail/CompletionPredicate.h"
 #include "detail/CompletionTokenizer.h"
+#include "detail/FieldResolver.h"
 #include "detail/Lexical.h"
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
-#include <ao/query/Parser.h>
-#include <ao/query/detail/FieldResolver.h>
-#include <ao/query/detail/Predicate.h>
 #include <ao/utility/String.h>
 
 #include <algorithm>
@@ -35,20 +34,7 @@ namespace ao::query
 
     bool startsWithInsensitive(std::string_view candidate, std::string_view prefix)
     {
-      if (prefix.size() > candidate.size())
-      {
-        return false;
-      }
-
-      return std::equal(prefix.begin(),
-                        prefix.end(),
-                        candidate.begin(),
-                        [](char lhs, char rhs) { return utility::toAsciiLower(lhs) == utility::toAsciiLower(rhs); });
-    }
-
-    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs)
-    {
-      return lhs.size() == rhs.size() && startsWithInsensitive(lhs, rhs);
+      return std::ranges::starts_with(candidate, prefix, {}, utility::toAsciiLower, utility::toAsciiLower);
     }
 
     VariableType variableTypeForTrigger(char trigger)
@@ -65,15 +51,9 @@ namespace ao::query
 
     bool hasExactAlias(QueryVariableDescriptor const& descriptor, std::string_view prefix)
     {
-      return std::ranges::any_of(
-        descriptor.aliases, [prefix](std::string_view alias) { return isEqualIgnoringAsciiCase(alias, prefix); });
-    }
-
-    bool containsCanonical(std::span<QueryVariableCompletionMatch const> matches, std::string_view canonicalName)
-    {
-      return std::ranges::any_of(matches,
-                                 [canonicalName](QueryVariableCompletionMatch const& match)
-                                 { return match.canonicalName == canonicalName; });
+      return std::ranges::any_of(descriptor.aliases,
+                                 [prefix](std::string_view alias)
+                                 { return utility::isEqualIgnoringAsciiCase(alias, prefix); });
     }
 
     bool isIdentifierLikeToken(detail::CompletionTokenKind kind)
@@ -113,9 +93,9 @@ namespace ao::query
 
     detail::CompletionToken const* tokenEndingAt(std::span<detail::CompletionToken const> tokens, std::size_t end)
     {
-      auto iter = std::ranges::find(tokens, end, &detail::CompletionToken::end);
+      auto iter = std::ranges::lower_bound(tokens, end, {}, &detail::CompletionToken::end);
 
-      if (iter == tokens.end())
+      if (iter == tokens.end() || iter->end != end)
       {
         return nullptr;
       }
@@ -138,51 +118,10 @@ namespace ao::query
       return &*iter;
     }
 
-    detail::CompletionToken const* previousTokenEndingAt(std::span<detail::CompletionToken const> tokens,
-                                                         std::size_t end)
-    {
-      for (auto const& token : std::views::reverse(tokens))
-      {
-        if (token.end == end)
-        {
-          return &token;
-        }
-      }
-
-      return nullptr;
-    }
-
-    detail::CompletionToken const* previousSignificantTokenBefore(std::span<detail::CompletionToken const> tokens,
-                                                                  std::size_t end)
-    {
-      for (auto const& token : std::views::reverse(tokens))
-      {
-        if (token.end <= end && token.kind != detail::CompletionTokenKind::Whitespace)
-        {
-          return &token;
-        }
-      }
-
-      return nullptr;
-    }
-
     std::size_t skipWhitespaceBefore(std::span<detail::CompletionToken const> tokens, std::size_t cursorPosition)
     {
-      auto cursor = cursorPosition;
-
-      for (;;)
-      {
-        auto const* token = previousTokenEndingAt(tokens, cursor);
-
-        if (token == nullptr || token->kind != detail::CompletionTokenKind::Whitespace)
-        {
-          break;
-        }
-
-        cursor = token->begin;
-      }
-
-      return cursor;
+      auto const* token = tokenEndingAt(tokens, cursorPosition);
+      return token != nullptr && token->kind == detail::CompletionTokenKind::Whitespace ? token->begin : cursorPosition;
     }
 
     bool isSimpleVariableCompletionText(std::string_view text)
@@ -193,7 +132,7 @@ namespace ao::query
 
     bool hasAdjacentIdentifierBefore(std::span<detail::CompletionToken const> tokens, detail::CompletionToken token)
     {
-      auto const* previous = previousTokenEndingAt(tokens, token.begin);
+      auto const* previous = tokenEndingAt(tokens, token.begin);
 
       return previous != nullptr && isIdentifierLikeToken(previous->kind);
     }
@@ -225,15 +164,10 @@ namespace ao::query
              !isSimpleVariableCompletionText(detail::tokenText(text, *token));
     }
 
-    std::optional<QueryCompletionToken> variableCompletionTokenAtCursor(std::string_view text,
-                                                                        std::span<detail::CompletionToken const> tokens,
-                                                                        std::size_t cursor)
+    std::optional<QueryVariableCompletion> variableCompletionAtCursor(std::string_view text,
+                                                                      std::span<detail::CompletionToken const> tokens,
+                                                                      std::size_t cursor)
     {
-      if (cursor == 0 || cursor > text.size())
-      {
-        return std::nullopt;
-      }
-
       auto const* token = tokenEndingAt(tokens, cursor);
 
       if (token == nullptr || (token->kind != detail::CompletionTokenKind::Variable &&
@@ -249,25 +183,15 @@ namespace ao::query
         return std::nullopt;
       }
 
-      return QueryCompletionToken{
+      return QueryVariableCompletion{
         .type = variableTypeForTrigger(value.front()),
-        .replaceBegin = token->begin,
-        .replaceEnd = cursor,
-        .prefix = std::string{value.substr(1)},
+        .replacement = {.replaceBegin = token->begin, .replaceEnd = cursor, .prefix = std::string{value.substr(1)}},
       };
     }
 
-    struct ParsedVariable final
-    {
-      VariableType type = VariableType::Metadata;
-      Field field = Field::Title;
-      std::size_t begin = 0;
-      std::size_t end = 0;
-    };
-
-    std::optional<ParsedVariable> parseVariableEndingAt(std::string_view text,
-                                                        std::span<detail::CompletionToken const> tokens,
-                                                        std::size_t end)
+    std::optional<Field> fieldEndingAt(std::string_view text,
+                                       std::span<detail::CompletionToken const> tokens,
+                                       std::size_t end)
     {
       auto const* token = tokenEndingAt(tokens, end);
 
@@ -279,86 +203,39 @@ namespace ao::query
 
       auto const value = detail::tokenText(text, *token);
 
-      if (value.empty() || !detail::isVariableSigil(value.front()))
-      {
-        return std::nullopt;
-      }
-
       auto const type = variableTypeForTrigger(value.front());
       auto const name = isSimpleVariableCompletionText(value) ? value.substr(1) : std::string_view{};
-      auto optField = detail::lookupVariableField(type, name);
-
-      if (!optField)
-      {
-        return std::nullopt;
-      }
-
-      return ParsedVariable{.type = type, .field = *optField, .begin = token->begin, .end = token->end};
-    }
-
-    struct ParsedOperator final
-    {
-      std::string_view text;
-      std::size_t begin = 0;
-      std::size_t end = 0;
-    };
-
-    std::optional<ParsedOperator> parseOperatorEndingAt(std::string_view text,
-                                                        std::span<detail::CompletionToken const> tokens,
-                                                        std::size_t end)
-    {
-      auto const* token = tokenEndingAt(tokens, end);
-
-      if (token == nullptr)
-      {
-        return std::nullopt;
-      }
-
-      auto const value = detail::tokenText(text, *token);
-
-      if (token->kind == detail::CompletionTokenKind::RelationalOperator)
-      {
-        return ParsedOperator{.text = isEqualIgnoringAsciiCase(value, "in") ? std::string_view{"in"} : value,
-                              .begin = token->begin,
-                              .end = token->end};
-      }
-
-      if (token->kind == detail::CompletionTokenKind::Bareword && isEqualIgnoringAsciiCase(value, "in"))
-      {
-        return ParsedOperator{.text = "in", .begin = token->begin, .end = token->end};
-      }
-
-      return std::nullopt;
+      return detail::lookupVariableField(type, name);
     }
 
     std::optional<detail::CompletionToken> findLastUnclosedListOpen(std::span<detail::CompletionToken const> tokens,
                                                                     std::size_t end)
     {
-      auto stack = std::vector<detail::CompletionToken>{};
+      std::size_t closed = 0;
 
-      for (auto const token : tokens)
+      for (auto const token : std::views::reverse(tokens))
       {
         if (token.end > end)
         {
-          break;
+          continue;
         }
 
-        if (token.kind == detail::CompletionTokenKind::OpenList)
+        if (token.kind == detail::CompletionTokenKind::CloseList)
         {
-          stack.push_back(token);
+          ++closed;
         }
-        else if (token.kind == detail::CompletionTokenKind::CloseList && !stack.empty())
+        else if (token.kind == detail::CompletionTokenKind::OpenList)
         {
-          stack.pop_back();
+          if (closed == 0)
+          {
+            return token;
+          }
+
+          --closed;
         }
       }
 
-      if (stack.empty())
-      {
-        return std::nullopt;
-      }
-
-      return stack.back();
+      return std::nullopt;
     }
 
     std::size_t findValuePrefixStart(std::span<detail::CompletionToken const> tokens, std::size_t cursor)
@@ -367,7 +244,7 @@ namespace ao::query
 
       for (;;)
       {
-        auto const* token = previousTokenEndingAt(tokens, start);
+        auto const* token = tokenEndingAt(tokens, start);
 
         if (token == nullptr || isValuePrefixBoundary(token->kind))
         {
@@ -378,31 +255,6 @@ namespace ao::query
       }
 
       return start;
-    }
-
-    bool hasCompletedExpressionEndingAt(std::string_view text,
-                                        std::span<detail::CompletionToken const> tokens,
-                                        std::size_t end)
-    {
-      if (end == 0)
-      {
-        return false;
-      }
-
-      if (auto optVariable = parseVariableEndingAt(text, tokens, end); optVariable)
-      {
-        return optVariable->type == VariableType::Tag;
-      }
-
-      auto const expression = text.substr(0, end);
-
-      // parse() validates the same grammar as matchesExpressionSyntax() and additionally builds the
-      // AST, returning no value on a grammar mismatch. A single parse() therefore subsumes the
-      // syntactic check: a grammar failure (or a future value callback that fails after a syntactic
-      // match) leaves parsed empty and degrades to "not a completed expression".
-      auto const parsedRes = parse(expression);
-
-      return parsedRes && detail::isPredicateExpression(*parsedRes);
     }
 
     bool isOperatorCompletionPrefixToken(std::string_view text, detail::CompletionToken token)
@@ -454,12 +306,11 @@ namespace ao::query
     {
       auto const valueStart = findValuePrefixStart(tokens, cursor);
       auto operatorEnd = skipWhitespaceBefore(tokens, valueStart);
-      auto const* operatorPrevious = previousSignificantTokenBefore(tokens, operatorEnd);
+      auto const* previous = tokenEndingAt(tokens, operatorEnd);
+      auto const inList = previous != nullptr && (previous->kind == detail::CompletionTokenKind::OpenList ||
+                                                  previous->kind == detail::CompletionTokenKind::Comma);
 
-      if (operatorPrevious != nullptr &&
-          (operatorPrevious->kind == detail::CompletionTokenKind::OpenList ||
-           operatorPrevious->kind == detail::CompletionTokenKind::Comma) &&
-          operatorPrevious->end == operatorEnd)
+      if (inList)
       {
         auto optListOpen = findLastUnclosedListOpen(tokens, operatorEnd);
 
@@ -471,29 +322,30 @@ namespace ao::query
         operatorEnd = skipWhitespaceBefore(tokens, optListOpen->begin);
       }
 
-      auto optOperator = parseOperatorEndingAt(text, tokens, operatorEnd);
+      auto const* op = tokenEndingAt(tokens, operatorEnd);
 
-      if (!optOperator || optOperator->text == "?")
+      if (op == nullptr || op->kind != detail::CompletionTokenKind::RelationalOperator)
       {
         return std::nullopt;
       }
 
-      if (valueStart == cursor && optOperator->end == cursor &&
-          (optOperator->text == "<" || optOperator->text == ">" || optOperator->text == "in"))
+      auto const spelling = detail::tokenText(text, *op);
+      auto const membership = utility::isEqualIgnoringAsciiCase(spelling, "in");
+
+      if ((inList && !membership) || (op->end == cursor && (spelling == "<" || spelling == ">" || membership)))
       {
         return std::nullopt;
       }
 
-      auto const lvalueEnd = skipWhitespaceBefore(tokens, optOperator->begin);
-      auto optVariable = parseVariableEndingAt(text, tokens, lvalueEnd);
+      auto optField = fieldEndingAt(text, tokens, skipWhitespaceBefore(tokens, op->begin));
 
-      if (!optVariable)
+      if (!optField)
       {
         return std::nullopt;
       }
 
       return QueryValueCompletion{
-        .field = optVariable->field,
+        .field = *optField,
         .replacement =
           QueryCompletionReplacement{
             .replaceBegin = valueStart,
@@ -510,25 +362,25 @@ namespace ao::query
       auto prefixStart = cursor;
       auto lvalueEnd = skipWhitespaceBefore(tokens, prefixStart);
 
-      if (auto const* token = previousTokenEndingAt(tokens, cursor);
+      if (auto const* token = tokenEndingAt(tokens, cursor);
           token != nullptr && isOperatorCompletionPrefixToken(text, *token))
       {
         prefixStart = token->begin;
         lvalueEnd = skipWhitespaceBefore(tokens, prefixStart);
       }
 
-      auto optVariable = parseVariableEndingAt(text, tokens, lvalueEnd);
+      auto optField = fieldEndingAt(text, tokens, lvalueEnd);
 
-      if (!optVariable)
+      if (!optField)
       {
         return std::nullopt;
       }
 
       return QueryOperatorCompletion{
-        .field = optVariable->field,
+        .field = *optField,
         .replacement =
           QueryCompletionReplacement{
-            .replaceBegin = optVariable->end,
+            .replaceBegin = lvalueEnd,
             .replaceEnd = cursor,
             .prefix = std::string{text.substr(prefixStart, cursor - prefixStart)},
           },
@@ -543,14 +395,17 @@ namespace ao::query
       auto prefixStart = cursor;
       auto expressionEnd = skipWhitespaceBefore(tokens, prefixStart);
 
-      if (auto const* token = previousTokenEndingAt(tokens, cursor);
+      if (auto const* token = tokenEndingAt(tokens, cursor);
           token != nullptr && isLogicalOperatorCompletionPrefixToken(*token))
       {
         prefixStart = token->begin;
         expressionEnd = skipWhitespaceBefore(tokens, prefixStart);
       }
 
-      if (!hasCompletedExpressionEndingAt(text, tokens, expressionEnd))
+      auto const pastExpression = std::ranges::upper_bound(tokens, expressionEnd, {}, &detail::CompletionToken::end);
+
+      if (!detail::hasCompletionPredicateShape(
+            text.substr(0, expressionEnd), std::span{tokens.begin(), pastExpression}))
       {
         return std::nullopt;
       }
@@ -588,7 +443,7 @@ namespace ao::query
       return std::nullopt;
     }
 
-    if (auto optToken = variableCompletionTokenAtCursor(text, prefixTokens, cursor); optToken)
+    if (auto optToken = variableCompletionAtCursor(text, prefixTokens, cursor); optToken)
     {
       return QueryCompletionAnalysis{*optToken};
     }
@@ -632,8 +487,7 @@ namespace ao::query
 
     for (auto const& descriptor : descriptors)
     {
-      if (startsWithInsensitive(descriptor.canonicalName, prefix) &&
-          !containsCanonical(matches, descriptor.canonicalName))
+      if (startsWithInsensitive(descriptor.canonicalName, prefix) && !hasExactAlias(descriptor, prefix))
       {
         matches.push_back(QueryVariableCompletionMatch{
           .type = descriptor.type,
