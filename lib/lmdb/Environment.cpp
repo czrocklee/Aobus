@@ -134,10 +134,11 @@ namespace ao::lmdb
 
     auto envPtr = EnvPtr{handle};
 
-    // Only a caller that wants one exact map pins it here. Leaving the size
-    // unset is what lets mdb_env_open adopt the size the database persisted,
-    // which the capacity policy below may then raise but never lowers.
-    if (options.pinnedMapBytes > 0)
+    // Without a pin, mdb_env_open adopts the persisted map size. Only then can
+    // the capacity policy raise it.
+    bool const pinned = options.pinnedMapBytes != 0;
+
+    if (pinned)
     {
       if (auto res =
             resultFromCode("mdb_env_set_mapsize",
@@ -191,13 +192,16 @@ namespace ao::lmdb
       return std::unexpected{res.error()};
     }
 
-    if (!readOnly)
+    if (!readOnly && !pinned)
     {
       if (auto res = applyCapacityPolicy(envPtr.get(), options.capacity); !res)
       {
         return std::unexpected{res.error()};
       }
+    }
 
+    if (!readOnly)
+    {
       // A concurrent opener shares the reader table, including slots left by exited processes.
       std::int32_t cleared = 0;
 

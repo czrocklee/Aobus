@@ -96,11 +96,12 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Odd title").artist("Artist");
     builder.tags().add("favorite");
-    builder.customMetadata().add("mood", "calm");
-    builder.property().uri("odd.flac");
+    builder.customMetadata().add("mood", "sad");
+    builder.property().uri("odd-track.flac");
     auto const [preparedHot, preparedCold] = prepareTrack(builder, transaction, fixture.library.resources());
-    auto hotBytes = std::vector<std::byte>(preparedHot.size());
-    auto coldBytes = std::vector<std::byte>(preparedCold.size());
+    // Reserved storage is not required to arrive zeroed. All three payloads need padding.
+    auto hotBytes = std::vector<std::byte>(preparedHot.size(), std::byte{0xff});
+    auto coldBytes = std::vector<std::byte>(preparedCold.size(), std::byte{0xff});
 
     preparedHot.writeTo(hotBytes);
     preparedCold.writeTo(coldBytes);

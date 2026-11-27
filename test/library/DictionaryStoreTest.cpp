@@ -24,7 +24,6 @@
 #include <thread>
 #include <tuple>
 #include <utility>
-#include <vector>
 
 namespace ao::library::test
 {
@@ -278,39 +277,24 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
     auto transaction = writeTransaction(library);
-    constexpr std::int32_t kValueCount = 5000;
-    auto ids = std::vector<DictionaryId>{};
-    ids.reserve(kValueCount);
+    // IDs separated by the cache capacity map to the same slot.
+    auto const first = requireIntern(transaction, "first");
 
-    for (std::int32_t index = 0; index < kValueCount; ++index)
+    for (std::uint32_t index = 1; index < detail::kDictionaryReadCacheCapacity; ++index)
     {
-      ids.push_back(requireIntern(transaction, "value_" + std::to_string(index)));
+      std::ignore = requireIntern(transaction, "filler_" + std::to_string(index));
     }
 
+    auto const second = requireIntern(transaction, "second");
+    REQUIRE(second.raw() == first.raw() + detail::kDictionaryReadCacheCapacity);
     REQUIRE(transaction.commit());
+
     auto cache = DictionaryReadCache{library.dictionary()};
-
-    for (std::int32_t index = 0; index < kValueCount; ++index)
-    {
-      CHECK(cache.get(ids[static_cast<std::size_t>(index)]) == "value_" + std::to_string(index));
-    }
-  }
-
-  TEST_CASE("DictionaryReadContext - binds symbols with one committed generation")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = openTestLibrary(temp);
-    auto transaction = writeTransaction(library);
-    auto const firstId = requireIntern(transaction, "first");
-    REQUIRE(transaction.commit());
-
-    auto context = DictionaryReadContext{library.dictionary()};
-    auto const symbols = std::vector<std::string>{"first", "missing"};
-    auto ids = std::vector<DictionaryId>(symbols.size());
-    auto const generation = context.bind(symbols, ids);
-
-    CHECK(generation == library.dictionary().generation());
-    CHECK(ids == std::vector{firstId, kInvalidDictionaryId});
+    CHECK(cache.get(first) == "first");
+    CHECK(cache.get(first) == "first");
+    CHECK(cache.get(second) == "second");
+    CHECK(cache.get(first) == "first");
+    CHECK(cache.get(second) == "second");
   }
 
   TEST_CASE("DictionaryStore - readers observe complete committed publications", "[concurrency]")

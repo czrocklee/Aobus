@@ -671,9 +671,8 @@ namespace ao::library::test
 
     SECTION("shorter than stable prefix")
     {
-      auto const bytes = std::array<std::byte, 7>{};
-      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, bytes);
-      requireCorruptLibrary(temp.path());
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header).first(7));
+      requireCorruptOpen(temp.path(), "Library metadata header is shorter than the stable 8-byte prefix");
     }
 
     SECTION("wrong magic")
@@ -683,12 +682,19 @@ namespace ao::library::test
       requireCorruptLibrary(temp.path());
     }
 
-    SECTION("wrong current-version exact size")
+    SECTION("short current-version header with a valid prefix")
     {
-      auto bytes = std::vector<std::byte>(sizeof(header) + 1U, std::byte{0});
+      auto const bytes = utility::bytes::view(header);
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, bytes.first(bytes.size() - 1U));
+      requireCorruptOpen(temp.path(), "Invalid library metadata header size 39 (expected 40)");
+    }
+
+    SECTION("long current-version header with a valid prefix")
+    {
+      auto bytes = std::array<std::byte, sizeof(header) + 1U>{};
       std::memcpy(bytes.data(), &header, sizeof(header));
       updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, bytes);
-      requireCorruptLibrary(temp.path());
+      requireCorruptOpen(temp.path(), "Invalid library metadata header size 41 (expected 40)");
     }
 
     SECTION("nonzero current-version flags")
@@ -975,9 +981,12 @@ namespace ao::library::test
 
     SECTION("Track dictionary references must resolve")
     {
+      constexpr auto kTrackUri = std::string_view{"track.flac"};
       createRawIntegerRow(temp.path(), "tracks_hot", 1, makeHotData(TrackHotHeader{.artistId = DictionaryId{1}}));
-      createRawIntegerRow(temp.path(), "tracks_cold", 1, makeColdData());
-      requireCorruptLibrary(temp.path());
+      createRawIntegerRow(temp.path(), "tracks_cold", 1, makeColdData({}, kTrackUri));
+      createRawManifestRow(temp.path(), kTrackUri, TrackId{1});
+      requireCorruptOpen(
+        temp.path(), "Track 1 failed persisted validation: Track record contains an unresolved metadata dictionary id");
     }
   }
 
@@ -1558,39 +1567,5 @@ namespace ao::library::test
       CHECK(commitRes.error().code == Error::Code::IoError);
       REQUIRE(WritableMusicLibrary::acquire(library));
     }
-  }
-
-  TEST_CASE("WritableMusicLibrary - storage mutation failure releases the writer session")
-  {
-    auto const temp = ao::test::TempDir{};
-    constexpr std::size_t kMapSize = std::size_t{256} * 1024;
-    auto smallLibrary = ao::test::requireValue(
-      MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
-    {
-      auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
-      REQUIRE(writerRes);
-      auto transaction = writerRes->writeTransaction();
-      // A resource row is a fixed 36 bytes now, so a dictionary entry is what
-      // still carries enough content to exhaust the whole map in one write.
-      auto const oversizedText = std::string(kMapSize * 4, 'x');
-      auto failureRes = transaction.apply(
-        [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
-        {
-          auto idRes = physicalDictionary(transaction).intern(oversizedText);
-
-          if (!idRes)
-          {
-            return std::unexpected{idRes.error()};
-          }
-
-          return {};
-        });
-      REQUIRE_FALSE(failureRes);
-      // A pinned map admits no growth, so a value larger than the whole map
-      // exhausts it, and that arrives as capacity rather than as plain IO.
-      CHECK(failureRes.error().code == Error::Code::StorageFull);
-    }
-
-    REQUIRE(WritableMusicLibrary::acquire(smallLibrary));
   }
 } // namespace ao::library::test

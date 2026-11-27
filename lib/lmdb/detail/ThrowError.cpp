@@ -7,12 +7,10 @@
 #include "ResultError.h"
 #include "TransactionFailure.h"
 #include <ao/Contract.h>
-#include <ao/Error.h>
 
 #include <lmdb.h>
 
 #include <cstdint>
-#include <format>
 #include <source_location>
 #include <thread>
 
@@ -45,7 +43,7 @@ namespace ao::lmdb
       auto* const consumed = injection.consumed;
       injection = {};
       *consumed = true;
-      return nativeCode == MDB_SUCCESS && injectedCode != MDB_SUCCESS ? injectedCode : nativeCode;
+      return nativeCode == MDB_SUCCESS ? injectedCode : nativeCode;
     }
   } // namespace
 
@@ -94,8 +92,6 @@ namespace ao::lmdb
   [[noreturn]] void throwOnMutationError(char const* origin, std::int32_t code, std::source_location location)
   {
     AO_EXCEPTION_CARRIER(PrivateErrorTransport);
-    throw detail::TransactionFailure{Error{.code = errorCodeFor(code),
-                                           .message = std::format("{}: {}", origin, ::mdb_strerror(code)),
-                                           .location = location}};
+    throw detail::TransactionFailure{lmdbError(origin, code, location)};
   }
 } // namespace ao::lmdb

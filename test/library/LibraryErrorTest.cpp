@@ -24,6 +24,7 @@ namespace ao::library::test
     catch (detail::LibraryException const& ex)
     {
       CHECK(ex.error().code == Error::Code::IoError);
+      CHECK(std::string_view{ex.what()} == "propagated failure");
       CHECK(std::string_view{ex.error().message} == "propagated failure");
       CHECK(ex.error().location.line() == origin.line());
       CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{origin.function_name()});
@@ -46,13 +47,5 @@ namespace ao::library::test
       CHECK(std::string_view{ex.error().location.file_name()} == std::string_view{here.file_name()});
       CHECK(ex.error().location.line() > here.line());
     }
-  }
-
-  TEST_CASE("LibraryException - exposes its Error through what()")
-  {
-    auto const ex = detail::LibraryException{Error::Code::ResourceExhausted, "store full"};
-
-    CHECK(ex.error().code == Error::Code::ResourceExhausted);
-    CHECK(std::string_view{ex.what()} == "store full");
   }
 } // namespace ao::library::test

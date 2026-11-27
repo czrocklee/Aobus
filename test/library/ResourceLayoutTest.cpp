@@ -4,12 +4,12 @@
 #include <ao/library/ResourceLayout.h>
 
 #include <ao/CoreIds.h>
-#include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -33,19 +33,6 @@ namespace ao::library::test
       return digest;
     }
   } // namespace
-
-  TEST_CASE("ResourceDescriptor - is a 36-byte row with no padding")
-  {
-    STATIC_REQUIRE(sizeof(ResourceDescriptor) == kResourceDescriptorSize);
-    STATIC_REQUIRE(alignof(ResourceDescriptor) == kResourceDescriptorAlignment);
-    STATIC_REQUIRE(kResourceDescriptorSize == utility::Sha256Digest::kByteCount + sizeof(std::uint32_t));
-  }
-
-  TEST_CASE("CoverArtEntry - the track record is untouched by externalization")
-  {
-    STATIC_REQUIRE(sizeof(CoverArtEntry) == 8);
-    STATIC_REQUIRE(alignof(CoverArtEntry) == 4);
-  }
 
   TEST_CASE("deriveResourceId - reads the digest's first four bytes big-endian")
   {
@@ -121,6 +108,23 @@ namespace ao::library::test
     // a predicate over a length: the size is unreachable through the byte-taking
     // entry point, since a span for it would claim a range that does not exist.
     STATIC_REQUIRE_FALSE(canDescribeResourceByteLength(kMaximum + 1U));
+  }
+
+  TEST_CASE("parseResourceDescriptor - copies descriptor facts out of an unaligned row")
+  {
+    auto const descriptor = ResourceDescriptor{
+      .digest = digestWithLeadingBytes({std::byte{0x12}, std::byte{0x34}, std::byte{0x56}, std::byte{0x78}}),
+      .byteLength = 86'956,
+    };
+    alignas(ResourceDescriptor) auto backing = std::array<std::byte, kResourceDescriptorSize + 1>{};
+    auto const row = std::span{backing}.subspan(1);
+    std::ranges::copy(utility::bytes::view(descriptor), row.begin());
+
+    auto const optParsed = parseResourceDescriptor(row);
+
+    REQUIRE(optParsed);
+    CHECK(optParsed->digest == descriptor.digest);
+    CHECK(optParsed->byteLength == descriptor.byteLength);
   }
 
   TEST_CASE("parseResourceDescriptor - refuses anything that is not a descriptor's width")

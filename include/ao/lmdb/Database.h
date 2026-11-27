@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -53,7 +52,7 @@ namespace ao::lmdb
     {
     }
 
-    DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
+    DbiHandle _dbi;
 
     friend class detail::DatabaseAccess;
   };
@@ -80,9 +79,7 @@ namespace ao::lmdb
     {
     }
 
-    DbiHandle _dbi = std::numeric_limits<DbiHandle>::max();
-
-    friend class detail::DatabaseAccess;
+    DbiHandle _dbi;
   };
 
   /**

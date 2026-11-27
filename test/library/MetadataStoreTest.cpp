@@ -7,7 +7,7 @@
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include "test/lmdb/LmdbProbeScratch.h"
-#include "test/lmdb/LmdbTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MetadataLayout.h>
@@ -15,83 +15,36 @@
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <chrono>
-#include <cstddef>
 #include <filesystem>
 #include <future>
-#include <span>
 #include <string>
 #include <type_traits>
-#include <vector>
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   static_assert(!std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
   static_assert(std::is_move_constructible_v<ReadTransaction>);
   static_assert(!std::is_copy_constructible_v<ReadTransaction>);
-
-  TEST_CASE("MusicLibrary metadata - open rejects truncated prefixes and invalid current header sizes")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto const databasePath = temp.path() / "db";
-    {
-      auto library = makeTestMusicLibrary(temp.path(), databasePath);
-      CHECK(library.metadataHeader().libraryVersion == kLibraryVersion);
-    }
-
-    auto expectedDiagnostic = std::string{};
-    {
-      auto env = openEnvironment(databasePath, {.flags = MDB_NOTLS, .maxDatabases = 20});
-      auto wtxn = beginWriteTransaction(env);
-      auto db = openIntegerKeyDatabase(wtxn, "meta");
-      auto writer = db.writer(wtxn);
-      auto const optHeader = writer.get(kMetadataHeaderRecordId);
-      REQUIRE(optHeader);
-      REQUIRE(optHeader->size() == kMetadataHeaderSize);
-      auto invalidData = std::vector<std::byte>{optHeader->begin(), optHeader->end()};
-
-      SECTION("truncated stable prefix")
-      {
-        invalidData = {std::byte{0x42}};
-        expectedDiagnostic = "Library metadata header is shorter than the stable 8-byte prefix";
-      }
-
-      SECTION("valid prefix and catalog reach the current-header size guard")
-      {
-        invalidData.pop_back();
-        expectedDiagnostic = "Invalid library metadata header size 39 (expected 40)";
-      }
-
-      REQUIRE(writer.update(kMetadataHeaderRecordId, std::span<std::byte const>{invalidData}));
-      REQUIRE(wtxn.commit());
-    }
-
-    auto const res = MusicLibrary::open(temp.path(), databasePath);
-    REQUIRE_FALSE(res);
-    CHECK(res.error().code == Error::Code::CorruptData);
-    CHECK(res.error().message == expectedDiagnostic);
-  }
 
   TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = library.readTransaction();
+    auto const admitted = library.metadataHeader();
     auto const header = library.metadataHeader(transaction);
 
     CHECK(header.magic == kMetadataMagic);
     CHECK(header.libraryVersion == kLibraryVersion);
+    CHECK(header.libraryId == admitted.libraryId);
+    CHECK(header.createdTime == admitted.createdTime);
   }
 
   TEST_CASE("MusicLibrary metadata - revision candidate publishes exactly once at commit")
@@ -99,15 +52,14 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
 
-    {
-      auto read = library.readTransaction();
-      CHECK(library.libraryRevision(read) == 0);
-    }
+    auto oldRead = library.readTransaction();
+    CHECK(library.libraryRevision(oldRead) == 0);
 
     auto firstWrite = writeTransaction(library);
     CHECK(library.libraryRevision(firstWrite) == 1);
     REQUIRE(firstWrite.commit());
 
+    CHECK(library.libraryRevision(oldRead) == 0);
     {
       auto read = library.readTransaction();
       CHECK(library.libraryRevision(read) == 1);

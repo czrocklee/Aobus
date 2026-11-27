@@ -24,13 +24,11 @@ namespace ao::library
   /**
    * FileManifestView - Unified view of a file manifest entry.
    *
-   * Record contract (see doc/reference/library/storage/database.md):
-   * the constructor runs the O(1) structural gate (fixed-size header fits
-   * and is aligned). A record that fails the gate is a poisoned view:
-   * isValid() reports false, mtime() reports absence, and the other
-   * accessors return zero values. Accessors never throw. FileManifestStore
-   * additionally reports a short record as CorruptData at its
-   * Reader/Writer::get boundary.
+   * The O(1) structural gate requires an aligned header and the exact
+   * record size for its segment count. On failure, isValid() is false and
+   * field accessors return empty or zero values (Available for status).
+   * FileManifestStore also checks record facts and treats post-open
+   * validation failures as invariant faults.
    */
   class FileManifestView final
   {

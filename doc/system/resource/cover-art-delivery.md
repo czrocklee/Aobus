@@ -304,7 +304,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 ## Test map
 
 - [`Sha256Test.cpp`](../../../test/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../../test/library/ResourceLayoutTest.cpp) protect published digest vectors, descriptor bytes, and id derivation.
-- [`ResourceStoreTest.cpp`](../../../test/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including counted observed descriptors and a searched id collision resolved by the probe.
+- [`ResourceStoreTest.cpp`](../../../test/library/ResourceStoreTest.cpp) covers counted and declared descriptors, a fixed colliding pair, and wraparound past the reserved zero id. [`TrackBuilderCoverArtTest.cpp`](../../../test/library/TrackBuilderCoverArtTest.cpp) covers cover references in Track preparation.
 - [`TrackBuilderSnapshotTest.cpp`](../../../test/runtime/library/TrackBuilderSnapshotTest.cpp) protects scan-time conversion from borrowed picture bytes to observed descriptors.
 - [`ResourceByteReadTest.cpp`](../../../test/runtime/resource/ResourceByteReadTest.cpp) protects the walk, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceByteReaderTest.cpp`](../../../test/runtime/resource/ResourceByteReaderTest.cpp) protects callback affinity, absence, both limits, cancellation, lazy index construction, and one rebuild per stale revision across several workers; [`ResourceByteDiskCacheTest.cpp`](../../../test/runtime/resource/ResourceByteDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`RequestCoalescerTest.cpp`](../../../test/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
@@ -317,7 +317,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`AppKitArtworkScenario.mm`](../../../test/macos-appkit/AppKitArtworkScenario.mm) and [`AppKitMediaScenario.mm`](../../../test/macos-appkit/AppKitMediaScenario.mm) protect current-cover replacement, native and MediaPlayer artwork publication, clock-anchor retention, and synchronous-cache-hit publication.
 - [`CoverArtLoaderTest.cpp`](../../../test/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/tui/CoverArtTest.cpp) protect TUI lifetime, the selection-settle window and navigation-burst cost, supported decode, limits, block preview, PNG, and Kitty escapes.
 - [`MprisBridgeTest.cpp`](../../../test/systemmedia/linux/MprisBridgeTest.cpp) covers detected extensions, full-digest naming, independent handle/content behavior, size-only revalidation, missing ids, and URL metadata.
-- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
+- [`LibCommandTest.cpp`](../../../test/cli/LibCommandTest.cpp) covers descriptor listing, verified byte export, and both absence reports.
 
 ## Related documents
 

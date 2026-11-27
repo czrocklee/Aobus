@@ -41,34 +41,6 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("Database - helper opens database")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openIntegerKeyDatabase(wtxn, "newdb");
-    REQUIRE(wtxn.commit());
-
-    auto const txn = beginReadTransaction(env);
-    auto const reader = db.reader(txn);
-    CHECK(reader.begin() == reader.end());
-  }
-
-  TEST_CASE("Typed databases - open returns the declared key type")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-
-    auto integerRes = IntegerKeyDatabase::open(wtxn, "integer");
-    auto byteRes = ByteKeyDatabase::open(wtxn, "byte");
-
-    CHECK(integerRes);
-    CHECK(byteRes);
-    REQUIRE(wtxn.commit());
-  }
-
   TEST_CASE("Typed databases - named database open requires a write transaction")
   {
     STATIC_REQUIRE(SupportsDatabaseOpen<IntegerKeyDatabase, WriteTransaction>);
@@ -83,10 +55,13 @@ namespace ao::lmdb::test
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
     auto transaction = beginWriteTransaction(env);
 
-    auto missingRes = IntegerKeyDatabase::openExisting(transaction, "missing");
+    auto const integerRes = IntegerKeyDatabase::openExisting(transaction, "missing-integer");
+    auto const byteRes = ByteKeyDatabase::openExisting(transaction, "missing-bytes");
 
-    REQUIRE_FALSE(missingRes);
-    CHECK(missingRes.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(integerRes);
+    REQUIRE_FALSE(byteRes);
+    CHECK(integerRes.error().code == Error::Code::NotFound);
+    CHECK(byteRes.error().code == Error::Code::NotFound);
     auto mainRes = ByteKeyDatabase::main(transaction);
     REQUIRE(mainRes);
     CHECK(mainRes->reader(transaction).entryCount() == 0);

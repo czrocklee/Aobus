@@ -40,7 +40,7 @@ cc_library(
     ],
 )
 
-# Test-only include spelling lib/lmdb/.... ResultError.h includes <lmdb.h>.
+# Test-only include spelling lib/lmdb/....
 cc_library(
     name = "test_headers",
     testonly = True,
@@ -57,8 +57,5 @@ cc_library(
     include_prefix = "lib/lmdb",
     strip_include_prefix = ".",
     visibility = ["//test:__pkg__"],
-    deps = [
-        "//include:lmdb_headers",
-        "@aobus_native_deps//:lmdb",
-    ],
+    deps = ["//include:lmdb_headers"],
 )

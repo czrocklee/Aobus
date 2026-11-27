@@ -46,7 +46,8 @@ namespace ao::library
       std::uint32_t maxReaders = kDefaultMaxReaders;
 
       /**
-       * Pins the database's capacity at exactly this many bytes, with no growth.
+       * Requests a fixed map size, bypassing managed growth. LMDB still maps
+       * at least the space already occupied by committed pages.
        *
        * Zero instead selects managed capacity: a fresh database starts at the
        * library floor, an existing one keeps at least the capacity it recorded,
@@ -98,12 +99,20 @@ namespace ao::library
     MusicLibrary& operator=(MusicLibrary&&) noexcept;
 
     ReadTransaction readTransaction() const;
+    /// The committed revision visible to this read snapshot.
     std::uint64_t libraryRevision(ReadTransaction const& transaction) const;
+    /// The active operation's candidate revision, not yet committed.
     std::uint64_t libraryRevision(LibraryWrite const& write) const;
+    /// The candidate revision assigned to this writer; only a successful commit publishes it.
     std::uint64_t libraryRevision(WriteTransaction const& transaction) const;
+
+    /// The immutable header admitted when this library opened.
     MetadataHeader metadataHeader() const;
+    /// The header captured from this read snapshot.
     MetadataHeader metadataHeader(ReadTransaction const& transaction) const;
+    /// The header captured by the active operation's write transaction.
     MetadataHeader metadataHeader(LibraryWrite const& write) const;
+    /// The header captured when this write transaction began.
     MetadataHeader metadataHeader(WriteTransaction const& transaction) const;
 
     TrackStore const& tracks() const;

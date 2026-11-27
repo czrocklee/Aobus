@@ -10,10 +10,12 @@
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/CoreIds.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/Credits.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/utility/Sha256.h>
 
 #include <boost/container_hash/hash.hpp>
@@ -176,7 +178,7 @@ namespace ao::library::detail
   {
     auto plan = ColdInputs{resources};
     auto const& metadata = builder.metadata();
-    plan._prepared.snapshot(&builder);
+    plan._prepared.snapshot(builder);
     plan._movementNumber = metadata.movementNumber();
     plan._movementTotal = metadata.movementTotal();
     plan._date = metadata.recordingDate();
@@ -269,15 +271,18 @@ namespace ao::library::detail
   {
     try
     {
-      _prepared._workId = terms.resolve(_work);
-      _prepared._movementId = terms.resolve(_movement);
-      _prepared._credits.reserve(_credits.size());
+      auto const work = TrackWorkBlock{.workId = terms.resolve(_work),
+                                       .movementId = terms.resolve(_movement),
+                                       .movementNumber = _movementNumber,
+                                       .movementTotal = _movementTotal};
+      auto credits = std::vector<TrackCreditEntry>{};
+      credits.reserve(_credits.size());
 
       for (auto const& credit : _credits)
       {
-        _prepared._credits.push_back({.nameId = terms.resolve(credit.name),
-                                      .roleId = terms.resolve(credit.role),
-                                      .kind = static_cast<std::uint8_t>(credit.kind)});
+        credits.push_back({.nameId = terms.resolve(credit.name),
+                           .roleId = terms.resolve(credit.role),
+                           .kind = static_cast<std::uint8_t>(credit.kind)});
       }
 
       auto pairs = std::vector<std::pair<DictionaryId, std::string>>{};
@@ -294,18 +299,18 @@ namespace ao::library::detail
       }
 
       std::ranges::sort(pairs, {}, &std::pair<DictionaryId, std::string>::first);
-      _prepared._coverArt.reserve(_covers.size());
+      auto covers = std::vector<CoverArt>{};
+      covers.reserve(_covers.size());
 
       for (auto const& cover : _covers)
       {
-        _prepared._coverArt.push_back(
-          {.resourceId = resolveCover(cover.source, terms._transaction), .type = cover.type});
+        covers.push_back({.resourceId = resolveCover(cover.source, terms._transaction), .type = cover.type});
       }
 
-      _prepared.appendCoverArtBlock();
-      _prepared.appendWorkBlock(_movementNumber, _movementTotal);
+      _prepared.appendCoverArtBlock(covers);
+      _prepared.appendWorkBlock(work);
       _prepared.appendCustomMetadataBlock(pairs);
-      _prepared.appendPerformanceBlock(_date);
+      _prepared.appendPerformanceBlock(_date, credits);
 
       if (_optSegment)
       {

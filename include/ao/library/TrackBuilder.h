@@ -61,7 +61,7 @@ namespace ao::library
    *   // Pattern B: create new track
    *   auto builder = TrackBuilder::makeEmpty();
    *   builder.metadata().title("Song").artist("Artist").album("Album");
-   *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
+   *   builder.property().uri("song.flac").bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.customMetadata().add("key", "value");
    *   auto writer = write.tracks();
@@ -353,13 +353,13 @@ namespace ao::library
       friend class detail::TrackPreparation;
 
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
-      void appendCoverArtBlock();
-      void appendWorkBlock(std::uint16_t movementNumber, std::uint16_t movementTotal);
-      void appendPerformanceBlock(RecordingDate date);
+      void appendCoverArtBlock(std::span<CoverArt const> covers);
+      void appendWorkBlock(TrackWorkBlock const& work);
+      void appendPerformanceBlock(RecordingDate date, std::span<TrackCreditEntry const> credits);
       void appendSegmentBlock(TrackSegment const& segment);
       void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string>> const& resolvedPairs);
       void assignLayout(std::string_view uri);
-      void snapshot(TrackBuilder const* builder);
+      void snapshot(TrackBuilder const& builder);
 
       struct PreparedBlock final
       {
@@ -368,7 +368,6 @@ namespace ao::library
       };
 
       std::string _uri;
-      std::vector<CoverArt> _coverArt;
       std::vector<PreparedBlock> _blocks;
       std::array<std::uint16_t, kTrackColdBlockSlotCount> _blockOffsets{};
       TrackDuration _duration{};
@@ -379,9 +378,6 @@ namespace ao::library
       std::uint16_t _discTotal = 0;
       std::uint16_t _uriOffset = 0;
       std::uint16_t _uriLength = 0;
-      DictionaryId _workId = kInvalidDictionaryId;
-      DictionaryId _movementId = kInvalidDictionaryId;
-      std::vector<TrackCreditEntry> _credits{};
       Channels _channels{};
       std::size_t _size = 0;
 

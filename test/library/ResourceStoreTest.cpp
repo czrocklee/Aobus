@@ -3,6 +3,7 @@
 
 #include <ao/library/ResourceStore.h>
 
+#include "test/TestFixtureSupport.h"
 #include "test/library/LibraryStoreTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -15,59 +16,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <span>
+#include <limits>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 namespace ao::library::test
 {
   namespace
   {
-    /**
-     * @brief Two byte strings whose handles collide but whose digests differ.
-     *
-     * A handle is the digest's first four bytes, so a collision is a 32-bit
-     * birthday event: searching short inputs upward from zero finds one in a few
-     * tens of thousands of hashes, deterministically, because SHA-256 is fixed.
-     * Searching rather than hard-coding keeps the pair honest — a constant would
-     * silently stop colliding if the derivation ever changed.
-     */
-    std::pair<std::vector<std::byte>, std::vector<std::byte>> findHandleCollision()
-    {
-      constexpr std::uint32_t kSearchLimit = 4'000'000;
-      auto seen = std::unordered_map<std::uint32_t, std::uint32_t>{};
-
-      for (std::uint32_t candidate = 0; candidate < kSearchLimit; ++candidate)
-      {
-        auto const bytes = std::array{static_cast<std::byte>(candidate & 0xFFU),
-                                      static_cast<std::byte>((candidate >> 8U) & 0xFFU),
-                                      static_cast<std::byte>((candidate >> 16U) & 0xFFU),
-                                      static_cast<std::byte>((candidate >> 24U) & 0xFFU)};
-        auto const handle = deriveResourceId(utility::computeSha256(bytes)).raw();
-        auto const [entry, inserted] = seen.emplace(handle, candidate);
-
-        if (inserted)
-        {
-          continue;
-        }
-
-        auto const makeBytes = [](std::uint32_t const value)
-        {
-          return std::vector{static_cast<std::byte>(value & 0xFFU),
-                             static_cast<std::byte>((value >> 8U) & 0xFFU),
-                             static_cast<std::byte>((value >> 16U) & 0xFFU),
-                             static_cast<std::byte>((value >> 24U) & 0xFFU)};
-        };
-        return {makeBytes(entry->second), makeBytes(candidate)};
-      }
-
-      return {};
-    }
-
     std::size_t rowCount(ResourceStore::Reader const& reader)
     {
       std::size_t count = 0;
@@ -140,11 +96,11 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - a handle collision occupies two rows resolved by the probe")
   {
-    auto const [first, second] = findHandleCollision();
-    REQUIRE_FALSE(first.empty());
-    REQUIRE_FALSE(second.empty());
-    auto const firstDigest = utility::computeSha256(first);
-    auto const secondDigest = utility::computeSha256(second);
+    // Both inputs have SHA-256 prefix dc478bbc, but distinct full digests.
+    constexpr auto kFirst = std::array{std::byte{0xeb}, std::byte{0x2f}, std::byte{0}, std::byte{0}};
+    constexpr auto kSecond = std::array{std::byte{0xcb}, std::byte{0x80}, std::byte{0}, std::byte{0}};
+    auto const firstDigest = utility::computeSha256(kFirst);
+    auto const secondDigest = utility::computeSha256(kSecond);
     REQUIRE(firstDigest != secondDigest);
     auto const homeKey = deriveResourceId(firstDigest);
     REQUIRE(deriveResourceId(secondDigest) == homeKey);
@@ -155,9 +111,9 @@ namespace ao::library::test
 
     auto writeTxn = writeTransaction(library);
     auto writer = physicalWriter(store, writeTxn);
-    auto firstIdRes = writer.create(first);
+    auto firstIdRes = writer.create(kFirst);
     REQUIRE(firstIdRes);
-    auto secondIdRes = writer.create(second);
+    auto secondIdRes = writer.create(kSecond);
     REQUIRE(secondIdRes);
 
     // The first content keeps the shared home key; the second is displaced one
@@ -167,7 +123,7 @@ namespace ao::library::test
 
     // A later create for the displaced content finds its existing row rather than
     // minting a second one for content that already has one.
-    auto repeatRes = writer.create(second);
+    auto repeatRes = writer.create(kSecond);
     REQUIRE(repeatRes);
     CHECK(*repeatRes == *secondIdRes);
     REQUIRE(writeTxn.commit());
@@ -179,6 +135,36 @@ namespace ao::library::test
     CHECK(reader.get(*firstIdRes)->digest == firstDigest);
     REQUIRE(reader.get(*secondIdRes));
     CHECK(reader.get(*secondIdRes)->digest == secondDigest);
+  }
+
+  TEST_CASE("ResourceStore - colliding handles wrap past the reserved zero id")
+  {
+    auto digest = utility::Sha256Digest{};
+    digest.bytes.fill(std::byte{0xff});
+    auto const first = ResourceDescriptor{.digest = digest, .byteLength = 1};
+    digest.bytes.back() = std::byte{0};
+    auto const second = ResourceDescriptor{.digest = digest, .byteLength = 2};
+
+    auto fixture = LibraryStoreFixture{};
+    auto const& store = fixture.library.resources();
+    auto transaction = writeTransaction(fixture.library);
+    auto writer = physicalWriter(store, transaction);
+    auto const firstId = ao::test::requireValue(writer.getOrCreate(first));
+    auto const secondId = ao::test::requireValue(writer.getOrCreate(second));
+    CHECK(firstId == ResourceId{std::numeric_limits<std::uint32_t>::max()});
+    CHECK(secondId == ResourceId{1});
+    CHECK(ao::test::requireValue(writer.getOrCreate(second)) == secondId);
+    REQUIRE(transaction.commit());
+
+    auto const readTransaction = fixture.library.readTransaction();
+    auto const reader = store.reader(readTransaction);
+    CHECK(rowCount(reader) == 2);
+    auto const optFirst = reader.get(firstId);
+    auto const optSecond = reader.get(secondId);
+    REQUIRE(optFirst);
+    REQUIRE(optSecond);
+    CHECK(optFirst->digest == first.digest);
+    CHECK(optSecond->digest == second.digest);
   }
 
   TEST_CASE("ResourceStore - a counted length corrects a row and a declared one never does")

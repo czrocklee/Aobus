@@ -834,7 +834,7 @@ namespace ao::library::test
       return 3;
     }
 
-    std::int32_t runPostOpenListParentCycle(std::string_view const scratchName)
+    std::int32_t runPostOpenListParentCycle(std::string_view const scratchName, bool const removeSubtree)
     {
       if (scratchName.empty())
       {
@@ -896,8 +896,16 @@ namespace ao::library::test
         return 3;
       }
 
-      auto candidate = ListBuilder::makeEmpty().name("Candidate").parentId(*firstIdRes);
       auto triggerTransaction = writableRes->writeTransaction();
+
+      if (removeSubtree)
+      {
+        std::ignore = triggerTransaction.apply([rootId = *firstIdRes](LibraryWrite& write)
+                                               { return write.lists().removeSubtree(rootId); });
+        return 3;
+      }
+
+      auto candidate = ListBuilder::makeEmpty().name("Candidate").parentId(*firstIdRes);
       std::ignore =
         triggerTransaction.apply([&candidate](LibraryWrite& write) { return write.lists().create(candidate); });
       return 3;
@@ -2195,7 +2203,12 @@ namespace ao::library::test
 
     if (name == "post-open-list-parent-cycle")
     {
-      return runPostOpenListParentCycle(scratchName);
+      return runPostOpenListParentCycle(scratchName, false);
+    }
+
+    if (name == "post-open-list-subtree-cycle")
+    {
+      return runPostOpenListParentCycle(scratchName, true);
     }
 
     if (name == "post-open-manifest-binding-breach")

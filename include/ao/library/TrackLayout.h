@@ -22,9 +22,8 @@ namespace ao::library
 {
   /**
    * Storage representation for a track's duration: a millisecond span backed by a 32-bit
-   * signed integer. Sized to fit the on-disk header (4 bytes, same byte layout as the
-   * previous std::uint32_t); the signed int32 range (~24.8 days) is far beyond any real
-   * track. Widens implicitly and losslessly to std::chrono::milliseconds at use sites.
+   * signed integer. The on-disk field occupies four bytes and widens losslessly
+   * to std::chrono::milliseconds at use sites.
    */
   using TrackDuration = std::chrono::duration<std::int32_t, std::milli>;
   /**
@@ -39,10 +38,9 @@ namespace ao::library
    * Layout:
    *   ┌─────────────────────────────────────┐  ← hot data begin
    *   │        TrackHotHeader (36B)         │
-   *   │  tagBloom, sampleRate,              │
-   *   │  artistId, albumId,                 │
+   *   │  tagBloom, artistId, albumId,       │
    *   │  genreId, albumArtistId,            │
-   *   │  composerId, year,                  │
+   *   │  composerId, sampleRate, year,      │
    *   │  titleLength, tagLengthAndFlags,    │
    *   │  bitDepth, codec                    │
    *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
@@ -162,13 +160,20 @@ namespace ao::library
     Segment = 4,
   };
 
-  constexpr std::size_t kTrackColdKnownBlockSlotCount = 5;
-  constexpr std::size_t kTrackColdBlockSlotCount = 5;
-
   constexpr std::size_t trackColdBlockSlotIndex(TrackColdBlockSlot slot) noexcept
   {
     return static_cast<std::size_t>(slot);
   }
+
+  constexpr std::size_t kTrackColdBlockSlotCount = 5; // Fixed by the persisted header.
+  constexpr auto kTrackColdKnownBlockSlotCount = trackColdBlockSlotIndex(TrackColdBlockSlot::Segment) + 1;
+
+  static_assert(kTrackColdKnownBlockSlotCount <= kTrackColdBlockSlotCount);
+  static_assert(trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt) == 0);
+  static_assert(trackColdBlockSlotIndex(TrackColdBlockSlot::Work) == 1);
+  static_assert(trackColdBlockSlotIndex(TrackColdBlockSlot::CustomMetadata) == 2);
+  static_assert(trackColdBlockSlotIndex(TrackColdBlockSlot::Performance) == 3);
+  static_assert(trackColdBlockSlotIndex(TrackColdBlockSlot::Segment) == 4);
 
   constexpr std::uint16_t kMaxTrackSegmentOrdinal = 99;
 
@@ -332,8 +337,8 @@ namespace ao::library
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - duration, bitrate, channels: audio properties
-   *   - trackNumber, trackTotal, discNumber, discTotal: display only
-   *   - extension block area: cover art, work, custom metadata, performance
+   *   - trackNumber, trackTotal, discNumber, discTotal: track and disc numbering
+   *   - extension block area: cover art, work, custom metadata, performance, segment
    *   - uri: playback path, stored after the block area
    *
    * Total size: 32 bytes with 4-byte alignment. The whole record, header

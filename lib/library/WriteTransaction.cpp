@@ -4,7 +4,6 @@
 #include <ao/library/WriteTransaction.h>
 
 #include "LibraryIdentity.h"
-#include "MetadataState.h"
 #include "MetadataStore.h"
 #include "WriteTransactionAccess.h"
 #include "detail/LibraryError.h"
@@ -33,7 +32,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <shared_mutex>
 #include <utility>
 
 namespace ao::library
@@ -50,8 +48,8 @@ namespace ao::library
          DictionaryStore& dictionary,
          FileManifestStore& manifestValue,
          MetadataStore& metadataValue,
-         detail::MetadataState& metadataStateValue,
-         detail::MetadataSnapshot metadataSnapshot,
+         MetadataHeader metadataHeader,
+         std::uint64_t revision,
          IdSpace committedIdSpaceValue,
          detail::LibraryIdentity const& libraryIdentity,
          Options options,
@@ -64,10 +62,9 @@ namespace ao::library
       , resources{&resourcesValue}
       , manifest{&manifestValue}
       , metadata{&metadataValue}
-      , metadataState{&metadataStateValue}
-      , header{metadataSnapshot.header}
-      , previousRevision{metadataSnapshot.revision}
-      , candidateRevision{metadataSnapshot.revision + 1U}
+      , header{metadataHeader}
+      , previousRevision{revision}
+      , candidateRevision{revision + 1U}
       , committedIdSpace{committedIdSpaceValue}
       , identity{&libraryIdentity}
       , optInjectedCommitFailure{std::move(options.optInjectedCommitFailure)}
@@ -80,11 +77,6 @@ namespace ao::library
       operationActive = false;
       dictionaryWriter.rollbackPublication();
       transaction.abort();
-
-      if (metadataPublicationLock.owns_lock())
-      {
-        metadataPublicationLock.unlock();
-      }
 
       if (writerGate.owns_lock())
       {
@@ -124,12 +116,10 @@ namespace ao::library
     ResourceStore* resources;
     FileManifestStore* manifest;
     MetadataStore* metadata;
-    detail::MetadataState* metadataState;
     MetadataHeader header{};
     std::uint64_t previousRevision = 0;
     std::uint64_t candidateRevision = 0;
     IdSpace committedIdSpace{};
-    std::unique_lock<std::shared_mutex> metadataPublicationLock;
     std::optional<TrackStore::Writer> optTrackWriter;
     std::optional<ListStore::Writer> optListWriter;
     std::optional<ResourceStore::Writer> optResourceWriter;
@@ -147,7 +137,6 @@ namespace ao::library
                                                    DictionaryStore& dictionary,
                                                    FileManifestStore& manifest,
                                                    MetadataStore& metadata,
-                                                   detail::MetadataState& metadataState,
                                                    detail::LibraryIdentity const& identity,
                                                    Options options,
                                                    std::shared_ptr<void const> writerSessionAnchorPtr)
@@ -167,15 +156,16 @@ namespace ao::library
       return std::unexpected{transactionRes.error()};
     }
 
-    auto metadataSnapshot = detail::MetadataSnapshot{};
+    auto metadataHeader = MetadataHeader{};
+    std::uint64_t revision = 0;
     auto committedIdSpace = IdSpace{};
 
     try
     {
       auto headerRes = metadata.load(*transactionRes);
       AO_INVARIANT(headerRes, "Library metadata header failed after open validation: {}", headerRes.error().message);
-      metadataSnapshot.header = *headerRes;
-      metadataSnapshot.revision = metadata.revision(*transactionRes);
+      metadataHeader = *headerRes;
+      revision = metadata.revision(*transactionRes);
       committedIdSpace = metadata.idSpace(*transactionRes);
     }
     catch (lmdb::detail::TransactionFailure const& failure)
@@ -183,8 +173,7 @@ namespace ao::library
       return std::unexpected{failure.error()};
     }
 
-    AO_INVARIANT(metadataSnapshot.revision < std::numeric_limits<std::uint64_t>::max() - 1U,
-                 "Library revision space is exhausted");
+    AO_INVARIANT(revision < std::numeric_limits<std::uint64_t>::max() - 1U, "Library revision space is exhausted");
 
     auto implPtr = std::make_unique<Impl>(std::move(writerGate),
                                           std::move(*transactionRes),
@@ -194,8 +183,8 @@ namespace ao::library
                                           dictionary,
                                           manifest,
                                           metadata,
-                                          metadataState,
-                                          metadataSnapshot,
+                                          metadataHeader,
+                                          revision,
                                           committedIdSpace,
                                           identity,
                                           std::move(options),
@@ -348,9 +337,6 @@ namespace ao::library
     try
     {
       _implPtr->dictionaryWriter.preparePublication();
-      _implPtr->metadataPublicationLock = std::unique_lock{_implPtr->metadataState->_mutex};
-      AO_INVARIANT(_implPtr->metadataState->_revision <= _implPtr->previousRevision,
-                   "Published library revision is ahead of the durable write snapshot");
 
       if (auto const candidateIdSpace = _implPtr->candidateIdSpace(*this);
           candidateIdSpace != _implPtr->committedIdSpace)
@@ -392,8 +378,6 @@ namespace ao::library
     }
 
     _implPtr->dictionaryWriter.publish();
-    _implPtr->metadataState->_revision = _implPtr->candidateRevision;
-    _implPtr->metadataPublicationLock.unlock();
     _implPtr->writerGate.unlock();
     _implPtr->writerSessionAnchorPtr.reset();
     return {};

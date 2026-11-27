@@ -8,6 +8,7 @@
 #include "test/library/LibraryStoreTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -25,7 +26,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::library::test
@@ -211,12 +211,8 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.manifest();
 
-    SECTION("FileManifestStore::Reader returns nullopt for non-existent entry")
-    {
-      auto const rtxnObj = fixture.library.readTransaction();
-      auto const optView = store.reader(rtxnObj).get("nonexistent.flac");
-      CHECK_FALSE(optView);
-    }
+    auto const rtxn = library.readTransaction();
+    CHECK_FALSE(store.reader(rtxn).get("nonexistent.flac"));
   }
 
   TEST_CASE("FileManifestStore::Reader - lowerBound seeks by canonical URI order")
@@ -229,7 +225,7 @@ namespace ao::library::test
     auto builder = FileManifestBuilder::makeEmpty();
     builder.fileSize(123).mtime(FileTimestamp{.seconds = 1719835200}).status(FileStatus::Available);
 
-    for (auto const uri : std::array<std::string_view, 3>{"alpha.flac", "delta.flac", "omega.flac"})
+    for (auto const uri : std::array<std::string_view, 3>{"abcde", "a", "abcd"})
     {
       auto const prepared = ao::test::requireValue(builder.validate(uri)).bind(TrackId{42});
       REQUIRE(writer.put(prepared));
@@ -241,21 +237,26 @@ namespace ao::library::test
 
     SECTION("exact URI")
     {
-      auto const it = reader.lowerBound("delta.flac");
+      auto it = reader.lowerBound("abcd");
       REQUIRE(it != reader.end());
-      CHECK((*it).first == "delta.flac");
+      CHECK((*it).first == "abcd");
+      ++it;
+      REQUIRE(it != reader.end());
+      CHECK((*it).first == "abcde");
+      ++it;
+      CHECK(it == reader.end());
     }
 
     SECTION("URI between stored keys")
     {
-      auto const it = reader.lowerBound("echo.flac");
+      auto const it = reader.lowerBound("ab");
       REQUIRE(it != reader.end());
-      CHECK((*it).first == "omega.flac");
+      CHECK((*it).first == "abcd");
     }
 
     SECTION("URI after the final key")
     {
-      CHECK(reader.lowerBound("zulu.flac") == reader.end());
+      CHECK(reader.lowerBound("z") == reader.end());
     }
   }
 
@@ -281,7 +282,7 @@ namespace ao::library::test
     CHECK_FALSE(optView);
   }
 
-  TEST_CASE("FileManifestStore - failed preparation cannot mutate the Store")
+  TEST_CASE("FileManifestPayload - rejects malformed membership, size, and modification times")
   {
     auto const serialize = [](FileManifestHeader const& header)
     {
@@ -290,8 +291,9 @@ namespace ao::library::test
       return bytes;
     };
     auto validHeader = FileManifestHeader{.trackId = TrackId{1}};
-    auto nonzeroPadding = validHeader;
-    nonzeroPadding.segmentCount = 100;
+    auto truncatedCarrier = validHeader;
+    truncatedCarrier.trackId = kInvalidTrackId;
+    truncatedCarrier.segmentCount = 1;
     auto zeroTrack = validHeader;
     zeroTrack.trackId = kInvalidTrackId;
     auto invalidMtimeFlag = validHeader;
@@ -312,8 +314,8 @@ namespace ao::library::test
     auto const invalidPayloads = std::array{
       InvalidPayloadCase{.name = "short", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) - 1)},
       InvalidPayloadCase{.name = "long", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) + 1)},
-      InvalidPayloadCase{.name = "padding", .payload = serialize(nonzeroPadding)},
-      InvalidPayloadCase{.name = "zero-track", .payload = serialize(zeroTrack)},
+      InvalidPayloadCase{.name = "missing carrier tail", .payload = serialize(truncatedCarrier)},
+      InvalidPayloadCase{.name = "zero whole-file Track id", .payload = serialize(zeroTrack)},
       InvalidPayloadCase{.name = "mtime-flag", .payload = serialize(invalidMtimeFlag)},
       InvalidPayloadCase{.name = "mtime-absent-seconds", .payload = serialize(noncanonicalAbsentSeconds)},
       InvalidPayloadCase{.name = "mtime-absent-nanoseconds", .payload = serialize(noncanonicalAbsentNanoseconds)},
@@ -326,42 +328,6 @@ namespace ao::library::test
       auto const validationRes = validateFileManifestPayload(invalid.payload);
       REQUIRE_FALSE(validationRes);
       CHECK(validationRes.error().code == Error::Code::CorruptData);
-    }
-
-    // A zero Track id is no longer a preparation fact: validation is independent
-    // of the binding, and only the complete payload validator above rejects it.
-    auto const invalidCandidates = std::array{
-      std::pair{"status", FileManifestBuilder::makeEmpty().status(static_cast<FileStatus>(0xff))},
-      std::pair{"length", FileManifestBuilder::makeEmpty().audioPayloadLength(1)},
-      std::pair{"signature", FileManifestBuilder::makeEmpty().audioSignature(utility::xxh3Hash128("signature"))},
-      std::pair{"mtime-nanoseconds",
-                FileManifestBuilder::makeEmpty().mtime(FileTimestamp{.seconds = 1, .nanoseconds = 1000000000})},
-    };
-
-    auto fixture = LibraryStoreFixture{};
-    auto transaction = writeTransaction(fixture.library);
-    auto writer = physicalWriter(fixture.library.manifest(), transaction);
-
-    for (auto const& [name, builder] : invalidCandidates)
-    {
-      auto const uri = std::string{name} + ".flac";
-      CAPTURE(name);
-      auto const unboundRes = builder.validate(uri);
-      REQUIRE_FALSE(unboundRes);
-      CHECK(unboundRes.error().code == Error::Code::CorruptData);
-      auto const optStagedRead = writer.get(uri);
-      CHECK_FALSE(optStagedRead);
-    }
-
-    REQUIRE(transaction.commit());
-    auto readTransaction = fixture.library.readTransaction();
-    auto reader = fixture.library.manifest().reader(readTransaction);
-
-    for (auto const& [name, builder] : invalidCandidates)
-    {
-      std::ignore = builder;
-      auto const optResult = reader.get(std::string{name} + ".flac");
-      CHECK_FALSE(optResult);
     }
   }
 } // namespace ao::library::test

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace ao::lmdb::test
@@ -37,7 +38,9 @@ namespace ao::lmdb::test
       REQUIRE(IntegerKeyDatabase::open(transaction, "other"));
       auto mainRes = ByteKeyDatabase::main(transaction);
       REQUIRE(mainRes);
-      REQUIRE(mainRes->writer(transaction).create(createStringData("ordinary"), createStringData("catalog value")));
+      // Named entries in the LMDB 1.0 catalog use the terminating NUL too.
+      auto const catalogKey = std::string{"ordinary"} + '\0';
+      REQUIRE(mainRes->writer(transaction).create(createStringData(catalogKey), createStringData("catalog value")));
       REQUIRE(transaction.commit());
     }
 

@@ -299,11 +299,15 @@ namespace ao::library::test
     duplicate.metadata().title("Duplicate");
     duplicate.property().uri("shared.flac");
 
-    auto createRes = transaction.apply([&duplicate](LibraryWrite& write)
-                                       { return write.tracks().create(duplicate, FileManifestBuilder::makeEmpty()); });
-
-    REQUIRE_FALSE(createRes);
-    CHECK(createRes.error().code == Error::Code::Conflict);
+    REQUIRE(transaction.apply(
+      [&duplicate](LibraryWrite& write) -> Result<>
+      {
+        auto const createRes = write.tracks().create(duplicate, FileManifestBuilder::makeEmpty());
+        REQUIRE_FALSE(createRes);
+        CHECK(createRes.error().code == Error::Code::Conflict);
+        return {};
+      }));
+    REQUIRE(transaction.commit());
     auto readTransaction = library.readTransaction();
     CHECK(library.tracks().reader(readTransaction).entryCount() == 1);
     auto const optTrack = library.tracks().reader(readTransaction).get(firstId);
@@ -789,6 +793,10 @@ namespace ao::library::test
         return {};
       }));
     REQUIRE(retry.commit());
+    auto const read = library.readTransaction();
+    auto const optView = library.tracks().reader(read).get(id);
+    REQUIRE(optView);
+    CHECK(soleRoleId(*optView) == *failedRoleRes);
     CHECK_FALSE(library.dictionary().findId("Discarded"));
     CHECK(library.dictionary().findId("Pianist") == *failedRoleRes);
   }
@@ -842,18 +850,19 @@ namespace ao::library::test
     auto const trackId = addTrack(library, TrackSpec{.title = "Before", .uri = "before.flac"});
     auto transaction = writeTransaction(library);
 
-    auto updateRes = transaction.apply(
-      [&](LibraryWrite& write)
+    REQUIRE(transaction.apply(
+      [&](LibraryWrite& write) -> Result<>
       {
         auto writer = write.tracks();
         auto track = loadForEdit(writer, trackId);
         track.metadata().title("Rejected");
         track.property().uri("after.flac");
-        return writer.update(trackId, track);
-      });
-
-    REQUIRE_FALSE(updateRes);
-    CHECK(updateRes.error().code == Error::Code::InvalidInput);
+        auto const updateRes = writer.update(trackId, track);
+        REQUIRE_FALSE(updateRes);
+        CHECK(updateRes.error().code == Error::Code::InvalidInput);
+        return {};
+      }));
+    REQUIRE(transaction.commit());
 
     auto readTransaction = library.readTransaction();
     auto const optTrack = library.tracks().reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);

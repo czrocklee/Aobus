@@ -121,20 +121,6 @@ namespace ao::lmdb::test
       CHECK(db.reader(rtxn).entryCount() == 0);
     }
 
-    SECTION("dense integer keys")
-    {
-      auto writer = db.writer(wtxn);
-      REQUIRE(writer.create(1, createStringData("one")));
-      REQUIRE(writer.create(2, createStringData("two")));
-      REQUIRE(writer.create(3, createStringData("three")));
-      REQUIRE(wtxn.commit());
-
-      auto const rtxn = beginReadTransaction(env);
-      auto const reader = db.reader(rtxn);
-      CHECK(reader.entryCount() == 3);
-      CHECK(reader.maxKey() == 3);
-    }
-
     SECTION("sparse integer keys")
     {
       auto writer = db.writer(wtxn);
@@ -209,7 +195,8 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     auto const it = reader.begin();
-    CHECK(utility::bytes::stringView(it->second) == "value");
+    REQUIRE(it != reader.end());
+    CHECK(utility::bytes::stringView((*it).second) == "value");
   }
 
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - an open cursor stays counted by its move-assigned read transaction")

@@ -128,7 +128,7 @@ Queued delivery retains only weak bus state, and coordinator acknowledgements re
 
 ## Persistence and versioning
 
-Revision zero represents no committed published mutation in a fresh library.
+A fresh library starts at revision zero; its first committed library write creates the revision record.
 Revision storage is defined by the [library database reference](../../reference/library/storage/database.md).
 Changesets are in-process values and have no persisted or compatibility format.
 
@@ -140,7 +140,7 @@ Changesets are in-process values and have no persisted or compatibility format.
 - [`TrackSourceCache.cpp`](../../../app/runtime/source/TrackSourceCache.cpp) applies revisions to the runtime's derived source state.
 - [`LibraryWriteLane.h`](../../../app/runtime/library/LibraryWriteLane.h) owns sequencer submission, one-shot settlement events, availability acknowledgement, and Closing state.
 - [`MusicLibrary`](../../../include/ao/library/MusicLibrary.h) exposes admitted snapshot and candidate revision values without a public physical metadata Store.
-- [`WriteTransaction`](../../../include/ao/library/WriteTransaction.h) derives the candidate from its durable writer snapshot, persists it at commit, and completes dictionary and metadata publication before the producer can submit a changeset.
+- [`WriteTransaction`](../../../include/ao/library/WriteTransaction.h) derives the candidate from its LMDB writer snapshot, persists it with the content commit, and publishes the committed dictionary mappings before the producer can submit a changeset.
 
 ## Test map
 

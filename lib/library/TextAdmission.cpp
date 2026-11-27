@@ -22,6 +22,16 @@ namespace ao::library::detail
       error.message = std::format("{}: {}", context, error.message);
       return std::unexpected{std::move(error)};
     }
+
+    std::unexpected<Error> contextualPersistedError(Error error, std::string_view const context)
+    {
+      if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
+      {
+        error.code = Error::Code::CorruptData;
+      }
+
+      return contextualError(std::move(error), context);
+    }
   } // namespace
 
   Result<> validateLibraryText(std::string_view const text, std::string_view const context)
@@ -48,14 +58,7 @@ namespace ao::library::detail
       return text.size();
     }
 
-    auto normalizedRes = utility::normalizeUtf8Nfc(text);
-
-    if (!normalizedRes)
-    {
-      return contextualError(std::move(normalizedRes.error()), context);
-    }
-
-    return normalizedRes->size();
+    return normalizeLibraryText(text, context).transform(&std::string::size);
   }
 
   Result<std::string> normalizeLibraryText(std::string_view const text, std::string_view const context)
@@ -76,14 +79,7 @@ namespace ao::library::detail
 
     if (!nfcRes)
     {
-      auto error = std::move(nfcRes.error());
-
-      if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
-      {
-        error.code = Error::Code::CorruptData;
-      }
-
-      return contextualError(std::move(error), context);
+      return contextualPersistedError(std::move(nfcRes.error()), context);
     }
 
     if (!*nfcRes)
@@ -98,14 +94,7 @@ namespace ao::library::detail
   {
     if (auto validationRes = utility::validateUtf8(text); !validationRes)
     {
-      auto error = std::move(validationRes.error());
-
-      if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
-      {
-        error.code = Error::Code::CorruptData;
-      }
-
-      return contextualError(std::move(error), context);
+      return contextualPersistedError(std::move(validationRes.error()), context);
     }
 
     return {};

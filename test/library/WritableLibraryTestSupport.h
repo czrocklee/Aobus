@@ -4,16 +4,11 @@
 #pragma once
 
 #include "lib/library/PhysicalStoreAccess.h"
-#include <ao/CoreIds.h>
-#include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
-
-#include <cstddef>
-#include <span>
 
 namespace ao::library
 {
@@ -45,14 +40,6 @@ namespace ao::library::test
   inline DictionaryStore::Writer& physicalDictionary(LibraryWrite& write)
   {
     return detail::PhysicalStoreAccess::dictionary(write);
-  }
-
-  inline Result<> overwriteListRecordForTest(ListStore const& store,
-                                             LibraryWrite& write,
-                                             ListId const id,
-                                             std::span<std::byte const> const bytes)
-  {
-    return detail::PhysicalStoreAccess::overwriteListRecordForTest(store, write, id, bytes);
   }
 
   inline auto physicalPrepareTrack(TrackBuilder const& builder,

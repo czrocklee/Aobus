@@ -139,7 +139,7 @@ See [library access and mutation](mutation.md) for status precedence and command
 
 ## Change publication and sources
 
-A successful commit first publishes its dictionary and metadata cache state, then submits one revisioned changeset to `LibraryChanges`.
+The native commit makes the new revision visible to later LMDB snapshots. The transaction publishes the committed dictionary mappings before the coordinator submits one revisioned changeset to `LibraryChanges`.
 `TrackSourceCache` is the runtime's single bound publication replica.
 It applies the committed revision before phase-two observers are notified, so an observer never learns a revision whose source state is still old.
 The committing command retains its lane turn through replica application, observer delivery, and the applicable availability notification.
@@ -207,7 +207,7 @@ owning command inputs
   -> synchronous WriteTransaction::apply(LibraryWrite&)
   -> Unchanged(value) or Changed(value, zero-revision changeset)
   -> one native commit with candidate revision
-  -> dictionary and metadata cache publication
+  -> committed dictionary publication
   -> LibraryChanges replica application
   -> source deltas and live projections
   -> phase-two changed observers

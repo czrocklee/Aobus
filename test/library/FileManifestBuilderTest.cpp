@@ -202,6 +202,12 @@ namespace ao::library::test
 
     REQUIRE_FALSE(pendingSignatureRes);
     CHECK(pendingSignatureRes.error().code == Error::Code::CorruptData);
+
+    auto const pendingLengthRes =
+      FileManifestBuilder::makeEmpty().audioSignature(utility::xxh3Hash128("signature")).validate("identity.flac");
+
+    REQUIRE_FALSE(pendingLengthRes);
+    CHECK(pendingLengthRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("FileManifestBuilder - validation rejects malformed mtime nanoseconds")

@@ -171,6 +171,7 @@ namespace ao::library
     }
 
     std::span<Entry const> entries() const noexcept;
+    Entry const* findEntry(DictionaryId dictionaryId) const noexcept;
 
     static std::string_view value(std::span<std::byte const> payload, Entry const& entry) noexcept;
 
@@ -191,10 +192,9 @@ namespace ao::library
    * structurally invalid side violates that accessor's precondition and fails
    * fast through AO_EXPECTS. Optional blocks absent from an otherwise valid
    * cold side still produce empty proxies and their documented default values.
-   * Semantic corruption within the established bounds (for example invalid
-   * recording dates or unsorted custom metadata keys) is not detected here;
-   * deep structural verification lives in detail::TrackColdReader for
-   * diagnostics and tests.
+   * The cold gate also checks that a stored recording date is valid. Other
+   * semantic corruption within bounds (for example unsorted custom metadata
+   * keys) belongs to the deep verifier in detail::TrackColdReader.
    *
    * The cold index is a lazy per-view mutable cache; views are intended for
    * single-threaded row access.

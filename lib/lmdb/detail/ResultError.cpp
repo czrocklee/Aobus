@@ -8,39 +8,33 @@
 #include <lmdb.h>
 
 #include <cstdint>
+#include <expected>
+#include <format>
 #include <source_location>
 
 namespace ao::lmdb
 {
-  Error::Code errorCodeFor(std::int32_t code)
+  namespace
   {
-    if (code == MDB_NOTFOUND)
+    Error::Code errorCodeFor(std::int32_t const code) noexcept
     {
-      return Error::Code::NotFound;
+      switch (code)
+      {
+        case MDB_NOTFOUND: return Error::Code::NotFound;
+        case MDB_KEYEXIST: return Error::Code::Conflict;
+        // A larger map can admit the same work; a full disk is still IoError.
+        case MDB_MAP_FULL: return Error::Code::StorageFull;
+        // Another process grew past this mapping; reopen to adopt its size.
+        case MDB_MAP_RESIZED: return Error::Code::InvalidState;
+        default: return Error::Code::IoError;
+      }
     }
+  } // namespace
 
-    if (code == MDB_KEYEXIST)
-    {
-      return Error::Code::Conflict;
-    }
-
-    if (code == MDB_MAP_FULL)
-    {
-      // The map ran out of room, which a larger one would have admitted. This is
-      // its own code because the remedy differs from every other storage
-      // failure: a caller may reopen with more capacity and repeat the work,
-      // while a full disk or an exhausted id space would only fail again.
-      return Error::Code::StorageFull;
-    }
-
-    if (code == MDB_MAP_RESIZED)
-    {
-      // Another process committed past this process's map, so this environment's
-      // mapping is stale. Reopening adopts the larger size; nothing else can.
-      return Error::Code::InvalidState;
-    }
-
-    return Error::Code::IoError;
+  Error lmdbError(char const* origin, std::int32_t const code, std::source_location const location)
+  {
+    return Error{
+      .code = errorCodeFor(code), .message = std::format("{}: {}", origin, ::mdb_strerror(code)), .location = location};
   }
 
   Result<> resultFromCode(char const* origin, std::int32_t code, std::source_location location)
@@ -50,6 +44,6 @@ namespace ao::lmdb
       return {};
     }
 
-    return lmdbError(origin, code, location);
+    return std::unexpected{lmdbError(origin, code, location)};
   }
 } // namespace ao::lmdb

@@ -33,16 +33,11 @@ namespace ao::library
     };
   } // namespace detail
 
-  struct ValidatedFileManifestEntry final
-  {
-    std::string_view uri;
-  };
-
   /** Record facts that do not depend on the owning Track binding. */
   Result<> validateManifestFacts(FileManifestHeader const& header);
 
   Result<std::string_view> validateFileManifestKey(std::span<std::byte const> rawKey);
   Result<> validateFileManifestPayload(std::span<std::byte const> payload);
-  Result<ValidatedFileManifestEntry> validateFileManifestEntry(std::span<std::byte const> rawKey,
-                                                               std::span<std::byte const> payload);
+  Result<std::string_view> validateFileManifestEntry(std::span<std::byte const> rawKey,
+                                                     std::span<std::byte const> payload);
 } // namespace ao::library

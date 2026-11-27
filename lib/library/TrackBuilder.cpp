@@ -74,9 +74,7 @@ namespace ao::library
         detail::throwLibraryError(Error::Code::ValueTooLarge, std::format("{} exceeds uint16_t", label));
       }
 
-      auto const byteCount = count * elementSize;
-      checkedUint16(byteCount, label);
-      return byteCount;
+      return count * elementSize;
     }
 
     [[noreturn]] void throwColdRecordTooLarge(std::string_view component)
@@ -1020,18 +1018,18 @@ namespace ao::library
     _blocks.push_back({.slot = slot, .payload = std::move(payload)});
   }
 
-  void TrackBuilder::PreparedCold::appendCoverArtBlock()
+  void TrackBuilder::PreparedCold::appendCoverArtBlock(std::span<CoverArt const> covers)
   {
-    if (_coverArt.empty())
+    if (covers.empty())
     {
       return;
     }
 
-    auto const payloadSize = checkedPayloadBytes(_coverArt.size(), sizeof(CoverArtEntry), "Cover art payload length");
+    auto const payloadSize = checkedPayloadBytes(covers.size(), sizeof(CoverArtEntry), "Cover art payload length");
     auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
     std::size_t offset = 0;
 
-    for (auto const& cover : _coverArt)
+    for (auto const& cover : covers)
     {
       writePod(std::span<std::byte>{payload},
                offset,
@@ -1042,37 +1040,32 @@ namespace ao::library
     appendBlock(TrackColdBlockSlot::CoverArt, std::move(payload));
   }
 
-  void TrackBuilder::PreparedCold::appendWorkBlock(std::uint16_t movementNumber, std::uint16_t movementTotal)
+  void TrackBuilder::PreparedCold::appendWorkBlock(TrackWorkBlock const& work)
   {
-    if (_workId == kInvalidDictionaryId && _movementId == kInvalidDictionaryId && movementNumber == 0 &&
-        movementTotal == 0)
+    if (work.workId == kInvalidDictionaryId && work.movementId == kInvalidDictionaryId && work.movementNumber == 0 &&
+        work.movementTotal == 0)
     {
       return;
     }
 
     auto payload = std::vector<std::byte>(sizeof(TrackWorkBlock), std::byte{0});
-    writePod(std::span<std::byte>{payload},
-             0,
-             TrackWorkBlock{.workId = _workId,
-                            .movementId = _movementId,
-                            .movementNumber = movementNumber,
-                            .movementTotal = movementTotal});
+    writePod(std::span<std::byte>{payload}, 0, work);
     appendBlock(TrackColdBlockSlot::Work, std::move(payload));
   }
 
-  void TrackBuilder::PreparedCold::appendPerformanceBlock(RecordingDate date)
+  void TrackBuilder::PreparedCold::appendPerformanceBlock(RecordingDate date, std::span<TrackCreditEntry const> credits)
   {
-    if (!date.isPresent() && _credits.empty())
+    if (!date.isPresent() && credits.empty())
     {
       return;
     }
 
-    auto const payloadSize = sizeof(TrackPerformanceBlock) + (_credits.size() * sizeof(TrackCreditEntry));
+    auto const payloadSize = sizeof(TrackPerformanceBlock) + (credits.size() * sizeof(TrackCreditEntry));
     auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
     writePod(std::span<std::byte>{payload}, 0, TrackPerformanceBlock{.recordingDate = date});
     auto offset = sizeof(TrackPerformanceBlock);
 
-    for (auto const& entry : _credits)
+    for (auto const& entry : credits)
     {
       writePod(std::span<std::byte>{payload}, offset, entry);
       offset += sizeof(TrackCreditEntry);
@@ -1180,10 +1173,10 @@ namespace ao::library
     _size = recordSize;
   }
 
-  void TrackBuilder::PreparedCold::snapshot(TrackBuilder const* builder)
+  void TrackBuilder::PreparedCold::snapshot(TrackBuilder const& builder)
   {
-    auto const& metadata = builder->_metadataBuilder;
-    auto const& property = builder->_propertyBuilder;
+    auto const& metadata = builder._metadataBuilder;
+    auto const& property = builder._propertyBuilder;
 
     _uri = std::string{property._uri};
     _duration = std::chrono::duration_cast<TrackDuration>(property.duration());
@@ -1236,17 +1229,9 @@ namespace ao::library
 
     AO_INVARIANT(offset == _uriOffset);
 
-    // Write uri
-    if (_uriLength > 0)
+    if (_uriLength != 0)
     {
       std::memcpy(out.data() + offset, _uri.data(), _uriLength);
-      offset += _uriLength;
-    }
-
-    // Pad to 4 bytes
-    while (offset % 4 != 0)
-    {
-      out[offset++] = std::byte{0};
     }
   }
 

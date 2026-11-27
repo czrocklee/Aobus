@@ -40,13 +40,12 @@ namespace ao::lmdb::test
     SECTION("lmdbError captures the caller and classifies the code")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const errorRes = Result<>{lmdbError("mdb_put", MDB_KEYEXIST)};
+      auto const error = lmdbError("mdb_put", MDB_KEYEXIST);
 
-      REQUIRE_FALSE(errorRes);
-      CHECK(errorRes.error().code == Error::Code::Conflict);
-      CHECK(errorRes.error().message.starts_with("mdb_put: "));
-      CHECK(errorRes.error().location.line() == expectedLine);
-      CHECK(std::string_view{errorRes.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
+      CHECK(error.code == Error::Code::Conflict);
+      CHECK(error.message.starts_with("mdb_put: "));
+      CHECK(error.location.line() == expectedLine);
+      CHECK(std::string_view{error.location.file_name()}.ends_with("ResultErrorTest.cpp"));
     }
 
     SECTION("An exhausted map is its own code, separate from other storage failures")

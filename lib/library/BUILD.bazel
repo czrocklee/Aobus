@@ -23,7 +23,6 @@ cc_library(
         "ListStore.cpp",
         "ListView.cpp",
         "ListWriter.cpp",
-        "MetadataState.cpp",
         "MetadataStore.cpp",
         "MusicLibrary.cpp",
         "OpenValidationMetrics.cpp",

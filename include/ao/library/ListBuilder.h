@@ -38,8 +38,6 @@ namespace ao::library
       std::vector<TrackId> const& ids() const { return _trackIds; }
 
     private:
-      friend class ListBuilder;
-
       std::vector<TrackId> _trackIds;
       std::unordered_set<TrackId> _trackIdMembership;
     };
@@ -77,8 +75,6 @@ namespace ao::library
 
   private:
     explicit ListBuilder() = default;
-
-    Result<std::vector<std::byte>> serializeCandidate() const;
 
     std::string _name;
     std::string _description;

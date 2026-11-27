@@ -3,7 +3,6 @@
 
 #include <ao/library/ListBuilder.h>
 
-#include "ListRecordValidation.h"
 #include "TextAdmission.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -12,6 +11,7 @@
 #include <ao/library/ListView.h>
 #include <ao/utility/ByteView.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -120,34 +120,10 @@ namespace ao::library
 
   Result<ListBuilder::Prepared> ListBuilder::prepare() const
   {
-    auto bytesRes = serializeCandidate();
-
-    if (!bytesRes)
-    {
-      return std::unexpected{bytesRes.error()};
-    }
-
-    if (auto validationRes = validateSerializedList(*bytesRes); !validationRes)
-    {
-      return std::unexpected{validationRes.error()};
-    }
-
-    return Prepared{std::move(*bytesRes)};
+    return serialize().transform([](std::vector<std::byte>&& bytes) { return Prepared{std::move(bytes)}; });
   }
 
   Result<std::vector<std::byte>> ListBuilder::serialize() const
-  {
-    auto preparedRes = prepare();
-
-    if (!preparedRes)
-    {
-      return std::unexpected{preparedRes.error()};
-    }
-
-    return std::move(preparedRes->_bytes);
-  }
-
-  Result<std::vector<std::byte>> ListBuilder::serializeCandidate() const
   {
     auto nameRes = detail::normalizeLibraryText(_name, "List name");
 
@@ -171,7 +147,7 @@ namespace ao::library
     auto const& name = *nameRes;
     auto const& description = *descriptionRes;
     auto const& expression = _filter;
-    auto const& orderTrackIds = _orderTrackIdsBuilder._trackIds;
+    auto const& orderTrackIds = _orderTrackIdsBuilder.ids();
 
     auto const nameLength = name.size();
     auto const descLength = description.size();
@@ -203,6 +179,11 @@ namespace ao::library
       return makeError(Error::Code::ValueTooLarge, "List record size overflows the host address space");
     }
 
+    if (std::ranges::contains(orderTrackIds, kInvalidTrackId))
+    {
+      return makeError(Error::Code::CorruptData, "List record contains the reserved Track id zero");
+    }
+
     auto const payloadSize =
       (logicalSize + (kListHeaderAlignment - 1)) & ~(static_cast<std::size_t>(kListHeaderAlignment) - 1);
 
@@ -227,11 +208,8 @@ namespace ao::library
     result.insert_range(result.end(), utility::bytes::view(description));
     result.insert_range(result.end(), utility::bytes::view(expression));
 
-    while (result.size() < payloadSize)
-    {
-      result.push_back(std::byte{0});
-    }
-
+    result.insert(result.end(), payloadSize - logicalSize, std::byte{0});
+    AO_ENSURES(ListView{result}.isValid(), "List serialization produced a non-canonical structural layout");
     return result;
   }
 } // namespace ao::library
