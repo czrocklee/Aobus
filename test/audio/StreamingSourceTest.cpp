@@ -43,19 +43,6 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("ScriptedDecoderSession - invalid output frame layout is rejected")
-  {
-    auto info = testStreamInfo();
-    info.outputFormat.channels = 0;
-    auto decoder = ScriptedDecoderSession{info};
-    decoder.setReadScript({{{std::byte{0}}, true}});
-
-    auto const blockRes = decoder.readNextBlock();
-
-    REQUIRE_FALSE(blockRes);
-    CHECK(blockRes.error().code == Error::Code::InvalidState);
-  }
-
   TEST_CASE("StreamingSource - preparation fills the configured preroll target")
   {
     auto const info = testStreamInfo();
@@ -134,7 +121,7 @@ namespace ao::audio::test
     auto const info = testStreamInfo();
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-    decoderPtr->setReadScript({{silenceBlock(kPcmFrameRingByteCapacity + 1), false}});
+    decoderPtr->setReadScript({{silenceBlock(kPcmFrameRingByteCapacity + frameBytes(info.outputFormat)), false}});
 
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});

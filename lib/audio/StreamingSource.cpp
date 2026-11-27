@@ -103,7 +103,8 @@ namespace ao::audio
 
   bool StreamingSource::isDrained() const noexcept
   {
-    return !isPreparingSeek() && _decoderReachedEof.load(std::memory_order_relaxed) &&
+    // Observing EOF must also make the final ring write visible before checking occupancy.
+    return !isPreparingSeek() && _decoderReachedEof.load(std::memory_order_acquire) &&
            _frameRing.readableByteCount() == 0;
   }
 
@@ -127,7 +128,7 @@ namespace ao::audio
     _seekStopSource = std::stop_source{};
     auto const seekToken = _seekStopSource.get_token();
 
-    _decoderReachedEof = false;
+    _decoderReachedEof.store(false, std::memory_order_relaxed);
     _frameRing.clear();
     _previousBlockByteCount = 0;
     _optPendingBlock.reset();
@@ -264,7 +265,7 @@ namespace ao::audio
 
         auto const status = decodeNextBlock(seekToken, OnRingFull::WaitForSpace);
 
-        if (status == StreamingSource::DecodeBlockStatus::Stopped)
+        if (status == DecodeBlockStatus::Stopped)
         {
           break;
         }
@@ -289,7 +290,7 @@ namespace ao::audio
              targetByteCount, _frameRing.readableByteCount(), _frameRing.writableByteCount(), _previousBlockByteCount))
     {
       if (auto const status = decodeNextBlock(seekToken, OnRingFull::RetainRemainder);
-          status == StreamingSource::DecodeBlockStatus::Stopped)
+          status == DecodeBlockStatus::Stopped)
       {
         break;
       }
@@ -343,7 +344,7 @@ namespace ao::audio
 
     if (endOfStream)
     {
-      _decoderReachedEof = true;
+      _decoderReachedEof.store(true, std::memory_order_release);
       return DecodeBlockStatus::Stopped;
     }
 

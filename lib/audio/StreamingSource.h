@@ -29,12 +29,6 @@ namespace ao::audio
     using OnSourceError = std::function<void(Error const&, std::stop_token)>;
     using OnReady = std::function<void(std::stop_token)>;
 
-    enum class DecodeBlockStatus : std::uint8_t
-    {
-      Decoded,
-      Stopped
-    };
-
     StreamingSource(std::unique_ptr<DecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
                     std::chrono::milliseconds prerollDuration,
@@ -71,6 +65,12 @@ namespace ao::audio
       Prepared,
       Active,
       PreparationFailed
+    };
+
+    enum class DecodeBlockStatus : std::uint8_t
+    {
+      Decoded,
+      Stopped
     };
 
     enum class OnRingFull : std::uint8_t

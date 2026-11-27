@@ -39,11 +39,6 @@ namespace ao::audio::detail
                  std::size_t writableByteCount,
                  std::size_t previousBlockByteCount) noexcept
   {
-    if (bufferedByteCount >= targetByteCount)
-    {
-      return false;
-    }
-
-    return previousBlockByteCount == 0 || writableByteCount >= previousBlockByteCount;
+    return bufferedByteCount < targetByteCount && writableByteCount >= previousBlockByteCount;
   }
 } // namespace ao::audio::detail
