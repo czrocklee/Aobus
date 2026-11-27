@@ -82,6 +82,8 @@ explicit authorization
 
 Rejecting or dropping a plan performs no persistent mutation.
 A plan has no time-based expiry; its source and target bindings make stale plans unusable.
+Apply compares the source against the previewed bytes through EOF.
+The reread is not an atomic file snapshot.
 
 ### Prepared target binding
 
@@ -311,7 +313,8 @@ A durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
 Version 1 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
-No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
+Preparation reads the whole document and retains both the original bytes and the buffer used for in-place parsing; it has no configurable memory ceiling.
+Apply rereads the file in fixed-size chunks without buffering another full copy.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
