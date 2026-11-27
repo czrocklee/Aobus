@@ -11,7 +11,9 @@ namespace ao::audio
 {
   struct PcmBlock final
   {
-    /// @brief Aliasing span of decoder-owned memory; valid until next readNextBlock() or decoder close.
+    /// @brief Borrows decoder-owned PCM until the next readNextBlock() or session destruction.
+    /// Ordinary seeks and flushes preserve these bytes. Retire all PCM borrows before calling
+    /// DecoderSession::seekAfterDiscard().
     std::span<std::byte const> bytes = {};
     std::uint32_t frames = 0;
     std::uint64_t firstFrameIndex = 0;

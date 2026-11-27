@@ -47,24 +47,23 @@ namespace ao::audio::detail
 
     _sourceFormat = sourceFormat;
     _nativeFormat = pcmFormat(sourceFormat, nativeEncoding);
-    _outputFormat = pcmFormat(sourceFormat, outputEncoding);
+    _outputEncoding = outputEncoding;
     _convertedBytes.clear();
-    return _outputFormat;
+    return pcmFormat(sourceFormat, outputEncoding);
   }
 
   Result<std::span<std::byte const>> DecoderOutputAdapter::convert(std::span<std::byte const> nativeBytes)
   {
-    AO_INVARIANT(
-      (_nativeFormat.encoding != SampleEncoding::Unknown && _outputFormat.encoding != SampleEncoding::Unknown),
-      "Decoder PCM output adapter is not configured");
+    AO_INVARIANT((_nativeFormat.encoding != SampleEncoding::Unknown && _outputEncoding != SampleEncoding::Unknown),
+                 "Decoder PCM output adapter is not configured");
 
-    if (_nativeFormat.encoding == _outputFormat.encoding)
+    if (_nativeFormat.encoding == _outputEncoding)
     {
       return nativeBytes;
     }
 
     if (auto convertedRes =
-          convertPcmEncoding(nativeBytes, _nativeFormat, _sourceFormat, _outputFormat.encoding, _convertedBytes);
+          convertPcmEncoding(nativeBytes, _nativeFormat, _sourceFormat, _outputEncoding, _convertedBytes);
         !convertedRes)
     {
       return std::unexpected{convertedRes.error()};
@@ -73,21 +72,8 @@ namespace ao::audio::detail
     return std::span<std::byte const>{_convertedBytes};
   }
 
-  void DecoderOutputAdapter::reset() noexcept
-  {
-    _sourceFormat = {};
-    _nativeFormat = {};
-    _outputFormat = {};
-    _convertedBytes.clear();
-  }
-
   PcmFormat const& DecoderOutputAdapter::nativeFormat() const noexcept
   {
     return _nativeFormat;
-  }
-
-  PcmFormat const& DecoderOutputAdapter::outputFormat() const noexcept
-  {
-    return _outputFormat;
   }
 } // namespace ao::audio::detail

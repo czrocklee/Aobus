@@ -14,6 +14,9 @@ namespace ao::audio::test
     std::uint8_t channels = 2;
     std::uint8_t precisionBits = 16;
     std::uint32_t packetCount = 1;
+    // Container timing is independent of the 48 kHz PCM rate.
+    std::uint32_t mediaTimescale = 48000;
+    std::uint32_t packetDurationTicks = 16;
     std::vector<std::uint8_t> sampleEntryPrefix{};
     std::vector<std::uint8_t> sampleEntrySuffix{};
     std::vector<std::uint8_t> cookieSuffix{};

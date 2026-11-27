@@ -4,6 +4,7 @@
 #include "lib/audio/detail/Mp4PacketSource.h"
 
 #include "test/TestFixtureSupport.h"
+#include "test/audio/AlacFrameTestSupport.h"
 #include "test/media/mp4/TestAtoms.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -54,12 +55,45 @@ namespace ao::audio::detail::test
     source.advance();
     CHECK(source.isAtEnd());
     CHECK(source.packet().empty());
-    CHECK(source.sampleInfo().size == 0);
+    CHECK(source.firstFrameIndex(44100, 4096) == 0);
 
     source.close();
     CHECK_FALSE(source.isOpen());
     CHECK(source.isAtEnd());
     CHECK(!source.seek(std::chrono::milliseconds{10}));
+  }
+
+  TEST_CASE("Mp4PacketSource - indexes the second packet in PCM frames")
+  {
+    constexpr std::uint32_t kSampleRate = 48000;
+    constexpr std::uint32_t kFallbackFramesPerPacket = 32;
+    auto options = ao::audio::test::AlacFrameTestOptions{.packetCount = 2, .packetDurationTicks = 8};
+    std::uint64_t expectedSecondFrame = 16;
+
+    SECTION("Media timescale differs from the sample rate")
+    {
+      options.mediaTimescale = 24000;
+    }
+
+    SECTION("Zero media timescale uses the fallback packet length")
+    {
+      options.mediaTimescale = 0;
+      expectedSecondFrame = 32;
+    }
+
+    auto const temp = ao::test::TempFile{ao::audio::test::buildAlacUncompressedFileBytes(options), ".m4a"};
+    auto source = Mp4PacketSource{};
+    REQUIRE(source.open(temp.path, "alac"));
+    REQUIRE(source.sampleCount() == 2);
+    CHECK(source.timescale() == options.mediaTimescale);
+    CHECK(source.firstFrameIndex(kSampleRate, kFallbackFramesPerPacket) == 0);
+
+    source.advance();
+    CHECK(source.firstFrameIndex(kSampleRate, kFallbackFramesPerPacket) == expectedSecondFrame);
+
+    source.advance();
+    CHECK(source.isAtEnd());
+    CHECK(source.firstFrameIndex(kSampleRate, kFallbackFramesPerPacket) == 0);
   }
 
   TEST_CASE("Mp4PacketSource - handles selection failures and timescale fallback")
@@ -81,7 +115,6 @@ namespace ao::audio::detail::test
       CHECK(source.sampleIndex() == 0);
       CHECK(source.packet().empty());
       CHECK(source.magicCookie().empty());
-      CHECK(source.sampleInfo().size == 0);
       CHECK(source.timescale() == 0);
       CHECK(source.duration() == std::chrono::milliseconds{0});
 

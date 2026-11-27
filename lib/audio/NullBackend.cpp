@@ -36,9 +36,9 @@ namespace ao::audio
                                           .message = "PCM formats require a sample rate and channels"}}};
     }
 
-    auto const encodings = detail::losslessPcmEncodings(sourceFormat);
+    auto const optEncoding = detail::preferredLosslessPcmEncoding(sourceFormat);
 
-    if (encodings.empty())
+    if (!optEncoding)
     {
       return std::unexpected{BackendOpenFailure{
         .error = Error{.code = Error::Code::NotSupported, .message = "No lossless PCM encoding is available"},
@@ -47,7 +47,7 @@ namespace ao::audio
 
     // A sink that discards frames has no endpoint to confirm, so it stays on
     // the lossless path and never authorizes a precision reduction.
-    return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, encodings.front())};
+    return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, *optEncoding)};
   }
 
   void NullBackend::start()

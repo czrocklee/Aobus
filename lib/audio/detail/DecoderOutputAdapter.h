@@ -22,16 +22,14 @@ namespace ao::audio::detail
 
     Result<PcmFormat> configure(SignalFormat const& sourceFormat, SampleEncoding nativeEncoding);
     Result<std::span<std::byte const>> convert(std::span<std::byte const> nativeBytes);
-    void reset() noexcept;
 
     PcmFormat const& nativeFormat() const noexcept;
-    PcmFormat const& outputFormat() const noexcept;
 
   private:
     std::optional<SampleEncoding> _optRequestedEncoding;
     SignalFormat _sourceFormat{};
     PcmFormat _nativeFormat{};
-    PcmFormat _outputFormat{};
+    SampleEncoding _outputEncoding = SampleEncoding::Unknown;
     std::vector<std::byte> _convertedBytes{};
   };
 } // namespace ao::audio::detail

@@ -67,7 +67,9 @@ Inspection-to-final stability covers the complete effective source format, inclu
 A drift limited to the source layout's evidence origin re-describes the same layout, changes no PCM identity, and is accepted.
 
 Decoder blocks containing PCM remain consumable before a later empty end-of-stream block.
-`firstFrameIndex` identifies the actual first PCM frame in a block, including after decoder-level seek adjustment.
+`firstFrameIndex` identifies the actual first PCM frame in a block, including after decoder-level seek adjustment. [`PcmBlock`](../../../include/ao/audio/PcmBlock.h) borrows decoder-owned bytes until the next read or session destruction.
+
+Seeking or flushing a FLAC session, including after a failed seek, preserves both native and converted bytes from its last read. A segment borrowing a subspan from that carrier has the same lifetime. libFLAC can decode the seek target synchronously; the session keeps that PCM separate until the next read.
 
 Opus decodes at a fixed 48 kHz and reports that rate as its source rate; the
 identification packet's input sample rate describes the encoder's source and is
@@ -85,10 +87,10 @@ codec-internal padding. A stream whose declared total is zero reaches end of
 stream without emitting a block, which is distinct from a stream that never
 declared a total and is decoded for as long as it yields packets.
 
-Seeking converts a playback offset into a granule position by measuring from the
-playback start, restarts at the earliest packet that can produce a position
-80 ms ahead of it, resets decoder state, and discards decoded samples up to the
-target, so `firstFrameIndex` names the requested frame exactly. A restart at or
+Seeking measures the target granule from the playback start. The demuxer looks
+up the page group for the position 80 ms before the target. The session resets
+decoder state there and discards decoded samples up to the target, so
+`firstFrameIndex` names the requested frame exactly on a valid timeline. A restart at or
 before the first audio packet resumes at the decode origin rather than at zero,
 because the header pages carry the granule position zero RFC 7845 fixes for
 them, which names no position on a stream that starts cropped. The pre-roll
@@ -106,7 +108,7 @@ Initial native frame information is also required.
 If it is missing, or if it disagrees with the native PCM rate or channel count, open fails rather than publishing an unassigned fallback.
 The scan builds the native seek index and duration even without a Xing or VBRI seek table.
 For a [supported trailing-tag chain](pcm-format.md#mp3-source-interpretation), a complete indexed-frame boundary must independently witness its start before the native input can be shortened.
-The session then reopens and rescans that audio extent before publication, preserving native duration and gapless calculations while keeping tag bytes out of PCM decoding.
+An exact ID3v1-only suffix reuses the initial native scan with the shorter read bound; a validated suffix containing APEv2 or Lyrics3v2 requires reopening and rescanning the audio extent before publication. Both keep the admitted tag bytes out of PCM decoding under the [MP3 source policy](pcm-format.md#mp3-source-interpretation).
 Ambiguous payload markers and malformed tag chains retain the original native input and `Unknown` identity.
 Each scan traverses the input; the growing full index adds allocation and retained-memory costs described by the source policy.
 A successful native scan alone does not prove complete header coverage; identity inspection checks that separately.
@@ -334,7 +336,7 @@ The exact operation/code matrix and helper surface are in the [decoder error ref
 Decoder session and malformed-input tests under [`test/audio/`](../../../test/audio) lock ready construction, requested-output adaptation, output representation, seeking, and failure behavior.
 [`DecoderErrorTest.cpp`](../../../test/audio/DecoderErrorTest.cpp) mechanically rejects direct concrete construction and instance `close()` operations.
 [`DecoderFactoryTest.cpp`](../../../test/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
-[`DecoderOutputAdapterTest.cpp`](../../../test/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
+[`DecoderOutputAdapterTest.cpp`](../../../test/audio/detail/DecoderOutputAdapterTest.cpp) covers precision-loss rejection, borrowed pass-through, configured output format, and exact converted sample bytes.
 [`WavDecoderChannelLayoutTest.cpp`](../../../test/audio/WavDecoderChannelLayoutTest.cpp) checks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and PCM preservation across reads and seeks through EOF.
 [`Mp3DecoderChannelLayoutTest.cpp`](../../../test/audio/Mp3DecoderChannelLayoutTest.cpp) is the channel-layout test authority for uniform mono and stereo/joint identity, dual and mixed-role withholding, same-count stereo/dual unknown admission without promotion, factory parity, exact zero PCM extent, output adaptation, seek/flush/EOF behavior, and refusal of geometry changes before contradictory PCM.
 [`Mp3DecoderTrailingTagTest.cpp`](../../../test/audio/Mp3DecoderTrailingTagTest.cpp) covers supported APEv2/Lyrics3v2/ID3v1 suffixes, read-only descriptor agreement, APEv1 identity withholding, malformed and overlapping candidates, and PCM/seek/EOF preservation after input-boundary selection.
@@ -363,11 +365,11 @@ For the complete role-conflict comparisons, the fixture sets only the copied for
 Mono `MONO` observations remain unassigned rather than being relabelled FC, and accepted mono maps retain one-channel PCM bytes. These tests do not open hardware or establish stereo-only-device support.
 [`OpusDecoderChannelLayoutTest.cpp`](../../../test/audio/OpusDecoderChannelLayoutTest.cpp) locks family 0/1/255 identity publication with literal per-count masks and exact per-slot PCM comparisons against family-255 ordinal decodes using independently declared RFC speaker roles.
 It covers silent and repeated mapping patterns, including distinguishable seven/eight-channel controls, six-channel family-255 ordinal order, concrete/factory parity and unsupported-family refusal, adaptation, and immutable stream information through reads/seek/flush/EOF.
-The generic borrowed-block byte-validity case across seek/flush until the next read is covered by [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp), independent of channel-role identification.
+[`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp) and [`WavDecoderSessionTest.cpp`](../../../test/audio/WavDecoderSessionTest.cpp) compare borrowed bytes across seek and flush. Byte equality detects overwrites, but detecting a vector cleared without releasing its storage requires a sanitizer with vector container annotations enabled.
 [`VorbisCommentTest.cpp`](../../../test/media/VorbisCommentTest.cpp) protects the shared raw grammar, borrowed order and bytes, malformed prefixes/tails, visitor abort and exception behavior, large counts, and atomic import collection.
 [`EngineStereoReuseTest.cpp`](../../../test/audio/EngineStereoReuseTest.cpp) covers WAV/ALAC stereo aliasing and FLAC/ALAC stereo opt-in splicing versus strict draining in both directions, with literal PCM and source-identity publication. An unsupported ALAC `chan` declaration supplies the zero-mask stereo fixture.
 These controlled Engine cases do not certify native routing or audible gaplessness.
-[`SegmentDecoderSessionTest.cpp`](../../../test/audio/SegmentDecoderSessionTest.cpp) covers range PCM, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
+[`SegmentDecoderSessionTest.cpp`](../../../test/audio/SegmentDecoderSessionTest.cpp) covers range PCM, borrowed FLAC tails across seek and flush, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
 [`CarrierPlaybackTest.cpp`](../../../test/runtime/CarrierPlaybackTest.cpp) verifies the stored second segment through final runtime PCM and a nonempty zero-millisecond segment.
 
 ## Related documents

@@ -451,8 +451,7 @@ namespace ao::audio::test
       auto const info = decoder.streamInfo();
       checkReadyInfo(info, testCase);
 
-      // Repeated inspection neither consumes nor mutates the primed first packet.
-      CHECK(decoder.streamInfo() == info);
+      // Inspection neither consumes nor mutates the primed first packet.
       CHECK(decoder.streamInfo() == info);
 
       auto const blockRes = decoder.readNextBlock();
@@ -601,6 +600,7 @@ namespace ao::audio::test
         auto const testFile = requireAudioFixture(testCase.fixtureName);
         auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, encoding));
         auto& decoder = *decoderPtr;
+        CHECK(decoder.streamInfo().outputFormat.encoding == encoding);
 
         for (std::uint32_t packetIndex = 0; packetIndex < targetPacketIndex; ++packetIndex)
         {
@@ -608,6 +608,7 @@ namespace ao::audio::test
           REQUIRE(blockRes);
           REQUIRE(blockRes->frames == kAacFramesPerPacket);
           REQUIRE(blockRes->firstFrameIndex == static_cast<std::uint64_t>(packetIndex) * kAacFramesPerPacket);
+          CHECK(blockRes->bytes.size() == base.size() * bytesPerSample(encoding));
         }
 
         auto const goldenRes = decoder.readNextBlock();

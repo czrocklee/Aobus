@@ -464,6 +464,7 @@ namespace ao::audio::test
         auto const blockRes = decoder.readNextBlock();
         REQUIRE(blockRes);
         REQUIRE_FALSE(blockRes->endOfStream);
+        REQUIRE(blockRes->frames > 0);
         REQUIRE(totalFrames + blockRes->frames <= expectedTotalFrames);
         CHECK(blockRes->firstFrameIndex == totalFrames);
         totalFrames += blockRes->frames;
@@ -474,7 +475,7 @@ namespace ao::audio::test
     }
 
     // An invalid recognized suffix keeps the whole original input, and the
-    // contract leaves the terminal behavior of the unrecognized tail open.
+    // contract leaves the terminal outcome of the unrecognized tail open.
     // Accept a clean end of stream or a terminal read error, but never a
     // further identity change after the intact prefix.
     void tolerateTailTestUnrecognizedEnding(DecoderSession& decoder, DecodedStreamInfo const& expectedInfo)
@@ -482,21 +483,22 @@ namespace ao::audio::test
       for (std::uint32_t attempt = 0; attempt < 16U; ++attempt)
       {
         auto const blockRes = decoder.readNextBlock();
+        CHECK(decoder.streamInfo() == expectedInfo);
 
         if (!blockRes)
         {
-          break;
+          return;
         }
 
         if (blockRes->endOfStream)
         {
           CHECK(blockRes->frames == 0);
           CHECK(blockRes->bytes.empty());
-          break;
+          return;
         }
       }
 
-      CHECK(decoder.streamInfo() == expectedInfo);
+      FAIL("Decoder did not reach a terminal read result after the intact prefix");
     }
 
     std::vector<std::byte> collectTailTestPcmBytes(DecoderSession& decoder, std::uint64_t nextFrameIndex = 0)
@@ -515,6 +517,7 @@ namespace ao::audio::test
           break;
         }
 
+        REQUIRE(blockRes->frames > 0);
         CHECK(blockRes->firstFrameIndex == nextFrameIndex);
         pcm.insert(pcm.end(), blockRes->bytes.begin(), blockRes->bytes.end());
         nextFrameIndex += blockRes->frames;
@@ -1379,7 +1382,7 @@ namespace ao::audio::test
     // The control protects real nonzero PCM, not only synthetic silence.
     CHECK(std::ranges::any_of(originalPcm, [](std::byte const val) { return val != std::byte{0}; }));
 
-    auto taggedBytes = tailTestAsciiBytes(ao::test::readFile(originalPath));
+    auto taggedBytes = readFileBytes(originalPath);
     appendTailTestApeTag(taggedBytes, tailTestDefaultApeItems());
     auto const temp = ao::test::TempFile{taggedBytes, ".mp3"};
     auto openedTagged = openTailTestSessions(temp.path, std::nullopt);
@@ -1406,7 +1409,7 @@ namespace ao::audio::test
       auto const originalPcm = collectTailTestPcmBytes(*openedOriginal.concretePtr);
       REQUIRE_FALSE(originalPcm.empty());
 
-      auto taggedBytes = tailTestAsciiBytes(ao::test::readFile(originalPath));
+      auto taggedBytes = readFileBytes(originalPath);
       appendTailTestId3v1Tag(taggedBytes);
       auto const temp = ao::test::TempFile{taggedBytes, ".mp3"};
       auto openedTagged = openTailTestSessions(temp.path, std::nullopt);
@@ -1424,6 +1427,7 @@ namespace ao::audio::test
       auto const originalSoughtPcm = collectTailTestPcmBytes(*openedOriginal.concretePtr, firstFrameIndex);
       auto const taggedSoughtPcm = collectTailTestPcmBytes(*openedTagged.concretePtr, firstFrameIndex);
       CHECK(taggedSoughtPcm.size() == originalSoughtPcm.size());
+      REQUIRE_FALSE(originalSoughtPcm.empty());
       CHECK(std::ranges::equal(taggedSoughtPcm, originalSoughtPcm));
     }
   }

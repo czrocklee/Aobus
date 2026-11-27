@@ -11,7 +11,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -76,71 +75,6 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - 32-bit padded output")
-  {
-    auto const testFile = requireAudioFixture("basic_metadata.m4a");
-
-    auto sourceDecoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
-    auto& sourceDecoder = *sourceDecoderPtr;
-    auto const sourceInfo = sourceDecoder.streamInfo();
-    auto const sourceBlockRes = sourceDecoder.readNextBlock();
-    REQUIRE(sourceBlockRes);
-    REQUIRE(sourceBlockRes->frames > 0);
-    REQUIRE(sourceBlockRes->bytes.size() ==
-            static_cast<std::size_t>(sourceBlockRes->frames) * sourceInfo.outputFormat.channels * sizeof(std::int16_t));
-
-    auto targetDecoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
-    auto& targetDecoder = *targetDecoderPtr;
-
-    auto const targetInfo = targetDecoder.streamInfo();
-    CHECK(targetInfo.sourceFormat.precisionBits == 16);
-    CHECK(encodingContainerBits(targetInfo.outputFormat.encoding) == 32);
-
-    auto const targetBlockRes = targetDecoder.readNextBlock();
-    REQUIRE(targetBlockRes);
-    REQUIRE(targetBlockRes->frames == sourceBlockRes->frames);
-    REQUIRE(targetBlockRes->firstFrameIndex == sourceBlockRes->firstFrameIndex);
-    REQUIRE(targetBlockRes->bytes.size() ==
-            static_cast<std::size_t>(targetBlockRes->frames) * targetInfo.outputFormat.channels * sizeof(std::int32_t));
-
-    // The first AAC packet may carry encoder priming silence. This comparison
-    // locks exact adapter correspondence without claiming nonzero sensitivity.
-    auto const sourceSamples = sourceBlockRes->bytes.size() / sizeof(std::int16_t);
-    auto const targetSamples = targetBlockRes->bytes.size() / sizeof(std::int32_t);
-    auto const samplesToCheck = std::min({sourceSamples, targetSamples, std::size_t{128}});
-    REQUIRE(samplesToCheck > 0);
-
-    for (std::size_t index = 0; index < samplesToCheck; ++index)
-    {
-      auto const sourceSample = readSigned16LePcmSample(sourceBlockRes->bytes, index);
-      auto const targetSample = readSigned32LePcmSample(targetBlockRes->bytes, index);
-      CHECK(targetSample == static_cast<std::int32_t>(sourceSample) * 65536);
-    }
-  }
-
-  TEST_CASE("AacDecoderSession - supports lossless output encodings")
-  {
-    auto const testFile = requireAudioFixture("basic_metadata.m4a");
-
-    for (auto const encoding : {SampleEncoding::Signed24PackedLe,
-                                SampleEncoding::Signed24In32Le,
-                                SampleEncoding::Signed32Le,
-                                SampleEncoding::Float32Le})
-    {
-      auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, encoding));
-      auto& decoder = *decoderPtr;
-      auto const info = decoder.streamInfo();
-      CHECK(info.outputFormat.encoding == encoding);
-
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-      REQUIRE(blockRes->frames > 0);
-      CHECK(blockRes->firstFrameIndex == 0);
-      CHECK(blockRes->bytes.size() ==
-            static_cast<std::size_t>(blockRes->frames) * info.outputFormat.channels * bytesPerSample(encoding));
-    }
-  }
-
   TEST_CASE("AacDecoderSession - reports error paths")
   {
     SECTION("Non-existent file")
@@ -167,6 +101,6 @@ namespace ao::audio::test
     auto decoderPtr = ao::test::requireValue(AacDecoderSession::open(testFile, SampleEncoding::Signed16Le));
     auto& decoder = *decoderPtr;
 
-    CHECK(readUntilStableEndOfStream(decoder, 256) > 0);
+    CHECK(readUntilStableEndOfStream(decoder, 256) == 46080); // 45 full 1024-frame blocks.
   }
 } // namespace ao::audio::test

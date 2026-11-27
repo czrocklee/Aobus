@@ -85,32 +85,6 @@ namespace ao::audio
     }
   } // namespace
 
-  void unpackS24PcmSamples(std::span<std::byte const> source,
-                           std::span<std::int32_t> destination,
-                           std::uint8_t shift) noexcept
-  {
-    auto const count = std::min(source.size() / 3, destination.size());
-
-    for (std::size_t i = 0; i < count; ++i)
-    {
-      auto const offset = i * 3;
-
-      // Manual unpack for little-endian S24
-      auto bits = static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset])) |
-                  (static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset + 1])) << 8U) |
-                  (static_cast<std::uint32_t>(static_cast<std::uint8_t>(source[offset + 2])) << 16U);
-
-      // Sign extension from 24 to 32 bits
-      if ((bits & kSigned24SignBit) != 0U)
-      {
-        bits |= kSigned24ExtensionMask;
-      }
-
-      bits <<= shift;
-      destination[i] = std::bit_cast<std::int32_t>(bits);
-    }
-  }
-
   Result<> convertPcmEncoding(std::span<std::byte const> source,
                               PcmFormat const& sourcePcmFormat,
                               SignalFormat const& sourceSignalFormat,

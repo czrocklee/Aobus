@@ -36,7 +36,6 @@ namespace ao::audio::detail
     }
 
     _optDemuxer.emplace(std::move(*demuxerRes));
-    _packetIndex = 0;
     return {};
   }
 
@@ -71,13 +70,7 @@ namespace ao::audio::detail
 
   std::span<std::byte const> OggPacketSource::packet() const
   {
-    if (isAtEnd())
-    {
-      return {};
-    }
-
-    AO_INVARIANT(_optDemuxer, "Readable Ogg packet source has no demuxer");
-    return _optDemuxer->packet(_packetIndex).bytes;
+    return packetAt(_packetIndex);
   }
 
   std::span<std::byte const> OggPacketSource::packetAt(std::size_t index) const
@@ -98,11 +91,6 @@ namespace ao::audio::detail
   std::size_t OggPacketSource::packetCount() const noexcept
   {
     return _optDemuxer ? _optDemuxer->packetCount() : 0;
-  }
-
-  std::int64_t OggPacketSource::finalGranulePosition() const noexcept
-  {
-    return _optDemuxer ? _optDemuxer->finalGranulePosition() : media::ogg::Demuxer::kUnsetGranulePosition;
   }
 
   media::ogg::Demuxer const& OggPacketSource::demuxer() const noexcept

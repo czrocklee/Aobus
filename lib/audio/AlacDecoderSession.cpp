@@ -573,18 +573,15 @@ namespace ao::audio
       return PcmBlock{.endOfStream = true};
     }
 
+    auto const maxFrames = _implPtr->fallbackFrameLength();
     auto const firstFrameIndex =
-      _implPtr->packetSource.firstFrameIndex(_implPtr->info.sourceFormat.sampleRate, _implPtr->fallbackFrameLength());
+      _implPtr->packetSource.firstFrameIndex(_implPtr->info.sourceFormat.sampleRate, maxFrames);
     auto const packet = _implPtr->packetSource.packet();
 
     if (packet.empty())
     {
       return makeError(Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
     }
-
-    auto const maxFrames = (_implPtr->decoderPtr->mConfig.frameLength > 0)
-                             ? _implPtr->decoderPtr->mConfig.frameLength
-                             : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
 
     auto const sourceBps = _implPtr->info.sourceFormat.precisionBits;
     auto const channels = _implPtr->info.outputFormat.channels;

@@ -15,6 +15,7 @@
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <bit>
@@ -271,11 +272,44 @@ namespace ao::audio::test
     auto decoderPtr = ao::test::requireValue(
       WavDecoderSession::open(requireAudioFixture("basic_metadata.wav"), SampleEncoding::Signed16Le));
     auto& decoder = *decoderPtr;
+    REQUIRE(decoder.streamInfo().optTotalFrames == 44100);
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
-    auto blockRes = decoder.readNextBlock();
-    REQUIRE(blockRes);
-    CHECK(blockRes->firstFrameIndex == 22050);
-    CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
+    auto const block = ao::test::requireValue(decoder.readNextBlock());
+    REQUIRE(block.frames > 0);
+    CHECK(block.firstFrameIndex == 22050);
+    CHECK(block.frames + readUntilStableEndOfStream(decoder, 512) == 22050);
+
+    REQUIRE(decoder.seekFrame(0));
+    auto const first = ao::test::requireValue(decoder.readNextBlock());
+    CHECK(first.firstFrameIndex == 0);
+    REQUIRE(first.frames > 0);
+
+    REQUIRE(decoder.seekFrame(44100));
+    CHECK(readUntilStableEndOfStream(decoder, 1) == 0);
+  }
+
+  TEST_CASE("WavDecoderSession - seek and flush preserve the last borrowed PCM")
+  {
+    auto const encoding = GENERATE(SampleEncoding::Signed16Le, SampleEncoding::Float32Le);
+    auto decoderPtr =
+      ao::test::requireValue(WavDecoderSession::open(requireAudioFixture("basic_metadata.wav"), encoding));
+    auto const first = ao::test::requireValue(decoderPtr->readNextBlock());
+    REQUIRE_FALSE(first.bytes.empty());
+    auto const saved = std::vector<std::byte>{first.bytes.begin(), first.bytes.end()};
+
+    SECTION("seek")
+    {
+      REQUIRE(decoderPtr->seekFrame(44100));
+    }
+
+    SECTION("flush")
+    {
+      decoderPtr->flush();
+    }
+
+    // Checks for overwrites; ASan vector annotations also catch a clear()
+    // that ends the elements' lifetimes but retains their storage.
+    CHECK(std::ranges::equal(first.bytes, saved));
   }
 
   TEST_CASE("WavDecoderSession - supports integer-to-float output")

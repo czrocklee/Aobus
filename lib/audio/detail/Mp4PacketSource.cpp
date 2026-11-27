@@ -40,7 +40,6 @@ namespace ao::audio::detail
     }
 
     _optDemuxer.emplace(std::move(*demuxerRes));
-    _sampleIndex = 0;
     return {};
   }
 
@@ -100,17 +99,6 @@ namespace ao::audio::detail
     return _optDemuxer ? _optDemuxer->alacSampleEntry() : media::mp4::OptionalAtom{};
   }
 
-  media::mp4::Demuxer::SampleEntry Mp4PacketSource::sampleInfo() const
-  {
-    if (isAtEnd())
-    {
-      return {};
-    }
-
-    AO_INVARIANT(_optDemuxer, "Readable MP4 packet source has no demuxer");
-    return _optDemuxer->sampleInfo(_sampleIndex);
-  }
-
   std::uint32_t Mp4PacketSource::sampleIndex() const noexcept
   {
     return _sampleIndex;
@@ -146,14 +134,14 @@ namespace ao::audio::detail
   std::uint64_t Mp4PacketSource::firstFrameIndex(std::uint32_t sampleRate,
                                                  std::uint32_t fallbackFramesPerPacket) const noexcept
   {
-    if (isAtEnd())
+    if (!_optDemuxer || _sampleIndex >= _optDemuxer->sampleCount())
     {
       return 0;
     }
 
-    auto const entry = sampleInfo();
+    auto const entry = _optDemuxer->sampleInfo(_sampleIndex);
 
-    if (auto const mediaTimescale = timescale();
+    if (auto const mediaTimescale = _optDemuxer->timescale();
         mediaTimescale > 0 && sampleRate > 0 && (entry.startTime > 0 || entry.duration > 0))
     {
       return saturatingScale(entry.startTime, sampleRate, mediaTimescale);

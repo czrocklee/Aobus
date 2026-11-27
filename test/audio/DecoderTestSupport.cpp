@@ -62,6 +62,7 @@ namespace ao::audio::test
     auto const stableBlockRes = decoder.readNextBlock();
     REQUIRE(stableBlockRes);
     CHECK(stableBlockRes->endOfStream);
+    CHECK(stableBlockRes->frames == 0);
     CHECK(stableBlockRes->bytes.empty());
     return totalFrames;
   }
