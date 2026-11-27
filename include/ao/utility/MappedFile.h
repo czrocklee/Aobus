@@ -33,10 +33,8 @@ namespace ao::utility
     /**
      * @brief Maps the specified file into memory (read-only).
      *
-     * A moved-from object is valid but unmapped; calling map() reinitializes
-     * its internal state and makes it usable again.
-     * @param filePath The path to the file to map.
-     * @return Result<>::ok() on success, or an error with message on failure.
+     * Closes any previous mapping first. On failure the object is unmapped
+     * and can be used again, just like a moved-from object.
      */
     Result<> map(std::filesystem::path const& filePath);
 
@@ -46,7 +44,8 @@ namespace ao::utility
     void unmap();
 
     /**
-     * @brief Returns a read-only span of the mapped file content.
+     * @brief Borrows the mapped bytes. A move transfers the mapping and its borrows;
+     * releasing or replacing that mapping (including a failed remap) invalidates them.
      */
     std::span<std::byte const> bytes() const;
 

@@ -99,24 +99,6 @@ namespace ao::i18n
       return makeError(code, std::format("{}: {}", operation, ::u_errorName(status)));
     }
 
-    bool isEqualIgnoringAsciiCase(std::string_view const left, std::string_view const right) noexcept
-    {
-      if (left.size() != right.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < left.size(); ++index)
-      {
-        if (utility::toAsciiLower(left[index]) != utility::toAsciiLower(right[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
     Result<> registerEmbeddedCatalogData()
     {
       auto& state = registrationState();
@@ -234,7 +216,7 @@ namespace ao::i18n
                          }};
       }
 
-      if (isEqualIgnoringAsciiCase(*canonicalTagRes, "qps-ploc"))
+      if (utility::isEqualIgnoringAsciiCase(*canonicalTagRes, "qps-ploc"))
       {
         return std::pair{std::string{"qps-ploc"},
                          std::vector<LocaleCandidate>{

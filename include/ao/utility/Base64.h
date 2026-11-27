@@ -19,7 +19,8 @@ namespace ao::utility
 
   /**
    * Decodes a Base64 string to binary data.
-   * Returns std::nullopt on invalid input (an invalid character or malformed trailing bits);
+   * ASCII whitespace is ignored. Padding is optional; if supplied, it must complete the final quartet.
+   * Returns std::nullopt on invalid characters, invalid padding, or nonzero unused trailing bits;
    * a successfully decoded empty input yields an engaged optional holding an empty vector.
    */
   std::optional<std::vector<std::byte>> base64Decode(std::string_view base64);

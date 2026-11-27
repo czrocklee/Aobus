@@ -36,6 +36,7 @@ UIModel receives paths or stores and does not resolve storage locations.
 | `<root>`      | The selected music-library root                                                                                                                                                       | The selected music-library root                                                                                                    |
 | `<preset-id>` | A validated shell-layout preset identifier                                                                                                                                            | A validated shell-layout preset identifier                                                                                         |
 
+Both helpers treat empty and relative location values as unset; no fallback uses the working directory.
 `<app-cache>` is deliberately local-machine on Windows: a roaming profile would synchronize derived files between machines that can each rebuild them.
 A root that cannot resolve it composes a runtime with no cache directory rather than failing to start.
 

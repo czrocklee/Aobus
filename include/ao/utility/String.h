@@ -45,6 +45,7 @@ namespace ao::utility
 
   // These transformations deliberately recognize ASCII only. Bytes belonging to
   // UTF-8 code units are preserved verbatim; Unicode case folding is a separate operation.
+  bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept;
   std::string toLower(std::string_view text);
   std::string_view trim(std::string_view text);
 } // namespace ao::utility

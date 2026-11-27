@@ -3,6 +3,8 @@
 
 #include <ao/utility/Base64.h>
 
+#include <ao/utility/ByteView.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -29,15 +31,14 @@ namespace ao::utility::test
     SECTION("Small string round-trip")
     {
       auto const input = std::string_view{"Hello Aobus!"};
-      auto const data = std::span{reinterpret_cast<std::byte const*>(input.data()), input.size()};
+      auto const data = bytes::view(input);
 
       auto const encoded = base64Encode(data);
       CHECK(encoded == "SGVsbG8gQW9idXMh");
 
       auto const optDecoded = base64Decode(encoded);
       REQUIRE(optDecoded);
-      auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
-      CHECK(result == input);
+      CHECK(bytes::stringView(*optDecoded) == input);
     }
 
     SECTION("Binary data round-trip (non-multiple of 3)")
@@ -53,7 +54,7 @@ namespace ao::utility::test
       auto const known = std::vector{std::byte{0x00}, std::byte{0x80}, std::byte{0xFF}};
       CHECK(base64Encode(known) == "AID/");
       CHECK(base64Decode("AID/") == known);
-    } // std::optional<vector> == vector compares the engaged value
+    }
 
     SECTION("Large binary data round-trip")
     {
@@ -82,8 +83,7 @@ namespace ao::utility::test
       auto const* const input = "SGVsbG8g\nQW9idXMh"; // Hello Aobus!
       auto const optDecoded = base64Decode(input);
       REQUIRE(optDecoded);
-      auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
-      CHECK(result == "Hello Aobus!");
+      CHECK(bytes::stringView(*optDecoded) == "Hello Aobus!");
     }
 
     SECTION("Padding handling")
@@ -97,6 +97,7 @@ namespace ao::utility::test
       auto const d2 = std::vector{std::byte{'A'}, std::byte{'B'}};
       CHECK(base64Encode(d2) == "QUI=");
       CHECK(base64Decode("QUI=") == d2);
+      CHECK(base64Decode("QUI") == d2);
     }
 
     SECTION("Truncation and invalid padding bits")
@@ -108,6 +109,7 @@ namespace ao::utility::test
       // 'A' encodes to "QQ==", where the second 'Q' uses 2 bits and 4 bits are zero padding.
       // If we change the second char to 'R' (which has non-zero in the bottom 4 bits):
       CHECK_FALSE(base64Decode("QR==").has_value());
+      CHECK_FALSE(base64Decode("QUJ=")); // The final symbol has two unused bits, which must both be zero.
 
       // Unpadded base64 should still work if valid
       auto const d1 = std::vector{std::byte{'A'}};
@@ -116,6 +118,8 @@ namespace ao::utility::test
 
     SECTION("Padding terminates the encoded value exactly")
     {
+      CHECK_FALSE(base64Decode("=="));
+      CHECK_FALSE(base64Decode("QUI=="));
       CHECK_FALSE(base64Decode("QQ==garbage"));
       CHECK_FALSE(base64Decode("QQ==="));
       CHECK_FALSE(base64Decode("QQ="));

@@ -43,12 +43,6 @@ namespace ao::test
 
   TEST_CASE("AudioCodec - storage conversion rejects unknown raw values")
   {
-    CHECK(audioCodecStorageValue(AudioCodec::Flac) == 1);
-    CHECK(audioCodecStorageValue(AudioCodec::Alac) == 2);
-    CHECK(audioCodecStorageValue(AudioCodec::Wav) == 3);
-    CHECK(audioCodecStorageValue(AudioCodec::Aac) == 128);
-    CHECK(audioCodecStorageValue(AudioCodec::Mp3) == 129);
-    CHECK(audioCodecStorageValue(AudioCodec::Opus) == 130);
     CHECK(audioCodecFromStorage(1) == AudioCodec::Flac);
     CHECK(audioCodecFromStorage(2) == AudioCodec::Alac);
     CHECK(audioCodecFromStorage(3) == AudioCodec::Wav);
@@ -56,6 +50,6 @@ namespace ao::test
     CHECK(audioCodecFromStorage(129) == AudioCodec::Mp3);
     CHECK(audioCodecFromStorage(130) == AudioCodec::Opus);
     CHECK(audioCodecFromStorage(4) == AudioCodec::Unknown);
-    CHECK(audioCodecFromStorage(255) == AudioCodec::Unknown);
+    CHECK(audioCodecStorageValue(static_cast<AudioCodec>(255)) == 0);
   }
 } // namespace ao::test

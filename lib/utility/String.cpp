@@ -3,11 +3,17 @@
 
 #include <ao/utility/String.h>
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 
 namespace ao::utility
 {
+  bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
+  {
+    return std::ranges::equal(lhs, rhs, {}, toAsciiLower, toAsciiLower);
+  }
+
   std::string toLower(std::string_view text)
   {
     auto result = std::string{};

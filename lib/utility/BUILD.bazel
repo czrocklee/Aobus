@@ -43,6 +43,7 @@ cc_library(
         "FileAccessPath.cpp",
         "FromChars.cpp",
         "Hash128.cpp",
+        "Hex.cpp",
         "MappedFile.cpp",
         "Reflect.cpp",
         "RymlAdapter.cpp",

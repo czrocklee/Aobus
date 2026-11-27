@@ -72,45 +72,30 @@ namespace ao::utility
 
       return home.is_absolute() ? std::optional{std::move(home)} : std::nullopt;
     }
+
+    Result<std::filesystem::path> applicationDirectory(char const* variable, std::string_view fallback)
+    {
+      if (auto optRoot = environmentPath(variable); optRoot)
+      {
+        return *optRoot / pathFromUtf8(kApplicationDirectoryName);
+      }
+
+      if (auto optHome = environmentPath("HOME").or_else(passwdHomeDirectory); optHome)
+      {
+        return *optHome / pathFromUtf8(fallback) / pathFromUtf8(kApplicationDirectoryName);
+      }
+
+      return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
+    }
   } // namespace
 
   Result<std::filesystem::path> applicationConfigDirectory()
   {
-    if (auto optConfigHome = environmentPath("XDG_CONFIG_HOME"); optConfigHome)
-    {
-      return *optConfigHome / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    if (auto optHome = environmentPath("HOME"); optHome)
-    {
-      return *optHome / ".config" / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    if (auto optHome = passwdHomeDirectory(); optHome)
-    {
-      return *optHome / ".config" / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
+    return applicationDirectory("XDG_CONFIG_HOME", ".config");
   }
 
   Result<std::filesystem::path> applicationCacheDirectory()
   {
-    if (auto optCacheHome = environmentPath("XDG_CACHE_HOME"); optCacheHome)
-    {
-      return *optCacheHome / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    if (auto optHome = environmentPath("HOME"); optHome)
-    {
-      return *optHome / ".cache" / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    if (auto optHome = passwdHomeDirectory(); optHome)
-    {
-      return *optHome / ".cache" / pathFromUtf8(kApplicationDirectoryName);
-    }
-
-    return makeError(Error::Code::NotFound, "No environment or account entry names a home directory");
+    return applicationDirectory("XDG_CACHE_HOME", ".cache");
   }
 } // namespace ao::utility
