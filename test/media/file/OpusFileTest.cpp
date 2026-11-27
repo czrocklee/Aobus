@@ -9,6 +9,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 #include <ao/media/opus/Header.h>
 #include <ao/utility/ByteView.h>
@@ -342,6 +343,42 @@ namespace ao::media::file::opus::test
 
     // The decoded comment must hand out the image itself, not its container.
     CHECK(std::ranges::equal(picture.bytes.first(kPngSignature.size()), kPngSignature));
+  }
+
+  TEST_CASE("Opus File - retains complete borrowed picture bytes across visits")
+  {
+    // A literal picture block: front cover, image/png, empty description,
+    // 1x1 geometry, and five opaque image bytes with interior and trailing NULs.
+    constexpr auto kPictureComment =
+      std::string_view{"METADATA_BLOCK_PICTURE=AAAAAwAAAAlpbWFnZS9wbmcAAAAAAAAAAQAAAAEAAAAYAAAAAAAAAAWJAFD/AA=="};
+    constexpr auto kExpected =
+      std::array{std::byte{0x89}, std::byte{0x00}, std::byte{0x50}, std::byte{0xFF}, std::byte{0x00}};
+    auto const comments = std::array{kPictureComment};
+    auto spec = StreamSpec{};
+    spec.optTagsPacket = makeTagsPacket(comments);
+    spec.audioPacketCount = 1;
+    spec.finalGranulePosition = kSyntheticPacketFrames;
+    auto const temp = TempFile{makeStreamBytes(spec), ".opus"};
+    auto const file = requireValue(ao::media::file::File::open(temp.path));
+
+    auto const visitPicture = [&file]
+    {
+      auto content = ao::media::file::test::RecordedContent{};
+      auto visitor = ao::media::file::test::VisitorSpy{content};
+      REQUIRE(file.visit(visitor));
+      REQUIRE(content.pictures().size() == 1);
+      // Only the borrowed view survives this visitor and its recording.
+      return content.pictures().front();
+    };
+
+    auto const first = visitPicture();
+    CHECK(first.type == PictureType::FrontCover);
+    CHECK(std::ranges::equal(first.bytes, kExpected));
+
+    auto const second = visitPicture();
+    CHECK(second.type == PictureType::FrontCover);
+    CHECK(std::ranges::equal(second.bytes, kExpected));
+    CHECK(std::ranges::equal(first.bytes, kExpected));
   }
 
   TEST_CASE("Opus File - ignores a Base64 picture comment with invalid structure")

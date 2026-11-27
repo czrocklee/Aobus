@@ -62,7 +62,7 @@ The `FILE` line is not resolved, including for an embedded sheet, because a rip 
 
 ## Embedded text
 
-Shared Vorbis-comment extraction may surface a `CUESHEET` comment from FLAC or Opus as embedded text. That callback is not a library text field.
+Shared Vorbis-comment extraction exposes distinct non-empty `CUESHEET` values from FLAC or Opus as [embedded text callbacks](audio-file.md#visitor-surface-and-order), not library text fields.
 Only a nonempty FLAC comment is an embedded binding source. It is the same single-`FILE` text and applies to its own file only when that file has no same-name external sheet.
 An empty FLAC comment does not bind. Opus text does not bind. Identical nonempty comments count as one sheet.
 Two different nonempty FLAC comments compete like same-name external sheets: neither binds, the file is undetermined, and the scan reports the ambiguity. A same-name external candidate blocks the FLAC fallback even when that candidate is unreadable, empty, outside the library root, or over the external read limit. There is no fallback to the embedded sheet or to importing the file whole. [CUE binding](../../system/library/scan-and-identity.md#cue-binding) owns resolution, in-root symlink containment, and that limit.
@@ -83,12 +83,12 @@ A later build that cannot use a stored carrier's codec leaves that carrier uncha
 
 - [`Sheet.h`](../../../include/ao/media/cue/Sheet.h) declares the sheet, the resolved segment, and the same-name candidate helpers.
 - [`Sheet.cpp`](../../../lib/media/cue/Sheet.cpp) owns UTF-8 admission, the grammar, and range resolution.
-- [`Visitor.h`](../../../include/ao/media/file/Visitor.h) exposes embedded sheet text through `cueSheet`, not a text field. Shared Vorbis-comment extraction copies a `CUESHEET` comment for FLAC and Opus; the FLAC reader skips the binary cue-sheet block.
+- [`Visitor.h`](../../../include/ao/media/file/Visitor.h) exposes embedded sheet text through `cueSheet`, not a text field. For FLAC and Opus, the visitor receives a borrowed view of each distinct nonempty `CUESHEET` comment. The FLAC reader skips the binary cue-sheet block.
 
 ## Test authority
 
 - [`CueSheetTest.cpp`](../../../test/media/CueSheetTest.cpp) locks the grammar, data-track ends, pregap placement, UTF-8 rejection, and same-name candidate sets.
-- [`ExactExtentTest.cpp`](../../../test/media/ExactExtentTest.cpp) locks exact FLAC and WAV extents and that a binary `CUESHEET` block stays uninterpreted while comment text is copied.
+- [`ExactExtentTest.cpp`](../../../test/media/ExactExtentTest.cpp) checks exact FLAC and WAV extents. Its visitor copies the comment text to verify verbatim delivery; the binary `CUESHEET` block produces no text callback.
 
 ## Related documents
 

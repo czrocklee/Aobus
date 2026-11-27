@@ -78,7 +78,8 @@ namespace ao::media::mp4::test
     {
       auto data = std::vector<std::uint8_t>{};
       auto moovBody = std::vector<std::uint8_t>{};
-      auto const videoTrack = ao::test::mp4::makeVideoTrackAtom("avc1");
+      auto const videoTrack =
+        ao::test::mp4::makeTrackAtom("vide", ao::test::mp4::makeAtom("stbl", ao::test::mp4::makeStsdAtom("alac")));
       auto const audioTrack = ao::test::mp4::makeAudioTrackAtom("mp4a", ao::test::mp4::makeAtom("esds", {0, 0, 0, 0}));
       moovBody.insert(moovBody.end(), videoTrack.begin(), videoTrack.end());
       moovBody.insert(moovBody.end(), audioTrack.begin(), audioTrack.end());
@@ -149,7 +150,8 @@ namespace ao::media::mp4::test
 
     SECTION("Reports NotFound when stsd is missing")
     {
-      auto const missingStsd = toBytes(ao::test::mp4::makeAtom("moov", {}));
+      auto const track = ao::test::mp4::makeTrackAtom("soun", ao::test::mp4::makeAtom("stbl", {}));
+      auto const missingStsd = toBytes(ao::test::mp4::makeAtom("moov", track));
       auto const res = audioSampleEntryType(missingStsd);
 
       REQUIRE_FALSE(res);
@@ -165,23 +167,10 @@ namespace ao::media::mp4::test
       CHECK(res.error().code == Error::Code::CorruptData);
     }
 
-    SECTION("Reports NotFound for malformed stsd sample entries")
+    SECTION("Reports NotFound when the declared stsd entry is absent")
     {
-      auto data = std::vector<std::uint8_t>{};
-      auto moovBody = std::vector<std::uint8_t>{};
-      auto stsdBody = std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 0, 1};
-      auto const stsdAtom = ao::test::mp4::makeAtom("stsd", stsdBody);
-      auto const stblAtom = ao::test::mp4::makeAtom("stbl", stsdAtom);
-      auto const minfAtom = ao::test::mp4::makeAtom("minf", stblAtom);
-      auto const hdlrAtom = ao::test::mp4::makeHdlrAtom("soun");
-      auto mdiaBody = std::vector<std::uint8_t>{};
-      mdiaBody.insert(mdiaBody.end(), hdlrAtom.begin(), hdlrAtom.end());
-      mdiaBody.insert(mdiaBody.end(), minfAtom.begin(), minfAtom.end());
-      auto const mdiaAtom = ao::test::mp4::makeAtom("mdia", mdiaBody);
-      auto const trakAtom = ao::test::mp4::makeAtom("trak", mdiaAtom);
-      moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
-      ao::test::mp4::addAtom(data, "moov", moovBody);
-      auto const res = audioSampleEntryType(toBytes(data));
+      auto const stsdAtom = ao::test::mp4::makeAtom("stsd", {0, 0, 0, 0, 0, 0, 0, 1});
+      auto const res = audioSampleEntryType(makeFileWithStsd(stsdAtom));
 
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);

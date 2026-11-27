@@ -39,6 +39,7 @@ namespace ao::media::mp4
     constexpr std::uint8_t kDescriptorLengthContinuationBit = 0x80;
     constexpr std::uint8_t kEsStreamDependenceFlag = 0x80;
     constexpr std::uint8_t kEsUrlFlag = 0x40;
+    constexpr std::uint8_t kEsOcrStreamFlag = 0x20;
 
     struct MdhdVersion0BodyLayout final
     {
@@ -168,7 +169,7 @@ namespace ao::media::mp4
         offset += 1U + byteValue(payload[offset]);
       }
 
-      if ((flags & 0x20U) != 0)
+      if ((flags & kEsOcrStreamFlag) != 0)
       {
         offset += 2;
       }
@@ -193,27 +194,45 @@ namespace ao::media::mp4
       return payload.subspan(kHeaderSize);
     }
 
-    std::optional<std::vector<std::byte>> findDescriptorPayload(std::span<std::byte const> bytes, std::byte targetTag)
+    std::optional<std::span<std::byte const>> findDescriptorPayload(std::span<std::byte const> bytes,
+                                                                    std::byte targetTag)
     {
-      std::size_t offset = 0;
+      // Visit children before siblings. Only defer nonempty sibling ranges;
+      // the ranges are disjoint and their count is bounded by the input bytes.
+      auto siblings = std::vector<std::span<std::byte const>>{};
 
-      while (offset < bytes.size())
+      while (true)
       {
-        auto const tag = bytes[offset++];
+        if (bytes.empty())
+        {
+          if (siblings.empty())
+          {
+            return std::nullopt;
+          }
+
+          bytes = siblings.back();
+          siblings.pop_back();
+        }
+
+        auto const tag = bytes.front();
+        std::size_t offset = 1;
         auto const optLength = readDescriptorLength(bytes, offset);
 
-        if (!optLength || offset + *optLength > bytes.size())
+        if (!optLength || *optLength > bytes.size() - offset)
         {
-          return std::nullopt;
+          // A malformed list stops just this branch, not its parent's siblings.
+          bytes = {};
+          continue;
         }
 
         auto const payload = bytes.subspan(offset, *optLength);
 
         if (tag == targetTag)
         {
-          return std::vector<std::byte>{payload.begin(), payload.end()};
+          return payload;
         }
 
+        bytes = bytes.subspan(offset + *optLength);
         auto nested = std::span<std::byte const>{};
 
         if (tag == kEsDescriptorTag)
@@ -227,16 +246,14 @@ namespace ao::media::mp4
 
         if (!nested.empty())
         {
-          if (auto optPayload = findDescriptorPayload(nested, targetTag); optPayload)
+          if (!bytes.empty())
           {
-            return optPayload;
+            siblings.push_back(bytes);
           }
+
+          bytes = nested;
         }
-
-        offset += *optLength;
       }
-
-      return std::nullopt;
     }
 
     std::vector<std::byte> extractAacMagicCookie(AtomView const& esdsView)
@@ -251,8 +268,8 @@ namespace ao::media::mp4
       }
 
       auto const descriptors = payload.subspan(kFullBoxHeaderSize);
-      auto optCookie = findDescriptorPayload(descriptors, kDecoderSpecificInfoTag);
-      return optCookie.value_or(std::vector<std::byte>{});
+      auto const optCookie = findDescriptorPayload(descriptors, kDecoderSpecificInfoTag);
+      return optCookie ? std::vector<std::byte>{optCookie->begin(), optCookie->end()} : std::vector<std::byte>{};
     }
 
     OptionalAtom findAtomOrThrow(AtomView const& root, std::span<std::string_view const> path)

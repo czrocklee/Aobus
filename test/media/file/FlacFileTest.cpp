@@ -7,7 +7,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/media/file/Visitor.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
-#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -373,7 +372,7 @@ namespace ao::media::file::flac::test
     CHECK(rangeRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("FLAC File - audio payload signature ignores metadata changes")
+  TEST_CASE("FLAC File - audio payload ignores metadata changes")
   {
     auto firstData = createMinimalFlac("Short");
     auto secondData = createMinimalFlac("A Longer Retagged Title");
@@ -391,12 +390,9 @@ namespace ao::media::file::flac::test
     REQUIRE(firstPayloadRes);
     REQUIRE(secondPayloadRes);
 
-    CHECK(firstPayloadRes->bytes.size() == audioPayload.size());
-    CHECK(secondPayloadRes->bytes.size() == audioPayload.size());
-    auto const expectedPayload = std::array{std::byte{0xC0}, std::byte{0xC1}, std::byte{0xC2}, std::byte{0xC3}};
+    auto const expectedPayload = std::as_bytes(std::span<std::uint8_t const>{audioPayload});
     CHECK(std::ranges::equal(firstPayloadRes->bytes, expectedPayload));
     CHECK(std::ranges::equal(secondPayloadRes->bytes, expectedPayload));
-    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
   TEST_CASE("FLAC File - rejects malformed input")
@@ -406,6 +402,7 @@ namespace ao::media::file::flac::test
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
       addBlockHeader(data, MetadataBlockType::VorbisComment, true, 10);
       data.insert(data.end(), 10, 0);
+      data.push_back(0xA0); // Keep audio present so only the missing STREAMINFO causes rejection.
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
@@ -502,6 +499,7 @@ namespace ao::media::file::flac::test
         auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
         addBlockHeader(data, MetadataBlockType::StreamInfo, true, declaredSize);
         data.insert(data.end(), declaredSize, 0);
+        data.push_back(0xA0);
 
         auto const temp = TempFile{data, ".flac"};
         auto const file = File{temp.path};

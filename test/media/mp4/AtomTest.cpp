@@ -177,18 +177,26 @@ namespace ao::media::mp4::test
     CHECK_FALSE(*endRes);
   }
 
-  TEST_CASE("MP4 AtomView - an atom read as a container rejects an end-of-file child size")
+  TEST_CASE("MP4 AtomCursor - only the synthetic root accepts an end-of-file child size")
   {
     auto const child = ao::test::mp4::makeEndOfFileAtom("data", {1});
-    auto const bytes = toBytes(ao::test::mp4::makeAtom("item", child));
-    auto rootCursor = AtomView::root(bytes).children();
-    auto const itemRes = rootCursor.next();
-    REQUIRE(itemRes);
-    REQUIRE(*itemRes);
+    auto const childBytes = toBytes(child);
+    auto fileCursor = AtomView::root(childBytes).children();
+    auto const topLevelRes = fileCursor.next();
+    REQUIRE(topLevelRes);
+    REQUIRE(*topLevelRes);
+    CHECK((*topLevelRes)->type() == "data");
+    CHECK((*topLevelRes)->bytes().size() == childBytes.size());
 
-    auto childCursor = (*itemRes)->asContainer().children();
+    auto const nestedBytes = toBytes(ao::test::mp4::makeAtom("root", child));
+    auto rootCursor = AtomView::root(nestedBytes).children();
+    auto const parentRes = rootCursor.next();
+    REQUIRE(parentRes);
+    REQUIRE(*parentRes);
+    CHECK((*parentRes)->type() == "root");
+
+    auto childCursor = (*parentRes)->asContainer().children();
     auto const childRes = childCursor.next();
-
     REQUIRE_FALSE(childRes);
     CHECK(childRes.error().code == Error::Code::FormatRejected);
   }

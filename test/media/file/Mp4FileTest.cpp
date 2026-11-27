@@ -9,7 +9,6 @@
 #include <ao/PictureType.h>
 #include <ao/media/file/Visitor.h>
 #include <ao/media/mp4/AtomLayout.h>
-#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -124,13 +123,7 @@ namespace ao::media::file::mp4::test
 
       for (auto const value : values)
       {
-        // A data child has one atom header, then type/locale/text. DataAtomLayout
-        // describes a parent plus nested data header, not a child by itself.
-        auto dataBody = std::vector<std::uint8_t>{};
-        ao::test::mp4::appendBe32(dataBody, dataType);
-        ao::test::mp4::appendBe32(dataBody, 0); // Locale.
-        dataBody.insert(dataBody.end(), value.begin(), value.end());
-        auto const child = ao::test::mp4::makeAtom("data", dataBody);
+        auto const child = ao::test::mp4::makeAtom("data", makeDataChildBody(value, dataType));
         freeformBody.insert(freeformBody.end(), child.begin(), child.end());
       }
 
@@ -307,20 +300,7 @@ namespace ao::media::file::mp4::test
                                                std::string_view text,
                                                std::uint32_t dataType = 1)
     {
-      auto layout = DataAtomLayout{};
-      layout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + text.size());
-      layout.common.type = {static_cast<char>(keyIndex >> 24),
-                            static_cast<char>(keyIndex >> 16),
-                            static_cast<char>(keyIndex >> 8),
-                            static_cast<char>(keyIndex)};
-      layout.dataLength = static_cast<std::uint32_t>(16 + text.size());
-      std::memcpy(layout.magic.data(), "data", 4);
-      layout.type = dataType;
-
-      auto const* ptr = reinterpret_cast<std::uint8_t const*>(&layout);
-      auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(layout));
-      atom.insert(atom.end(), text.begin(), text.end());
-      return atom;
+      return makeTextMetadataAtom(mdtaItemType(keyIndex).data(), text, dataType);
     }
 
     std::vector<std::uint8_t> createMinimalM4aWithIlstAndKeys(std::vector<std::uint8_t> const& rawIlstChildren,
@@ -348,23 +328,7 @@ namespace ao::media::file::mp4::test
 
     std::vector<std::uint8_t> createMinimalM4aWithRawIlstAtom(std::vector<std::uint8_t> const& rawIlstChild)
     {
-      auto data = std::vector<std::uint8_t>{};
-      auto const ilstAtom = ao::test::mp4::makeAtom("ilst", rawIlstChild);
-
-      auto metaBody = std::vector<std::uint8_t>{0, 0, 0, 0};
-      metaBody.insert(metaBody.end(), ilstAtom.begin(), ilstAtom.end());
-
-      auto const metaAtom = ao::test::mp4::makeAtom("meta", metaBody);
-      auto const udtaAtom = ao::test::mp4::makeAtom("udta", metaAtom);
-      auto const trakAtom = ao::test::mp4::makeAudioTrackAtom("mp4a");
-
-      auto moovBody = std::vector<std::uint8_t>{};
-      moovBody.insert(moovBody.end(), udtaAtom.begin(), udtaAtom.end());
-      moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
-
-      ao::test::mp4::addAtom(data, "moov", moovBody);
-      ao::test::mp4::addAtom(data, "mdat", {0x01});
-      return data;
+      return createMinimalM4aWithIlstAndKeys(rawIlstChild, {});
     }
 
     std::vector<std::uint8_t> createMinimalM4aWithRawDiskAtom()
@@ -744,7 +708,8 @@ namespace ao::media::file::mp4::test
       CAPTURE(dataType);
       auto children = std::vector<std::uint8_t>{};
 
-      for (auto const& atom : {makeTextMetadataAtom("\xA9"
+      for (auto const& atom : {makeMdtaTextAtom(3, "Declared"),
+                               makeTextMetadataAtom("\xA9"
                                                     "nam",
                                                     "AB",
                                                     dataType),
@@ -774,8 +739,7 @@ namespace ao::media::file::mp4::test
                                                     "1999",
                                                     dataType),
                                makeMdtaTextAtom(1, "AB", dataType),
-                               makeMdtaTextAtom(2, "1999", dataType),
-                               makeMdtaTextAtom(3, "Declared")})
+                               makeMdtaTextAtom(2, "1999", dataType)})
       {
         children.insert(children.end(), atom.begin(), atom.end());
       }
@@ -1125,7 +1089,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - audio payload signature ignores non-mdat atoms")
+  TEST_CASE("MP4 File - audio payload ignores non-mdat atoms")
   {
     auto const payload = std::vector<std::uint8_t>{0x21, 0x22, 0x23, 0x24};
     auto const baselineData = createMinimalM4aWithMdat(payload);
@@ -1142,9 +1106,9 @@ namespace ao::media::file::mp4::test
     REQUIRE(baselinePayloadRes);
     REQUIRE(retaggedPayloadRes);
 
-    CHECK(baselinePayloadRes->bytes.size() == payload.size());
-    CHECK(retaggedPayloadRes->bytes.size() == payload.size());
-    CHECK(utility::xxh3Hash128(baselinePayloadRes->bytes) == utility::xxh3Hash128(retaggedPayloadRes->bytes));
+    auto const expected = std::as_bytes(std::span<std::uint8_t const>{payload});
+    CHECK(std::ranges::equal(baselinePayloadRes->bytes, expected));
+    CHECK(std::ranges::equal(retaggedPayloadRes->bytes, expected));
   }
 
   TEST_CASE("MP4 File - single covr with two data boxes")

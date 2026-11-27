@@ -5,12 +5,15 @@
 
 #include "TestAtoms.h"
 #include "test/audio/AudioFixtureSupport.h"
+#include <ao/media/mp4/Atom.h>
+#include <ao/media/mp4/TrackSelection.h>
 #include <ao/utility/MappedFile.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -90,7 +93,7 @@ namespace ao::media::mp4::test
       expectedMessage = "MP4 fixed-size samples or index exceed file size";
     }
 
-    SECTION("Missing chunk entries cannot admit the declared count")
+    SECTION("A missing sample-to-chunk table cannot admit the declared count")
     {
       expectedMessage = "Missing MP4 samples, chunk offsets, or sample-to-chunk table";
       stsc.clear();
@@ -296,6 +299,8 @@ namespace ao::media::mp4::test
     auto chunkOffsets = ao::test::mp4::makeAtom("stco", chunkBody);
     bool missingPayload = false;
     bool hasTiming = true;
+    auto firstPacket = std::vector{std::byte{1}, std::byte{2}};
+    auto secondPacket = std::vector{std::byte{3}, std::byte{4}};
 
     SECTION("Compact sample tables")
     {
@@ -313,12 +318,14 @@ namespace ao::media::mp4::test
     {
       auto body = std::vector<std::uint8_t>{};
 
-      for (auto const value : {0U, 0U, 3U, 2U, 2U, 2U})
+      for (auto const value : {0U, 0U, 3U, 1U, 3U, 2U})
       {
         ao::test::mp4::appendBe32(body, value);
       }
 
       stsz = ao::test::mp4::makeAtom("stsz", body);
+      firstPacket = {std::byte{1}};
+      secondPacket = {std::byte{2}, std::byte{3}, std::byte{4}};
     }
 
     SECTION("Timing remains optional")
@@ -347,16 +354,20 @@ namespace ao::media::mp4::test
     REQUIRE(res);
     REQUIRE(res->sampleCount() == 3);
     CHECK(res->sampleInfo(0).offset == 8);
-    CHECK(res->sampleInfo(1).offset == 10);
+    CHECK(res->sampleInfo(1).offset == 8 + firstPacket.size());
     CHECK(res->sampleInfo(2).offset == (missingPayload ? 4096U : 14U));
     CHECK(res->sampleInfo(2).size == 2);
     CHECK(res->sampleInfo(2).startTime == (hasTiming ? 2048U : 0U));
     CHECK(res->sampleInfo(2).duration == (hasTiming ? 512U : 0U));
     CHECK(res->sampleIndexAtTime(2560) == 3);
-    REQUIRE(res->samplePayload(0).size() == 2);
-    CHECK(res->samplePayload(0)[0] == std::byte{1});
-    REQUIRE(res->samplePayload(1).size() == 2);
-    CHECK(res->samplePayload(1)[1] == std::byte{4});
+
+    if (!hasTiming)
+    {
+      CHECK(res->sampleIndexAtTime(1000) == 1); // Proportional fallback within the track duration.
+    }
+
+    CHECK(std::ranges::equal(res->samplePayload(0), firstPacket));
+    CHECK(std::ranges::equal(res->samplePayload(1), secondPacket));
 
     if (missingPayload)
     {
@@ -364,10 +375,17 @@ namespace ao::media::mp4::test
     }
     else
     {
-      REQUIRE(res->samplePayload(2).size() == 2);
-      CHECK(res->samplePayload(2)[0] == std::byte{5});
-      CHECK(res->samplePayload(2)[1] == std::byte{6});
+      CHECK(std::ranges::equal(res->samplePayload(2), std::array{std::byte{5}, std::byte{6}}));
     }
+  }
+
+  TEST_CASE("MP4 findAudioTrack - does not select an audio track without a sample table")
+  {
+    auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", {}));
+    auto const res = findAudioTrack(AtomView::root(fileData), "alac");
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("MP4 Demuxer - rejects malformed sample-table inputs")
@@ -384,26 +402,6 @@ namespace ao::media::mp4::test
     {
       auto const garbage = std::array{std::byte{0x00}, std::byte{0x01}, std::byte{0x02}};
       auto const res = Demuxer::parse(garbage, "alac");
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::FormatRejected);
-    }
-
-    SECTION("Atom with missing stbl returns FormatRejected gracefully")
-    {
-      // Construct a very basic 'ftyp' + 'moov' structure but missing 'stbl'
-      // ftyp atom (8 bytes header + payload)
-      // moov atom (8 bytes header + no children)
-      auto const data = std::vector{
-        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x10}, // size 16
-        std::byte{'f'},  std::byte{'t'},  std::byte{'y'},  std::byte{'p'},  // type
-        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, // dummy
-        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, // dummy
-        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x08}, // size 8
-        std::byte{'m'},  std::byte{'o'},  std::byte{'o'},  std::byte{'v'}   // type
-      };
-
-      auto const res = Demuxer::parse(data, "alac");
-
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::FormatRejected);
     }
@@ -537,14 +535,15 @@ namespace ao::media::mp4::test
   TEST_CASE("MP4 Demuxer - parses version 1 media timing")
   {
     auto const stbl = ao::test::mp4::makeSampleTableAtom(makeAlacStsd());
-    auto const mdhd = ao::test::mp4::makeMdhdVersion1Atom(48000, 96000);
+    constexpr std::uint64_t kDuration = 0x100017700ULL;
+    auto const mdhd = ao::test::mp4::makeMdhdVersion1Atom(48000, kDuration);
     auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, mdhd);
     auto const fileData = makeFile(track);
     auto const demuxerRes = Demuxer::parse(fileData, "alac");
 
     REQUIRE(demuxerRes);
     CHECK(demuxerRes->timescale() == 48000);
-    CHECK(demuxerRes->duration() == 96000);
+    CHECK(demuxerRes->duration() == kDuration);
   }
 
   TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables")
@@ -581,9 +580,103 @@ namespace ao::media::mp4::test
     CHECK(res->sampleCount() > 0);
   }
 
+  TEST_CASE("MP4 Demuxer - finds the AAC cookie in a sibling after a child list without a match")
+  {
+    auto const esds =
+      ao::test::mp4::makeAtom("esds",
+                              {
+                                0,    0,    0,    0, // FullBox version and flags
+                                0x03, 6,             // First ES descriptor, without a cookie
+                                0,    1,    0,       // ES ID and flags
+                                0x06, 1,    2,       // SL config descriptor
+                                0x03, 25,            // Second ES descriptor
+                                0,    2,    0,       // ES ID and flags
+                                0x04, 17,            // Decoder config descriptor
+                                0x40, 0x15, 0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0, // Decoder config fields
+                                0x05, 2,    0x12, 0x10,                            // AudioSpecificConfig
+                                0x06, 1,    2,                                     // SL config descriptor
+                              });
+    auto const fileData = makeFile(ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", esds, 48000, 96000, 7, 2048, 321));
+    auto const res = Demuxer::parse(fileData, "mp4a");
+
+    REQUIRE(res);
+    REQUIRE(res->magicCookie().size() == 2);
+    CHECK(res->magicCookie()[0] == std::byte{0x12});
+    CHECK(res->magicCookie()[1] == std::byte{0x10});
+  }
+
+  TEST_CASE("MP4 Demuxer - searches AAC descriptor children before deferred siblings")
+  {
+    auto const malformedChild = GENERATE(false, true);
+    // A length of three extends past the decoder config, not into its valid sibling.
+    std::uint8_t const childLength = malformedChild ? 3 : 2;
+    auto const expectedCookie =
+      malformedChild ? std::array{std::byte{0x11}, std::byte{0x90}} : std::array{std::byte{0x12}, std::byte{0x10}};
+
+    auto const esds =
+      ao::test::mp4::makeAtom("esds",
+                              {
+                                0,    0,           0,    0,                               // FullBox version and flags
+                                0x03, 26,          0,    1,    0,                         // ES descriptor and fields
+                                0x04, 17,                                                 // Decoder config descriptor
+                                0x40, 0x15,        0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0, // Config fields
+                                0x05, childLength, 0x12, 0x10,                            // Config child
+                                0x05, 2,           0x11, 0x90, // Config sibling inside the ES descriptor
+                                0x05, 2,           0x11, 0x10, // Outer sibling after the ES descriptor
+                              });
+    auto const fileData = makeFile(ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", esds, 48000, 96000, 7, 2048, 321));
+    auto const res = Demuxer::parse(fileData, "mp4a");
+
+    REQUIRE(res);
+    CHECK(std::ranges::equal(res->magicCookie(), expectedCookie));
+  }
+
+  TEST_CASE("MP4 Demuxer - finds the AAC cookie through nested descriptor lists")
+  {
+    auto descriptors = std::vector<std::uint8_t>{
+      0x04, 17,                                          // Decoder config descriptor
+      0x40, 0x15, 0,    0,    0, 0, 0, 0, 0, 0, 0, 0, 0, // Config fields
+      0x05, 2,    0x12, 0x10,                            // AudioSpecificConfig
+    };
+    constexpr std::size_t kLayerCount = 12;
+    constexpr auto kSibling = std::array<std::uint8_t, 3>{0x06, 1, 2}; // SL config descriptor
+
+    // Build a small synthetic hierarchy inside out, with a sibling at each level.
+    for (std::size_t layer = 0; layer < kLayerCount; ++layer)
+    {
+      auto const payloadSize = 3 + descriptors.size() + kSibling.size(); // ES ID, flags, and children
+      REQUIRE(payloadSize < 128);                                        // Each layer fits a single length byte.
+      auto es = std::vector<std::uint8_t>{0x03, static_cast<std::uint8_t>(payloadSize), 0, 1, 0};
+      es.append_range(descriptors);
+      es.append_range(kSibling);
+      descriptors.swap(es);
+    }
+
+    auto body = std::vector<std::uint8_t>{0, 0, 0, 0}; // FullBox version and flags
+    body.append_range(descriptors);
+    auto const esds = ao::test::mp4::makeAtom("esds", body);
+    auto const fileData = makeFile(ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", esds, 48000, 96000, 7, 2048, 321));
+    auto const res = Demuxer::parse(fileData, "mp4a");
+
+    REQUIRE(res);
+    CHECK(std::ranges::equal(res->magicCookie(), std::array{std::byte{0x12}, std::byte{0x10}}));
+  }
+
   TEST_CASE("MP4 Demuxer - binds sample table to selected audio track")
   {
-    auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0, 0x05, 0x02, 0x12, 0x10});
+    auto const esdsAtom =
+      ao::test::mp4::makeAtom("esds",
+                              {
+                                0,    0,    0,    0,        // FullBox version and flags
+                                0x03, 0x80, 0x80, 0x80, 30, // ES descriptor with four-byte length
+                                0,    1,    0xE0,           // ES ID and three optional fields
+                                0,    2,                    // Depends on ES ID 2
+                                3,    'a',  'u',  'd',      // URL
+                                0,    3,                    // OCR ES ID
+                                0x04, 17,                   // Decoder config descriptor
+                                0x40, 0x15, 0,    0,    0,  0, 0, 0, 0, 0, 0, 0, 0, // AAC audio configuration header
+                                0x05, 2,    0x12, 0x10,                             // AudioSpecificConfig
+                              });
     auto const audioTrack = ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", esdsAtom, 48000, 96000, 7, 2048, 321);
     auto const videoTrack = ao::test::mp4::makeVideoTrackAtom("avc1");
 

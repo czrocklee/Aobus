@@ -3,21 +3,28 @@
 
 #include "Layout.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace ao::media::file::mpeg::id3v2
 {
-  std::size_t decodeSize(EncodedSize size)
+  std::optional<std::size_t> tryDecodeSize(EncodedSize size) noexcept
   {
-    static constexpr std::uint8_t kSyncSafeMask = 0x7F;
+    constexpr std::uint8_t kHighBit = 0x80U;
+
+    if (std::ranges::any_of(size.data, [](std::uint8_t byte) { return (byte & kHighBit) != 0; }))
+    {
+      return std::nullopt;
+    }
+
     static constexpr std::size_t kByteShift3 = 21;
     static constexpr std::size_t kByteShift2 = 14;
     static constexpr std::size_t kByteShift1 = 7;
 
-    return (static_cast<std::size_t>(size.data[0] & kSyncSafeMask) << kByteShift3) |
-           (static_cast<std::size_t>(size.data[1] & kSyncSafeMask) << kByteShift2) |
-           (static_cast<std::size_t>(size.data[2] & kSyncSafeMask) << kByteShift1) |
-           (static_cast<std::size_t>(size.data.back() & kSyncSafeMask));
+    return (static_cast<std::size_t>(size.data[0]) << kByteShift3) |
+           (static_cast<std::size_t>(size.data[1]) << kByteShift2) |
+           (static_cast<std::size_t>(size.data[2]) << kByteShift1) | static_cast<std::size_t>(size.data.back());
   }
 } // namespace ao::media::file::mpeg::id3v2

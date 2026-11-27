@@ -15,11 +15,13 @@
 #include <ao/media/opus/Timeline.h>
 #include <ao/utility/Base64.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <chrono>
 #include <cstddef>
 #include <expected>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -32,27 +34,6 @@ namespace ao::media::file::opus
     // Vorbis comment key carrying a Base64-encoded METADATA_BLOCK_PICTURE body.
     constexpr std::string_view kPictureKey = "METADATA_BLOCK_PICTURE";
 
-    bool isPictureKey(std::string_view key) noexcept
-    {
-      if (key.size() != kPictureKey.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < key.size(); ++index)
-      {
-        auto const character = key[index];
-        auto const upper = character >= 'a' && character <= 'z' ? static_cast<char>(character - 'a' + 'A') : character;
-
-        if (upper != kPictureKey[index])
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
     void appendPicture(detail::ContentBuilder& builder, std::string_view value)
     {
       auto const optDecoded = utility::base64Decode(value);
@@ -62,8 +43,7 @@ namespace ao::media::file::opus
         return;
       }
 
-      auto const decoded = decodeString(*optDecoded);
-      auto const optBlock = detail::parsePictureBlock(utility::bytes::view(decoded));
+      auto const optBlock = detail::parsePictureBlock(*optDecoded);
 
       if (!optBlock || optBlock->bytes.empty())
       {
@@ -72,7 +52,7 @@ namespace ao::media::file::opus
 
       // Only a validated image needs cache-owned backing. The Base64 envelope
       // and picture-block fields are no longer needed after parsing.
-      auto const stored = builder.own(decodeString(optBlock->bytes));
+      auto const stored = builder.own(std::string{utility::bytes::stringView(optBlock->bytes)});
       builder.coverArt().add(optBlock->type, utility::bytes::view(stored));
     }
 
@@ -95,7 +75,8 @@ namespace ao::media::file::opus
           continue;
         }
 
-        if (!detail::tryApplyVorbisComment(builder, *optField) && isPictureKey(optField->key))
+        if (!detail::tryApplyVorbisComment(builder, *optField) &&
+            utility::isEqualIgnoringAsciiCase(optField->key, kPictureKey))
         {
           appendPicture(builder, optField->value);
         }
@@ -104,8 +85,7 @@ namespace ao::media::file::opus
 
     std::chrono::milliseconds streamDuration(Timeline const& timeline) noexcept
     {
-      // A stream that never declared a complete ending reports no duration
-      // rather than a guess; a stream that declared zero audible frames does.
+      // Without a complete ending there is no frame count to convert.
       if (!timeline.optTotalFrames)
       {
         return std::chrono::milliseconds{0};

@@ -39,9 +39,15 @@ namespace ao::media::file::mpeg
     constexpr std::uint8_t kId3v2FooterFlag = 0x10;
     constexpr std::uint8_t kId3v2MajorVersion4 = 4;
     constexpr std::size_t kApeV2FooterSize = 32;
-    constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
 
-    std::optional<std::size_t> id3v2TotalSize(std::span<std::byte const> bytes) noexcept
+    struct LeadingTagView final
+    {
+      id3v2::HeaderLayout const* header;
+      std::span<std::byte const> body;
+      std::size_t endOffset;
+    };
+
+    std::optional<LeadingTagView> findLeadingTag(std::span<std::byte const> bytes) noexcept
     {
       if (bytes.size() < sizeof(id3v2::HeaderLayout) ||
           std::memcmp(bytes.data(), kId3v2Magic.data(), kId3v2Magic.size()) != 0)
@@ -51,22 +57,27 @@ namespace ao::media::file::mpeg
 
       auto const* const header = utility::layout::view<id3v2::HeaderLayout>(bytes);
 
-      for (auto const byte : header->size.data)
+      auto const optBodySize = id3v2::tryDecodeSize(header->size);
+
+      if (!optBodySize)
       {
-        if ((byte & kSyncSafeHighBit) != 0)
-        {
-          return std::nullopt;
-        }
+        return std::nullopt;
       }
 
-      std::size_t totalSize = sizeof(id3v2::HeaderLayout) + id3v2::decodeSize(header->size);
+      auto totalSize = id3v2::HeaderLayout::kSize + *optBodySize;
 
       if (header->majorVersion >= kId3v2MajorVersion4 && (header->flags & kId3v2FooterFlag) != 0)
       {
         totalSize += kId3v2FooterSize;
       }
 
-      return totalSize <= bytes.size() ? std::optional<std::size_t>{totalSize} : std::nullopt;
+      if (totalSize > bytes.size())
+      {
+        return std::nullopt;
+      }
+
+      return LeadingTagView{
+        .header = header, .body = bytes.subspan(id3v2::HeaderLayout::kSize, *optBodySize), .endOffset = totalSize};
     }
 
     bool hasId3v1Tag(std::span<std::byte const> bytes, std::size_t endOffset) noexcept
@@ -211,8 +222,7 @@ namespace ao::media::file::mpeg
   {
     PayloadView payload;
     FrameView firstFrame{nullptr, 0};
-    id3v2::HeaderLayout const* id3Header = nullptr;
-    std::span<std::byte const> id3Body;
+    std::optional<LeadingTagView> optTag;
   };
 
   struct File::CachedIndex final
@@ -242,18 +252,8 @@ namespace ao::media::file::mpeg
     auto parse = [&] -> Result<Index>
     {
       auto const fileBytes = bytes();
-      std::size_t audioStartOffset = 0;
-      auto result = Index{};
-
-      if (auto const optId3Size = id3v2TotalSize(fileBytes); optId3Size)
-      {
-        auto const* const header = utility::layout::view<id3v2::HeaderLayout>(fileBytes);
-        auto const bodySize = id3v2::decodeSize(header->size);
-        result.id3Header = header;
-        result.id3Body = fileBytes.subspan(sizeof(id3v2::HeaderLayout), bodySize);
-        audioStartOffset = *optId3Size;
-      }
-
+      auto const optTag = findLeadingTag(fileBytes);
+      auto const audioStartOffset = optTag ? optTag->endOffset : std::size_t{0};
       auto const payloadEndRes = trimTrailingTags(fileBytes, audioStartOffset);
 
       if (!payloadEndRes)
@@ -278,9 +278,8 @@ namespace ao::media::file::mpeg
 
       auto const frameOffset =
         static_cast<std::size_t>(static_cast<std::byte const*>(optFrame->data()) - fileBytes.data());
-      result.payload = payloadRange(frameOffset, payloadEnd - frameOffset);
-      result.firstFrame = *optFrame;
-      return result;
+      return Index{
+        .payload = payloadRange(frameOffset, payloadEnd - frameOffset), .firstFrame = *optFrame, .optTag = optTag};
     };
 
     _cachedIndexPtr->optResult.emplace(parse());
@@ -319,9 +318,9 @@ namespace ao::media::file::mpeg
 
     auto builder = detail::ContentBuilder::makeEmpty();
 
-    if (indexRes->id3Header != nullptr)
+    if (auto const& optTag = indexRes->optTag; optTag)
     {
-      if (auto optTagBuilder = id3v2::readFrames(*indexRes->id3Header, indexRes->id3Body); optTagBuilder)
+      if (auto optTagBuilder = id3v2::readFrames(*optTag->header, optTag->body); optTagBuilder)
       {
         builder = std::move(*optTagBuilder);
       }

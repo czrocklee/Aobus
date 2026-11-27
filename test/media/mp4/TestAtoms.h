@@ -21,8 +21,6 @@ namespace ao::test::mp4
                                                      std::uint32_t sampleRate = 44100,
                                                      std::uint16_t channels = 2,
                                                      std::uint16_t precisionBits = 16);
-  std::vector<std::uint8_t> makeSampleEntryAtom(std::string_view sampleEntryType,
-                                                std::vector<std::uint8_t> const& body);
   std::vector<std::uint8_t> makeStsdAtom(std::string_view sampleEntryType,
                                          std::vector<std::uint8_t> const& sampleEntryExtensions = {},
                                          std::uint32_t sampleRate = 44100,

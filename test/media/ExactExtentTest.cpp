@@ -137,17 +137,14 @@ namespace ao::media::file::test
     CHECK(visitor.sheets().empty());
   }
 
-  TEST_CASE("Media extent - embedded text CUE is copied verbatim while binary CUESHEET stays skipped")
+  TEST_CASE("Media extent - delivers embedded CUE text verbatim and skips binary CUESHEET")
   {
     auto const sheet = std::string{"FILE \"image.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n"};
+    auto const temp = ao::test::TempFile{flacHeader(588, sheet), ".flac"};
+    auto const file = ao::test::requireValue(File::open(temp.path));
     auto visitor = ExtentVisitorSpy{};
 
-    {
-      auto const temp = ao::test::TempFile{flacHeader(588, sheet), ".flac"};
-      auto const file = ao::test::requireValue(File::open(temp.path));
-      REQUIRE(file.visit(visitor));
-    }
-
+    REQUIRE(file.visit(visitor));
     CHECK(visitor.sheets() == std::vector<std::string>{sheet});
     CHECK(visitor.exactFrames() == 588);
   }

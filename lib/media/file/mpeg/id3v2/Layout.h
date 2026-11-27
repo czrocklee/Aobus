@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace ao::media::file::mpeg::id3v2
 {
@@ -25,7 +26,8 @@ namespace ao::media::file::mpeg::id3v2
   static_assert(alignof(EncodedSize) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<EncodedSize>);
 
-  std::size_t decodeSize(EncodedSize size);
+  // The high bit of each byte is reserved and must be clear.
+  std::optional<std::size_t> tryDecodeSize(EncodedSize size) noexcept;
 
   struct HeaderLayout
   {
@@ -33,25 +35,6 @@ namespace ao::media::file::mpeg::id3v2
     std::array<char, kId22Size> id;
     std::uint8_t majorVersion;
     std::uint8_t minorVersion;
-
-    /*    union
-       {
-         struct
-         {
-           std::uint8_t unsync : 1;
-           std::uint8_t compression : 1;
-           std::uint8_t padding : 6;
-         } v22;
-
-         struct
-         {
-           std::uint8_t unsync : 1;
-           std::uint8_t extended : 1;
-           std::uint8_t experimental : 1;
-           std::uint8_t footer : 1;
-           std::uint8_t padding : 4;
-         } v23;
-       } flags; */
 
     std::uint8_t flags;
     EncodedSize size;
@@ -61,18 +44,6 @@ namespace ao::media::file::mpeg::id3v2
   static_assert(alignof(HeaderLayout) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<HeaderLayout>);
 
-  struct V22CommonFrameLayout
-  {
-    static constexpr std::size_t kSize = 6;
-    using CommonLayout = V22CommonFrameLayout;
-    std::array<char, kId22Size> id;
-    boost::endian::big_uint24_buf_t size;
-  };
-
-  static_assert(sizeof(V22CommonFrameLayout) == V22CommonFrameLayout::kSize);
-  static_assert(alignof(V22CommonFrameLayout) == 1);
-  static_assert(utility::layout::kIsBinaryLayoutType<V22CommonFrameLayout>);
-
   enum class Encoding : std::uint8_t
   {
     Latin1 = 0U,
@@ -81,61 +52,6 @@ namespace ao::media::file::mpeg::id3v2
     Utf16Be = 2U,
     Utf8 = 3U
   };
-
-  struct V22TextFrameLayout
-  {
-    static constexpr std::size_t kSize = 7;
-    using CommonLayout = V22CommonFrameLayout;
-
-    V22CommonFrameLayout common;
-    Encoding encoding;
-    // text
-  };
-
-  static_assert(sizeof(V22TextFrameLayout) == V22TextFrameLayout::kSize);
-  static_assert(alignof(V22TextFrameLayout) == 1);
-  static_assert(utility::layout::kIsBinaryLayoutType<V22TextFrameLayout>);
-
-  struct V22CommentFrameLayout
-  {
-    static constexpr std::size_t kSize = 10;
-    using CommonLayout = V22CommonFrameLayout;
-
-    V22CommonFrameLayout common;
-    Encoding encoding;
-    std::array<char, kId22Size> language;
-  };
-
-  static_assert(sizeof(V22CommentFrameLayout) == V22CommentFrameLayout::kSize);
-  static_assert(alignof(V22CommentFrameLayout) == 1);
-  static_assert(utility::layout::kIsBinaryLayoutType<V22CommentFrameLayout>);
-
-  enum class Id3PictureRole : std::uint8_t
-  {
-    FrontCover = 3
-  };
-
-  struct V22PictureFrameLayout
-  {
-    static constexpr std::size_t kSize = 11;
-    using CommonLayout = V22CommonFrameLayout;
-
-    V22CommonFrameLayout common;
-    Encoding encoding;
-    std::array<char, kId22Size> format;
-    Id3PictureRole type;
-    // description
-    // data
-  };
-
-  static_assert(sizeof(V22PictureFrameLayout) == V22PictureFrameLayout::kSize);
-  static_assert(alignof(V22PictureFrameLayout) == 1);
-  static_assert(utility::layout::kIsBinaryLayoutType<V22PictureFrameLayout>);
-
-  inline std::size_t frameSize(V22CommonFrameLayout const& layout)
-  {
-    return layout.size.value();
-  }
 
   struct V23CommonFrameLayout
   {
@@ -164,11 +80,6 @@ namespace ao::media::file::mpeg::id3v2
   static_assert(alignof(V23TextFrameLayout) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<V23TextFrameLayout>);
 
-  inline std::size_t frameSize(V23CommonFrameLayout const& layout)
-  {
-    return layout.size.value();
-  }
-
   struct V24CommonFrameLayout
   {
     static constexpr std::size_t kSize = 10;
@@ -181,23 +92,4 @@ namespace ao::media::file::mpeg::id3v2
   static_assert(sizeof(V24CommonFrameLayout) == V24CommonFrameLayout::kSize);
   static_assert(alignof(V24CommonFrameLayout) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<V24CommonFrameLayout>);
-
-  inline std::size_t frameSize(V24CommonFrameLayout const& layout)
-  {
-    return decodeSize(layout.size);
-  }
-
-  struct V24TextFrameLayout
-  {
-    static constexpr std::size_t kSize = 11;
-    using CommonLayout = V24CommonFrameLayout;
-
-    V24CommonFrameLayout common;
-    Encoding encoding;
-    // text
-  };
-
-  static_assert(sizeof(V24TextFrameLayout) == V24TextFrameLayout::kSize);
-  static_assert(alignof(V24TextFrameLayout) == 1);
-  static_assert(utility::layout::kIsBinaryLayoutType<V24TextFrameLayout>);
 } // namespace ao::media::file::mpeg::id3v2

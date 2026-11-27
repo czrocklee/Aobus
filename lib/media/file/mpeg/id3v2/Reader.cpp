@@ -33,7 +33,6 @@ namespace ao::media::file::mpeg::id3v2
     constexpr std::uint8_t kId3v22MajorVersion = 2;
     constexpr std::uint8_t kId3v23MajorVersion = 3;
     constexpr std::uint8_t kId3v24MajorVersion = 4;
-    constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
     constexpr std::uint8_t kAsciiHighBit = 0x80U;
     constexpr std::size_t kFrameHeaderSize = sizeof(V23CommonFrameLayout);
     constexpr std::uint8_t kTagUnsyncFlag = 0x80U;
@@ -279,50 +278,42 @@ namespace ao::media::file::mpeg::id3v2
 
     void handleYear(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
-      auto convertedStorage = std::string{};
+      forEachDecodedTextValue(builder,
+                              content,
+                              version,
+                              [&](std::string_view value)
+                              {
+                                if (auto const optYear = decodeYear(value); optYear)
+                                {
+                                  builder.metadata().year(*optYear);
+                                }
+                              });
+    }
 
-      if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
+    template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
+    void applySlashNumber(detail::ContentBuilder& builder, std::string_view value)
+    {
+      auto const pair = parseSlashPair(value);
+
+      if (pair.optPrimary)
       {
-        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+        (builder.metadata().*PrimarySetter)(*pair.optPrimary);
+      }
 
-        forEachTextValue(stableText,
-                         version,
-                         [&](std::string_view value)
-                         {
-                           if (auto const optYear = decodeYear(value); optYear)
-                           {
-                             builder.metadata().year(*optYear);
-                           }
-                         });
+      if (pair.optSecondary)
+      {
+        (builder.metadata().*SecondarySetter)(*pair.optSecondary);
       }
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
     void handleSlashNumber(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
-      auto convertedStorage = std::string{};
-
-      if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
-      {
-        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
-
-        forEachTextValue(stableText,
-                         version,
-                         [&](std::string_view value)
-                         {
-                           auto const pair = parseSlashPair(value);
-
-                           if (pair.optPrimary)
-                           {
-                             (builder.metadata().*PrimarySetter)(*pair.optPrimary);
-                           }
-
-                           if (pair.optSecondary)
-                           {
-                             (builder.metadata().*SecondarySetter)(*pair.optSecondary);
-                           }
-                         });
-      }
+      forEachDecodedTextValue(builder,
+                              content,
+                              version,
+                              [&](std::string_view value)
+                              { applySlashNumber<PrimarySetter, SecondarySetter>(builder, value); });
     }
 
     std::optional<std::size_t> findTerminator(std::span<std::byte const> bytes,
@@ -388,23 +379,7 @@ namespace ao::media::file::mpeg::id3v2
       builder.coverArt().add(pictureType, content.subspan(*optDescriptionEnd));
     }
 
-    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
-    {
-      if (lhs.size() != rhs.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < lhs.size(); ++index)
-      {
-        if (utility::toAsciiLower(lhs[index]) != utility::toAsciiLower(rhs[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
+    using utility::isEqualIgnoringAsciiCase;
 
     // Picard's TIPL involvements for non-performing credits.
     std::optional<CreditKind> involvementCreditKind(std::string_view involvement) noexcept
@@ -534,17 +509,8 @@ namespace ao::media::file::mpeg::id3v2
                          version,
                          [&](std::string_view value)
                          {
-                           auto const pair = parseSlashPair(value);
-
-                           if (pair.optPrimary)
-                           {
-                             builder.metadata().movementNumber(*pair.optPrimary);
-                           }
-
-                           if (pair.optSecondary)
-                           {
-                             builder.metadata().movementTotal(*pair.optSecondary);
-                           }
+                           applySlashNumber<&detail::ContentBuilder::MetadataBuilder::movementNumber,
+                                            &detail::ContentBuilder::MetadataBuilder::movementTotal>(builder, value);
                          });
       }
 
@@ -598,14 +564,7 @@ namespace ao::media::file::mpeg::id3v2
 
       if (version == kId3v24MajorVersion)
       {
-        auto const encoded = utility::layout::view<V24CommonFrameLayout>(frame)->size;
-
-        if (std::ranges::any_of(encoded.data, [](std::uint8_t value) { return (value & kSyncSafeHighBit) != 0; }))
-        {
-          return std::nullopt;
-        }
-
-        return decodeSize(encoded);
+        return tryDecodeSize(utility::layout::view<V24CommonFrameLayout>(frame)->size);
       }
 
       return utility::layout::view<V23CommonFrameLayout>(frame)->size.value();
@@ -655,21 +614,14 @@ namespace ao::media::file::mpeg::id3v2
 
       if (version == kId3v24MajorVersion)
       {
-        auto const* const encoded = utility::layout::view<EncodedSize>(bytes);
+        auto const optSize = tryDecodeSize(*utility::layout::view<EncodedSize>(bytes));
 
-        if (std::ranges::any_of(encoded->data, [](std::uint8_t value) { return (value & kSyncSafeHighBit) != 0; }))
+        if (!optSize || *optSize < kExtendedHeaderMinSize || *optSize > bytes.size())
         {
           return std::nullopt;
         }
 
-        auto const size = decodeSize(*encoded);
-
-        if (size < kExtendedHeaderMinSize || size > bytes.size())
-        {
-          return std::nullopt;
-        }
-
-        return size;
+        return optSize;
       }
 
       auto const size = utility::layout::view<boost::endian::big_uint32_buf_t>(bytes)->value();
@@ -745,9 +697,9 @@ namespace ao::media::file::mpeg::id3v2
           return std::span<std::byte const>{};
         }
 
-        auto const& encoded = utility::layout::view<EncodedSize>(frameData.first(kDataLengthIndicatorSize))->data;
+        auto const& encoded = *utility::layout::view<EncodedSize>(frameData);
 
-        if (std::ranges::any_of(encoded, [](std::uint8_t value) { return (value & kSyncSafeHighBit) != 0; }))
+        if (!tryDecodeSize(encoded))
         {
           return std::nullopt;
         }

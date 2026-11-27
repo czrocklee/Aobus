@@ -9,15 +9,17 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/media/file/Visitor.h>
-#include <ao/utility/Xxh3.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -199,15 +201,16 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == bytes[range.offset + 1U]);
   }
 
-  TEST_CASE("WAV File - audio payload signature ignores INFO metadata changes")
+  TEST_CASE("WAV File - audio payload ignores INFO metadata changes")
   {
-    auto firstData = ao::test::wav::makeWav({
-      .audioData = {0x00, 0x00, 0x01, 0x00},
+    auto const audio = std::vector<std::uint8_t>{0x00, 0x00, 0x01, 0x00};
+    auto const firstData = ao::test::wav::makeWav({
+      .audioData = audio,
       .infoFields = {{{.id = {'I', 'N', 'A', 'M'}, .value = "Before"}}},
     });
-    auto secondData = ao::test::wav::makeWav({
-      .audioData = {0x00, 0x00, 0x01, 0x00},
-      .infoFields = {{{.id = {'I', 'N', 'A', 'M'}, .value = "After"}}},
+    auto const secondData = ao::test::wav::makeWav({
+      .audioData = audio,
+      .infoFields = {{{.id = {'I', 'N', 'A', 'M'}, .value = "After Retagging"}}},
     });
     auto const firstTemp = ao::test::TempFile{firstData, ".wav"};
     auto const secondTemp = ao::test::TempFile{secondData, ".wav"};
@@ -219,7 +222,9 @@ namespace ao::media::file::wav::test
     REQUIRE(firstPayloadRes);
     REQUIRE(secondPayloadRes);
 
-    CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
+    auto const expected = std::as_bytes(std::span<std::uint8_t const>{audio});
+    CHECK(std::ranges::equal(firstPayloadRes->bytes, expected));
+    CHECK(std::ranges::equal(secondPayloadRes->bytes, expected));
   }
 
   TEST_CASE("WAV File - preserves ID3 APIC cover art")
@@ -489,6 +494,40 @@ namespace ao::media::file::wav::test
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::CorruptData);
     CHECK(res.error().message == "WAV file has no audio data");
+  }
+
+  TEST_CASE("WAV File - rejects a non-syncsafe ID3 envelope without losing INFO or the audio payload")
+  {
+    // Zero leaves the valid control unchanged; bytes 6 through 9 hold the tag size.
+    auto const reservedBitOffset = GENERATE(0U, 6U, 7U, 8U, 9U);
+    CAPTURE(reservedBitOffset);
+    auto frames = std::vector<std::uint8_t>{};
+    appendLatin1TextFrame(frames, "TIT2", "ID3 title");
+    auto id3 = std::vector<std::uint8_t>{};
+    appendId3v23Header(id3, frames.size());
+
+    if (reservedBitOffset != 0U)
+    {
+      id3[reservedBitOffset] |= 0x80U;
+    }
+
+    id3.append_range(frames);
+    auto const audio = std::vector<std::uint8_t>{0x34, 0x12, 0x78, 0x56};
+    auto const data = ao::test::wav::makeWav({
+      .audioData = audio,
+      .infoFields = {{.id = {'I', 'A', 'R', 'T'}, .value = "INFO artist"}},
+      .extraChunks = {{.id = {'i', 'd', '3', ' '}, .payload = std::move(id3)}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+
+    auto const content = readContent(file);
+    CHECK(content.text(TextField::Title) == (reservedBitOffset == 0U ? "ID3 title" : ""));
+    CHECK(content.text(TextField::Artist) == "INFO artist");
+    CHECK(content.codec() == AudioCodec::Wav);
+    auto const payloadRes = file.audioPayload();
+    REQUIRE(payloadRes);
+    CHECK(std::ranges::equal(payloadRes->bytes, std::as_bytes(std::span<std::uint8_t const>{audio})));
   }
 
   TEST_CASE("WAV File - discards malformed optional ID3 metadata")

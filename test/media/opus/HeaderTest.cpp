@@ -84,12 +84,13 @@ namespace ao::media::opus::test
   {
     SECTION("Stereo couples its two channels into one stream")
     {
-      auto const headRes = parseHead(makeHead({}));
+      auto const headRes = parseHead(makeHead({.inputSampleRate = 96000, .outputGain = -384}));
       REQUIRE(headRes);
 
       CHECK(headRes->channels == 2);
       CHECK(headRes->preSkip == 312);
-      CHECK(headRes->inputSampleRate == 48000);
+      CHECK(headRes->inputSampleRate == 96000);
+      CHECK(headRes->outputGain == -384);
       CHECK(headRes->streamCount == 1);
       CHECK(headRes->coupledStreamCount == 1);
       CHECK(headRes->channelMapping[0] == 0);
@@ -190,6 +191,23 @@ namespace ao::media::opus::test
       CHECK(headRes->streamCount == 9);
     }
 
+    SECTION("Family 255 preserves the highest mapping slot and the silent marker")
+    {
+      auto tail = std::vector<std::uint8_t>(257, 0);
+      tail[0] = 254;
+      tail[1] = 1;
+      tail[2] = 255;
+      tail.back() = 254;
+      auto const headRes =
+        parseHead(makeHead({.channels = 255, .channelMappingFamily = kMappingFamilyDiscrete, .mappingTail = tail}));
+      REQUIRE(headRes);
+      CHECK(headRes->channels == 255);
+      CHECK(headRes->streamCount == 254);
+      CHECK(headRes->coupledStreamCount == 1);
+      CHECK(headRes->channelMapping.front() == 255);
+      CHECK(headRes->channelMapping.back() == 254);
+    }
+
     SECTION("A projection family this reader cannot describe is unsupported")
     {
       auto const headRes =
@@ -235,7 +253,9 @@ namespace ao::media::opus::test
   {
     SECTION("A higher minor revision stays supported")
     {
-      CHECK(parseHead(makeHead({.version = 15})));
+      auto const headRes = parseHead(makeHead({.version = 15}));
+      REQUIRE(headRes);
+      CHECK(headRes->version == 15);
     }
 
     SECTION("A higher major revision is not supported")

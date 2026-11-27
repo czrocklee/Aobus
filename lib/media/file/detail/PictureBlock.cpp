@@ -3,10 +3,10 @@
 
 #include "PictureBlock.h"
 
-#include "Decoder.h"
 #include <ao/PictureType.h>
+#include <ao/utility/ByteView.h>
 
-#include <boost/endian/detail/order.hpp>
+#include <boost/endian/buffers.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -15,32 +15,60 @@
 
 namespace ao::media::file::detail
 {
+  namespace
+  {
+    std::optional<std::uint32_t> takeU32(std::span<std::byte const>& bytes) noexcept
+    {
+      auto const* const field = utility::bytes::tryLayout<boost::endian::big_uint32_buf_t>(bytes);
+
+      if (field == nullptr)
+      {
+        return std::nullopt;
+      }
+
+      bytes = bytes.subspan(sizeof(*field));
+      return field->value();
+    }
+
+    std::optional<std::span<std::byte const>> takeSized(std::span<std::byte const>& bytes) noexcept
+    {
+      auto const optSize = takeU32(bytes);
+
+      if (!optSize || *optSize > bytes.size())
+      {
+        return std::nullopt;
+      }
+
+      auto const value = bytes.first(*optSize);
+      bytes = bytes.subspan(*optSize);
+      return value;
+    }
+  } // namespace
+
   std::optional<PictureBlock> parsePictureBlock(std::span<std::byte const> payload) noexcept
   {
     // Width, height, colour depth, and indexed-colour count, none of which the
     // library records.
     constexpr std::size_t kImageScalarCount = 4;
 
-    std::size_t offset = 0;
-    auto const optRawType = readU32(payload, offset, boost::endian::order::big);
+    auto const optRawType = takeU32(payload);
 
-    if (!optRawType || !readSized(payload, offset, boost::endian::order::big) ||
-        !readSized(payload, offset, boost::endian::order::big))
+    if (!optRawType || !takeSized(payload) || !takeSized(payload))
     {
       return std::nullopt;
     }
 
     for (std::size_t index = 0; index < kImageScalarCount; ++index)
     {
-      if (!readU32(payload, offset, boost::endian::order::big))
+      if (!takeU32(payload))
       {
         return std::nullopt;
       }
     }
 
-    auto const optBytes = readSized(payload, offset, boost::endian::order::big);
+    auto const optBytes = takeSized(payload);
 
-    if (!optBytes || offset != payload.size())
+    if (!optBytes || !payload.empty())
     {
       return std::nullopt;
     }
