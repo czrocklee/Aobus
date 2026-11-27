@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -76,15 +77,6 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("Environment - openEnvironment creates usable environments")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
-
-    // Verify by starting a transaction
-    auto txn = beginWriteTransaction(env);
-  }
-
   TEST_CASE("Environment - open returns IoError for missing directory")
   {
     auto temp = ao::test::TempDir{};
@@ -92,16 +84,6 @@ namespace ao::lmdb::test
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::IoError);
-  }
-
-  TEST_CASE("Environment - open returns environment on success")
-  {
-    auto temp = ao::test::TempDir{};
-    auto envRes = Environment::open(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
-    REQUIRE(envRes);
-
-    auto txnRes = WriteTransaction::begin(*envRes);
-    REQUIRE(txnRes);
   }
 
   TEST_CASE("Environment - unflushed commits stay readable after the environment closes")
@@ -152,23 +134,13 @@ namespace ao::lmdb::test
     STATIC_REQUIRE_FALSE(HasPublicEnvironmentHandle<Environment>);
   }
 
-  TEST_CASE("Environment - helper opens path")
+  TEST_CASE("Environment - opens a readable snapshot with default options")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
-
-    // Verify we can create transactions.
-    auto txn = beginReadTransaction(env);
-    auto wtxn = beginWriteTransaction(env);
-  }
-
-  TEST_CASE("Environment - helper uses default options")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path());
-
-    // Verify it opened correctly by starting a transaction.
-    auto rtxn = beginReadTransaction(env);
+    auto const temp = ao::test::TempDir{};
+    auto envRes = Environment::open(temp.path());
+    REQUIRE(envRes);
+    auto const transaction = beginReadTransaction(*envRes);
+    CHECK(transaction.isActive());
   }
 
   TEST_CASE("Environment - capacity reports the configured map and a growing high water")
@@ -209,32 +181,25 @@ namespace ao::lmdb::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kMapSize});
 
+    auto transaction = beginWriteTransaction(env);
+    auto database = openIntegerKeyDatabase(transaction, "records");
+    auto writer = database.writer(transaction);
+    auto const data = createTestData(4096);
+
+    for (std::uint32_t index = 0; index < 256; ++index)
     {
-      auto const data = createTestData(4096);
-      auto txn = beginWriteTransaction(env);
-      auto database = openIntegerKeyDatabase(txn, "records");
-      auto writer = database.writer(txn);
-
-      for (std::uint32_t index = 0; index < 256; ++index)
-      {
-        REQUIRE(writer.append(data));
-      }
-
-      REQUIRE(txn.commit());
+      REQUIRE(writer.append(data));
     }
 
+    REQUIRE(transaction.commit());
     auto const filled = env.capacity();
+    auto clearTransaction = beginWriteTransaction(env);
+    REQUIRE(database.writer(clearTransaction).clear());
+    REQUIRE(clearTransaction.commit());
 
-    {
-      auto txn = beginWriteTransaction(env);
-      auto database = openIntegerKeyDatabase(txn, "records");
-      auto writer = database.writer(txn);
-      REQUIRE(writer.clear());
-      REQUIRE(txn.commit());
-    }
-
-    // Emptying the database returns its pages to the free list for reuse, which
-    // never lowers the high water. A capacity decision has to read it that way.
+    // Prove that clear committed before observing the unchanged (or increased) peak.
+    auto const snapshot = beginReadTransaction(env);
+    CHECK(database.reader(snapshot).entryCount() == 0);
     CHECK(env.capacity().highWaterBytes >= filled.highWaterBytes);
   }
 
@@ -291,20 +256,76 @@ namespace ao::lmdb::test
     CHECK(env.capacity().mapBytes == kFloor);
   }
 
-  TEST_CASE("Environment - a pinned map size is never raised")
+  TEST_CASE("Environment - a pinned map bypasses the policy floor and growth on reopen")
   {
-    auto temp = ao::test::TempDir{};
-    auto const pinnedOptions =
-      Environment::Options{.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kFloor};
+    auto const temp = ao::test::TempDir{};
+    auto pinnedOptions = Environment::Options{.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kFloor};
 
     {
       auto env = openEnvironment(temp.path(), pinnedOptions);
       fillPastHighWater(env, kPastHalfOfFloor);
     }
 
-    // A caller that asked for one exact capacity has to keep getting it, which is
-    // what lets a test reach the end of a map on purpose.
+    SECTION("a higher policy floor cannot raise the pin")
+    {
+      pinnedOptions.capacity = {.minimumMapBytes = kWideMap};
+    }
+
+    SECTION("a high water past half the pin cannot trigger policy doubling")
+    {
+      pinnedOptions.capacity = {.maximumMapBytes = kCeiling};
+    }
+
     auto env = openEnvironment(temp.path(), pinnedOptions);
     CHECK(env.capacity().mapBytes == kFloor);
+  }
+
+  TEST_CASE("Environment - a smaller pin on reopen preserves committed data")
+  {
+    constexpr auto kPinBelowExtent = std::uint64_t{1} * 1024 * 1024;
+    constexpr auto kPinAboveExtent = std::uint64_t{8} * 1024 * 1024;
+    auto const temp = ao::test::TempDir{};
+    auto const data = createTestData(std::size_t{2} * 1024 * 1024);
+    auto const committed = [&]
+    {
+      auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kWideMap});
+      auto txn = beginWriteTransaction(env);
+      auto database = openIntegerKeyDatabase(txn, "records");
+      REQUIRE(database.writer(txn).create(1, data));
+      REQUIRE(txn.commit());
+      return env.capacity();
+    }();
+    REQUIRE(kPinBelowExtent < committed.highWaterBytes);
+    REQUIRE(committed.highWaterBytes < kPinAboveExtent);
+    REQUIRE(kPinAboveExtent < committed.mapBytes);
+
+    auto const reopenAndRead = [&](std::uint64_t const pin)
+    {
+      auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = pin});
+      auto const capacity = env.capacity();
+      CHECK(capacity.highWaterBytes == committed.highWaterBytes);
+
+      // Opening the existing DBI needs a write transaction, but reading it needs no new pages.
+      auto txn = beginWriteTransaction(env);
+      auto const databaseRes = IntegerKeyDatabase::openExisting(txn, "records");
+      REQUIRE(databaseRes);
+      auto const optValue = databaseRes->reader(txn).get(1);
+      REQUIRE(optValue);
+      CHECK(std::ranges::equal(*optValue, data));
+      return capacity.mapBytes;
+    };
+
+    SECTION("a pin above the committed extent overrides the recorded map")
+    {
+      auto const mapBytes = reopenAndRead(kPinAboveExtent);
+      CHECK(mapBytes == kPinAboveExtent);
+    }
+
+    SECTION("a pin below the committed extent is raised to fit")
+    {
+      auto const mapBytes = reopenAndRead(kPinBelowExtent);
+      CHECK(mapBytes >= committed.highWaterBytes);
+      CHECK(mapBytes < committed.mapBytes);
+    }
   }
 } // namespace ao::lmdb::test

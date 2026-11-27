@@ -359,7 +359,7 @@ namespace ao::library::test
           return std::unexpected{createRes.error()};
         }
 
-        return makeError(Error::Code::InvalidInput, "No section selected");
+        return {}; // A missing scenario must not satisfy the expected rejection.
       });
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::InvalidInput);
@@ -390,6 +390,7 @@ namespace ao::library::test
           REQUIRE(writer.updateHot(ids[0], *optHot));
           auto optComplete = writer.loadForEdit(ids[0]);
           REQUIRE(optComplete);
+          CHECK(optComplete->metadata().title() == "Hot refresh");
           optComplete->property().bitrate(Bitrate{2345});
           REQUIRE(writer.updateCold(ids[0], *optComplete));
           // Rebuild after each mutation: builders borrow mapped URI/metadata bytes.
@@ -397,6 +398,9 @@ namespace ao::library::test
           REQUIRE(optComplete);
           optComplete->metadata().title("Replacement");
           REQUIRE(writer.replace(ids[0], *optComplete, FileManifestBuilder::makeEmpty().fileSize(9876)));
+          auto const optUpdatedManifest = writer.manifest("disc.flac");
+          REQUIRE(optUpdatedManifest);
+          CHECK(optUpdatedManifest->fileSize() == 9876);
           REQUIRE(writer.updateManifest(ids[1], FileManifestBuilder::makeEmpty().status(FileStatus::Missing)));
           return {};
         }));

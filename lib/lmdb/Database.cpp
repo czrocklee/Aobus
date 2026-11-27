@@ -57,8 +57,6 @@ namespace ao::lmdb
       static bool isOnOwnerThread(ReadTransaction const& transaction) noexcept { return transaction.isOwnerThread(); }
 
       static IntegerKeyDatabase integerKeyDatabase(DbiHandle const dbi) noexcept { return IntegerKeyDatabase{dbi}; }
-
-      static ByteKeyDatabase byteKeyDatabase(DbiHandle const dbi) noexcept { return ByteKeyDatabase{dbi}; }
     };
   } // namespace detail
 
@@ -66,24 +64,21 @@ namespace ao::lmdb
   {
     constexpr auto kInvalidDbi = std::numeric_limits<DbiHandle>::max();
 
-    template<typename T>
-    ::MDB_val makeVal(T const& val)
+    ::MDB_val makeVal(std::span<std::byte const> const bytes)
     {
-      return {.mv_size = sizeof(T), .mv_data = utility::layout::asLegacyPtr<T>(&val)};
+      return {.mv_size = bytes.size(), .mv_data = utility::layout::asLegacyPtr<void>(bytes.data())};
     }
 
-    inline ::MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
+    std::span<std::byte const> viewOf(::MDB_val const value)
     {
-      return {.mv_size = size, .mv_data = utility::layout::asLegacyPtr<void>(data)};
+      return utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size);
     }
 
-    template<typename T>
-    T read(::MDB_val const val)
+    std::uint32_t readIntegerKey(std::span<std::byte const> const key)
     {
-      AO_INVARIANT(val.mv_size == sizeof(T), "LMDB integer key has an invalid size");
-
-      T value;
-      std::memcpy(&value, val.mv_data, sizeof(T));
+      std::uint32_t value = 0;
+      AO_INVARIANT(key.size() == sizeof(value), "LMDB integer key has an invalid size");
+      std::memcpy(&value, key.data(), sizeof(value));
       return value;
     }
 
@@ -93,10 +88,25 @@ namespace ao::lmdb
       std::uint32_t nativeFlags = 0;
     };
 
-    Result<OpenedDatabase> openNamedDatabase(MDB_txn* transaction,
+    std::uint32_t readDatabaseFlags(MDB_txn* transaction, DbiHandle const dbi)
+    {
+      unsigned int flags = 0;
+
+      if (auto const code = ::mdb_dbi_flags(transaction, dbi, &flags); code != MDB_SUCCESS)
+      {
+        throwOnMutationError("mdb_dbi_flags", code);
+      }
+
+      return flags;
+    }
+
+    Result<OpenedDatabase> openNamedDatabase(WriteTransaction& owner,
                                              std::string const& name,
                                              std::uint32_t const openFlags)
     {
+      AO_EXPECTS(owner.isActive(), "Cannot open a database with a finished write transaction");
+      detail::DatabaseAccess::acquireOpenAdmission(owner);
+      auto* const transaction = detail::DatabaseAccess::handle(owner);
       DbiHandle dbi = 0;
       auto const code = ::mdb_dbi_open(transaction, name.c_str(), openFlags, &dbi);
 
@@ -116,15 +126,7 @@ namespace ao::lmdb
         throwOnMutationError("mdb_dbi_open", code);
       }
 
-      unsigned int nativeFlags = 0;
-      auto const flagsCode = ::mdb_dbi_flags(transaction, dbi, &nativeFlags);
-
-      if (flagsCode != MDB_SUCCESS)
-      {
-        throwOnMutationError("mdb_dbi_flags", flagsCode);
-      }
-
-      return OpenedDatabase{.dbi = dbi, .nativeFlags = nativeFlags};
+      return OpenedDatabase{.dbi = dbi, .nativeFlags = readDatabaseFlags(transaction, dbi)};
     }
 
     Result<> validateExactFlags(std::string_view const databaseName,
@@ -140,6 +142,33 @@ namespace ao::lmdb
       }
 
       return {};
+    }
+
+    enum class NamedOpen : std::uint8_t
+    {
+      Existing,
+      Create
+    };
+
+    Result<DbiHandle> openTypedDatabase(WriteTransaction& transaction,
+                                        std::string const& name,
+                                        NamedOpen const mode,
+                                        std::uint32_t const expectedFlags)
+    {
+      auto const openFlags = mode == NamedOpen::Create ? (MDB_CREATE | expectedFlags) : 0U;
+      auto openedRes = openNamedDatabase(transaction, name, openFlags);
+
+      if (!openedRes)
+      {
+        return std::unexpected{std::move(openedRes.error())};
+      }
+
+      if (auto validationRes = validateExactFlags(name, openedRes->nativeFlags, expectedFlags); !validationRes)
+      {
+        return std::unexpected{std::move(validationRes.error())};
+      }
+
+      return openedRes->dbi;
     }
 
     Result<> validateByteKeyMain(std::uint32_t const nativeFlags)
@@ -158,8 +187,8 @@ namespace ao::lmdb
                                                         std::span<std::byte const> const keyView,
                                                         bool const transactionOwned)
     {
-      auto key = makeVal(keyView.data(), keyView.size());
-      auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+      auto key = makeVal(keyView);
+      auto value = ::MDB_val{};
       auto const code = ::mdb_get(transaction, dbi, &key, &value);
 
       if (code == MDB_NOTFOUND)
@@ -168,7 +197,7 @@ namespace ao::lmdb
       }
 
       failRead("mdb_get", code, transactionOwned);
-      return utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size);
+      return viewOf(value);
     }
 
     std::size_t readEntryCount(MDB_txn* transaction, DbiHandle const dbi, bool const transactionOwned)
@@ -191,82 +220,67 @@ namespace ao::lmdb
       std::span<std::byte const> value;
     };
 
-    bool tryPositionCursor(MDB_cursor* cursor,
-                           MDB_cursor_op const operation,
-                           bool const transactionOwned,
-                           RawRecord& record)
+    std::optional<RawRecord> positionCursor(MDB_cursor* cursor,
+                                            MDB_cursor_op const operation,
+                                            bool const transactionOwned,
+                                            ::MDB_val key = {})
     {
-      auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
-      auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+      auto value = ::MDB_val{};
       auto const code = ::mdb_cursor_get(cursor, &key, &value, operation);
 
       if (code == MDB_NOTFOUND)
       {
-        record = {};
-        return false;
+        return std::nullopt;
       }
 
       failRead("mdb_cursor_get", code, transactionOwned);
-      record = {.key = utility::bytes::view(static_cast<void const*>(key.mv_data), key.mv_size),
-                .value = utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size)};
-      return true;
+      return RawRecord{.key = viewOf(key), .value = viewOf(value)};
     }
 
-    bool tryPositionCursorAtOrAfter(MDB_cursor* cursor,
-                                    std::span<std::byte const> const keyView,
-                                    bool const transactionOwned,
-                                    RawRecord& record)
+    Result<> put(MDB_cursor* cursor,
+                 std::span<std::byte const> const keyView,
+                 ::MDB_val& value,
+                 unsigned int const flags)
     {
-      auto key = makeVal(keyView.data(), keyView.size());
-      auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
-      auto const code = ::mdb_cursor_get(cursor, &key, &value, MDB_SET_RANGE);
+      AO_INVARIANT(cursor != nullptr);
+      auto key = makeVal(keyView);
+      auto const code = ::mdb_cursor_put(cursor, &key, &value, flags);
 
-      if (code == MDB_NOTFOUND)
+      if (code != MDB_SUCCESS && (code != MDB_KEYEXIST || (flags & MDB_NOOVERWRITE) == 0))
       {
-        record = {};
-        return false;
+        throwOnMutationError("mdb_cursor_put", code);
       }
 
-      failRead("mdb_cursor_get", code, transactionOwned);
-      record = {.key = utility::bytes::view(static_cast<void const*>(key.mv_data), key.mv_size),
-                .value = utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size)};
-      return true;
+      return resultFromCode("mdb_cursor_put", code);
     }
 
-    std::int32_t put(MDB_cursor* cursor,
-                     std::span<std::byte const> const keyView,
-                     std::span<std::byte const> const data,
-                     unsigned int const flags)
+    Result<> putCopied(MDB_cursor* cursor,
+                       std::span<std::byte const> const key,
+                       std::span<std::byte const> const data,
+                       unsigned int const flags)
     {
-      AO_INVARIANT(cursor != nullptr);
-
-      auto key = makeVal(keyView.data(), keyView.size());
-      auto value = makeVal(data.data(), data.size());
-      return ::mdb_cursor_put(cursor, &key, &value, flags);
+      auto value = makeVal(data);
+      return put(cursor, key, value, flags);
     }
 
-    struct ReserveResult final
+    Result<std::span<std::byte>> reserve(MDB_cursor* cursor,
+                                         std::span<std::byte const> const key,
+                                         std::size_t const size,
+                                         unsigned int const flags)
     {
-      std::int32_t code = MDB_SUCCESS;
-      ::MDB_val value{.mv_size = 0, .mv_data = nullptr};
-    };
+      auto value = ::MDB_val{.mv_size = size, .mv_data = nullptr};
 
-    ReserveResult reserve(MDB_cursor* cursor,
-                          std::span<std::byte const> const keyView,
-                          std::size_t const size,
-                          std::uint32_t const flags)
-    {
-      AO_INVARIANT(cursor != nullptr);
+      if (auto res = put(cursor, key, value, flags | MDB_RESERVE); !res)
+      {
+        return std::unexpected{std::move(res.error())};
+      }
 
-      auto key = makeVal(keyView.data(), keyView.size());
-      auto value = makeVal(nullptr, size);
-      auto const code = ::mdb_cursor_put(cursor, &key, &value, flags | MDB_RESERVE);
-      return {.code = code, .value = value};
+      return utility::bytes::view(value.mv_data, value.mv_size);
     }
 
     bool tryDeleteKey(MDB_cursor* cursor, std::span<std::byte const> const keyView)
     {
-      auto key = makeVal(keyView.data(), keyView.size());
+      auto key = makeVal(keyView);
       auto const code = ::mdb_cursor_get(cursor, &key, nullptr, MDB_SET);
 
       if (code == MDB_NOTFOUND)
@@ -290,112 +304,41 @@ namespace ao::lmdb
     std::optional<std::span<std::byte const>> readCursorPoint(MDB_cursor* cursor,
                                                               std::span<std::byte const> const keyView)
     {
-      auto key = makeVal(keyView.data(), keyView.size());
-      auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
-      auto const code = ::mdb_cursor_get(cursor, &key, &value, MDB_SET);
-
-      if (code == MDB_NOTFOUND)
-      {
-        return std::nullopt;
-      }
-
-      failRead("mdb_cursor_get", code, true);
-      return utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size);
+      return positionCursor(cursor, MDB_SET, true, makeVal(keyView))
+        .transform([](RawRecord const& record) { return record.value; });
     }
 
-    Result<> clearDatabase(MDB_txn* transaction, DbiHandle const dbi)
+    void clearDatabase(MDB_txn* transaction, DbiHandle const dbi)
     {
-      auto const code = ::mdb_drop(transaction, dbi, 0);
-
-      if (code != MDB_SUCCESS)
+      if (auto const code = ::mdb_drop(transaction, dbi, 0); code != MDB_SUCCESS)
       {
         throwOnMutationError("mdb_drop", code);
       }
-
-      return resultFromCode("mdb_drop", code);
     }
   } // namespace
 
   Result<IntegerKeyDatabase> IntegerKeyDatabase::open(WriteTransaction& transaction, std::string const& name)
   {
-    AO_EXPECTS(transaction.isActive(), "Cannot open a database with a finished write transaction");
-    detail::DatabaseAccess::acquireOpenAdmission(transaction);
-    auto openedRes = openNamedDatabase(
-      detail::DatabaseAccess::handle(transaction), name, static_cast<std::uint32_t>(MDB_CREATE | MDB_INTEGERKEY));
-
-    if (!openedRes)
-    {
-      return std::unexpected{std::move(openedRes.error())};
-    }
-
-    if (auto validationRes =
-          validateExactFlags(name, openedRes->nativeFlags, static_cast<std::uint32_t>(MDB_INTEGERKEY));
-        !validationRes)
-    {
-      return std::unexpected{std::move(validationRes.error())};
-    }
-
-    return detail::DatabaseAccess::integerKeyDatabase(openedRes->dbi);
+    return openTypedDatabase(transaction, name, NamedOpen::Create, MDB_INTEGERKEY)
+      .transform([](DbiHandle const dbi) { return IntegerKeyDatabase{dbi}; });
   }
 
   Result<IntegerKeyDatabase> IntegerKeyDatabase::openExisting(WriteTransaction& transaction, std::string const& name)
   {
-    AO_EXPECTS(transaction.isActive(), "Cannot open a database with a finished write transaction");
-    detail::DatabaseAccess::acquireOpenAdmission(transaction);
-    auto openedRes = openNamedDatabase(detail::DatabaseAccess::handle(transaction), name, 0);
-
-    if (!openedRes)
-    {
-      return std::unexpected{std::move(openedRes.error())};
-    }
-
-    if (auto validationRes =
-          validateExactFlags(name, openedRes->nativeFlags, static_cast<std::uint32_t>(MDB_INTEGERKEY));
-        !validationRes)
-    {
-      return std::unexpected{std::move(validationRes.error())};
-    }
-
-    return detail::DatabaseAccess::integerKeyDatabase(openedRes->dbi);
+    return openTypedDatabase(transaction, name, NamedOpen::Existing, MDB_INTEGERKEY)
+      .transform([](DbiHandle const dbi) { return IntegerKeyDatabase{dbi}; });
   }
 
   Result<ByteKeyDatabase> ByteKeyDatabase::open(WriteTransaction& transaction, std::string const& name)
   {
-    AO_EXPECTS(transaction.isActive(), "Cannot open a database with a finished write transaction");
-    detail::DatabaseAccess::acquireOpenAdmission(transaction);
-    auto openedRes =
-      openNamedDatabase(detail::DatabaseAccess::handle(transaction), name, static_cast<std::uint32_t>(MDB_CREATE));
-
-    if (!openedRes)
-    {
-      return std::unexpected{std::move(openedRes.error())};
-    }
-
-    if (auto validationRes = validateExactFlags(name, openedRes->nativeFlags, 0); !validationRes)
-    {
-      return std::unexpected{std::move(validationRes.error())};
-    }
-
-    return detail::DatabaseAccess::byteKeyDatabase(openedRes->dbi);
+    return openTypedDatabase(transaction, name, NamedOpen::Create, 0)
+      .transform([](DbiHandle const dbi) { return ByteKeyDatabase{dbi}; });
   }
 
   Result<ByteKeyDatabase> ByteKeyDatabase::openExisting(WriteTransaction& transaction, std::string const& name)
   {
-    AO_EXPECTS(transaction.isActive(), "Cannot open a database with a finished write transaction");
-    detail::DatabaseAccess::acquireOpenAdmission(transaction);
-    auto openedRes = openNamedDatabase(detail::DatabaseAccess::handle(transaction), name, 0);
-
-    if (!openedRes)
-    {
-      return std::unexpected{std::move(openedRes.error())};
-    }
-
-    if (auto validationRes = validateExactFlags(name, openedRes->nativeFlags, 0); !validationRes)
-    {
-      return std::unexpected{std::move(validationRes.error())};
-    }
-
-    return detail::DatabaseAccess::byteKeyDatabase(openedRes->dbi);
+    return openTypedDatabase(transaction, name, NamedOpen::Existing, 0)
+      .transform([](DbiHandle const dbi) { return ByteKeyDatabase{dbi}; });
   }
 
   Result<ByteKeyDatabase> ByteKeyDatabase::main(WriteTransaction& transaction)
@@ -410,20 +353,14 @@ namespace ao::lmdb
       throwOnMutationError("mdb_dbi_open", code);
     }
 
-    unsigned int nativeFlags = 0;
-    auto const flagsCode = ::mdb_dbi_flags(detail::DatabaseAccess::handle(transaction), dbi, &nativeFlags);
+    auto const flags = readDatabaseFlags(detail::DatabaseAccess::handle(transaction), dbi);
 
-    if (flagsCode != MDB_SUCCESS)
-    {
-      throwOnMutationError("mdb_dbi_flags", flagsCode);
-    }
-
-    if (auto validationRes = validateByteKeyMain(nativeFlags); !validationRes)
+    if (auto validationRes = validateByteKeyMain(flags); !validationRes)
     {
       return std::unexpected{std::move(validationRes.error())};
     }
 
-    return detail::DatabaseAccess::byteKeyDatabase(dbi);
+    return ByteKeyDatabase{dbi};
   }
 
   IntegerKeyDatabase::Reader IntegerKeyDatabase::reader(ReadTransaction const& transaction) const
@@ -475,14 +412,9 @@ namespace ao::lmdb
   {
     ensureActive();
     auto cursorPtr = create(_txn, *_owner, _dbi);
-    auto record = RawRecord{};
-
-    if (!tryPositionCursor(cursorPtr.get(), MDB_LAST, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
-    {
-      return 0;
-    }
-
-    return read<std::uint32_t>(makeVal(record.key.data(), record.key.size()));
+    auto const optRecord =
+      positionCursor(cursorPtr.get(), MDB_LAST, detail::DatabaseAccess::isTransactionOwned(*_owner));
+    return optRecord ? readIntegerKey(optRecord->key) : 0;
   }
 
   void IntegerKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
@@ -536,15 +468,17 @@ namespace ao::lmdb
     , _owner{&owner}
     , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
-    auto record = RawRecord{};
+    auto const optRecord =
+      positionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner));
 
-    if (!tryPositionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner), record))
+    if (optRecord)
+    {
+      _value = Reader::Value{Reader::KeyView{optRecord->key}, optRecord->value};
+    }
+    else
     {
       _cursorPtr.reset();
-      return;
     }
-
-    _value = Reader::Value{Reader::KeyView{record.key}, record.value};
   }
 
   IntegerKeyDatabase::Reader::Iterator::Iterator(Iterator&& other) noexcept
@@ -614,16 +548,18 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Reader::Iterator::next()
   {
-    auto record = RawRecord{};
+    auto const optRecord =
+      positionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner));
 
-    if (!tryPositionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
+    if (optRecord)
+    {
+      _value = Reader::Value{Reader::KeyView{optRecord->key}, optRecord->value};
+    }
+    else
     {
       _value = Reader::Value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
       _cursorPtr.reset();
-      return;
     }
-
-    _value = Reader::Value{Reader::KeyView{record.key}, record.value};
   }
 
   ByteKeyDatabase::Reader::Reader(DbiHandle const dbi, MDB_txn* transaction, ReadTransaction const& owner)
@@ -696,15 +632,17 @@ namespace ao::lmdb
     , _owner{&owner}
     , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
-    auto record = RawRecord{};
+    auto const optRecord =
+      positionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner));
 
-    if (!tryPositionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner), record))
+    if (optRecord)
+    {
+      _value = Reader::Value{optRecord->key, optRecord->value};
+    }
+    else
     {
       _cursorPtr.reset();
-      return;
     }
-
-    _value = Reader::Value{record.key, record.value};
   }
 
   ByteKeyDatabase::Reader::Iterator::Iterator(MDB_txn* transaction,
@@ -716,16 +654,17 @@ namespace ao::lmdb
     , _owner{&owner}
     , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
-    auto record = RawRecord{};
+    auto const optRecord = positionCursor(
+      _cursorPtr.get(), MDB_SET_RANGE, detail::DatabaseAccess::isTransactionOwned(owner), makeVal(lowerBoundKey));
 
-    if (!tryPositionCursorAtOrAfter(
-          _cursorPtr.get(), lowerBoundKey, detail::DatabaseAccess::isTransactionOwned(owner), record))
+    if (optRecord)
+    {
+      _value = Reader::Value{optRecord->key, optRecord->value};
+    }
+    else
     {
       _cursorPtr.reset();
-      return;
     }
-
-    _value = Reader::Value{record.key, record.value};
   }
 
   ByteKeyDatabase::Reader::Iterator::Iterator(Iterator&& other) noexcept
@@ -795,16 +734,18 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Reader::Iterator::next()
   {
-    auto record = RawRecord{};
+    auto const optRecord =
+      positionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner));
 
-    if (!tryPositionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
+    if (optRecord)
+    {
+      _value = Reader::Value{optRecord->key, optRecord->value};
+    }
+    else
     {
       _value = {};
       _cursorPtr.reset();
-      return;
     }
-
-    _value = Reader::Value{record.key, record.value};
   }
 
   IntegerKeyDatabase::Writer::Writer(DbiHandle const dbi, WriteTransaction& transaction)
@@ -816,9 +757,9 @@ namespace ao::lmdb
     ensureActive();
     _cursorPtr = Reader::create(detail::DatabaseAccess::handle(transaction), transaction, _dbi);
 
-    if (auto record = RawRecord{}; tryPositionCursor(_cursorPtr.get(), MDB_LAST, true, record))
+    if (auto const optRecord = positionCursor(_cursorPtr.get(), MDB_LAST, true); optRecord)
     {
-      _lastId = read<std::uint32_t>(makeVal(record.key.data(), record.key.size()));
+      _lastId = readIntegerKey(optRecord->key);
     }
   }
 
@@ -863,32 +804,13 @@ namespace ao::lmdb
   Result<> IntegerKeyDatabase::Writer::create(std::uint32_t const id, std::span<std::byte const> const data)
   {
     ensureActive();
-    auto const code = put(_cursorPtr.get(), utility::bytes::view(id), data, MDB_NOOVERWRITE);
-
-    if (code != MDB_SUCCESS && code != MDB_KEYEXIST)
-    {
-      throwOnMutationError("mdb_cursor_put", code);
-    }
-
-    return resultFromCode("mdb_cursor_put", code);
+    return putCopied(_cursorPtr.get(), utility::bytes::view(id), data, MDB_NOOVERWRITE);
   }
 
   Result<std::span<std::byte>> IntegerKeyDatabase::Writer::reserveCreate(std::uint32_t const id, std::size_t const size)
   {
     ensureActive();
-    auto const result = reserve(_cursorPtr.get(), utility::bytes::view(id), size, MDB_NOOVERWRITE);
-
-    if (result.code == MDB_SUCCESS)
-    {
-      return utility::bytes::view(result.value.mv_data, result.value.mv_size);
-    }
-
-    if (result.code != MDB_KEYEXIST)
-    {
-      throwOnMutationError("mdb_cursor_put", result.code);
-    }
-
-    return std::unexpected{resultFromCode("mdb_cursor_put", result.code).error()};
+    return reserve(_cursorPtr.get(), utility::bytes::view(id), size, MDB_NOOVERWRITE);
   }
 
   std::uint32_t IntegerKeyDatabase::Writer::maxKey() const noexcept
@@ -912,14 +834,14 @@ namespace ao::lmdb
       return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");
     }
 
-    auto const id = ++_lastId;
+    auto const id = _lastId + 1;
 
-    if (auto res = create(id, data); !res)
+    if (auto res = putCopied(_cursorPtr.get(), utility::bytes::view(id), data, MDB_NOOVERWRITE); !res)
     {
-      --_lastId;
       return std::unexpected{std::move(res.error())};
     }
 
+    _lastId = id;
     return id;
   }
 
@@ -933,42 +855,28 @@ namespace ao::lmdb
       return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");
     }
 
-    auto const id = ++_lastId;
-    auto dataRes = reserveCreate(id, size);
+    auto const id = _lastId + 1;
+    auto dataRes = reserve(_cursorPtr.get(), utility::bytes::view(id), size, MDB_NOOVERWRITE);
 
     if (!dataRes)
     {
-      --_lastId;
       return std::unexpected{std::move(dataRes.error())};
     }
 
+    _lastId = id;
     return std::pair<std::uint32_t, std::span<std::byte>>{id, *dataRes};
   }
 
   Result<> IntegerKeyDatabase::Writer::update(std::uint32_t const id, std::span<std::byte const> const data)
   {
     ensureActive();
-    auto const code = put(_cursorPtr.get(), utility::bytes::view(id), data, 0);
-
-    if (code != MDB_SUCCESS)
-    {
-      throwOnMutationError("mdb_cursor_put", code);
-    }
-
-    return resultFromCode("mdb_cursor_put", code);
+    return putCopied(_cursorPtr.get(), utility::bytes::view(id), data, 0);
   }
 
   Result<std::span<std::byte>> IntegerKeyDatabase::Writer::reserveUpdate(std::uint32_t const id, std::size_t const size)
   {
     ensureActive();
-    auto const result = reserve(_cursorPtr.get(), utility::bytes::view(id), size, 0);
-
-    if (result.code == MDB_SUCCESS)
-    {
-      return utility::bytes::view(result.value.mv_data, result.value.mv_size);
-    }
-
-    throwOnMutationError("mdb_cursor_put", result.code);
+    return reserve(_cursorPtr.get(), utility::bytes::view(id), size, 0);
   }
 
   bool IntegerKeyDatabase::Writer::tryDelete(std::uint32_t const id)
@@ -986,9 +894,9 @@ namespace ao::lmdb
   Result<> IntegerKeyDatabase::Writer::clear()
   {
     ensureActive();
-    auto res = clearDatabase(detail::DatabaseAccess::handle(*_txn), _dbi);
+    clearDatabase(_nativeTxn, _dbi);
     _lastId = 0;
-    return res;
+    return {};
   }
 
   ByteKeyDatabase::Writer::Writer(DbiHandle const dbi, WriteTransaction& transaction)
@@ -1040,27 +948,13 @@ namespace ao::lmdb
   Result<> ByteKeyDatabase::Writer::create(std::span<std::byte const> const key, std::span<std::byte const> const data)
   {
     ensureActive();
-    auto const code = put(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
-
-    if (code != MDB_SUCCESS && code != MDB_KEYEXIST)
-    {
-      throwOnMutationError("mdb_cursor_put", code);
-    }
-
-    return resultFromCode("mdb_cursor_put", code);
+    return putCopied(_cursorPtr.get(), key, data, MDB_NOOVERWRITE);
   }
 
   Result<> ByteKeyDatabase::Writer::update(std::span<std::byte const> const key, std::span<std::byte const> const data)
   {
     ensureActive();
-    auto const code = put(_cursorPtr.get(), key, data, 0);
-
-    if (code != MDB_SUCCESS)
-    {
-      throwOnMutationError("mdb_cursor_put", code);
-    }
-
-    return resultFromCode("mdb_cursor_put", code);
+    return putCopied(_cursorPtr.get(), key, data, 0);
   }
 
   bool ByteKeyDatabase::Writer::tryDelete(std::span<std::byte const> const key)
@@ -1078,7 +972,8 @@ namespace ao::lmdb
   Result<> ByteKeyDatabase::Writer::clear()
   {
     ensureActive();
-    return clearDatabase(detail::DatabaseAccess::handle(*_txn), _dbi);
+    clearDatabase(_nativeTxn, _dbi);
+    return {};
   }
 
   detail::UnvalidatedDatabase::UnvalidatedDatabase(UnvalidatedDatabase&& other) noexcept
@@ -1101,9 +996,7 @@ namespace ao::lmdb
   Result<detail::UnvalidatedDatabase> detail::UnvalidatedDatabase::openExisting(WriteTransaction& transaction,
                                                                                 std::string const& name)
   {
-    AO_EXPECTS(transaction.isActive(), "Cannot open a database with a finished write transaction");
-    DatabaseAccess::acquireOpenAdmission(transaction);
-    auto openedRes = openNamedDatabase(DatabaseAccess::handle(transaction), name, 0);
+    auto openedRes = openNamedDatabase(transaction, name, 0);
 
     if (!openedRes)
     {

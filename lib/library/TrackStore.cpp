@@ -37,6 +37,43 @@ namespace ao::library
         AO_INVARIANT(view.isColdValid(), "Cold Track record is structurally corrupt after library validation");
       }
     }
+
+    template<typename Lookup>
+    std::optional<TrackView> loadTrack(Lookup const& hot,
+                                       Lookup const& cold,
+                                       TrackId id,
+                                       TrackStore::Reader::LoadMode mode)
+    {
+      using LoadMode = TrackStore::Reader::LoadMode;
+      auto optHot = std::optional<std::span<std::byte const>>{};
+      auto optCold = std::optional<std::span<std::byte const>>{};
+
+      if (mode == LoadMode::Hot || mode == LoadMode::Both)
+      {
+        optHot = hot.get(id.raw());
+      }
+
+      if (mode == LoadMode::Cold || mode == LoadMode::Both)
+      {
+        optCold = cold.get(id.raw());
+      }
+
+      if (mode == LoadMode::Both)
+      {
+        AO_INVARIANT(
+          optHot.has_value() == optCold.has_value(), "Track hot/cold presence diverged after library validation");
+      }
+
+      if ((mode != LoadMode::Cold && !optHot) || (mode != LoadMode::Hot && !optCold))
+      {
+        return std::nullopt;
+      }
+
+      auto view =
+        TrackView{optHot.value_or(std::span<std::byte const>{}), optCold.value_or(std::span<std::byte const>{})};
+      validateLoadedTrack(view, mode);
+      return view;
+    }
   } // namespace
 
   // TrackStore implementation
@@ -87,37 +124,7 @@ namespace ao::library
 
   std::optional<TrackView> TrackStore::Reader::get(TrackId id, LoadMode mode) const
   {
-    auto optHotBytes = std::optional<std::span<std::byte const>>{};
-    auto optColdBytes = std::optional<std::span<std::byte const>>{};
-    auto hotBuffer = std::span<std::byte const>{};
-    auto coldBuffer = std::span<std::byte const>{};
-
-    if (mode == LoadMode::Hot || mode == LoadMode::Both)
-    {
-      optHotBytes = _hotReader.get(id.raw());
-    }
-
-    if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
-    {
-      optColdBytes = _coldReader.get(id.raw());
-    }
-
-    if (mode == LoadMode::Both)
-    {
-      AO_INVARIANT(optHotBytes.has_value() == optColdBytes.has_value(),
-                   "Track hot/cold presence diverged after library validation");
-    }
-
-    if ((mode != LoadMode::Cold && !optHotBytes) || (mode != LoadMode::Hot && !optColdBytes))
-    {
-      return std::nullopt;
-    }
-
-    hotBuffer = optHotBytes.value_or(hotBuffer);
-    coldBuffer = optColdBytes.value_or(coldBuffer);
-    auto view = TrackView{hotBuffer, coldBuffer};
-    validateLoadedTrack(view, mode);
-    return view;
+    return loadTrack(_hotReader, _coldReader, id, mode);
   }
 
   bool TrackStore::Reader::shouldUseCursorScan(std::span<TrackId const> ids, LoadMode const mode) const
@@ -311,37 +318,7 @@ namespace ao::library
 
   std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
   {
-    auto optHotBytes = std::optional<std::span<std::byte const>>{};
-    auto optColdBytes = std::optional<std::span<std::byte const>>{};
-    auto hotBuffer = std::span<std::byte const>{};
-    auto coldBuffer = std::span<std::byte const>{};
-
-    if (mode == Reader::LoadMode::Hot || mode == Reader::LoadMode::Both)
-    {
-      optHotBytes = _hotWriter.get(id.raw());
-    }
-
-    if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
-    {
-      optColdBytes = _coldWriter.get(id.raw());
-    }
-
-    if (mode == Reader::LoadMode::Both)
-    {
-      AO_INVARIANT(optHotBytes.has_value() == optColdBytes.has_value(),
-                   "Track hot/cold presence diverged after library validation");
-    }
-
-    if ((mode != Reader::LoadMode::Cold && !optHotBytes) || (mode != Reader::LoadMode::Hot && !optColdBytes))
-    {
-      return std::nullopt;
-    }
-
-    hotBuffer = optHotBytes.value_or(hotBuffer);
-    coldBuffer = optColdBytes.value_or(coldBuffer);
-    auto view = TrackView{hotBuffer, coldBuffer};
-    validateLoadedTrack(view, mode);
-    return view;
+    return loadTrack(_hotWriter, _coldWriter, id, mode);
   }
 
   bool TrackStore::Writer::tryRemove(TrackId id)

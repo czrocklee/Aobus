@@ -56,7 +56,7 @@ namespace ao::library::test
     CHECK(optResult->payloadLength == payload.size());
   }
 
-  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity", "[concurrency]")
+  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity")
   {
     auto const payload = makePayload(kHashChunkSize + 17U);
     auto stopSource = std::stop_source{};
@@ -82,5 +82,24 @@ namespace ao::library::test
     CHECK(progressEvents.back() == expectedFraction);
     CHECK(progressEvents.back() > 0.0);
     CHECK(progressEvents.back() < 1.0);
+  }
+
+  TEST_CASE("readAudioIdentity - cancellation at the final progress callback returns no identity")
+  {
+    auto const payload = makePayload(32);
+    auto stopSource = std::stop_source{};
+    auto optResult = readAudioIdentity(
+      payload,
+      [&stopSource](double fraction)
+      {
+        if (fraction == 1.0)
+        {
+          stopSource.request_stop();
+        }
+      },
+      stopSource.get_token());
+
+    CHECK(stopSource.stop_requested());
+    CHECK_FALSE(optResult);
   }
 } // namespace ao::library::test

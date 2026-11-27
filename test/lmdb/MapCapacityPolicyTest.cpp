@@ -82,12 +82,13 @@ namespace ao::lmdb::test
   {
     auto const capacity = capacityOf(mebibytes(512), mebibytes(500));
 
-    // Doubling would ask for 1024 MiB, which is the ceiling, and the next step
-    // would pass it.
-    CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(1024));
+    auto const policy = CapacityPolicy{.maximumMapBytes = mebibytes(768)};
 
-    auto const atCeiling = capacityOf(mebibytes(1024), mebibytes(1000));
-    CHECK(detail::plannedMapBytes(atCeiling, growingPolicy()) == mebibytes(1024));
+    // An uncapped doubling would return 1024 MiB.
+    CHECK(detail::plannedMapBytes(capacity, policy) == mebibytes(768));
+
+    auto const atCeiling = capacityOf(mebibytes(768), mebibytes(700));
+    CHECK(detail::plannedMapBytes(atCeiling, policy) == mebibytes(768));
   }
 
   TEST_CASE("plannedMapBytes - a map already past the ceiling is left where it is")

@@ -253,6 +253,39 @@ namespace ao::library::test
     CHECK_FALSE(library.lists().reader(readTransaction).get(siblingId));
   }
 
+  TEST_CASE("ListWriter - subtree deletion follows reparenting staged in the same write")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto transaction = writeTransaction(library);
+    auto formerParentId = kInvalidListId;
+    auto subtreeId = kInvalidListId;
+    auto movedId = kInvalidListId;
+
+    auto const removedRes = transaction.apply(
+      [&](LibraryWrite& write) -> Result<std::vector<ListId>>
+      {
+        auto writer = write.lists();
+        formerParentId = createList(writer, "Former parent");
+        subtreeId = createList(writer, "Subtree", formerParentId);
+        movedId = createList(writer, "Moved", formerParentId);
+        REQUIRE(writer.update(movedId, ListBuilder::makeEmpty().name("Moved").parentId(subtreeId)));
+        return writer.removeSubtree(subtreeId);
+      });
+
+    REQUIRE(removedRes);
+    CHECK(*removedRes == std::vector{subtreeId, movedId});
+    REQUIRE(transaction.commit());
+
+    auto readTransaction = library.readTransaction();
+    auto const reader = library.lists().reader(readTransaction);
+    auto const optFormerParent = reader.get(formerParentId);
+    REQUIRE(optFormerParent);
+    CHECK(optFormerParent->name() == "Former parent");
+    CHECK_FALSE(reader.get(subtreeId));
+    CHECK_FALSE(reader.get(movedId));
+  }
+
   TEST_CASE("ListWriter - clear removes the complete saved List graph")
   {
     auto const temp = ao::test::TempDir{};

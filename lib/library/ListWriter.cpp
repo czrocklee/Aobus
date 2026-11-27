@@ -183,64 +183,39 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto records = std::unordered_set<ListId>{};
-    auto children = std::unordered_map<ListId, std::vector<ListId>>{};
+    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
 
-    for (auto const& [id, view] : _transaction->listStore().reader(*_transaction))
-    {
-      records.insert(id);
-      children[view.parentId()].push_back(id);
-    }
-
-    if (!records.contains(rootId))
+    if (!writer.get(rootId))
     {
       return makeError(Error::Code::NotFound, std::format("List {} does not exist", rootId.raw()));
     }
 
-    struct Visit final
+    auto children = std::unordered_map<ListId, std::vector<ListId>>{};
+
+    for (auto const& [id, view] : _transaction->listStore().reader(*_transaction))
     {
-      ListId id;
-      bool exiting;
-    };
+      children[view.parentId()].push_back(id);
+    }
 
     auto rootFirst = std::vector<ListId>{};
-    auto visiting = std::unordered_set<ListId>{};
-    auto visited = std::unordered_set<ListId>{};
-    auto pending = std::vector<Visit>{{.id = rootId, .exiting = false}};
+    auto pending = std::vector{rootId};
 
     while (!pending.empty())
     {
-      auto const [id, exiting] = pending.back();
+      auto const id = pending.back();
       pending.pop_back();
-
-      if (exiting)
-      {
-        visiting.erase(id);
-        visited.insert(id);
-        continue;
-      }
-
-      if (visited.contains(id))
-      {
-        continue;
-      }
-
-      auto const inserted = visiting.insert(id).second;
-      AO_INVARIANT(inserted, "List parent graph contains a cycle after library validation");
-
       rootFirst.push_back(id);
-      pending.push_back(Visit{.id = id, .exiting = true});
 
       if (auto const childIt = children.find(id); childIt != children.end())
       {
         for (auto const childId : childIt->second | std::views::reverse)
         {
-          pending.push_back(Visit{.id = childId, .exiting = false});
+          // Each row has one parent, so a reachable cycle must return to the root.
+          AO_INVARIANT(childId != rootId, "List parent graph contains a cycle after library validation");
+          pending.push_back(childId);
         }
       }
     }
-
-    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
 
     for (auto const id : rootFirst | std::views::reverse)
     {

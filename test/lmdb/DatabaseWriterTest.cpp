@@ -303,7 +303,38 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
 
-  TEST_CASE("ReservationWriterAccess - append conflict restores cached maximum and skips encoder")
+  TEST_CASE("IntegerKeyDatabase::Writer - a copied append conflict preserves the row and next allocation")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls | kEnvNoSync, .maxDatabases = 2});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(transaction, "records");
+    auto writer = db.writer(transaction);
+    REQUIRE(writer.create(1, createStringData("explicit")));
+
+    auto const conflictRes = writer.append(createStringData("must not overwrite"));
+    REQUIRE_FALSE(conflictRes);
+    CHECK(conflictRes.error().code == Error::Code::Conflict);
+    CHECK(writer.maxKey() == 0);
+
+    auto const optOriginal = writer.get(1);
+    REQUIRE(optOriginal);
+    CHECK(utility::bytes::stringView(*optOriginal) == "explicit");
+    REQUIRE(writer.tryDelete(1));
+    auto const idRes = writer.append(createStringData("retry"));
+    REQUIRE(idRes);
+    CHECK(*idRes == 1);
+    REQUIRE(transaction.commit());
+
+    auto const snapshot = beginReadTransaction(env);
+    auto const reader = db.reader(snapshot);
+    auto const optValue = reader.get(1);
+    REQUIRE(optValue);
+    CHECK(utility::bytes::stringView(*optValue) == "retry");
+    CHECK(reader.entryCount() == 1);
+  }
+
+  TEST_CASE("ReservationWriterAccess - append conflict preserves cached maximum and skips encoder")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -322,13 +353,17 @@ namespace ao::lmdb::test
     CHECK(encoderCalls == 0);
     CHECK(writer.maxKey() == 0);
 
-    REQUIRE(writer.update(1, createStringData("still active")));
+    REQUIRE(writer.update(2, createStringData("still active")));
     REQUIRE(transaction.commit());
 
     auto const readTransaction = beginReadTransaction(env);
-    auto const optData = db.reader(readTransaction).get(1);
-    REQUIRE(optData);
-    CHECK(utility::bytes::stringView(*optData) == "still active");
+    auto const reader = db.reader(readTransaction);
+    auto const optOriginal = reader.get(1);
+    auto const optLater = reader.get(2);
+    REQUIRE(optOriginal);
+    REQUIRE(optLater);
+    CHECK(utility::bytes::stringView(*optOriginal) == "explicit");
+    CHECK(utility::bytes::stringView(*optLater) == "still active");
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - clear resets integer append allocation on the same writer")
@@ -691,6 +726,7 @@ namespace ao::lmdb::test
     {
       auto transaction = beginWriteTransaction(env);
       auto writer = db.writer(transaction);
+      REQUIRE(writer.create(2, createStringData("staged before the fault")));
       auto const oversized = createTestData(kOversizedValue);
 
       SECTION("create with copied data")

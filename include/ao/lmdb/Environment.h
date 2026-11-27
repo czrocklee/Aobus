@@ -142,7 +142,7 @@ namespace ao::lmdb
        * consumed, so the effective map is never under the committed extent.
        */
       std::uint64_t pinnedMapBytes = 0;
-      /// Growth applied after opening. Ignored for a read-only environment.
+      /// Growth applied after opening. Ignored for read-only and pinned environments.
       CapacityPolicy capacity{};
     };
 

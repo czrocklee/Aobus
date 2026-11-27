@@ -51,16 +51,17 @@ Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, `.aobus-o
 Capacity is either managed or pinned, and `MusicLibrary::Options` chooses which.
 
 Managed capacity is the default and is what the application uses.
-Every open raises the map to at least a 2 GiB floor: a fresh database opens at the floor, and an existing database keeps at least its recorded capacity, raised to the floor when smaller.
-A library that an earlier build sized below 2 GiB, as it did on a Windows volume without sparse files such as exFAT, therefore opens at 2 GiB.
-Each open also doubles the map when the recorded peak has come within a doubling of filling it, up to a 64 GiB ceiling.
+An unpinned writable open raises the map to at least a 2 GiB floor: a fresh database opens at the floor, and an existing database keeps at least its recorded capacity, raised to the floor when smaller.
+A library that an earlier build sized below 2 GiB, as it did on a Windows volume without sparse files such as exFAT, therefore opens with at least 2 GiB under managed capacity.
+The policy also doubles the map when the recorded peak has come within a doubling of filling it, up to a 64 GiB ceiling.
 The floor and each doubling cost no disk, because the map reserves address space rather than disk.
-Capacity only ever grows: no open lowers a map a database already recorded, and no live environment is resized.
+Managed capacity never lowers a map the database already recorded. No live environment is resized.
 A mutation that exhausts the map rolls back and leaves the recorded peak untouched, so nothing asks the next open for more room; repeating that work needs the database to have grown for another reason.
 
-`Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
-It is for callers that need one known capacity, including tests that mean to reach the end of a map.
-`MusicLibrary::open` is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
+A nonzero `Options::pinnedMapBytes` instead requests that capacity and disables managed growth, overriding the policy floor and the previously recorded capacity.
+It is for callers that need a known capacity, including tests that mean to reach the end of a map. LMDB still raises a request below the committed extent to fit that extent.
+
+`MusicLibrary::open()` is the sole public recoverable construction boundary and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
 It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created.
 An empty catalog initializes the exact version-1 schema by default. With `RequireExisting`, an empty catalog returns `NotFound` without initializing the schema, even when `data.mdb` is nonempty.
 LMDB 1.0 keys each named database's catalog entry by its name followed by a terminating NUL byte, so admission compares those exact keys and treats a row keyed by the bare name as an ordinary main-database record.
@@ -92,7 +93,7 @@ This reference records the format-specific consequences.
 
 `MusicLibrary::readTransaction()` returns a move-only coherent LMDB snapshot carrying the metadata header and committed revision read from that snapshot.
 The specialized stores are const read services: their readers use a read transaction, a write transaction for pre-operation inspection, or the active `LibraryWrite` context for one coherent in-operation view.
-`MusicLibrary` exposes logical metadata-header values rather than a physical Metadata Store handle.
+`MusicLibrary` exposes logical metadata-header values rather than a physical Metadata Store handle. The header accessor without a transaction returns the immutable header admitted at open; the committed revision comes from the caller's LMDB snapshot.
 A store accepts only a transaction minted by the same stable `MusicLibrary`; cross-library metadata, revision, or record access fails before exposing a fact.
 Mapped record views borrow bytes from that transaction and follow the [view safety rules](#view-safety). Committed dictionary text instead has the store-owned lifetime described by the [library architecture](../../../system/library/structure.md#physical-storage-and-capabilities).
 These semantic wrappers add no second storage transaction or read-path heap allocation.
@@ -388,7 +389,8 @@ The reader rejects multiplication/addition overflow, truncated fields, a non-can
 Text fields retain an independent 65,535-byte post-NFC product limit; the 32-bit physical lengths do not authorize multi-gigabyte user text.
 
 `ListBuilder` owns copies of its name, description, and filter inputs, so a logical mutation may stage the semantic value without retaining a caller or LMDB view.
-`ListBuilder::prepare()` validates scalar UTF-8, normalizes name and description to NFC, preserves filter bytes, then snapshots one immutable prepared value after checking the product limits, exact canonical layout, nonzero unique saved-order ids, and every derived extent.
+`ListBuilder::prepare()` validates scalar UTF-8, normalizes name and description to NFC, and preserves filter bytes. It uses the builder's first-occurrence order, rejects a zero id, checks text limits and derived extents, and verifies the emitted layout with `ListView` before returning the immutable prepared value.
+Library open separately validates arbitrary persisted List bytes, including the encoded order's uniqueness and the canonical text and layout rules.
 The filter field is syntactically opaque at this boundary: any scalar-valid UTF-8 text within the size limit is locally valid, and no query parse or compile occurs.
 `ListStore::Writer` accepts only the prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
 It does not serialize again or allocate and rebuild a second saved-order uniqueness set before copying those bytes.
@@ -561,8 +563,7 @@ Its `hot()` and `cold()` ranges are explicit projections over one physical side 
 A loaded but structurally invalid hot or cold side after successful open fails through `AO_INVARIANT`; it is not returned as a poisoned live Store row.
 Directly constructed `TrackView` remains available for bounded binary diagnostics and preserves its independent validity queries.
 
-Mapped Store record views borrow their bytes from the active LMDB transaction.
-It must not outlive that transaction.
+Mapped Store record views borrow their bytes from the active LMDB transaction and must not outlive it.
 Within a write transaction, a subsequent database mutation may invalidate an earlier borrowed value even when the C++ `ListView` object is still in scope.
 Code that writes after reading a List must first copy every needed scalar, string, rank vector, or serialized payload, or reacquire the List after the intervening write; it must never dereference the old view afterward.
 
@@ -630,11 +631,11 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`IdSpaceTest.cpp`](../../../../test/library/IdSpaceTest.cpp) covers never-reused Track and List ids across deletion, clear, and reopen, the library id across clear, failed-commit rollback, the saved-order mark, and the List id ceiling.
 - [`MetadataStoreTest.cpp`](../../../../test/library/MetadataStoreTest.cpp) covers logical metadata snapshots, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
-- [`ListLayoutTest.cpp`](../../../../test/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
-- [`ListStoreTest.cpp`](../../../../test/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
+- [`ListLayout.h`](../../../../include/ao/library/ListLayout.h) statically checks the 20-byte header, alignment, field offsets, and absence of padding. [`ListBuilderTest.cpp`](../../../../test/library/ListBuilderTest.cpp) and [`ListViewTest.cpp`](../../../../test/library/ListViewTest.cpp) cover canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and the padding gate.
+- [`ListStoreTest.cpp`](../../../../test/library/ListStoreTest.cpp) covers the prepared-only writer surface, canonical replacement, and ordinary point reads and iteration.
 - [`FileManifestBuilderTest.cpp`](../../../../test/library/FileManifestBuilderTest.cpp) checks the status byte's offset and encodings in the 52-byte whole-file record, unbound and bound snapshots, and binding-independent validation.
-- [`FileManifestStoreTest.cpp`](../../../../test/library/FileManifestStoreTest.cpp) locks the prepared-only writer surface, manifest validation, URI padding boundaries through the maximum key size, point-read and lower-bound outcomes, and post-open iterator fail-fast behavior.
-- [`LibraryProbeTest.cpp`](../../../../test/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, empty lower-bound rejection, fresh-environment reader-table exhaustion, the default request exceeding LMDB's 126-slot baseline through 160 simultaneous snapshots, and bounded normal child-process observations.
+- [`FileManifestStoreTest.cpp`](../../../../test/library/FileManifestStoreTest.cpp) covers the prepared-only writer surface, manifest validation, URI padding boundaries through the maximum key size, and point-read and lower-bound outcomes.
+- [`LibraryProbeTest.cpp`](../../../../test/library/LibraryProbeTest.cpp) covers invalid-view and prepared-write contracts, post-open List point-read corruption and List-parent failures, one-sided Track reads, a missing manifest binding in `TrackWriter::requireManifestBinding`, and native-read failures. It also covers revision exhaustion, LMDB lifetime misuse, empty lower-bound rejection, fresh-environment reader-table exhaustion, the default request exceeding LMDB's 126-slot baseline through 160 simultaneous snapshots, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/baseline/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
 - [`TrackWriterTest.cpp`](../../../../test/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior, including a maximum-length URI across reopen.

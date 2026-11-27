@@ -5,6 +5,7 @@
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
 
@@ -52,7 +53,7 @@ namespace ao::library::test
     CHECK(builder.coverArt().entries().empty());
   }
 
-  TEST_CASE("TrackBuilder - aligns cover table after custom values")
+  TEST_CASE("TrackBuilder - cover art and padded custom values coexist in a cold record")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("song.flac");
@@ -64,6 +65,11 @@ namespace ao::library::test
     auto const coldData = context.serializeCold(builder);
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
+    REQUIRE(view.isColdValid());
+    auto const optKeyId = context.dictionary().findId("odd");
+    REQUIRE(optKeyId);
+    CHECK(view.customMetadata().get(*optKeyId) == "abc");
+    CHECK(view.property().uri() == "song.flac");
     REQUIRE(view.coverArt().count() == 2);
     CHECK(view.coverArt().at(0).type == PictureType::BackCover);
     CHECK(view.coverArt().at(1).type == PictureType::FrontCover);

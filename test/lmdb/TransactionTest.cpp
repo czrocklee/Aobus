@@ -5,6 +5,7 @@
 
 #include "test/TestFixtureSupport.h"
 #include "test/fatal/ProbeProcess.h"
+#include "test/lmdb/LmdbProbeScratch.h"
 #include "test/lmdb/LmdbTestSupport.h"
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -37,52 +38,21 @@ namespace ao::lmdb::test
     static_assert(std::is_nothrow_move_assignable_v<WriteTransaction>);
   } // namespace
 
-  TEST_CASE("ReadTransaction - helper starts transaction")
+  TEST_CASE("ReadTransaction - destruction releases the last reader slot")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxReaders = 1});
 
-    // First create database with write transaction
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openIntegerKeyDatabase(wtxn, "test");
-    REQUIRE(wtxn.commit());
-
-    // Then use read transaction
-    auto txn = beginReadTransaction(env);
-    auto reader = db.reader(txn);
-    CHECK(reader.begin() == reader.end()); // Empty DB
-  }
-
-  TEST_CASE("ReadTransaction - begin returns transaction")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    auto txnRes = ReadTransaction::begin(env);
-
-    CHECK(txnRes);
-  }
-
-  TEST_CASE("ReadTransaction - destructor aborts")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    // Create database with write transaction
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openIntegerKeyDatabase(wtxn, "test");
-    REQUIRE(wtxn.commit());
-
-    // Read transaction - destructor should abort
     {
-      auto txn = beginReadTransaction(env);
-      // Destructor should abort
+      auto const snapshot = beginReadTransaction(env);
+      auto const extraRes = ReadTransaction::begin(env);
+      REQUIRE_FALSE(extraRes);
+      CHECK(extraRes.error().code == Error::Code::IoError);
+      CHECK(extraRes.error().message.starts_with("mdb_txn_begin: MDB_READERS_FULL"));
     }
 
-    // Should be able to start new transaction
-    auto txn2 = beginReadTransaction(env);
-    auto reader = db.reader(txn2);
-    CHECK(reader.begin() == reader.end());
+    auto const replacement = beginReadTransaction(env);
+    CHECK(replacement.isActive());
   }
 
   TEST_CASE("ReadTransaction - move constructor transfers usable transactions")
@@ -100,30 +70,6 @@ namespace ao::lmdb::test
     // Verify moved transaction is valid by using it
     auto reader = db.reader(txn2);
     CHECK(reader.begin() == reader.end());
-  }
-
-  // ============================================================================
-  // WriteTransaction Tests
-  // ============================================================================
-  TEST_CASE("WriteTransaction - helper starts transaction")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    auto txn = beginWriteTransaction(env);
-    // Verify transaction is valid by using it to create a database
-    auto db = openIntegerKeyDatabase(txn, "test");
-    [[maybe_unused]] auto writer = db.writer(txn);
-  }
-
-  TEST_CASE("WriteTransaction - begin returns transaction")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    auto txnRes = WriteTransaction::begin(env);
-
-    CHECK(txnRes);
   }
 
   TEST_CASE("WriteTransaction - commit persists written data")
@@ -236,7 +182,7 @@ namespace ao::lmdb::test
     for (auto const scenarioName : kScenarios)
     {
       INFO("probe: " << scenarioName);
-      auto const scratch = ao::test::TempDir{};
+      auto const scratch = ao::test::LmdbProbeScratch{};
       auto scenario = std::string{scenarioName};
       scenario.append(":").append(scratch.path().filename().string());
       auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);

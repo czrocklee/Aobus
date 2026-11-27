@@ -47,7 +47,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - A configured map size is a capacity and address-space bound rather than a disk reservation: on every supported platform and filesystem, the data file grows with the pages transactions use, never with the map. An unsuccessful transaction can leave the file longer than the committed extent; wherever the volume can hold a hole, only the pages it wrote are allocated.
 - Reported high water is the peak page extent the environment has committed, never a live-data measure, and it does not decrease when records are deleted.
 - Map capacity changes only at the open boundary, before the environment is handed to a caller. No live environment is resized, because resizing unmaps and remaps the file and would invalidate every pointer a transaction or reader holds.
-- Capacity only grows. A policy whose floor or ceiling is below what a database already recorded leaves that database's map where it is.
+- The capacity policy applies only to unpinned writable opens and never lowers the map size a database already recorded.
 - An exhausted map is its own recoverable code, distinct from a full disk and from an exhausted identifier space, because only the exhausted map may succeed on a repeat with more capacity.
 - Environment paths crossing this adapter are UTF-8, matching LMDB's own decoding, and are converted explicitly rather than through a platform's narrow-string default.
 - Native environment handles are private to the adapter; public callers compose transactions and databases rather than bypassing their ownership checks.
@@ -117,7 +117,7 @@ Callers that mix explicit integer-key creation with append in one writer must no
 ### Environment and database opening
 
 `Environment::open` applies a nonzero pinned map size and the maximum-database and maximum-reader options before opening the requested path. It prepares a writable environment's data file and opens the native environment with the supplied flags and mode.
-Before returning a writable environment, it applies the capacity policy and calls `mdb_reader_check` once so LMDB can release reader slots left by exited processes. The adapter does not request this check on read-only opens or when beginning transactions.
+An unpinned writable open then applies the capacity policy. Every writable open, pinned or not, calls `mdb_reader_check` once so LMDB can release reader slots left by exited processes. The adapter does not request this check on read-only opens or when beginning transactions.
 If any open step fails, the adapter returns a recoverable `Result` error and closes any partially created native handle.
 
 Three separate figures describe an environment's storage and this specification keeps them apart.
@@ -161,13 +161,14 @@ The open function takes a native path rather than an encoded string, because its
 A caller that converted first would have to choose one and be wrong about the other where the platform's narrow encoding is not UTF-8.
 
 A caller chooses between two ways of sizing an environment.
-`Options::pinnedMapBytes` sets the capacity before the open, which overrides whatever the database recorded and admits no policy growth; it exists for callers that need one known capacity, including tests that have to reach the end of a map.
+A nonzero `Options::pinnedMapBytes` requests a capacity before the open, overriding the recorded map size and bypassing both the policy floor and policy growth.
+This is useful for tests that need to reach the end of a map at a known capacity.
 It is not a guaranteed exact size: LMDB silently raises a request below the space the environment has already consumed, so the effective map is never under the committed extent.
 Leaving it zero lets LMDB adopt the size the database itself recorded, which is what allows a database to keep capacity an earlier session gave it, and a fresh database to start at LMDB's own small default.
-`Options::capacity` then decides whether to raise that.
+For an unpinned writable open, `Options::capacity` then decides whether to raise that size.
 
 The capacity policy names a floor and a ceiling.
-A default policy names neither and therefore changes nothing, so an environment sized by `pinnedMapBytes` alone behaves as it always did.
+A default policy names neither and therefore changes nothing.
 A ceiling of zero disables the growth rule alone: no step is taken and no headroom is reserved, while a floor above the current map still applies, because a floor is the capacity the caller asked to open with rather than a reaction to how full the database has become.
 Otherwise the planned capacity starts at the larger of the current map and the floor, and then doubles while the map is less than twice the recorded high water, stopping at the ceiling.
 Doubling costs no disk, because the data file grows with the pages transactions use, never with the map.
@@ -175,8 +176,8 @@ The planned capacity is never below the current map, so a database opened once u
 Applying it uses the native map-size call on the just-opened environment, which is safe only here: that call unmaps and remaps the file, and LMDB documents that it does not check for active transactions, so the caller must guarantee there are none.
 Construction order is that guarantee rather than any check, because the handle has not yet left the open function and no transaction on the environment can exist.
 The new size takes effect for this process immediately but reaches the database only when a later write transaction commits something, so an open alone raises the map without recording it and the next open recomputes from what was recorded.
-A read-only environment is left alone, since it maps whatever exists and could not record a larger size.
-Data-file preparation is likewise skipped for one: creating an absent file, requesting write permission, and marking a file sparse are all mutations, so a read-only open touches the data file not at all.
+A read-only open skips the capacity policy, since it could not record a larger size.
+Data-file preparation is likewise skipped: creating an absent file, requesting write permission, and marking a file sparse are all mutations, so a read-only open touches the data file not at all.
 That is a statement about the data file rather than about the whole environment, since LMDB still maintains the reader table in the lock file except on a read-only filesystem.
 
 Growth reacts to the recorded high water, which a rolled-back mutation does not change.
@@ -258,7 +259,7 @@ This defines item neutrality relative to the transaction state when that item be
 
 Append starts at key `1` for an empty integer database because key `0` is reserved by current Aobus consumers as a null identity.
 When the cached maximum is `std::numeric_limits<std::uint32_t>::max()`, both the public copied-data append and the private reservation append return `ResourceExhausted` without attempting a write.
-If exclusive creation fails after the cache was incremented, append restores the previous cached maximum and propagates the error.
+Append advances the cached maximum only after exclusive creation succeeds; on failure it propagates the error without advancing the cache.
 
 ## Failure and cancellation
 
@@ -340,7 +341,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`Database.h`](../../../include/ao/lmdb/Database.h) and [`Database.cpp`](../../../lib/lmdb/Database.cpp) own the integer-key and byte-key tokens, named-database access, readers, iterators, writers, and integer key allocation.
 - [`ReservationWriterAccess.h`](../../../lib/lmdb/detail/ReservationWriterAccess.h) owns the source-private zero-copy reservation access used by library Track encoding; public create, update, and append operations accept only copied input bytes.
 - [`UnvalidatedDatabase.h`](../../../lib/lmdb/detail/UnvalidatedDatabase.h) owns the source-private, read-only token used to inspect a library metadata version before consuming the same DBI as an integer-key token; the LMDB build guard limits that seam to its implementation and `MusicLibrary` admission.
-- [`ResultError.h`](../../../lib/lmdb/detail/ResultError.h) owns recoverable native-code mapping and source-location capture.
+- [`ResultError.h`](../../../lib/lmdb/detail/ResultError.h) and [`ResultError.cpp`](../../../lib/lmdb/detail/ResultError.cpp) own native-code mapping, diagnostic construction, and caller source-location capture.
 - [`ThrowError.h`](../../../lib/lmdb/detail/ThrowError.h) dispatches native read faults to the owning transaction channel and constructs mutation-failure control flow; the private [`TransactionFailure.h`](../../../lib/lmdb/detail/TransactionFailure.h) carries the narrow transaction-control error to an owner boundary.
 - [`ReadFaultInjection.h`](../../../lib/lmdb/detail/ReadFaultInjection.h) and
   [`ThrowError.cpp`](../../../lib/lmdb/detail/ThrowError.cpp) own the

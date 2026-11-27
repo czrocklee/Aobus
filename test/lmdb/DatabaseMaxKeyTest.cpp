@@ -23,25 +23,6 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 0);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openIntegerKeyDatabase(wtxn, "test");
-    auto writer = db.writer(wtxn);
-
-    REQUIRE(writer.append(createStringData("first")));
-    auto const id2Res = writer.append(createStringData("second"));
-    REQUIRE(id2Res);
-    REQUIRE(wtxn.commit());
-
-    auto const rtxn = beginReadTransaction(env);
-    auto const reader = db.reader(rtxn);
-    CHECK(reader.maxKey() == *id2Res);
-  }
-
   TEST_CASE("IntegerKeyDatabase::Reader - maxKey tracks explicitly created keys")
   {
     auto const temp = ao::test::TempDir{};

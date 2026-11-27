@@ -26,7 +26,6 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
-    class MetadataState;
     class PhysicalStoreAccess;
     class WriteTransactionAccess;
 
@@ -143,7 +142,6 @@ namespace ao::library
                                           DictionaryStore& dictionary,
                                           FileManifestStore& manifest,
                                           MetadataStore& metadata,
-                                          detail::MetadataState& metadataState,
                                           detail::LibraryIdentity const& identity,
                                           Options options,
                                           std::shared_ptr<void const> writerSessionAnchorPtr = {});

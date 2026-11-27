@@ -7,7 +7,6 @@
 #include "LibraryIdentity.h"
 #include "ListRecordValidation.h"
 #include "LockFile.h"
-#include "MetadataState.h"
 #include "MetadataStore.h"
 #include "OpenValidationMetrics.h"
 #include "TrackRecordValidation.h"
@@ -133,22 +132,6 @@ namespace ao::library
       }
 
       return {};
-    }
-
-    /// Capacity management for one open, or none when the caller pinned the map.
-    lmdb::CapacityPolicy capacityPolicyFor(MusicLibrary::Options const& options)
-    {
-      if (options.pinnedMapBytes > 0)
-      {
-        // A pinned capacity is one the caller has to be able to rely on, so no
-        // growth rule may raise it.
-        return lmdb::CapacityPolicy{};
-      }
-
-      return lmdb::CapacityPolicy{
-        .minimumMapBytes = kLmdbMapFloor,
-        .maximumMapBytes = kLmdbMapCeiling,
-      };
     }
 
     std::uint32_t environmentFlagsFor(MusicLibrary::Options const& options)
@@ -435,21 +418,15 @@ namespace ao::library
       return openSchemaWithMetadata(transaction, create, std::move(*metadataRes));
     }
 
-    struct MetadataRecords final
-    {
-      std::uint64_t revision = 0;
-      IdSpace idSpace;
-    };
-
     struct AdmittedSchema final
     {
       MetadataHeader header;
-      MetadataRecords records;
+      IdSpace idSpace;
       SchemaDatabases databases;
     };
 
-    Result<MetadataRecords> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
-                                                     lmdb::ReadTransaction const& transaction);
+    Result<IdSpace> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
+                                             lmdb::ReadTransaction const& transaction);
 
     Result<AdmittedSchema> createFreshSchema(lmdb::WriteTransaction& transaction)
     {
@@ -480,9 +457,7 @@ namespace ao::library
         return std::unexpected{createRes.error()};
       }
 
-      return AdmittedSchema{.header = *headerRes,
-                            .records = MetadataRecords{.revision = 0, .idSpace = idSpace},
-                            .databases = std::move(*schemaRes)};
+      return AdmittedSchema{.header = *headerRes, .idSpace = idSpace, .databases = std::move(*schemaRes)};
     }
 
     Result<AdmittedSchema> admitCurrentSchema(lmdb::ByteKeyDatabase const& mainDatabase,
@@ -564,14 +539,14 @@ namespace ao::library
         return std::unexpected{schemaRes.error()};
       }
 
-      auto recordsRes = validateMetadataDatabase(schemaRes->metadata, transaction);
+      auto idSpaceRes = validateMetadataDatabase(schemaRes->metadata, transaction);
 
-      if (!recordsRes)
+      if (!idSpaceRes)
       {
-        return std::unexpected{recordsRes.error()};
+        return std::unexpected{idSpaceRes.error()};
       }
 
-      return AdmittedSchema{.header = *headerRes, .records = *recordsRes, .databases = std::move(*schemaRes)};
+      return AdmittedSchema{.header = *headerRes, .idSpace = *idSpaceRes, .databases = std::move(*schemaRes)};
     }
 
     Result<std::uint32_t> decodePersistedId(lmdb::IntegerKeyDatabase::Reader::KeyView const key,
@@ -613,13 +588,12 @@ namespace ao::library
       return idSpace;
     }
 
-    Result<MetadataRecords> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
-                                                     lmdb::ReadTransaction const& transaction)
+    Result<IdSpace> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
+                                             lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
       bool foundHeader = false;
       auto optIdSpace = std::optional<IdSpace>{};
-      std::uint64_t revision = 0;
 
       for (auto const& [key, payload] : reader)
       {
@@ -632,11 +606,7 @@ namespace ao::library
 
         if (*idRes == kMetadataHeaderRecordId)
         {
-          if (auto headerRes = validateCurrentMetadataHeader(payload); !headerRes)
-          {
-            return std::unexpected{headerRes.error()};
-          }
-
+          // The version gate already point-read and validated this value in this snapshot.
           foundHeader = true;
           continue;
         }
@@ -659,6 +629,8 @@ namespace ao::library
           return makeError(
             Error::Code::CorruptData, std::format("Metadata database contains unknown record {}", *idRes));
         }
+
+        std::uint64_t revision = 0;
 
         if (payload.size() != sizeof(revision))
         {
@@ -686,7 +658,7 @@ namespace ao::library
         return makeError(Error::Code::CorruptData, "Metadata database has no id space record");
       }
 
-      return MetadataRecords{.revision = revision, .idSpace = *optIdSpace};
+      return *optIdSpace;
     }
 
     /// Enough of a digest to spread rows across buckets; the set compares the
@@ -1157,7 +1129,7 @@ namespace ao::library
     std::filesystem::path const databasePath;
     lmdb::Environment env;
     lmdb::WriteTransaction initializationTransaction;
-    detail::MetadataState metadataState;
+    MetadataHeader const admittedHeader;
     detail::LibraryIdentity identity;
     MetadataStore metadataStore;
     TrackStore tracks;
@@ -1172,7 +1144,6 @@ namespace ao::library
          lmdb::Environment env,
          lmdb::WriteTransaction initializationTransaction,
          MetadataHeader metadataHeader,
-         std::uint64_t committedRevision,
          lmdb::IntegerKeyDatabase metadataDb,
          lmdb::IntegerKeyDatabase tracksHotDb,
          lmdb::IntegerKeyDatabase tracksColdDb,
@@ -1185,7 +1156,7 @@ namespace ao::library
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
       , initializationTransaction{std::move(initializationTransaction)}
-      , metadataState{metadataHeader, committedRevision}
+      , admittedHeader{metadataHeader}
       , metadataStore{std::move(metadataDb)}
       , tracks{std::move(tracksHotDb), std::move(tracksColdDb), identity}
       , lists{std::move(listsDb), identity}
@@ -1217,13 +1188,14 @@ namespace ao::library
         }
       }
 
-      auto envRes = lmdb::Environment::open(databasePath,
-                                            lmdb::Environment::Options{.flags = environmentFlagsFor(options),
-                                                                       .mode = kLmdbFileMode,
-                                                                       .maxDatabases = kLmdbMaxDatabases,
-                                                                       .maxReaders = options.maxReaders,
-                                                                       .pinnedMapBytes = options.pinnedMapBytes,
-                                                                       .capacity = capacityPolicyFor(options)});
+      auto envRes = lmdb::Environment::open(
+        databasePath,
+        lmdb::Environment::Options{.flags = environmentFlagsFor(options),
+                                   .mode = kLmdbFileMode,
+                                   .maxDatabases = kLmdbMaxDatabases,
+                                   .maxReaders = options.maxReaders,
+                                   .pinnedMapBytes = options.pinnedMapBytes,
+                                   .capacity = {.minimumMapBytes = kLmdbMapFloor, .maximumMapBytes = kLmdbMapCeiling}});
 
       if (!envRes)
       {
@@ -1281,7 +1253,6 @@ namespace ao::library
                                             std::move(*envRes),
                                             std::move(*initializationTransactionRes),
                                             admittedSchema.header,
-                                            admittedSchema.records.revision,
                                             schema.metadata,
                                             schema.tracksHot,
                                             schema.tracksCold,
@@ -1308,14 +1279,14 @@ namespace ao::library
                                                       schema.manifest,
                                                       implPtr->initializationTransaction,
                                                       implPtr->dictionary,
-                                                      admittedSchema.records.idSpace.lastTrackId);
+                                                      admittedSchema.idSpace.lastTrackId);
           !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }
 
       if (auto validationRes =
-            validateListDatabase(schema.lists, implPtr->initializationTransaction, admittedSchema.records.idSpace);
+            validateListDatabase(schema.lists, implPtr->initializationTransaction, admittedSchema.idSpace);
           !validationRes)
       {
         return std::unexpected{validationRes.error()};
@@ -1428,7 +1399,6 @@ namespace ao::library
                                                   _implPtr->dictionary,
                                                   _implPtr->manifest,
                                                   _implPtr->metadataStore,
-                                                  _implPtr->metadataState,
                                                   _implPtr->identity,
                                                   std::move(options),
                                                   std::move(writerSessionAnchorPtr));
@@ -1485,7 +1455,7 @@ namespace ao::library
 
   MetadataHeader MusicLibrary::metadataHeader() const
   {
-    return _implPtr->metadataState.snapshot().header;
+    return _implPtr->admittedHeader;
   }
 
   MetadataHeader MusicLibrary::metadataHeader(ReadTransaction const& transaction) const

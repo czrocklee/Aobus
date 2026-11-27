@@ -93,11 +93,6 @@ namespace ao::library::detail
       return store.writer(transaction);
     }
 
-    static TrackStore::Writer writer(TrackStore const& store, LibraryWrite& write)
-    {
-      return writer(store, transaction(write));
-    }
-
     static bool tryRemoveHotTrackRecordForTest(TrackStore const& store, WriteTransaction& transaction, TrackId const id)
     {
       return store._hotDb.writer(transaction.native(*store._identity)).tryDelete(id.raw());
@@ -125,11 +120,6 @@ namespace ao::library::detail
       return store.writer(transaction);
     }
 
-    static FileManifestStore::Writer writer(FileManifestStore const& store, LibraryWrite& write)
-    {
-      return writer(store, transaction(write));
-    }
-
     static ResourceStore::Writer writer(ResourceStore const& store, WriteTransaction& transaction)
     {
       return store.writer(transaction);
@@ -145,10 +135,7 @@ namespace ao::library::detail
       return WriteTransactionAccess::dictionary(transaction);
     }
 
-    static DictionaryStore::Writer& dictionary(LibraryWrite& write)
-    {
-      return WriteTransactionAccess::dictionary(write.transaction());
-    }
+    static DictionaryStore::Writer& dictionary(LibraryWrite& write) { return dictionary(transaction(write)); }
 
     static Result<> overwriteListRecordForTest(ListStore const& store,
                                                LibraryWrite& write,

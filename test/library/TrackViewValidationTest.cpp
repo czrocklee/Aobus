@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -179,7 +178,7 @@ namespace ao::library::test
       checkVerifierRejects(data);
 
       auto view = TrackView{std::span<std::byte const>{}, data};
-      CHECK(view.isColdValid());
+      REQUIRE(view.isColdValid());
       return view;
     }
   } // namespace
@@ -202,13 +201,6 @@ namespace ao::library::test
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::CorruptData);
     CHECK(res.error().message.contains("duplicate tag ID"));
-  }
-
-  TEST_CASE("TrackView - rejects null hot data")
-  {
-    auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    auto const nullView = TrackView{nullSpan, std::span<std::byte const>{}};
-    CHECK(nullView.isHotValid() == false);
   }
 
   TEST_CASE("TrackView - rejects undersized hot data")
@@ -308,13 +300,6 @@ namespace ao::library::test
     CHECK(coldView.customMetadata().count() == 0);
   }
 
-  TEST_CASE("TrackView - rejects null cold data")
-  {
-    auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    auto const nullView = TrackView{std::span<std::byte const>{}, nullSpan};
-    CHECK(nullView.isColdValid() == false);
-  }
-
   TEST_CASE("TrackView - rejects undersized cold data")
   {
     auto const smallData = std::array<char, 10>{};
@@ -375,11 +360,13 @@ namespace ao::library::test
       checkColdGateRejects(data);
     }
 
-    SECTION("slot offset is not aligned")
+    SECTION("an in-bounds slot offset is not aligned")
     {
-      auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
+      auto data = makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CoverArt, .payload = makeCoverPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] = 30;
+      REQUIRE(header != nullptr);
+      // The shallow gate clips an incomplete cover entry; only alignment rejects this offset.
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)] = sizeof(TrackColdHeader) + 2;
       checkColdGateRejects(data);
     }
 
@@ -589,9 +576,8 @@ namespace ao::library::test
     SECTION("large unsorted custom tables stay memory-safe without lookup guarantees")
     {
       // 64 entries reach the binary-search lookup path, which assumes the
-      // writer-sorted key order. On unsorted data iteration stays complete
-      // and in stored order; keyed lookup may miss and is deliberately not
-      // asserted - only that it runs within bounds.
+      // writer-sorted key order. Iteration still preserves stored order;
+      // keyed lookup may miss, but contains() and get() must agree.
       constexpr std::uint16_t kEntryCount = 64;
 
       auto payload = std::vector<std::byte>(
@@ -629,8 +615,16 @@ namespace ao::library::test
 
       CHECK(iterated == kEntryCount);
 
-      std::ignore = view.customMetadata().contains(DictionaryId{kEntryCount});
-      std::ignore = view.customMetadata().get(DictionaryId{1});
+      for (auto const id : {DictionaryId{1}, DictionaryId{kEntryCount}})
+      {
+        auto const optValue = view.customMetadata().get(id);
+        CHECK(view.customMetadata().contains(id) == optValue.has_value());
+
+        if (optValue)
+        {
+          CHECK(optValue->empty());
+        }
+      }
     }
 
     SECTION("custom entry value range outside the payload clamps to an empty value")

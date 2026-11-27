@@ -30,11 +30,6 @@ namespace ao::library::detail
     {
     }
 
-    LibraryException(Error::Code code, std::string message, std::source_location loc = std::source_location::current())
-      : _error{.code = code, .message = std::move(message), .location = loc}
-    {
-    }
-
     char const* what() const noexcept override { return _error.message.c_str(); }
     Error const& error() const noexcept { return _error; }
 

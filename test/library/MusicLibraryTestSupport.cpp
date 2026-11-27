@@ -14,10 +14,7 @@ namespace ao::library::test
 {
   MusicLibrary makeTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
-    return ao::test::requireValue(
-      MusicLibrary::open(std::move(musicRoot),
-                         std::move(databasePath),
-                         MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes, .flushCommits = false}));
+    return ao::test::requireValue(openTestMusicLibrary(std::move(musicRoot), std::move(databasePath)));
   }
 
   Result<MusicLibrary> openTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)

@@ -22,8 +22,9 @@ namespace ao::library::detail
    * These live here rather than on WriteTransaction because their return types
    * are nested in the five store classes, and a member declaration would pull
    * all five store headers into every translation unit that only wants to hold
-   * or apply a transaction. The writers are created on first use and owned by
-   * the transaction, so each reference stays valid until the transaction ends.
+   * or apply a transaction. The dictionary writer is created with the
+   * transaction; the other writers are created on first use. Each reference
+   * stays valid until the transaction ends.
    *
    * This is a production access path, distinct from the representation-test
    * seam in PhysicalStoreAccess.

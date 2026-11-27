@@ -120,23 +120,9 @@ namespace ao::library
 
   std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictionaryId) const noexcept
   {
-    constexpr std::size_t kSearchThreshold = 64;
-    auto customEntries = entries();
-
-    if (customEntries.size() < kSearchThreshold)
+    if (auto const* entry = findEntry(dictionaryId); entry != nullptr)
     {
-      if (auto it = std::ranges::find(customEntries, dictionaryId, &Entry::keyId); it != customEntries.end())
-      {
-        return value(_payload, *it);
-      }
-
-      return std::nullopt;
-    }
-
-    if (auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
-        it != customEntries.end() && it->keyId == dictionaryId)
-    {
-      return value(_payload, *it);
+      return value(_payload, *entry);
     }
 
     return std::nullopt;
@@ -144,16 +130,41 @@ namespace ao::library
 
   bool CustomMetadataProxy::contains(DictionaryId dictionaryId) const noexcept
   {
+    return findEntry(dictionaryId) != nullptr;
+  }
+
+  CustomMetadataProxy::Entry const* CustomMetadataProxy::findEntry(DictionaryId dictionaryId) const noexcept
+  {
     constexpr std::size_t kSearchThreshold = 64;
-    auto customEntries = entries();
+    auto const customEntries = entries();
 
     if (customEntries.size() < kSearchThreshold)
     {
-      return std::ranges::find(customEntries, dictionaryId, &Entry::keyId) != customEntries.end();
+      auto const it = std::ranges::find(customEntries, dictionaryId, &Entry::keyId);
+      return it != customEntries.end() ? &*it : nullptr;
     }
 
-    auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
-    return it != customEntries.end() && it->keyId == dictionaryId;
+    // Binary search on canonical rows. The shallow gate doesn't verify key
+    // order, so avoid std::ranges::lower_bound's partition precondition.
+    std::size_t first = 0;
+    auto count = customEntries.size();
+
+    while (count != 0)
+    {
+      auto const half = count / 2;
+
+      if (auto const middle = first + half; customEntries[middle].keyId < dictionaryId)
+      {
+        first = middle + 1;
+        count -= half + 1;
+      }
+      else
+      {
+        count = half;
+      }
+    }
+
+    return first < customEntries.size() && customEntries[first].keyId == dictionaryId ? &customEntries[first] : nullptr;
   }
 
   std::span<CustomMetadataProxy::Entry const> CustomMetadataProxy::entries() const noexcept

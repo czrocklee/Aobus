@@ -12,6 +12,8 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/library/ListWriter.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -246,6 +248,15 @@ namespace ao::library::test
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto unallocated = ListBuilder::makeEmpty();
     unallocated.name("Ordered").orderTrackIds().add(TrackId{1});
+    auto const checkOrder = [&library](ListId const listId, TrackId const trackId)
+    {
+      auto read = library.readTransaction();
+      auto const optList = library.lists().reader(read).get(listId);
+      REQUIRE(optList);
+      auto const order = optList->orderTrackIds();
+      REQUIRE(order.size() == 1);
+      CHECK(order.front() == trackId);
+    };
 
     SECTION("on create")
     {
@@ -277,6 +288,7 @@ namespace ao::library::test
         });
       REQUIRE(listRes);
       REQUIRE(transaction.commit());
+      checkOrder(*listRes, TrackId{1});
     }
 
     SECTION("a deleted Track keeps its rank")
@@ -285,7 +297,9 @@ namespace ao::library::test
       removeTrack(library, trackId);
       auto ordered = ListBuilder::makeEmpty();
       ordered.name("Ordered").orderTrackIds().add(trackId);
-      CHECK(createList(library, ordered));
+      auto const listRes = createList(library, ordered);
+      REQUIRE(listRes);
+      checkOrder(*listRes, trackId);
     }
   }
 

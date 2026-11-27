@@ -67,6 +67,7 @@ namespace ao::library::test
     auto const view = ListView{payload};
 
     CHECK(view.name() == "My Saved List");
+    CHECK(view.description() == "An ordered expression");
     CHECK(view.filter() == "@artist = 'Test'");
     CHECK(view.parentId() == ListId{17});
     REQUIRE(view.orderTrackIds().size() == 2);
@@ -133,18 +134,19 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[2] == TrackId{20});
   }
 
-  TEST_CASE("ListBuilder - remove eliminates an ID after repeated add requests")
+  TEST_CASE("ListBuilder - a removed ID can be added again at the end of the order")
   {
     auto builder = ListBuilder::makeEmpty();
     builder.orderTrackIds().add(TrackId{10}).add(TrackId{20}).add(TrackId{10}).add(TrackId{30});
 
-    builder.orderTrackIds().remove(TrackId{10});
+    builder.orderTrackIds().remove(TrackId{10}).add(TrackId{10});
 
     auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
-    REQUIRE(view.orderTrackIds().size() == 2);
+    REQUIRE(view.orderTrackIds().size() == 3);
     CHECK(view.orderTrackIds()[0] == TrackId{20});
     CHECK(view.orderTrackIds()[1] == TrackId{30});
+    CHECK(view.orderTrackIds()[2] == TrackId{10});
   }
 
   TEST_CASE("ListBuilder - fromView canonicalizes duplicate order IDs by first occurrence")
@@ -196,16 +198,6 @@ namespace ao::library::test
     CHECK(rebuiltView.parentId() == ListId{42});
     CHECK(rebuiltView.name() == "Nested Smart List");
     CHECK(rebuiltView.filter() == "$year >= 2021");
-  }
-
-  TEST_CASE("ListBuilder - derives adjacent text field positions")
-  {
-    auto const payload =
-      ao::test::requireValue(ListBuilder::makeEmpty().name("Offset Test").description("Desc Here").serialize());
-    auto const view = ListView{payload};
-
-    CHECK(view.name() == "Offset Test");
-    CHECK(view.description() == "Desc Here");
   }
 
   TEST_CASE("ListBuilder - serialization rejects text beyond the product limit")

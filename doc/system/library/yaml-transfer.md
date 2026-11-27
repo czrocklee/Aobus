@@ -321,7 +321,9 @@ An accepted document may use a canonically decomposed spelling, but export emits
 Only the exact [version-1 schema](../../reference/library/format/yaml.md) is accepted. Alternative schemas labeled version 1 are unsupported, without aliases, a dual reader, or layout autodetection.
 Empty scalar text, including a present empty plain scalar, is the date's clear form.
 The importer accepts no other interchange version and provides no migration or legacy-restore path for documents written by development builds before the first release.
-No build can re-export a development-era physical library into a document the current importer accepts, because the current build opens only physical version 1; recovering such a library means scanning the music files it describes.
+Earlier physical layouts are [unsupported even when the database version matches](../../reference/library/storage/database.md#compatibility-and-versioning).
+Export with the build that wrote the library, and restore into a new library only from a document that conforms to the current schema.
+Rescanning the media does not recover database-only curation.
 
 ## Frontend observations
 

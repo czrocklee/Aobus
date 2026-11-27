@@ -130,10 +130,10 @@ If a `full` document declares length `1024` for a digest whose row already holds
 ## Test authority
 
 - [`Sha256Test.cpp`](../../../test/utility/Sha256Test.cpp) protects published digest vectors, hexadecimal spelling, and parsing.
-- [`ResourceLayoutTest.cpp`](../../../test/library/ResourceLayoutTest.cpp) protects descriptor size, alignment, byte order, and id derivation.
-- [`ResourceStoreTest.cpp`](../../../test/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
+- [`ResourceLayout.h`](../../../include/ao/library/ResourceLayout.h) statically checks the descriptor's size, alignment, field offsets, and absence of padding. [`ResourceLayoutTest.cpp`](../../../test/library/ResourceLayoutTest.cpp) covers descriptor bytes, id derivation, the content-length limit, unaligned-row parsing, and wrong-width rejection.
+- [`ResourceStoreTest.cpp`](../../../test/library/ResourceStoreTest.cpp) covers id creation, digest reuse, a fixed colliding pair, wraparound past the reserved zero id, declared and counted length evidence, reads, and removal.
 - [`TrackBuilderCoverArtTest.cpp`](../../../test/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
-- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
+- [`LibCommandTest.cpp`](../../../test/cli/LibCommandTest.cpp) covers descriptor listing, verified byte export, and both absence reports.
 - [`ResourceByteReaderTest.cpp`](../../../test/runtime/resource/ResourceByteReaderTest.cpp) protects interactive size, ownership, affinity, absence, cancellation, and carrier-index rebuild behavior.
 
 ## Related documents

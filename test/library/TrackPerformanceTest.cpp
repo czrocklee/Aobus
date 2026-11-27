@@ -29,6 +29,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <cstddef>
@@ -38,6 +39,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -298,35 +300,31 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - aggregate cold bounds reject excessive credits and merged retained blocks before interning")
   {
+    struct ColdInputs final
+    {
+      std::string_view reason;
+      std::size_t creditCount;
+      std::size_t customValueBytes = 0;
+    };
+    constexpr auto kMaxTailEntries = std::numeric_limits<std::uint16_t>::max() / sizeof(TrackCreditEntry);
+    auto const inputs = GENERATE(ColdInputs{"prefix and tail exceed payload width", kMaxTailEntries},
+                                 ColdInputs{"performance fits but the whole record does not", 5458},
+                                 ColdInputs{"retained custom values and one credit overflow", 1, 65'480});
+    CAPTURE(inputs.reason);
+
     auto context = TrackSerializationFixture{};
+    auto const retained = std::string(inputs.customValueBytes, 'x');
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().artist("Do not intern");
     builder.property().uri("x");
-    std::size_t count = 5458;
 
-    SECTION("prefix and tail exceed payload width")
+    if (!retained.empty())
     {
-      count = std::numeric_limits<std::uint16_t>::max() / sizeof(TrackCreditEntry);
+      builder.customMetadata().add("key", retained);
     }
 
-    SECTION("aggregate record exceeds width despite fitting payload")
-    {
-    }
-
-    SECTION("retained custom values make a small incoming list overflow")
-    {
-      count = 1;
-      builder.customMetadata().add("key", std::string_view{});
-    }
-
-    auto const retained = std::string(count == 1 ? 65480 : 0, 'x');
-
-    if (count == 1)
-    {
-      builder.customMetadata().clear().add("key", retained);
-    }
-
-    auto const entries = std::vector<CreditView>(count, CreditView{.name = "Do not intern name", .role = "Role"});
+    auto const entries =
+      std::vector<CreditView>(inputs.creditCount, CreditView{.name = "Do not intern name", .role = "Role"});
     builder.metadata().credits(entries);
     auto const res = physicalSerializeTrack(builder, context.transaction(), context.resources());
     REQUIRE_FALSE(res);
@@ -359,16 +357,13 @@ namespace ao::library::test
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
     auto const date = RecordingDate{.year = 1981, .month = 5, .day = 12};
-    bool coldOnly = false;
-
-    SECTION("complete preparation")
+    enum class Preparation : std::uint8_t
     {
-    }
-
-    SECTION("cold-only preparation")
-    {
-      coldOnly = true;
-    }
+      Complete,
+      ColdOnly,
+    };
+    auto const preparation = GENERATE(Preparation::Complete, Preparation::ColdOnly);
+    CAPTURE(preparation);
 
     auto preparedRes = [&] -> Result<TrackBuilder::PreparedCold>
     {
@@ -378,7 +373,7 @@ namespace ao::library::test
       builder.metadata().recordingDate(date).credits(entries);
       builder.property().uri("snapshot.flac");
 
-      if (coldOnly)
+      if (preparation == Preparation::ColdOnly)
       {
         return physicalPrepareColdTrack(builder, context.transaction(), context.resources());
       }

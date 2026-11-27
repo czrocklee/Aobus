@@ -237,14 +237,14 @@ namespace ao::library::test
     CHECK(res.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("TrackView - unused cold slot and obsolete mixed block are not accepted")
+  TEST_CASE("TrackView - rejects a segment offset at the URI and obsolete mixed work blocks")
   {
     auto bytes = performanceRecord(TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}});
     auto* header = utility::layout::viewMutable<TrackColdHeader>(bytes);
 
     SECTION("segment slot cannot point at URI")
     {
-      header->blockOffsets[4] = header->uriOffset;
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Segment)] = header->uriOffset;
     }
 
     SECTION("old 24-byte mixed block is not a work block")

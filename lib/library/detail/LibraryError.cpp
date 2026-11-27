@@ -29,7 +29,6 @@ namespace ao::library::detail
 
   [[noreturn]] void throwLibraryError(Error::Code const code, std::string message, std::source_location const loc)
   {
-    AO_EXCEPTION_CARRIER(PrivateErrorTransport);
-    throw LibraryException{code, std::move(message), loc};
+    throwLibraryError(Error{.code = code, .message = std::move(message), .location = loc});
   }
 } // namespace ao::library::detail

@@ -29,6 +29,8 @@ namespace ao::library
   {
     class DictionaryTerms;
     class LibraryIdentity;
+
+    inline constexpr std::uint32_t kDictionaryReadCacheCapacity = 4096;
   }
 
   class WriteTransaction;
@@ -217,10 +219,8 @@ namespace ao::library
       std::string_view value{};
     };
 
-    static constexpr std::size_t kCapacity = 4096;
-
     DictionaryStore const* _dictionary;
-    std::unique_ptr<std::array<Entry, kCapacity>> _entriesPtr;
+    std::unique_ptr<std::array<Entry, detail::kDictionaryReadCacheCapacity>> _entriesPtr;
   };
 
   /**
@@ -237,7 +237,6 @@ namespace ao::library
 
     std::uint64_t bind(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
     std::string_view get(DictionaryId id);
-    DictionaryStore const& dictionary() const noexcept;
 
   private:
     DictionaryStore const* _dictionary;

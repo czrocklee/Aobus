@@ -13,7 +13,9 @@
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 
+#include <cstddef>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -27,6 +29,17 @@ namespace ao::library
 
       AO_EXPECTS(parsedRes, "Invalid file manifest URI");
       AO_EXPECTS(parsedRes->value() == uri, "File manifest URI is not canonical");
+    }
+
+    std::pair<std::string_view, FileManifestView> checkedEntry(std::span<std::byte const> key,
+                                                               std::span<std::byte const> payload)
+    {
+      auto const uriRes = validateFileManifestEntry(key, payload);
+      AO_INVARIANT(uriRes, "File manifest entry failed validation");
+
+      auto const view = FileManifestView{payload};
+      AO_INVARIANT(view.isValid(), "File manifest entry is misaligned");
+      return {*uriRes, view};
     }
   } // namespace
 
@@ -56,20 +69,8 @@ namespace ao::library
 
     auto const key = detail::PaddedFileManifestKey{uri};
 
-    auto optData = _reader.get(key.bytes());
-
-    if (!optData)
-    {
-      return std::nullopt;
-    }
-
-    auto const validationRes = validateFileManifestEntry(key.bytes(), *optData);
-    AO_INVARIANT(validationRes, "File manifest entry failed validation");
-
-    auto view = FileManifestView{*optData};
-    AO_INVARIANT(view.isValid(), "File manifest entry is misaligned");
-
-    return view;
+    return _reader.get(key.bytes())
+      .transform([&key](auto const payload) { return checkedEntry(key.bytes(), payload).second; });
   }
 
   FileManifestStore::Reader::Iterator& FileManifestStore::Reader::Iterator::operator++()
@@ -80,15 +81,8 @@ namespace ao::library
 
   std::pair<std::string_view, FileManifestView> FileManifestStore::Reader::Iterator::operator*() const
   {
-    auto const pair = *_it;
-    auto validationRes = validateFileManifestEntry(pair.first, pair.second);
-
-    AO_INVARIANT(validationRes, "File manifest iterator encountered invalid data after library validation");
-
-    auto view = FileManifestView{pair.second};
-    AO_INVARIANT(view.isValid(), "File manifest iterator encountered a misaligned payload after library validation");
-
-    return {validationRes->uri, view};
+    auto const [key, payload] = *_it;
+    return checkedEntry(key, payload);
   }
 
   FileManifestStore::Reader::Iterator FileManifestStore::Reader::begin() const
@@ -109,20 +103,8 @@ namespace ao::library
 
     auto const key = detail::PaddedFileManifestKey{uri};
 
-    auto optData = _writer.get(key.bytes());
-
-    if (!optData)
-    {
-      return std::nullopt;
-    }
-
-    auto const validationRes = validateFileManifestEntry(key.bytes(), *optData);
-    AO_INVARIANT(validationRes, "File manifest entry failed validation");
-
-    auto view = FileManifestView{*optData};
-    AO_INVARIANT(view.isValid(), "File manifest entry is misaligned");
-
-    return view;
+    return _writer.get(key.bytes())
+      .transform([&key](auto const payload) { return checkedEntry(key.bytes(), payload).second; });
   }
 
   Result<> FileManifestStore::Writer::put(FileManifestBuilder::Prepared const& prepared)

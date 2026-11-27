@@ -12,12 +12,12 @@
 
 namespace ao::library::detail
 {
-  TrimmedCredit trimCredit(CreditView const entry)
+  CreditView trimCredit(CreditView const entry)
   {
     return {.name = utility::trim(entry.name), .kind = entry.kind, .role = utility::trim(entry.role)};
   }
 
-  Result<TrimmedCredit> admitCreditShape(CreditView const entry, std::size_t const index)
+  Result<CreditView> admitCreditShape(CreditView const entry, std::size_t const index)
   {
     auto const trimmed = trimCredit(entry);
 

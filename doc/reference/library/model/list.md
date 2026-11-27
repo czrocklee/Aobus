@@ -56,8 +56,9 @@ Each text field is validated as scalar UTF-8 and limited to 65,535 bytes by prod
 The stored order count must fit unsigned 32-bit, multiplication and aggregate record sizing use checked host-size arithmetic, and the record is padded canonically to a four-byte boundary.
 `ListBuilder` owns its text fields rather than retaining setter input views.
 `ListBuilder::prepare()` rejects malformed UTF-8, returns a recoverable error instead of narrowing an out-of-range count or text size, snapshots the admitted encoded bytes, and accepts no zero saved-order id.
-The same canonical row validator checks preparation and open-time row validation, including NFC display text and scalar-valid byte-exact filter source.
-The Store encoder's `AO_ENSURES` postcondition checks that its output exactly equals the validated immutable snapshot instead of allocating a second saved-order uniqueness set.
+Preparation checks builder input, uses the builder's first-occurrence order, and checks the encoded layout with `ListView` before returning the prepared bytes.
+Opening a library separately checks persisted rows for the same structural layout, text validity and limits, and nonzero unique order ids; arbitrary stored bytes cannot rely on the builder's checks.
+The Store writes the prepared bytes through the copied-data LMDB writer without serializing or validating the saved-order ids again.
 
 `ListBuilder::OrderTrackIdsBuilder` retains only the first occurrence of an id.
 Runtime mutation and YAML import require resolved order ids to identify existing tracks; an order id need not currently match the List expression.

@@ -25,6 +25,7 @@
 
 #include <cstddef>
 #include <expected>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -105,6 +106,7 @@ namespace ao::library::test
     REQUIRE_FALSE(operationRes);
     CHECK(operationRes.error().code == Error::Code::Conflict);
     CHECK(operationRes.error().message == "reject staged write");
+    REQUIRE(stagedId != kInvalidResourceId);
 
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
@@ -117,10 +119,10 @@ namespace ao::library::test
   {
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
-    auto library = ao::test::requireValue(
-      MusicLibrary::open(temp.path(), temp.path() / "db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
-    auto writable = ao::test::requireValue(WritableMusicLibrary::acquire(library));
-    auto transaction = writable.writeTransaction();
+    auto library = ao::test::requireValue(MusicLibrary::open(
+      temp.path(), temp.path() / "db", MusicLibrary::Options{.pinnedMapBytes = kMapSize, .flushCommits = false}));
+    auto optWritable = std::optional{requireWritableLibrary(library)};
+    auto transaction = optWritable->writeTransaction();
 
     // A resource row is a fixed 36 bytes, so exhausting a pinned map takes a store
     // that still holds variable-length content; a dictionary entry is one.
@@ -142,8 +144,12 @@ namespace ao::library::test
     CHECK(failureRes.error().code == Error::Code::StorageFull);
     CHECK_FALSE(library.dictionary().findId(oversizedText));
     CHECK(library.dictionary().size() == 0);
-    auto retryTransaction = writable.writeTransaction();
+    auto retryTransaction = optWritable->writeTransaction();
     retryTransaction.abort();
+
+    // Both transactions are still alive. Reacquisition must not depend on their destructors.
+    optWritable.reset();
+    REQUIRE(WritableMusicLibrary::acquire(library));
   }
 
   TEST_CASE("WriteTransaction - native writer read fault aborts the root operation")
@@ -221,6 +227,7 @@ namespace ao::library::test
                           throw std::runtime_error{"unexpected operation failure"};
                         }),
                       "unexpected operation failure");
+    REQUIRE(stagedId != kInvalidResourceId);
 
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();

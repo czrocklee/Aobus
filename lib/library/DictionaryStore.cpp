@@ -454,9 +454,11 @@ namespace ao::library
 
   std::string_view DictionaryReadCache::get(DictionaryId id)
   {
+    auto const slot = id.raw() % detail::kDictionaryReadCacheCapacity;
+
     if (_entriesPtr != nullptr && id != kInvalidDictionaryId)
     {
-      if (auto const& entry = (*_entriesPtr)[id.raw() % kCapacity]; entry.id == id)
+      if (auto const& entry = (*_entriesPtr)[slot]; entry.id == id)
       {
         return entry.value;
       }
@@ -468,10 +470,10 @@ namespace ao::library
     {
       if (_entriesPtr == nullptr)
       {
-        _entriesPtr = std::make_unique<std::array<Entry, kCapacity>>();
+        _entriesPtr = std::make_unique<std::array<Entry, detail::kDictionaryReadCacheCapacity>>();
       }
 
-      (*_entriesPtr)[id.raw() % kCapacity] = Entry{.id = id, .value = value};
+      (*_entriesPtr)[slot] = Entry{.id = id, .value = value};
     }
 
     return value;
@@ -500,11 +502,6 @@ namespace ao::library
   std::string_view DictionaryReadContext::get(DictionaryId id)
   {
     return _cache != nullptr ? _cache->get(id) : _dictionary->get(id);
-  }
-
-  DictionaryStore const& DictionaryReadContext::dictionary() const noexcept
-  {
-    return *_dictionary;
   }
 } // namespace ao::library
 
