@@ -417,8 +417,7 @@ The [audio execution contract](audio-execution.md#prepared-lookahead) bounds the
 - A selected encoding always preserves the logical signal precision.
 - A confirmed endpoint has the configured rate, channels, and sample domain,
   fits inside the client encoding, and preserves the logical source precision.
-- An unknown or lower-precision endpoint is never a reason to reduce precision;
-  the open is rejected instead.
+- Missing endpoint evidence does not relax the client-format precision requirement. If a backend supplies a confirmed endpoint, zero precision or precision below the source rejects the mode.
 - Float and integer signals are never converted into each other's domain
   outside the bit-transparent integer-to-float range above.
 - The opened client must retain the source rate, count, and effective speaker mask exactly.

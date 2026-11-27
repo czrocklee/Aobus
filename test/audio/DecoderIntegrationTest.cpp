@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "DecoderTestSupport.h"
 #include "lib/audio/AlacDecoderSession.h"
 #include "lib/audio/AudioTime.h"
 #include "lib/audio/FlacDecoderSession.h"
 #include "lib/audio/Mp3DecoderSession.h"
 #include "lib/audio/OpusDecoderSession.h"
 #include "test/TestFixtureSupport.h"
-#include "test/audio/AudioFixtureDirectory.h"
+#include "test/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -16,7 +17,6 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 
-#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -24,10 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <iterator>
 #include <optional>
 #include <span>
@@ -40,46 +37,33 @@ namespace ao::audio::test
   namespace
   {
     /**
-     * @brief Requires a repository-owned integration audio fixture.
-     */
-    std::filesystem::path requireAudioFixture(char const* fileName)
-    {
-      auto const path = audioFixtureDirectory() / fileName;
-
-      INFO("Required audio fixture: " << path);
-      REQUIRE(std::filesystem::is_regular_file(path));
-
-      return path;
-    }
-
-    /**
      * @brief Extracts a specific number of samples from a decoder runtime for verification.
      */
     template<typename T>
     std::vector<T> extractSamples(DecoderSession& decoder, std::size_t count)
     {
-      auto const blockRes = decoder.readNextBlock();
+      auto const block = ao::test::requireValue(decoder.readNextBlock());
+      auto const format = decoder.streamInfo().outputFormat;
+      REQUIRE(bytesPerSample(format.encoding) == sizeof(T));
+      REQUIRE(block.bytes.size() == static_cast<std::size_t>(block.frames) * frameBytes(format));
+      auto const available = std::min(count, block.bytes.size() / sizeof(T));
+      auto samples = std::vector<T>{};
+      samples.reserve(available);
 
-      if (!blockRes || blockRes->bytes.empty())
+      for (std::size_t index = 0; index < available; ++index)
       {
-        return {};
+        if constexpr (std::is_same_v<T, std::int16_t>)
+        {
+          samples.push_back(readSigned16LePcmSample(block.bytes, index));
+        }
+        else
+        {
+          static_assert(std::is_same_v<T, std::int32_t>);
+          samples.push_back(readSigned32LePcmSample(block.bytes, index));
+        }
       }
 
-      auto const available =
-        std::min<std::size_t>(count, static_cast<std::size_t>(blockRes->frames) * 2); // Assume Stereo
-      auto const* data = reinterpret_cast<T const*>(blockRes->bytes.data());
-
-      return {data, data + available};
-    }
-
-    /**
-     * @brief Reads a fixture into memory so a test can patch its header bytes.
-     */
-    std::vector<std::uint8_t> readFileBytes(std::filesystem::path const& path)
-    {
-      auto stream = std::ifstream{path, std::ios::binary};
-      REQUIRE(stream);
-      return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+      return samples;
     }
 
     /**
@@ -88,19 +72,14 @@ namespace ao::audio::test
      */
     double rootMeanSquare(PcmBlock const& block)
     {
+      REQUIRE(block.bytes.size() % sizeof(std::int16_t) == 0);
       auto const samples = block.bytes.size() / sizeof(std::int16_t);
-
-      if (samples == 0)
-      {
-        return 0.0;
-      }
-
+      REQUIRE(samples > 0);
       double total = 0.0;
 
       for (std::size_t index = 0; index < samples; ++index)
       {
-        std::int16_t sample = 0;
-        std::memcpy(&sample, block.bytes.data() + (index * sizeof(sample)), sizeof(sample));
+        auto const sample = readSigned16LePcmSample(block.bytes, index);
         total += static_cast<double>(sample) * sample;
       }
 
@@ -135,20 +114,13 @@ namespace ao::audio::test
      */
     std::vector<std::int32_t> unpackS24(std::span<std::byte const> bytes)
     {
+      REQUIRE(bytes.size() % 3U == 0);
       auto samples = std::vector<std::int32_t>{};
+      samples.reserve(bytes.size() / 3U);
 
-      for (std::size_t i = 0; i + 2 < bytes.size(); i += 3)
+      for (std::size_t index = 0; index < bytes.size() / 3U; ++index)
       {
-        std::int32_t val = static_cast<std::uint8_t>(bytes[i]) | (static_cast<std::uint8_t>(bytes[i + 1]) << 8) |
-                           (static_cast<std::uint8_t>(bytes[i + 2]) << 16);
-
-        // Sign extend from 24 to 32 bits
-        if ((val & 0x800000) != 0)
-        {
-          val |= static_cast<std::int32_t>(0xFF000000);
-        }
-
-        samples.push_back(val);
+        samples.push_back(readSigned24PackedLePcmSample(bytes, index));
       }
 
       return samples;
@@ -159,11 +131,6 @@ namespace ao::audio::test
       return durationToSamples(offset, info.sourceFormat.sampleRate);
     }
 
-    std::uint64_t totalFrames(DecodedStreamInfo const& info)
-    {
-      return durationToSamples(info.duration, info.sourceFormat.sampleRate);
-    }
-
     void checkPcmBlockLayout(PcmBlock const& block, PcmFormat const& outputFormat)
     {
       auto const bytesPerFrame = frameBytes(outputFormat);
@@ -172,20 +139,10 @@ namespace ao::audio::test
       CHECK(block.bytes.size() == static_cast<std::size_t>(block.frames) * bytesPerFrame);
     }
 
-    void checkBlockDoesNotRunPastStream(PcmBlock const& block, DecodedStreamInfo const& info)
+    void checkBlockDoesNotRunPastStream(PcmBlock const& block, std::uint64_t frameCount)
     {
-      if (auto const frameCount = totalFrames(info); frameCount > 0 && block.firstFrameIndex <= frameCount)
-      {
-        CHECK(block.frames <= frameCount - block.firstFrameIndex);
-      }
-    }
-
-    void checkNearSeekFrame(PcmBlock const& block, std::uint64_t expectedFrame, std::uint32_t sampleRate)
-    {
-      auto const toleranceFrames = static_cast<std::uint64_t>(sampleRate / 20U);
-
-      CHECK(block.firstFrameIndex + toleranceFrames >= expectedFrame);
-      CHECK(block.firstFrameIndex <= expectedFrame + toleranceFrames);
+      REQUIRE(block.firstFrameIndex <= frameCount);
+      CHECK(block.frames <= frameCount - block.firstFrameIndex);
     }
   } // namespace
 
@@ -286,7 +243,8 @@ namespace ao::audio::test
       REQUIRE(blockRes->frames > 0);
       CHECK(blockRes->firstFrameIndex == expectedFrame);
       checkPcmBlockLayout(*blockRes, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*blockRes, info);
+      REQUIRE(info.optTotalFrames);
+      checkBlockDoesNotRunPastStream(*blockRes, *info.optTotalFrames);
     }
   }
 
@@ -311,7 +269,6 @@ namespace ao::audio::test
       REQUIRE(blockRes->frames > 0);
       REQUIRE_FALSE(blockRes->bytes.empty());
       checkPcmBlockLayout(*blockRes, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 
@@ -336,7 +293,6 @@ namespace ao::audio::test
       REQUIRE(blockRes->frames > 0);
       REQUIRE_FALSE(blockRes->bytes.empty());
       checkPcmBlockLayout(*blockRes, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 
@@ -432,13 +388,19 @@ namespace ao::audio::test
         auto const blockRes = decoderPtr->readNextBlock();
         REQUIRE(blockRes);
 
-        auto const* const data = reinterpret_cast<std::int16_t const*>(blockRes->bytes.data());
-        samples.insert(samples.end(), data, data + (blockRes->bytes.size() / sizeof(std::int16_t)));
+        REQUIRE(blockRes->bytes.size() % sizeof(std::int16_t) == 0);
+
+        for (std::size_t index = 0; index < blockRes->bytes.size() / sizeof(std::int16_t); ++index)
+        {
+          samples.push_back(readSigned16LePcmSample(blockRes->bytes, index));
+        }
 
         if (blockRes->endOfStream)
         {
           return samples;
         }
+
+        REQUIRE(blockRes->frames > 0);
       }
     }();
 
@@ -454,15 +416,15 @@ namespace ao::audio::test
     auto const count = static_cast<std::size_t>(blockRes->frames) * channels;
     auto const offset = static_cast<std::size_t>(kSeekFrame) * channels;
     REQUIRE(offset + count <= reference.size());
+    REQUIRE(blockRes->bytes.size() == count * sizeof(std::int16_t));
 
-    auto const* const sought = reinterpret_cast<std::int16_t const*>(blockRes->bytes.data());
     double error = 0.0;
     double energy = 0.0;
 
     for (std::size_t index = 0; index < count; ++index)
     {
       auto const expected = static_cast<double>(reference[offset + index]);
-      error += std::abs(static_cast<double>(sought[index]) - expected);
+      error += std::abs(static_cast<double>(readSigned16LePcmSample(blockRes->bytes, index)) - expected);
       energy += std::abs(expected);
     }
 
@@ -525,39 +487,24 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::DecodeFailed);
   }
 
-  TEST_CASE("Mp3Decoder - a seek near the end returns a block bounded by the stream")
+  TEST_CASE("Mp3Decoder - seeking to the last ten milliseconds of hires.mp3 returns its 480-frame tail")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
     auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
     REQUIRE(decoderRes);
     auto& decoder = **decoderRes;
 
-    auto const info = decoder.streamInfo();
-
-    REQUIRE(info.duration > std::chrono::milliseconds{10});
-
-    auto const seekOffset = info.duration - std::chrono::milliseconds{10};
-    auto const expectedFrame = frameIndexAt(info, seekOffset);
-
-    REQUIRE(decoder.seek(seekOffset));
-    auto const blockRes = decoder.readNextBlock();
-    REQUIRE(blockRes);
-
-    if (blockRes->endOfStream)
-    {
-      CHECK(blockRes->frames == 0);
-      CHECK(blockRes->bytes.empty());
-    }
-    else
-    {
-      REQUIRE(blockRes->frames > 0);
-      checkNearSeekFrame(*blockRes, expectedFrame, info.sourceFormat.sampleRate);
-      checkPcmBlockLayout(*blockRes, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*blockRes, info);
-    }
+    // This fixture contains one audible second at 48 kHz, independent of
+    // the seek index or duration the decoder reports.
+    REQUIRE(decoder.seek(std::chrono::milliseconds{990}));
+    auto const block = ao::test::requireValue(decoder.readNextBlock());
+    CHECK(block.firstFrameIndex == 47520);
+    REQUIRE(block.frames > 0);
+    checkPcmBlockLayout(block, decoder.streamInfo().outputFormat);
+    CHECK(block.frames + readUntilStableEndOfStream(decoder, 4) == 480);
   }
 
-  TEST_CASE("FlacDecoder - a seek near the end returns the target frame or end of stream")
+  TEST_CASE("FlacDecoder - a seek near the end returns the target frame")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
     auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
@@ -575,16 +522,10 @@ namespace ao::audio::test
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
 
-    if (blockRes->endOfStream && blockRes->frames == 0)
-    {
-      CHECK(blockRes->bytes.empty());
-    }
-    else
-    {
-      REQUIRE(blockRes->frames > 0);
-      CHECK(blockRes->firstFrameIndex == expectedFrame);
-      checkPcmBlockLayout(*blockRes, info.outputFormat);
-      checkBlockDoesNotRunPastStream(*blockRes, info);
-    }
+    REQUIRE(blockRes->frames > 0);
+    CHECK(blockRes->firstFrameIndex == expectedFrame);
+    checkPcmBlockLayout(*blockRes, info.outputFormat);
+    REQUIRE(info.optTotalFrames);
+    checkBlockDoesNotRunPastStream(*blockRes, *info.optTotalFrames);
   }
 } // namespace ao::audio::test

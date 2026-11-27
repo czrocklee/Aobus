@@ -193,9 +193,10 @@ namespace ao::audio
 
     DecodedStreamInfo info;
 
-    // Buffer for decoded samples
-    std::vector<std::byte> pcmBuffer;
-    std::span<std::byte const> outputBytes{};
+    // A seek can decode a new block while the caller still borrows readPcm
+    // (pass-through) or the output adapter's last conversion.
+    std::vector<std::byte> readPcm;
+    std::vector<std::byte> seekPcm;
     // Reused per-channel span scratch for interleaving (avoids a per-block heap
     // allocation in the write callback). Capacity persists across blocks.
     std::vector<std::span<std::int32_t const>> channelSpans;
@@ -572,8 +573,6 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::SeekFailed, "FLAC frame seek is out of bounds");
       }
 
-      _implPtr->pcmBuffer.clear();
-      _implPtr->outputBytes = {};
       _implPtr->bufferedFrames = 0;
       _implPtr->optDecodeError.reset();
       _implPtr->optFormatMismatch.reset();
@@ -653,8 +652,6 @@ namespace ao::audio
       }
     }
 
-    _implPtr->pcmBuffer.clear();
-    _implPtr->outputBytes = {};
     _implPtr->bufferedFrames = 0;
     _implPtr->lastFramePrecedesId3v1 = false;
   }
@@ -672,7 +669,13 @@ namespace ao::audio
 
       _implPtr->checkDecodeError();
 
-      // If buffer is empty, process a single frame
+      // Only seek_absolute can leave unread PCM between public calls. The
+      // previous borrow has now expired, so adopt that block without copying.
+      if (_implPtr->bufferedFrames != 0)
+      {
+        _implPtr->readPcm.swap(_implPtr->seekPcm);
+      }
+
       while (_implPtr->bufferedFrames == 0 && !_implPtr->eof)
       {
         auto const processed = ::FLAC__stream_decoder_process_single(_implPtr->decoder);
@@ -706,8 +709,16 @@ namespace ao::audio
         return PcmBlock{.endOfStream = true};
       }
 
+      auto convertedRes = _implPtr->outputAdapter.convert(_implPtr->readPcm);
+
+      if (!convertedRes)
+      {
+        _implPtr->optOperationError = std::move(convertedRes).error();
+        return std::unexpected{*_implPtr->optOperationError};
+      }
+
       auto block = PcmBlock{
-        .bytes = _implPtr->outputBytes,
+        .bytes = *convertedRes,
         .frames = _implPtr->bufferedFrames,
         .firstFrameIndex = _implPtr->nextFrameIndex,
         .endOfStream = _implPtr->eof &&
@@ -857,10 +868,12 @@ namespace ao::audio
         auto const nativeEncoding = impl->outputAdapter.nativeFormat().encoding;
         auto const outputBitDepth = encodingNominalBits(nativeEncoding);
 
+        auto& pcm = impl->optSeekTarget ? impl->seekPcm : impl->readPcm;
+
         if (nativeEncoding == SampleEncoding::Signed16Le)
         {
-          impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
-          auto* out = utility::layout::viewMutable<std::int16_t>(impl->pcmBuffer);
+          pcm.resize(static_cast<std::size_t>(blockSize) * channels * 2);
+          auto* out = utility::layout::viewMutable<std::int16_t>(pcm);
 
           for (std::uint32_t i = 0; i < blockSize; ++i)
           {
@@ -872,8 +885,8 @@ namespace ao::audio
         }
         else if (nativeEncoding == SampleEncoding::Signed24PackedLe)
         {
-          impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 3);
-          auto* out = utility::layout::viewMutable<std::uint8_t>(impl->pcmBuffer);
+          pcm.resize(static_cast<std::size_t>(blockSize) * channels * 3);
+          auto* out = utility::layout::viewMutable<std::uint8_t>(pcm);
 
           for (std::uint32_t i = 0; i < blockSize; ++i)
           {
@@ -888,8 +901,8 @@ namespace ao::audio
         }
         else if (nativeEncoding == SampleEncoding::Signed32Le)
         {
-          impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
-          auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
+          pcm.resize(static_cast<std::size_t>(blockSize) * channels * 4);
+          auto const dst = utility::layout::viewArrayMutable<std::int32_t>(pcm);
 
           impl->channelSpans.resize(channels);
 
@@ -907,15 +920,6 @@ namespace ao::audio
         }
 
         impl->bufferedFrames = blockSize;
-        auto convertedRes = impl->outputAdapter.convert(impl->pcmBuffer);
-
-        if (!convertedRes)
-        {
-          impl->optOperationError = convertedRes.error();
-          return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
-        }
-
-        impl->outputBytes = *convertedRes;
 
         return ::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
       });

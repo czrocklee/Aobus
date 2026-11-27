@@ -128,6 +128,10 @@ namespace ao::audio::test
         : _availableFrames{availableFrames}
         , _bytes{std::vector<std::byte>(static_cast<std::size_t>(availableFrames) * 2U, std::byte{0x35})}
       {
+        for (std::size_t frame = 0; frame < availableFrames; ++frame)
+        {
+          _bytes[frame * 2U] = static_cast<std::byte>(frame);
+        }
       }
 
       Result<> seek(std::chrono::milliseconds /*offset*/) noexcept override
@@ -228,6 +232,44 @@ namespace ao::audio::test
       readPcm(*decoderPtr), std::span<std::byte const>{reference}.subspan(317 * bytesPerFrame, 588 * bytesPerFrame)));
   }
 
+  TEST_CASE("SegmentDecoderSession - a FLAC-backed segment keeps its borrowed tail through seek and flush")
+  {
+    auto const encoding = GENERATE(SampleEncoding::Signed16Le, SampleEncoding::Signed32Le);
+    auto const temp = ao::test::TempFile{carrierBytes(true), ".flac"};
+    // Carrier frames [3,19) straddle two differently marked 16-frame blocks.
+    auto decoderPtr = ao::test::requireValue(
+      makeSegmentDecoderSession(ao::test::requireValue(openDecoderSession(temp.path, encoding)),
+                                {.startFrame = 3, .frameCount = 16, .totalFrames = kCarrierFrames},
+                                kSampleRate));
+    auto const bytesPerFrame = frameBytes(decoderPtr->streamInfo().outputFormat);
+    auto const first = ao::test::requireValue(decoderPtr->readNextBlock());
+    REQUIRE(first.frames == 13);
+    REQUIRE(first.bytes.size() == 13 * bytesPerFrame);
+    auto const savedFirst = std::vector<std::byte>{first.bytes.begin(), first.bytes.end()};
+    auto const tail = ao::test::requireValue(decoderPtr->readNextBlock());
+    REQUIRE(tail.frames == 3);
+    REQUIRE(tail.bytes.size() == 3 * bytesPerFrame);
+    REQUIRE(tail.endOfStream);
+    auto const savedTail = std::vector<std::byte>{tail.bytes.begin(), tail.bytes.end()};
+
+    REQUIRE(decoderPtr->seekFrame(0));
+    CHECK(std::ranges::equal(tail.bytes, savedTail));
+    decoderPtr->flush();
+    CHECK(std::ranges::equal(tail.bytes, savedTail));
+
+    auto const restart = ao::test::requireValue(decoderPtr->readNextBlock());
+    CHECK(restart.firstFrameIndex == 0);
+    CHECK(restart.frames == 13);
+    CHECK_FALSE(restart.endOfStream);
+    CHECK(std::ranges::equal(restart.bytes, savedFirst));
+
+    auto const next = ao::test::requireValue(decoderPtr->readNextBlock());
+    CHECK(next.firstFrameIndex == 13);
+    CHECK(next.frames == 3);
+    CHECK(next.endOfStream);
+    CHECK(std::ranges::equal(next.bytes, savedTail));
+  }
+
   TEST_CASE("SegmentDecoderSession - submillisecond nonempty segments still play at zero")
   {
     auto const flac = GENERATE(false, true);
@@ -313,9 +355,13 @@ namespace ao::audio::test
   {
     auto decoderPtr = ao::test::requireValue(makeSegmentDecoderSession(
       std::make_unique<FrameSeekDecoderFake>(64), {.startFrame = 19, .frameCount = 20, .totalFrames = 64}, 1000));
-    CHECK(readPcm(*decoderPtr).size() == 40);
+    auto const pcm = readPcm(*decoderPtr);
+    REQUIRE(pcm.size() == 40);
+    CHECK(pcm[0] == std::byte{19});
+    CHECK(pcm[26] == std::byte{32}); // First carrier frame after the initial partial block.
+    CHECK(pcm[38] == std::byte{38});
     REQUIRE(decoderPtr->seekFrame(19));
-    CHECK(readPcm(*decoderPtr, 19).size() == 2);
+    CHECK(readPcm(*decoderPtr, 19) == std::vector{std::byte{38}, std::byte{0x35}});
   }
 
   TEST_CASE("SegmentDecoderSession - an inner frame seek failure reaches the caller")

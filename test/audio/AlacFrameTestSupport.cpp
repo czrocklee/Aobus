@@ -166,7 +166,7 @@ namespace ao::audio::test
 
     auto const stsd = ao::test::mp4::makeStsdAtom("alac", extensions, 48000, options.channels, options.precisionBits);
     auto const stsz = ao::test::mp4::makeStszAtom(packetSize, options.packetCount);
-    auto const stts = ao::test::mp4::makeSttsAtom(options.packetCount, 16);
+    auto const stts = ao::test::mp4::makeSttsAtom(options.packetCount, options.packetDurationTicks);
     auto const stsc = ao::test::mp4::makeStscAtom(options.packetCount);
     auto const stco = ao::test::mp4::makeStcoAtom(8);
     auto tableBody = std::vector<std::uint8_t>{};
@@ -176,7 +176,8 @@ namespace ao::audio::test
     tableBody.insert(tableBody.end(), stsc.begin(), stsc.end());
     tableBody.insert(tableBody.end(), stco.begin(), stco.end());
     auto const table = ao::test::mp4::makeAtom("stbl", tableBody);
-    auto const track = ao::test::mp4::makeTrackAtom("soun", table, 48000, 16U * options.packetCount);
+    auto const track = ao::test::mp4::makeTrackAtom(
+      "soun", table, options.mediaTimescale, options.packetDurationTicks * options.packetCount);
     auto bytes = std::vector<std::uint8_t>{};
     ao::test::mp4::addAtom(bytes, "mdat", payload);
     ao::test::mp4::addAtom(bytes, "moov", track);

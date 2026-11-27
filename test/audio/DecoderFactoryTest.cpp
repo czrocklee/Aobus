@@ -40,6 +40,7 @@ namespace ao::audio::test
 
     for (auto const& testCase : kCases)
     {
+      CAPTURE(testCase.fileName);
       auto const fixture = requireAudioFixture(testCase.fileName);
       auto inspectionRes = openDecoderSession(fixture, std::nullopt);
 
@@ -51,15 +52,15 @@ namespace ao::audio::test
       CHECK(inspectionInfo.sourceFormat.channels > 0);
       CHECK(inspectionInfo.outputFormat.encoding != SampleEncoding::Unknown);
 
-      auto sessionRes = openDecoderSession(fixture, SampleEncoding::Signed16Le);
+      REQUIRE(inspectionInfo.outputFormat.encoding != SampleEncoding::Signed32Le);
+      auto sessionRes = openDecoderSession(fixture, SampleEncoding::Signed32Le);
 
       REQUIRE(sessionRes);
       REQUIRE(*sessionRes != nullptr);
       auto const info = (*sessionRes)->streamInfo();
       CHECK(info.codec == testCase.codec);
-      CHECK(info.sourceFormat.sampleRate > 0);
-      CHECK(info.sourceFormat.channels > 0);
-      CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
+      CHECK(info.sourceFormat == inspectionInfo.sourceFormat);
+      CHECK(info.outputFormat.encoding == SampleEncoding::Signed32Le);
     }
   }
 
@@ -106,10 +107,15 @@ namespace ao::audio::test
 
     SECTION("Missing supported file")
     {
-      auto const res = openDecoderSession("missing.flac", SampleEncoding::Signed16Le);
+      auto const dir = ao::test::TempDir{};
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::IoError);
+      for (auto const name : std::array<std::string_view, 2>{"missing.flac", "missing.m4a"})
+      {
+        CAPTURE(name);
+        auto const res = openDecoderSession(dir.path() / name, SampleEncoding::Signed16Le);
+        REQUIRE_FALSE(res);
+        CHECK(res.error().code == Error::Code::IoError);
+      }
     }
 
     SECTION("Existing malformed supported file")

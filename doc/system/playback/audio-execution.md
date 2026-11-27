@@ -69,7 +69,7 @@ The render cursor points non-owningly into Engine's control-plane timeline.
 The current and lookahead nodes keep source, decoder, and file lifetime alive until a control/event consumer retires them.
 
 Player owns one Engine, all registered providers, route graph state, its executor, and a shared callback/teardown gate.
-PlaybackTransport owns runtime metadata separately; `audio::PlaybackInput` contains only path, optional duration, and optional format hints.
+PlaybackTransport owns runtime metadata separately. `audio::PlaybackInput` supplies the file path, duration and format hints, and an optional [PCM frame range for a segment](decoder-session.md#segment-playback).
 
 ## Commands and transitions
 

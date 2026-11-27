@@ -256,7 +256,6 @@ namespace ao::audio
     std::size_t dataSize = 0;
     std::uint16_t sourceBitsPerSample = 0;
     std::uint16_t sourceBlockAlign = 0;
-    bool eof = false;
 
     explicit Impl(std::optional<SampleEncoding> optOutputEncoding)
       : outputAdapter{optOutputEncoding}
@@ -327,8 +326,6 @@ namespace ao::audio
       _implPtr->sourceBlockAlign = parsed.format.blockAlign;
       _implPtr->totalFrames = parsed.data.size() / parsed.format.blockAlign;
       _implPtr->info.optTotalFrames = _implPtr->totalFrames;
-      _implPtr->nextFrameIndex = 0;
-      _implPtr->eof = false;
 
       _implPtr->info.duration = samplesToDuration(_implPtr->totalFrames, parsed.format.sampleRate);
       return {};
@@ -369,21 +366,19 @@ namespace ao::audio
     }
 
     _implPtr->nextFrameIndex = frameIndex;
-    _implPtr->eof = frameIndex == _implPtr->totalFrames;
-    _implPtr->pcmBuffer.clear();
     return {};
   }
 
   void WavDecoderSession::flush() noexcept
   {
-    _implPtr->pcmBuffer.clear();
+    // There is no pending decode work; keep the last published PCM borrow intact.
   }
 
   // The decode buffer may allocate; DecoderSession intentionally fails fast if
   // an allocation escapes this noexcept boundary.
   Result<PcmBlock> WavDecoderSession::readNextBlock() noexcept
   {
-    if (!_implPtr->file.isMapped() || _implPtr->eof)
+    if (!_implPtr->file.isMapped() || _implPtr->nextFrameIndex == _implPtr->totalFrames)
     {
       return PcmBlock{.endOfStream = true};
     }
@@ -433,10 +428,13 @@ namespace ao::audio
     }
 
     _implPtr->nextFrameIndex += frames;
-    _implPtr->eof = _implPtr->nextFrameIndex == _implPtr->totalFrames;
 
     return PcmBlock{
-      .bytes = *convertedRes, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = _implPtr->eof};
+      .bytes = *convertedRes,
+      .frames = frames,
+      .firstFrameIndex = currentFrameIndex,
+      .endOfStream = _implPtr->nextFrameIndex == _implPtr->totalFrames,
+    };
   }
 
   DecodedStreamInfo WavDecoderSession::streamInfo() const noexcept

@@ -7,6 +7,7 @@
 #include "lib/audio/AlacDecoderSession.h"
 #include "lib/audio/FlacDecoderSession.h"
 #include "lib/audio/Mp3DecoderSession.h"
+#include "lib/audio/OpusDecoderSession.h"
 #include "lib/audio/PcmSource.h"
 #include "lib/audio/WavDecoderSession.h"
 #include <ao/Error.h>
@@ -42,11 +43,13 @@ namespace ao::audio::test
   static_assert(!std::is_constructible_v<AlacDecoderSession, std::optional<SampleEncoding>>);
   static_assert(!std::is_constructible_v<FlacDecoderSession, std::optional<SampleEncoding>>);
   static_assert(!std::is_constructible_v<Mp3DecoderSession, std::optional<SampleEncoding>>);
+  static_assert(!std::is_constructible_v<OpusDecoderSession, std::optional<SampleEncoding>>);
   static_assert(!std::is_constructible_v<WavDecoderSession, std::optional<SampleEncoding>>);
   static_assert(!ClosesAudioFile<AacDecoderSession>);
   static_assert(!ClosesAudioFile<AlacDecoderSession>);
   static_assert(!ClosesAudioFile<FlacDecoderSession>);
   static_assert(!ClosesAudioFile<Mp3DecoderSession>);
+  static_assert(!ClosesAudioFile<OpusDecoderSession>);
   static_assert(!ClosesAudioFile<WavDecoderSession>);
   static_assert(noexcept(std::declval<DecoderSession&>().seek(std::declval<std::chrono::milliseconds>())));
   static_assert(noexcept(std::declval<DecoderSession&>().flush()));

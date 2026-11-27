@@ -12,6 +12,7 @@
 #include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <chrono>
@@ -84,17 +85,26 @@ namespace ao::audio::test
       CHECK_FALSE(info.isLossy);
     }
 
-    void checkFirstFrameBlock(PcmBlock const& block)
+    void checkFirstFrameBlock(PcmBlock const& block, SampleEncoding encoding = SampleEncoding::Signed16Le)
     {
-      CHECK(block.frames == kFrameSamples);
+      auto const isConverted = encoding == SampleEncoding::Signed32Le;
+      REQUIRE(block.frames == kFrameSamples);
       CHECK(block.firstFrameIndex == 0);
       CHECK_FALSE(block.endOfStream);
-      REQUIRE(block.bytes.size() == 64);
+      REQUIRE(block.bytes.size() == (isConverted ? 128U : 64U));
 
       for (std::size_t frame = 0; frame < block.frames; ++frame)
       {
-        CHECK(readSigned16LePcmSample(block.bytes, frame * 2U) == kFirstFrameMarkers[0]);
-        CHECK(readSigned16LePcmSample(block.bytes, (frame * 2U) + 1U) == kFirstFrameMarkers[1]);
+        if (isConverted)
+        {
+          CHECK(readSigned32LePcmSample(block.bytes, frame * 2U) == kFirstFrameMarkers[0] * 65536);
+          CHECK(readSigned32LePcmSample(block.bytes, (frame * 2U) + 1U) == kFirstFrameMarkers[1] * 65536);
+        }
+        else
+        {
+          CHECK(readSigned16LePcmSample(block.bytes, frame * 2U) == kFirstFrameMarkers[0]);
+          CHECK(readSigned16LePcmSample(block.bytes, (frame * 2U) + 1U) == kFirstFrameMarkers[1]);
+        }
       }
     }
 
@@ -273,38 +283,6 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - seeking into a contradicting frame preserves the failure")
-  {
-    auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, 3, kStreamBitsPerSample), ".flac"};
-    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
-    auto& decoder = *decoderPtr;
-
-    auto const info = decoder.streamInfo();
-
-    auto const firstBlockRes = decoder.readNextBlock();
-    REQUIRE(firstBlockRes);
-    checkFirstFrameBlock(*firstBlockRes);
-
-    // Seeking back into the intact first frame still succeeds.
-    REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
-    auto const soughtBlockRes = decoder.readNextBlock();
-    REQUIRE(soughtBlockRes);
-    checkFirstFrameBlock(*soughtBlockRes);
-
-    // 1 ms at 48 kHz clamps to the last declared sample, which the changed
-    // second frame owns; the seek fails with the preserved format error.
-    auto const seekRes = decoder.seek(std::chrono::milliseconds{1});
-    REQUIRE_FALSE(seekRes);
-    CHECK(seekRes.error().code == Error::Code::DecodeFailed);
-    CHECK_FALSE(seekRes.error().message.empty());
-
-    auto const readAfterFailedSeekRes = decoder.readNextBlock();
-    REQUIRE_FALSE(readAfterFailedSeekRes);
-    checkPreservedError(readAfterFailedSeekRes.error(), seekRes.error());
-
-    CHECK(decoder.streamInfo() == info);
-  }
-
   TEST_CASE("FlacDecoderSession - flush and seek restore decoding before a contradicting frame")
   {
     auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, kStreamChannels, 24), ".flac"};
@@ -347,15 +325,17 @@ namespace ao::audio::test
     // Both entry paths into the terminal failure state share this arrange: the
     // intact first frame decodes, and the changed second frame owns the last
     // declared sample of the stream.
+    auto const encoding = GENERATE(SampleEncoding::Signed16Le, SampleEncoding::Signed32Le);
     auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, 3, kStreamBitsPerSample), ".flac"};
-    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
+    auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, encoding));
     auto& decoder = *decoderPtr;
 
     auto const info = decoder.streamInfo();
+    REQUIRE(info.outputFormat.encoding == encoding);
 
     auto const firstBlockRes = decoder.readNextBlock();
     REQUIRE(firstBlockRes);
-    checkFirstFrameBlock(*firstBlockRes);
+    checkFirstFrameBlock(*firstBlockRes, encoding);
 
     SECTION("Failure entered by a rejected read")
     {
@@ -387,7 +367,7 @@ namespace ao::audio::test
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
       auto const recoveredBlockRes = decoder.readNextBlock();
       REQUIRE(recoveredBlockRes);
-      checkFirstFrameBlock(*recoveredBlockRes);
+      checkFirstFrameBlock(*recoveredBlockRes, encoding);
 
       auto const repeatRes = decoder.readNextBlock();
       REQUIRE_FALSE(repeatRes);
@@ -403,6 +383,7 @@ namespace ao::audio::test
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
       auto const rereadRes = decoder.readNextBlock();
       REQUIRE(rereadRes);
+      checkFirstFrameBlock(*rereadRes, encoding);
 
       // 1 ms at 48 kHz clamps to the last declared sample, which the changed
       // second frame owns; the seek aborts with the format failure.
@@ -410,28 +391,40 @@ namespace ao::audio::test
       REQUIRE_FALSE(abortSeekRes);
       CHECK(abortSeekRes.error().code == Error::Code::DecodeFailed);
       CHECK_FALSE(abortSeekRes.error().message.empty());
+      checkFirstFrameBlock(*rereadRes, encoding);
 
       // Another seek without flush preserves the recorded failure together
       // with its diagnostic location instead of clearing it.
       auto const seekRes = decoder.seek(std::chrono::milliseconds{0});
       REQUIRE_FALSE(seekRes);
       checkPreservedError(seekRes.error(), abortSeekRes.error());
+      checkFirstFrameBlock(*rereadRes, encoding);
 
       CHECK(decoder.streamInfo() == info);
 
-      // A read after the failed seek keeps reporting the recorded failure
-      // instead of looping or producing a fake end of stream.
-      auto const readRes = decoder.readNextBlock();
-      REQUIRE_FALSE(readRes);
-      checkPreservedError(readRes.error(), abortSeekRes.error());
+      SECTION("flush while the last read is still borrowed")
+      {
+        // A failed seek takes flush's discard path, not its healthy path
+        // that preserves buffered seek-target PCM.
+        decoder.flush();
+        checkFirstFrameBlock(*rereadRes, encoding);
+      }
+
+      SECTION("read in the failed state before flushing")
+      {
+        // Even a failed read ends the previous block's borrow.
+        auto const readRes = decoder.readNextBlock();
+        REQUIRE_FALSE(readRes);
+        checkPreservedError(readRes.error(), abortSeekRes.error());
+        decoder.flush();
+      }
 
       // The explicit recovery protocol still restores decoding, and the
       // changed frame fails again on arrival.
-      decoder.flush();
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
       auto const recoveredBlockRes = decoder.readNextBlock();
       REQUIRE(recoveredBlockRes);
-      checkFirstFrameBlock(*recoveredBlockRes);
+      checkFirstFrameBlock(*recoveredBlockRes, encoding);
 
       auto const repeatRes = decoder.readNextBlock();
       REQUIRE_FALSE(repeatRes);

@@ -6,11 +6,21 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
+#include <array>
 #include <optional>
 #include <vector>
 
 namespace ao::audio::detail
 {
+  namespace
+  {
+    constexpr auto kPreferredOrder = std::to_array<SampleEncoding>({SampleEncoding::Signed16Le,
+                                                                    SampleEncoding::Signed24PackedLe,
+                                                                    SampleEncoding::Signed24In32Le,
+                                                                    SampleEncoding::Signed32Le,
+                                                                    SampleEncoding::Float32Le});
+  } // namespace
+
   bool isLosslessPcmEncoding(SignalFormat const& sourceFormat, SampleEncoding const encoding) noexcept
   {
     if (sourceFormat.sampleKind == SampleKind::FloatingPoint)
@@ -18,50 +28,26 @@ namespace ao::audio::detail
       return sourceFormat.precisionBits == 32U && encoding == SampleEncoding::Float32Le;
     }
 
-    if (sourceFormat.precisionBits == 0U || sourceFormat.precisionBits > 32U || isFloatEncoding(encoding))
+    if (sourceFormat.precisionBits == 0U || sourceFormat.precisionBits > 32U)
     {
-      return sourceFormat.precisionBits != 0U && sourceFormat.precisionBits <= 24U &&
-             encoding == SampleEncoding::Float32Le;
+      return false;
     }
 
-    return encodingNominalBits(encoding) >= sourceFormat.precisionBits;
+    // Float32 has 24 bits of significand precision for integer PCM, not 32.
+    auto const availableBits = isFloatEncoding(encoding) ? 24U : encodingNominalBits(encoding);
+    return availableBits >= sourceFormat.precisionBits;
   }
 
   std::vector<SampleEncoding> losslessPcmEncodings(SignalFormat const& sourceFormat)
   {
     auto encodings = std::vector<SampleEncoding>{};
 
-    if (sourceFormat.sampleKind == SampleKind::FloatingPoint)
+    for (auto const encoding : kPreferredOrder)
     {
-      if (sourceFormat.precisionBits == 32U)
+      if (isLosslessPcmEncoding(sourceFormat, encoding))
       {
-        encodings.push_back(SampleEncoding::Float32Le);
+        encodings.push_back(encoding);
       }
-
-      return encodings;
-    }
-
-    if (sourceFormat.precisionBits == 0U || sourceFormat.precisionBits > 32U)
-    {
-      return encodings;
-    }
-
-    if (sourceFormat.precisionBits <= 16U)
-    {
-      encodings.push_back(SampleEncoding::Signed16Le);
-    }
-
-    if (sourceFormat.precisionBits <= 24U)
-    {
-      encodings.push_back(SampleEncoding::Signed24PackedLe);
-      encodings.push_back(SampleEncoding::Signed24In32Le);
-    }
-
-    encodings.push_back(SampleEncoding::Signed32Le);
-
-    if (sourceFormat.precisionBits <= 24U)
-    {
-      encodings.push_back(SampleEncoding::Float32Le);
     }
 
     return encodings;
@@ -69,26 +55,14 @@ namespace ao::audio::detail
 
   std::optional<SampleEncoding> preferredLosslessPcmEncoding(SignalFormat const& sourceFormat) noexcept
   {
-    if (sourceFormat.sampleKind == SampleKind::FloatingPoint)
+    for (auto const encoding : kPreferredOrder)
     {
-      return sourceFormat.precisionBits == 32U ? std::optional{SampleEncoding::Float32Le} : std::nullopt;
+      if (isLosslessPcmEncoding(sourceFormat, encoding))
+      {
+        return encoding;
+      }
     }
 
-    if (sourceFormat.precisionBits == 0U || sourceFormat.precisionBits > 32U)
-    {
-      return std::nullopt;
-    }
-
-    if (sourceFormat.precisionBits <= 16U)
-    {
-      return SampleEncoding::Signed16Le;
-    }
-
-    if (sourceFormat.precisionBits <= 24U)
-    {
-      return SampleEncoding::Signed24PackedLe;
-    }
-
-    return SampleEncoding::Signed32Le;
+    return std::nullopt;
   }
 } // namespace ao::audio::detail

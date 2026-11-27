@@ -81,7 +81,9 @@ namespace ao::audio::test
 
   std::vector<std::uint8_t> readFileBytes(std::filesystem::path const& path)
   {
+    INFO("Reading audio fixture: " << path);
     auto ifs = std::ifstream{path, std::ios::binary};
+    REQUIRE(ifs);
     return {std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
   }
 } // namespace ao::audio::test
