@@ -231,7 +231,7 @@ namespace ao::rt
                                           ListId sourceListId,
                                           compat::MoveOnlyFunction<bool()> acceptance,
                                           compat::MoveOnlyFunction<void(Result<PreparedPlaybackStart>)> completion);
-    Result<> prepareSuccessionNextAsync(TrackId trackId,
+    Result<> prepareSuccessionNextAsync(PlaybackRequest request,
                                         ListId sourceListId,
                                         compat::MoveOnlyFunction<bool()> acceptance,
                                         compat::MoveOnlyFunction<void(Result<PreparedNextToken>)> completion);

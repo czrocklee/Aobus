@@ -14,6 +14,7 @@
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
@@ -91,7 +92,18 @@ namespace ao::rt
     {
       TrackId trackId = kInvalidTrackId;
       ListId sourceListId = kInvalidListId;
-      std::vector<TrackId> failedTrackIds;
+      PlaybackOccurrenceId occurrenceId{};
+      audio::PlaybackInput input{};
+      // Bounded per shuffle retry chain, not across the lifetime of the playing occurrence.
+      std::size_t attemptCount = 0;
+      ShuffleHistory::OnExhaustion onExhaustion = ShuffleHistory::OnExhaustion::DiscardCandidate;
+      std::vector<TrackId> failedPreparationTrackIds;
+    };
+
+    struct FailedLookahead final
+    {
+      TrackId trackId;
+      audio::PlaybackInput input;
     };
 
     Impl(async::Executor& executor,
@@ -100,13 +112,15 @@ namespace ao::rt
          library::MusicLibrary const& library,
          PlaybackTransport& transport,
          NotificationService& notifications,
-         async::Runtime& asyncRuntime)
+         async::Runtime& asyncRuntime,
+         ShuffleChooserFactory shuffleChooserFactory)
       : executor{executor}
       , views{views}
       , sources{sources}
       , library{library}
       , transport{transport}
       , notifications{notifications}
+      , shuffleChooserFactory{std::move(shuffleChooserFactory)}
       , restartDeadline{asyncRuntime,
                         [this] { return this->transport.elapsed(); },
                         [this](bool const available) { handleRestartAvailabilityChanged(available); }}
@@ -127,6 +141,11 @@ namespace ao::rt
 
     ShuffleHistory::CandidateChooser makeCandidateChooser()
     {
+      if (shuffleChooserFactory)
+      {
+        return shuffleChooserFactory();
+      }
+
       return [generator = std::mt19937{std::random_device{}()}](std::span<TrackId const> candidates) mutable
       {
         if (candidates.empty())
@@ -226,9 +245,17 @@ namespace ao::rt
       transport.cancelSuccessionLookaheadPreparation();
     }
 
+    void forgetSessionLookahead()
+    {
+      optInstalledLookahead.reset();
+      failedLookaheadInputs = std::vector<FailedLookahead>{};
+      lookaheadOccurrenceId = {};
+    }
+
     bool isLookaheadCandidateCurrent(PendingLookahead const& pending) const
     {
-      return !isClosing() && sessionPtr && sessionPtr->cursor().launchSpec().sourceListId == pending.sourceListId &&
+      return !isClosing() && sessionPtr && transport.state().occurrenceId == pending.occurrenceId &&
+             sessionPtr->cursor().launchSpec().sourceListId == pending.sourceListId &&
              sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Live &&
              sessionPtr->cursor().semanticTuple().optResolvedSuccessor == pending.trackId &&
              sessionPtr->indexOf(pending.trackId).has_value();
@@ -307,6 +334,7 @@ namespace ao::rt
       auto const optDisarmedToken = transport.clearPreparedNext();
       sessionPtr->invalidatePreparedNext(optDisarmedToken);
       sessionPtr.reset();
+      forgetSessionLookahead();
       restartDeadline.clearSession();
       resetFailureState();
       synchronizeState();
@@ -332,6 +360,7 @@ namespace ao::rt
 
       stoppingTransport = false;
       sessionPtr.reset();
+      forgetSessionLookahead();
       restartDeadline.clearSession();
       resetFailureState();
       synchronizeState();
@@ -402,6 +431,7 @@ namespace ao::rt
 
     void startObservingCurrentSession()
     {
+      forgetSessionLookahead();
       sessionPtr->startObserving(
         [this](PlaybackCursor::Changes const changes, bool const sourceInvalidated)
         {
@@ -443,19 +473,36 @@ namespace ao::rt
 
     bool tryRetryLookahead(PendingLookahead pending)
     {
-      if (!isLookaheadCandidateCurrent(pending) || sessionPtr->cursor().shuffleMode() != ShuffleMode::On)
+      if (!isLookaheadCandidateCurrent(pending) || sessionPtr->cursor().shuffleMode() != ShuffleMode::On ||
+          sessionPtr->cursor().repeatMode() == RepeatMode::One ||
+          pending.attemptCount >= kMaxConsecutivePlaybackFailures)
       {
         return false;
       }
 
-      pending.failedTrackIds.push_back(pending.trackId);
+      // Preparation failures exclude a Track within this chain. For installed failures,
+      // exclude only the input that failed: a relink can be a viable alternative.
+      auto excluded = pending.failedPreparationTrackIds;
 
-      if (pending.failedTrackIds.size() >= kMaxConsecutivePlaybackFailures)
+      if (!failedLookaheadInputs.empty())
       {
-        return false;
+        auto const transaction = library.readTransaction();
+
+        for (auto const& failed : failedLookaheadInputs)
+        {
+          if (!std::ranges::contains(excluded, failed.trackId))
+          {
+            auto const requestRes = playbackRequestForTrack(library, transaction, failed.trackId);
+
+            if (requestRes && requestRes->input == failed.input)
+            {
+              excluded.push_back(failed.trackId);
+            }
+          }
+        }
       }
 
-      auto const optRetry = sessionPtr->rerollShuffleForward(pending.failedTrackIds);
+      auto const optRetry = sessionPtr->rerollShuffleForward(excluded, pending.onExhaustion);
 
       if (!optRetry)
       {
@@ -471,6 +518,12 @@ namespace ao::rt
       return tryPrepareLookahead(std::move(pending));
     }
 
+    bool tryRetryPreparationFailure(PendingLookahead pending)
+    {
+      pending.failedPreparationTrackIds.push_back(pending.trackId);
+      return tryRetryLookahead(std::move(pending));
+    }
+
     bool tryCompleteLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr,
                               Result<PreparedNextToken> preparedRes)
     {
@@ -484,7 +537,7 @@ namespace ao::rt
 
       if (!preparedRes)
       {
-        return preparedRes.error().code != Error::Code::Conflict && tryRetryLookahead(std::move(pending));
+        return preparedRes.error().code != Error::Code::Conflict && tryRetryPreparationFailure(std::move(pending));
       }
 
       if (!sessionPtr)
@@ -507,19 +560,47 @@ namespace ao::rt
         return false;
       }
 
+      optInstalledLookahead.emplace(std::move(pending));
       return true;
     }
 
-    bool tryPrepareLookahead(PendingLookahead pending)
+    enum class LookaheadAdmission : std::uint8_t
     {
-      auto const successor = pending.trackId;
+      ResolvedSuccessor,
+      AfterInstalledFailure,
+    };
+
+    bool tryPrepareLookahead(PendingLookahead pending,
+                             LookaheadAdmission const admission = LookaheadAdmission::ResolvedSuccessor)
+    {
+      auto requestRes = playbackRequestForTrack(library, pending.trackId);
+
+      if (requestRes &&
+          std::ranges::any_of(failedLookaheadInputs,
+                              [&](FailedLookahead const& failed)
+                              { return failed.trackId == pending.trackId && failed.input == requestRes->input; }))
+      {
+        // Only the installed failure itself can reroll on a suppressed input. A fresh
+        // admission (for example after a seek) doesn't change the foreground reservation.
+        return admission == LookaheadAdmission::AfterInstalledFailure && tryRetryLookahead(std::move(pending));
+      }
+
+      ++pending.attemptCount;
+
+      if (!requestRes)
+      {
+        return requestRes.error().code != Error::Code::InvalidState &&
+               requestRes.error().code != Error::Code::Conflict && tryRetryPreparationFailure(std::move(pending));
+      }
+
+      pending.input = requestRes->input;
       auto const sourceListId = pending.sourceListId;
       auto pendingPtr = std::make_shared<PendingLookahead>(std::move(pending));
       auto const pendingWeakPtr = std::weak_ptr{pendingPtr};
       pendingLookaheadPtr = pendingPtr;
 
       auto admittedRes = transport.prepareSuccessionNextAsync(
-        successor,
+        std::move(*requestRes),
         sourceListId,
         [this, pendingWeakPtr]
         {
@@ -564,6 +645,14 @@ namespace ao::rt
 
       auto& session = *sessionPtr;
       auto& registry = session.preparedNextRegistry();
+      auto const occurrenceId = transport.state().occurrenceId;
+
+      if (lookaheadOccurrenceId != occurrenceId)
+      {
+        failedLookaheadInputs.clear();
+        lookaheadOccurrenceId = occurrenceId;
+      }
+
       auto optSuccessor = session.cursor().semanticTuple().optResolvedSuccessor;
 
       if (!force && optSuccessor)
@@ -579,6 +668,7 @@ namespace ao::rt
       }
 
       cancelPendingLookahead();
+      optInstalledLookahead.reset();
       auto const optDisarmedToken = transport.clearPreparedNext();
       registry.invalidate(optDisarmedToken);
 
@@ -589,8 +679,10 @@ namespace ao::rt
 
       auto const successor = *optSuccessor;
       auto const sourceListId = session.cursor().launchSpec().sourceListId;
-      return tryPrepareLookahead(
-        PendingLookahead{.trackId = successor, .sourceListId = sourceListId, .failedTrackIds = {}});
+      return tryPrepareLookahead(PendingLookahead{.trackId = successor,
+                                                  .sourceListId = sourceListId,
+                                                  .occurrenceId = occurrenceId,
+                                                  .failedPreparationTrackIds = {}});
     }
 
     Result<> startTrack(TrackId const trackId, ShuffleHistory::TransitionOrigin const origin)
@@ -729,7 +821,7 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      std::ignore = sessionPtr->rerollShuffleForward(attemptedTrackIds);
+      std::ignore = sessionPtr->rerollShuffleForward(attemptedTrackIds, ShuffleHistory::OnExhaustion::DiscardCandidate);
       std::ignore = sessionPtr->refreshSemanticState();
 
       if (auto const retry = sessionPtr->cursor().resolveNext();
@@ -933,12 +1025,42 @@ namespace ao::rt
       {
         auto& registry = sessionPtr->preparedNextRegistry();
 
-        if (!registry.contains(*failure.optPreparedNextToken))
+        auto const wasActive = registry.activeToken() == failure.optPreparedNextToken;
+
+        if (!registry.tryAcknowledgeDisarm(*failure.optPreparedNextToken))
         {
           return PlaybackFailureDisposition::Unhandled;
         }
 
-        std::ignore = registry.tryAcknowledgeDisarm(*failure.optPreparedNextToken);
+        if (!wasActive)
+        {
+          // Delivery can follow replacement of a token the engine had already disarmed.
+          // Its acknowledgement must not disturb the replacement, even for the same Track.
+          return PlaybackFailureDisposition::Recovered;
+        }
+
+        if (failure.kind == PlaybackFailureKind::Decode && failure.recoverable)
+        {
+          auto optInstalled = std::exchange(optInstalledLookahead, std::nullopt);
+
+          if (optInstalled && optInstalled->occurrenceId == transport.state().occurrenceId)
+          {
+            // Repeat One can retain the commitment across a projection gap. Its input still
+            // failed for this occurrence, even if there is no eligible retry right now.
+            failedLookaheadInputs.push_back(
+              {.trackId = optInstalled->trackId, .input = std::move(optInstalled->input)});
+
+            if (optInstalled->attemptCount < kMaxConsecutivePlaybackFailures &&
+                isLookaheadCandidateCurrent(*optInstalled))
+            {
+              optInstalled->onExhaustion = ShuffleHistory::OnExhaustion::KeepCandidate;
+              tryPrepareLookahead(std::move(*optInstalled), LookaheadAdmission::AfterInstalledFailure);
+            }
+          }
+
+          return PlaybackFailureDisposition::Recovered;
+        }
+
         sessionPtr->shuffleHistory().tryDiscardForwardCandidate(failure.trackId);
         std::ignore = sessionPtr->refreshSemanticState();
         tryReprepareNext(false);
@@ -1162,12 +1284,16 @@ namespace ao::rt
     library::MusicLibrary const& library;
     PlaybackTransport& transport;
     NotificationService& notifications;
+    ShuffleChooserFactory shuffleChooserFactory;
     PlaybackSuccessionState state{};
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
     std::unique_ptr<PlaybackCursorSession> sessionPtr;
     std::optional<PendingViewStart> optPendingViewStart;
     std::shared_ptr<PendingLookahead> pendingLookaheadPtr;
+    std::optional<PendingLookahead> optInstalledLookahead;
+    PlaybackOccurrenceId lookaheadOccurrenceId{};
+    std::vector<FailedLookahead> failedLookaheadInputs;
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
     async::Signal<PlaybackSuccessionState const&> changedSignal;
     async::Signal<> explicitStartSettledSignal;
@@ -1205,8 +1331,16 @@ namespace ao::rt
                                          library::MusicLibrary const& library,
                                          PlaybackTransport& transport,
                                          NotificationService& notifications,
-                                         async::Runtime& asyncRuntime)
-    : _implPtr{std::make_unique<Impl>(executor, views, sources, library, transport, notifications, asyncRuntime)}
+                                         async::Runtime& asyncRuntime,
+                                         ShuffleChooserFactory shuffleChooserFactory)
+    : _implPtr{std::make_unique<Impl>(executor,
+                                      views,
+                                      sources,
+                                      library,
+                                      transport,
+                                      notifications,
+                                      asyncRuntime,
+                                      std::move(shuffleChooserFactory))}
   {
     _implPtr->start();
   }

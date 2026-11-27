@@ -69,6 +69,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -726,6 +727,43 @@ namespace ao::rt::test
     REQUIRE(endCurrent() == start(third));
     REQUIRE(sessionPtr->adoptCurrent(third, std::nullopt, ShuffleHistory::TransitionOrigin::Forward));
     CHECK(endCurrent().action == PlaybackCursor::CommandAction::Stop);
+  }
+
+  TEST_CASE("PlaybackCursorSession - an exhausted shuffle reservation survives foreground resolution")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const a = libraryFixture.addTrack("A");
+    auto const b = libraryFixture.addTrack("B");
+    auto const c = libraryFixture.addTrack("C");
+    auto const& library = libraryFixture.library();
+    auto changes = makeStateOnlyLibraryChanges(library);
+    auto sources = TrackSourceCache{library, changes};
+    sources.reloadAllTracks();
+    auto views = ViewService{stateOnlyLibraryExecutor(), library, sources, changes};
+    std::size_t draws = 0;
+    auto sessionPtr = ao::test::requireValue(
+      PlaybackCursorSession::create(PlaybackLaunchSpec{.sourceListId = kAllTracksListId},
+                                    a,
+                                    sources,
+                                    views,
+                                    RepeatMode::Off,
+                                    ShuffleMode::On,
+                                    [&](std::span<TrackId const> candidates)
+                                    {
+                                      ++draws;
+                                      return std::ranges::contains(candidates, b) ? b : candidates.front();
+                                    }));
+    REQUIRE(sessionPtr->cursor().resolveNext().trackId == b);
+    auto const keep = ShuffleHistory::OnExhaustion::KeepCandidate;
+    REQUIRE(sessionPtr->rerollShuffleForward(std::array{b}, keep) == c);
+    REQUIRE(sessionPtr->refreshSemanticState().semanticChanged);
+    REQUIRE(sessionPtr->cursor().resolveNext().trackId == c);
+    REQUIRE(draws == 2);
+
+    REQUIRE_FALSE(sessionPtr->rerollShuffleForward(std::array{b, c}, keep));
+    CHECK_FALSE(sessionPtr->refreshSemanticState().semanticChanged);
+    CHECK(sessionPtr->cursor().resolveNext().trackId == c);
+    CHECK(draws == 2);
   }
 
   TEST_CASE("PlaybackCursorSession - stale lookahead keeps a latched prepared winner resolvable", "[concurrency]")

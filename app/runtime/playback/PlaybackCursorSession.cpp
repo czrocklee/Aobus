@@ -359,15 +359,16 @@ namespace ao::rt
                       : PlaybackCursor::CommandResolution{.action = PlaybackCursor::CommandAction::Stop};
   }
 
-  std::optional<TrackId> PlaybackCursorSession::rerollShuffleForward(std::span<TrackId const> const excludedTrackIds)
+  std::optional<TrackId> PlaybackCursorSession::rerollShuffleForward(std::span<TrackId const> const excludedTrackIds,
+                                                                     ShuffleHistory::OnExhaustion const onExhaustion)
   {
-    _shuffleHistory.invalidateForwardCandidate();
     auto const projection = projectionSnapshot();
-    return _shuffleHistory.forwardCandidate(projection,
-                                            _cursor.currentTrackId(),
-                                            _cursor.anchor().state() == ProjectionAnchor::State::Bound,
-                                            _cursor.repeatMode() == RepeatMode::All,
-                                            excludedTrackIds);
+    return _shuffleHistory.rerollForwardCandidate(projection,
+                                                  _cursor.currentTrackId(),
+                                                  _cursor.anchor().state() == ProjectionAnchor::State::Bound,
+                                                  _cursor.repeatMode() == RepeatMode::All,
+                                                  excludedTrackIds,
+                                                  onExhaustion);
   }
 
   Result<PlaybackCursor::Changes> PlaybackCursorSession::adoptCurrent(

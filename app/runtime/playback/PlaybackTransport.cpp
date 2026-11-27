@@ -1954,7 +1954,7 @@ namespace ao::rt
   }
 
   Result<> PlaybackTransport::prepareSuccessionNextAsync(
-    TrackId const trackId,
+    PlaybackRequest request,
     ListId const sourceListId,
     compat::MoveOnlyFunction<bool()> acceptance,
     compat::MoveOnlyFunction<void(Result<PreparedNextToken>)> completion)
@@ -1964,15 +1964,9 @@ namespace ao::rt
 
     detail::expectPreparedNextSlotAvailable(impl->optActivePreparedToken.has_value());
 
-    auto requestRes = playbackRequestForTrack(impl->library, trackId);
-
-    if (!requestRes)
-    {
-      return std::unexpected{requestRes.error()};
-    }
-
-    auto item = impl->makePlaybackItem(requestRes->input);
-    auto const expectedInput = requestRes->input;
+    auto item = impl->makePlaybackItem(request.input);
+    auto const expectedInput = request.input;
+    auto const trackId = request.item.trackId;
     auto const admittedRes = impl->playerPtr->prepareNextAsync(
       item,
       [impl, expectedInput, trackId, acceptance = std::move(acceptance)] mutable
@@ -1985,7 +1979,7 @@ namespace ao::rt
         auto const currentRequestRes = playbackRequestForTrack(impl->library, trackId);
         return currentRequestRes && currentRequestRes->input == expectedInput;
       },
-      [impl, request = std::move(*requestRes), sourceListId, completion = std::move(completion)](
+      [impl, request = std::move(request), sourceListId, completion = std::move(completion)](
         Result<audio::Engine::PreparedNextResult> preparedRes) mutable
       {
         if (impl->isClosing())
