@@ -32,6 +32,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <tuple>
 #include <utility>
 
 namespace ao::rt::test
@@ -249,26 +250,18 @@ namespace ao::rt::test
 
     {
       auto const lock = std::scoped_lock{_implPtr->mutex};
-      ++_implPtr->queuedCount;
-
-      try
-      {
-        _implPtr->loopExecutor.defer(
-          [this, task = std::move(task)] mutable
+      _implPtr->loopExecutor.defer(
+        [this, task = std::move(task)] mutable
+        {
           {
-            {
-              auto const taskLock = std::scoped_lock{_implPtr->mutex};
-              --_implPtr->queuedCount;
-            }
+            auto const taskLock = std::scoped_lock{_implPtr->mutex};
+            --_implPtr->queuedCount;
+          }
 
-            task();
-          });
-      }
-      catch (...)
-      {
-        --_implPtr->queuedCount;
-        throw;
-      }
+          task();
+        });
+      // Admission can throw, but the callback cannot decrement until we release this lock.
+      ++_implPtr->queuedCount;
     }
 
     _implPtr->cv.notify_all();

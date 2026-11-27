@@ -105,16 +105,9 @@ namespace ao::async
 
     void complete(FlightToken const& token, Value const& value)
     {
-      auto const tokenFlightPtr = token._flightPtr.lock();
+      auto const it = findFlight(token);
 
-      if (!tokenFlightPtr)
-      {
-        return;
-      }
-
-      auto const it = _flights.find(token._key);
-
-      if (it == _flights.end() || it->second != tokenFlightPtr)
+      if (it == _flights.end())
       {
         return;
       }
@@ -152,16 +145,9 @@ namespace ao::async
 
     bool tryRetainDependency(FlightToken const& token, utility::ScopedRegistration dependency)
     {
-      auto const tokenFlightPtr = token._flightPtr.lock();
+      auto const it = findFlight(token);
 
-      if (!tokenFlightPtr)
-      {
-        return false;
-      }
-
-      auto const it = _flights.find(token._key);
-
-      if (it == _flights.end() || it->second != tokenFlightPtr)
+      if (it == _flights.end())
       {
         return false;
       }
@@ -190,12 +176,27 @@ namespace ao::async
       std::vector<utility::ScopedRegistration> dependencies;
     };
 
+    using Flights = std::unordered_map<Key, std::shared_ptr<Flight>, Hash, Equal>;
+
+    Flights::iterator findFlight(FlightToken const& token)
+    {
+      auto const flightPtr = token._flightPtr.lock();
+
+      if (!flightPtr)
+      {
+        return _flights.end();
+      }
+
+      auto const it = _flights.find(token._key);
+      return it != _flights.end() && it->second == flightPtr ? it : _flights.end();
+    }
+
     template<typename Start>
     void startFlight(Key const& key, std::shared_ptr<Flight> const& flightPtr, Start&& start)
     {
       try
       {
-        std::invoke(std::forward<Start>(start), FlightToken{key, std::weak_ptr<void>{flightPtr}});
+        std::invoke(std::forward<Start>(start), FlightToken{key, flightPtr});
       }
       catch (...)
       {
@@ -208,6 +209,6 @@ namespace ao::async
       }
     }
 
-    std::unordered_map<Key, std::shared_ptr<Flight>, Hash, Equal> _flights;
+    Flights _flights;
   };
 } // namespace ao::async

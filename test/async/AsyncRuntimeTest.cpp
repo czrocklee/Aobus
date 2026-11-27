@@ -114,15 +114,6 @@ namespace ao::rt::test
 
     constexpr auto kFutureTimeout = std::chrono::seconds{5};
 
-    // TaskFuture has no nonblocking readiness query. Keep the blocking read
-    // off the test thread and destroy the producer before the reader on failure.
-    template<typename T>
-    std::future<std::exception_ptr> readFutureException(TaskFuture<T> future)
-    {
-      return std::async(
-        std::launch::async, [future = std::move(future)] mutable { return captureTaskFutureException(future); });
-    }
-
     template<typename T>
     Task<T> markSpawnStartedAsync(AsyncTestState<bool> started)
     {
@@ -231,12 +222,13 @@ namespace ao::rt::test
       AsyncTestState<std::uint32_t> _exitCount;
     };
 
-    Task<void> sleepUntilPoolTeardownAsync(Runtime* runtime,
-                                           AsyncTestState<bool> resumed,
-                                           AsyncTestState<std::uint32_t> exitCount)
+    Task<void> recordSleepExitAsync(Runtime* runtime,
+                                    AsyncTestState<bool> resumed,
+                                    AsyncTestState<std::uint32_t> exitCount,
+                                    std::stop_token stopToken = {})
     {
       auto const exitRecorder = TaskExitRecorder{exitCount};
-      co_await runtime->sleepForAsync(std::chrono::hours{1});
+      co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
       resumed.set(true);
     }
 
@@ -254,7 +246,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - ready task eagerly owns and returns its value")
   {
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor};
+    auto runtime = Runtime{executor, 1};
     auto valuePtr = std::make_unique<std::int32_t>(42);
     auto future = runtime.spawn(makeReadyTaskAsync(std::move(valuePtr)));
     CHECK_FALSE(valuePtr);
@@ -264,7 +256,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor", "[concurrency]")
   {
     auto executor = LoopExecutor{};
-    auto runtime = Runtime{executor};
+    auto runtime = Runtime{executor, 1};
     auto const ownerThread = std::this_thread::get_id();
 
     auto const threads = runLoopTask(runtime, executor, pingPongTaskAsync(&runtime));
@@ -334,7 +326,7 @@ namespace ao::rt::test
 
     {
       auto runtime = Runtime{executor, 1};
-      runtime.spawnLogged(sleepUntilPoolTeardownAsync(&runtime, resumed, exitCount));
+      runtime.spawnLogged(recordSleepExitAsync(&runtime, resumed, exitCount));
       // A later turn on the sole worker fences registration of the default timer.
       runtime.spawnLogged(reachWorkerFenceAsync(&runtime, reached));
       REQUIRE(reached.tryWaitUntil(true));
@@ -493,7 +485,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - future task failure remains caller-owned")
   {
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor};
+    auto runtime = Runtime{executor, 1};
 
     auto future = runtime.spawn(failingTaskAsync(&runtime));
     REQUIRE_THROWS_AS(future.get(), std::runtime_error);
@@ -508,7 +500,7 @@ namespace ao::rt::test
     STATIC_REQUIRE_FALSE(std::is_move_assignable_v<NonDefaultTaskResult>);
 
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor};
+    auto runtime = Runtime{executor, 1};
 
     CHECK(runtime.spawn(nonDefaultResultTaskAsync(&runtime)).get().value() == 42);
     CHECK_THROWS_AS(runtime.spawn(failingNonDefaultResultTaskAsync(&runtime)).get(), std::runtime_error);
@@ -547,31 +539,109 @@ namespace ao::rt::test
     CHECK(executor.queuedCount() == 0);
   }
 
-  TEST_CASE("AsyncRuntime - sleeping coroutine observes a thread-safe stop request", "[concurrency]")
+  TEST_CASE("AsyncRuntime - injected expiry and cancellation settle the sleep exactly once", "[concurrency]")
   {
+    auto result = std::future<std::exception_ptr>{};
     auto executor = ManualExecutor{};
     auto sleeper = ControlledSleeper{};
     auto runtime = Runtime{executor, 1, &sleeper};
     auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
     auto ranOnWorker = AsyncTestState<bool>::create(false);
+    auto stopSource = std::stop_source{};
 
-    auto task = runtime.spawnCancellable(
-      [&runtime, callbackCount, ranOnWorker](std::stop_token const stopToken)
-      { return sleepAndRecordAsync(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker, stopToken); });
+    auto task = runtime.spawn(
+      sleepAndRecordAsync(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker, stopSource.get_token()));
     REQUIRE(sleeper.tryWaitForCallCount(1));
-    auto const sleepingCall = sleeper.call(0);
-    auto const cancellingThread = std::this_thread::get_id();
+    result = readFutureException(std::move(task));
+    bool expectExpiry = false;
 
-    task.reset();
+    SECTION("Expiry settles before the stop request")
+    {
+      REQUIRE(sleeper.tryFire(0));
+      expectExpiry = true;
+    }
+
+    SECTION("Stop claims the pending sleep")
+    {
+      auto const cancellingThread = std::this_thread::get_id();
+      REQUIRE(stopSource.request_stop());
+      REQUIRE(sleeper.tryWaitForCancellation(0));
+      auto const cancelledCall = sleeper.call(0);
+      CHECK(cancelledCall.startedOn != cancellingThread);
+      CHECK(cancelledCall.cancelledOn == cancellingThread);
+      CHECK_FALSE(sleeper.tryFire(0));
+    }
+
+    SECTION("The sleeper fires but stop precedes the Runtime continuation")
+    {
+      auto held = AsyncTestState<bool>::create(false);
+      auto release = AsyncTestState<bool>::create(false);
+      auto exited = AsyncTestState<bool>::create(false);
+      auto cleanup = gsl_lite::finally([&release] { release.set(true); });
+      runtime.spawnLogged(holdWorkerAsync(held, release, exited));
+      REQUIRE(held.tryWaitUntil(true));
+      REQUIRE(sleeper.tryFire(0));
+      REQUIRE(stopSource.request_stop());
+      CHECK_FALSE(sleeper.call(0).cancelled);
+      REQUIRE_FALSE(exited.load());
+    }
+
+    REQUIRE(result.wait_for(kFutureTimeout) == std::future_status::ready);
+
+    if (expectExpiry)
+    {
+      REQUIRE(stopSource.request_stop());
+      CHECK_FALSE(result.get());
+      CHECK(callbackCount.load() == 1);
+      CHECK(ranOnWorker.load());
+    }
+    else
+    {
+      auto const cancellation = result.get();
+      REQUIRE(cancellation);
+      CHECK_THROWS_AS(std::rethrow_exception(cancellation), OperationCancelled);
+      CHECK(callbackCount.load() == 0);
+    }
+  }
+
+  TEST_CASE("AsyncRuntime - resetting a handle cancels its suspended sleep before teardown", "[concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto sleeper = ControlledSleeper{};
+    auto runtime = Runtime{executor, 1, &sleeper};
+    auto resumed = AsyncTestState<bool>::create(false);
+    auto exitCount = AsyncTestState<std::uint32_t>::create(0);
+    auto handle = runtime.spawnCancellable([&runtime, resumed, exitCount](std::stop_token token)
+                                           { return recordSleepExitAsync(&runtime, resumed, exitCount, token); });
+    REQUIRE(sleeper.tryWaitForCallCount(1));
+    handle.reset();
     REQUIRE(sleeper.tryWaitForCancellation(0));
-    auto const cancelledCall = sleeper.call(0);
-    CHECK(cancelledCall.cancelled);
-    CHECK(cancelledCall.startedOn != cancellingThread);
-    CHECK(cancelledCall.cancelledOn == cancellingThread);
-    CHECK_FALSE(sleeper.tryFireById(sleepingCall.id));
-    runtime.requestStop();
-    runtime.join();
+    REQUIRE(exitCount.tryWaitUntil(1));
+    CHECK_FALSE(resumed.load());
+  }
 
+  TEST_CASE("AsyncRuntime - stopping an armed timer settles the task without continuing", "[concurrency]")
+  {
+    auto result = std::future<std::exception_ptr>{};
+    auto executor = ManualExecutor{};
+    auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
+    auto ranOnWorker = AsyncTestState<bool>::create(false);
+    auto reached = AsyncTestState<bool>::create(false);
+    auto stopSource = std::stop_source{};
+    auto runtime = Runtime{executor, 1};
+
+    auto task = runtime.spawn(
+      sleepAndRecordAsync(&runtime, std::chrono::hours{1}, callbackCount, ranOnWorker, stopSource.get_token()));
+    // The later worker turn runs after the timer's asynchronous wait is registered.
+    runtime.spawnLogged(reachWorkerFenceAsync(&runtime, reached));
+    REQUIRE(reached.tryWaitUntil(true));
+    REQUIRE(stopSource.request_stop());
+
+    result = readFutureException(std::move(task));
+    REQUIRE(result.wait_for(kFutureTimeout) == std::future_status::ready);
+    auto const cancellation = result.get();
+    REQUIRE(cancellation);
+    CHECK_THROWS_AS(std::rethrow_exception(cancellation), OperationCancelled);
     CHECK(callbackCount.load() == 0);
   }
 

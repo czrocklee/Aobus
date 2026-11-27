@@ -12,7 +12,6 @@
 #include <memory>
 #include <thread>
 #include <tuple>
-#include <utility>
 
 namespace ao::async
 {
@@ -30,6 +29,38 @@ namespace ao::rt::test
    * exits. Elsewhere this does nothing.
    */
   void requestMillisecondTimerResolution() noexcept;
+
+  namespace detail
+  {
+    template<typename Predicate, typename RunReady, typename WaitForWork>
+    bool tryDrainTestExecutorUntil(Predicate& predicate,
+                                   RunReady runReady,
+                                   WaitForWork waitForWork,
+                                   std::chrono::milliseconds const timeout)
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (!predicate())
+      {
+        bool const ran = runReady();
+        auto const now = std::chrono::steady_clock::now();
+
+        if (now >= deadline)
+        {
+          return predicate();
+        }
+
+        if (!ran)
+        {
+          auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+          // Worker-only completion can change the predicate without notifying this executor.
+          std::ignore = waitForWork(std::min(remaining, std::chrono::milliseconds{1}));
+        }
+      }
+
+      return true;
+    }
+  } // namespace detail
 
   class ManualExecutor final : public async::Executor
   {
@@ -51,31 +82,8 @@ namespace ao::rt::test
     template<typename Predicate>
     bool tryDrainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{10})
     {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (!predicate())
-      {
-        if (tryRunOne())
-        {
-          continue;
-        }
-
-        auto const now = std::chrono::steady_clock::now();
-
-        if (now >= deadline)
-        {
-          return predicate();
-        }
-
-        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
-        auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
-
-        // A Runtime task can finish on a worker without queuing anything here,
-        // so periodically recheck the predicate while the queue is empty.
-        std::ignore = tryWaitUntilQueued(pollInterval);
-      }
-
-      return true;
+      return detail::tryDrainTestExecutorUntil(
+        predicate, [this] { return tryRunOne(); }, [this](auto wait) { return tryWaitUntilQueued(wait); }, timeout);
     }
 
     std::size_t queuedCount() const;
@@ -134,31 +142,11 @@ namespace ao::rt::test
     template<typename Predicate>
     bool tryDrainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{10})
     {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (!predicate())
-      {
-        if (tryRunReadyTurn())
-        {
-          continue;
-        }
-
-        auto const now = std::chrono::steady_clock::now();
-
-        if (now >= deadline)
-        {
-          return predicate();
-        }
-
-        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
-        auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
-
-        // The predicate may observe worker-owned state that does not notify
-        // this executor, so periodically recheck it while the queue is empty.
-        std::ignore = tryWaitUntilQueued(pollInterval);
-      }
-
-      return true;
+      return detail::tryDrainTestExecutorUntil(
+        predicate,
+        [this] { return tryRunReadyTurn(); },
+        [this](auto wait) { return tryWaitUntilQueued(wait); },
+        timeout);
     }
 
     std::size_t queuedCount() const;

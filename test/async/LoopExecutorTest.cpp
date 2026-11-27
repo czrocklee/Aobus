@@ -3,6 +3,7 @@
 
 #include <ao/async/LoopExecutor.h>
 
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/async/QueuedExecutorBase.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,9 +23,10 @@ namespace ao::async::test
 {
   namespace
   {
-    class FinalDrainExecutor final : public QueuedExecutorBase
+    class TestQueuedExecutor final : public QueuedExecutorBase
     {
     public:
+      void runTurn() { drainQueuedTasks(); }
       void finish() { drainQueuedTasksUntilIdle(); }
 
     private:
@@ -67,7 +69,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[concurrency]")
+  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns")
   {
     auto executor = LoopExecutor{};
 
@@ -273,9 +275,30 @@ namespace ao::async::test
     CHECK(order == std::vector<int>{1, 2, 3});
   }
 
+  TEST_CASE("QueuedExecutorBase - a recursive drain cannot reenter the active turn")
+  {
+    auto deadline = rt::test::ScopedTestDeadline{};
+    auto executor = TestQueuedExecutor{};
+    auto order = std::vector<int>{};
+    executor.defer(
+      [&]
+      {
+        order.push_back(1);
+        executor.defer([&] { order.push_back(4); });
+        executor.runTurn();
+        order.push_back(2);
+      });
+    executor.defer([&] { order.push_back(3); });
+
+    executor.runTurn();
+    CHECK(order == std::vector<int>{1, 2, 3});
+    executor.runTurn();
+    CHECK(order == std::vector<int>{1, 2, 3, 4});
+  }
+
   TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations")
   {
-    auto executor = FinalDrainExecutor{};
+    auto executor = TestQueuedExecutor{};
     auto order = std::vector<int>{};
 
     executor.defer(

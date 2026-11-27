@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -226,7 +227,8 @@ namespace ao::async::test
       });
     auto payload = std::string{"first"};
 
-    signal.post(executor, std::move(payload));
+    auto producer = std::jthread{[&] { signal.post(executor, payload); }};
+    producer.join();
     payload = "changed";
 
     CHECK(observed.empty());

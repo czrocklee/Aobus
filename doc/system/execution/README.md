@@ -52,7 +52,7 @@ not choose an executor; its owner defines the domain. `Signal::post()` supplies
 a weak-lifetime deferred hop, not permission to use its other operations from a
 foreign thread. See the [signal contract](signal.md).
 
-The GTK, TUI, CLI loop, and WinUI adapters derive from `QueuedExecutorBase`.
+The GTK, TUI, CLI loop, WinUI, and AppKit adapters derive from `QueuedExecutorBase`.
 Foreign producers append to one mutex-protected FIFO; only the constructing
 thread drains it. A drain takes a snapshot, releases the mutex, and executes
 that snapshot non-reentrantly. Tasks admitted by those callbacks remain for a

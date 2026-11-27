@@ -110,11 +110,6 @@ namespace ao::async
       }
       catch (boost::system::system_error const& error)
       {
-        if (stopToken.stop_requested() && error.code() == boost::asio::error::operation_aborted)
-        {
-          throwOperationCancelled();
-        }
-
         translateBoostCancellation(error);
       }
 

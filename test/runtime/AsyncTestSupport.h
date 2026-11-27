@@ -17,10 +17,11 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdint>
 #include <exception>
+#include <future>
 #include <memory>
 #include <mutex>
+#include <source_location>
 #include <stop_token>
 #include <thread>
 #include <tuple>
@@ -54,6 +55,35 @@ namespace ao::rt::test
     return {};
   }
 
+  // TaskFuture has no readiness query. Declare the reader before its Runtime so
+  // assertion unwinding stops the producer before the asynchronous read joins.
+  template<typename T>
+  std::future<std::exception_ptr> readFutureException(async::TaskFuture<T> future)
+  {
+    return std::async(
+      std::launch::async, [future = std::move(future)] mutable { return captureTaskFutureException(future); });
+  }
+
+  // For self-deadlock scenarios: neither a timed assertion nor a worker stop
+  // can unwind a test thread stuck in a synchronous call or joining that worker.
+  // Declare the guard before the objects whose execution or teardown it must bound,
+  // so it is destroyed after them.
+  class ScopedTestDeadline final
+  {
+  public:
+    explicit ScopedTestDeadline(std::source_location location = std::source_location::current());
+    ~ScopedTestDeadline();
+
+    ScopedTestDeadline(ScopedTestDeadline const&) = delete;
+    ScopedTestDeadline& operator=(ScopedTestDeadline const&) = delete;
+    ScopedTestDeadline(ScopedTestDeadline&&) = delete;
+    ScopedTestDeadline& operator=(ScopedTestDeadline&&) = delete;
+
+  private:
+    std::promise<void> _finished;
+    std::jthread _watchdog;
+  };
+
   // Injectable delay strategy for deterministic Runtime tests. The sleeper
   // must outlive every Runtime that receives it.
   class ControlledSleeper final : public async::Sleeper
@@ -63,7 +93,6 @@ namespace ao::rt::test
 
     struct Call final
     {
-      std::uint64_t id = 0;
       Delay delay{};
       bool cancelled = false;
       std::thread::id startedOn;
@@ -81,13 +110,12 @@ namespace ao::rt::test
     async::Task<void> sleepForAsync(Delay delay, std::stop_token stopToken) override;
     bool tryWaitForCallCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
     std::size_t callCount() const;
+    // Snapshot a published entry, after tryWaitForCallCount or tryWaitForCancellation.
     Call call(std::size_t index) const;
     bool tryWaitForCancellation(std::size_t index, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
     bool tryFire(std::size_t index);
     bool tryFireNext();
     bool tryFireNext(Delay delay);
-    bool tryFireById(std::uint64_t id);
-    std::uint64_t lastScheduledId() const;
     std::vector<Delay> pendingDelays() const;
     bool tryWaitForPendingDelays(std::vector<Delay> const& expected,
                                  std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
