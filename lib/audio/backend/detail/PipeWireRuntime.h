@@ -6,7 +6,6 @@
 extern "C"
 {
 #include <pipewire/pipewire.h>
-#include <spa/support/loop.h>
 #include <spa/utils/hook.h>
 }
 
@@ -51,19 +50,6 @@ namespace ao::audio::backend::detail
   using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
 
   using PwRegistryPtr = PwProxyPtr<::pw_registry>;
-  using PwLinkPtr = PwProxyPtr<::pw_link>;
-
-  struct SpaSourceDeleter final
-  {
-    ::pw_thread_loop* loop = nullptr;
-
-    void operator()(::spa_source* ptr) const noexcept
-    {
-      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), ptr);
-    }
-  };
-
-  using SpaSourcePtr = std::unique_ptr<::spa_source, SpaSourceDeleter>;
 
   class [[nodiscard]] SpaHookGuard final
   {
@@ -116,8 +102,5 @@ namespace ao::audio::backend::detail
 
     PipeWireEnvironmentGuard(PipeWireEnvironmentGuard&&) = delete;
     PipeWireEnvironmentGuard& operator=(PipeWireEnvironmentGuard&&) = delete;
-
-  private:
-    bool _active = false;
   };
 } // namespace ao::audio::backend::detail

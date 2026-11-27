@@ -673,12 +673,12 @@ It does not assert canonical native byte order or physical wiring.
 Current route-graph evidence recomputes the flag from the monitor's current Format cache.
 A later observation that is no longer complete clears it; the flag is not a sticky lease.
 
-`OpenedPcmMode::channelDelivery` is the initial snapshot projected during `open()` from the latest accepted observation before `open()` returns.
+`open()` snapshots `OpenedPcmMode::channelDelivery` from the latest accepted observation while it holds the PipeWire thread-loop lock.
 The installed render delivery is fixed at first admission and is never mutated by a later Format param.
 A later parsed zero-mask non-stereo observation with the same rate, channel count, and encoding may refresh only the control-side native cache.
 That cache is the comparison baseline for the next Format param.
-It does not change installed transport, and it does not mutate the mode already returned by `open()`.
-The open snapshot includes such a refresh only when that observation arrives before `open()` returns, and that projection may then differ from the first admitted render plan.
+A refresh before the snapshot can therefore change the reported evidence without changing the installed transport.
+A refresh after the snapshot does not change the mode `open()` returns, even if the call has not returned yet.
 After an observation has been accepted, any later observation that is not one of those permitted refreshes is `OutputFailure`, including a storage change and a role change on an exact two-channel or identified path.
 That later fault is not reclassified as a recoverable layout contradiction merely because the new roles would have been one in isolation.
 Current graph channel evidence comes from the monitor's independent Format cache when that graph is refreshed.

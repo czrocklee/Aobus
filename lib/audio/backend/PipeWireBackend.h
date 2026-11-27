@@ -29,7 +29,6 @@ namespace ao::audio::backend
   class PipeWireBackend final : public Backend
   {
   public:
-    struct Impl;
     explicit PipeWireBackend(Device const& device,
                              ProfileId const& profile,
                              OutputRoutingPolicy routingPolicy = OutputRoutingPolicy::Fixed);
@@ -58,6 +57,7 @@ namespace ao::audio::backend
     PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
   private:
+    struct Impl;
     std::unique_ptr<Impl> _implPtr;
     std::string _targetDeviceId;
     OutputRoutingPolicy _routingPolicy;

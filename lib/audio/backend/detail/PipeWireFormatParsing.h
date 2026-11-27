@@ -34,13 +34,13 @@ namespace ao::audio::backend::detail
     std::uint32_t flags = 0;
     std::array<std::uint32_t, SPA_AUDIO_MAX_CHANNELS> positions{};
 
+    ChannelDeliveryEvidence channelDelivery() const noexcept;
     bool operator==(RawStreamFormat const&) const = default;
   };
 
   struct RawStreamDelivery final
   {
     PcmFormat clientFormat{};
-    ChannelDeliveryEvidence channelDelivery{.isMapped = false};
     // Native destination slot -> canonical application source slot.
     std::array<std::uint8_t, SPA_AUDIO_MAX_CHANNELS> sourceSlots{};
     bool needsPermutation = false;

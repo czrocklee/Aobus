@@ -68,16 +68,10 @@ namespace ao::audio::backend::detail
     }
 
     ++state.refCount;
-    _active = true;
   }
 
   PipeWireEnvironmentGuard::~PipeWireEnvironmentGuard() noexcept
   {
-    if (!_active)
-    {
-      return;
-    }
-
     auto& state = pipeWireRuntimeState();
     auto const lock = std::scoped_lock{state.mutex};
     --state.refCount;

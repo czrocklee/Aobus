@@ -28,8 +28,6 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/utility/ThreadName.h>
 
-#include <poll.h>
-
 #include <cerrno>
 
 extern "C"
@@ -90,12 +88,6 @@ namespace ao::audio::backend
       }
 
       return -EINTR;
-    }
-
-    bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
-    {
-      return sourceFormat.sampleRate != 0U && sourceFormat.channels != 0U &&
-             ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat).has_value();
     }
 
     std::optional<PcmFormat> readCurrentHwFormat(::snd_pcm_t* const pcm)
@@ -812,19 +804,18 @@ namespace ao::audio::backend
     return {};
   }
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& /*profile*/)
-    : _implPtr{std::make_unique<Impl>(device.id.raw(),
-                                      detail::AlsaGraphPublisher{},
-                                      std::make_unique<detail::AlsaMixerSession>(detail::nativeAlsaMixerOpenFactory()))}
+  AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& profile)
+    : AlsaExclusiveBackend{device, profile, detail::AlsaGraphPublisher{}}
   {
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device,
-                                             ProfileId const& /*profile*/,
+                                             ProfileId const& profile,
                                              detail::AlsaGraphPublisher graphPublisher)
-    : _implPtr{std::make_unique<Impl>(device.id.raw(),
-                                      std::move(graphPublisher),
-                                      std::make_unique<detail::AlsaMixerSession>(detail::nativeAlsaMixerOpenFactory()))}
+    : AlsaExclusiveBackend{device,
+                           profile,
+                           std::move(graphPublisher),
+                           std::make_unique<detail::AlsaMixerSession>(detail::nativeAlsaMixerOpenFactory())}
   {
   }
 
@@ -887,15 +878,15 @@ namespace ao::audio::backend
   {
     // Reject deterministic source refusals before this backend's own close().
     // Engine closes its previous playback before calling open().
-    if (!canAdmitSourceFormat(sourceFormat))
+    if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
     {
-      if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
-      {
-        return std::unexpected{BackendOpenFailure{
-          .error = makeError(Error::Code::InvalidInput, "ALSA PCM formats require a sample rate and channels").error(),
-          .cause = BackendOpenFailure::Cause::OutputFailure}};
-      }
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InvalidInput, "ALSA PCM formats require a sample rate and channels").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
 
+    if (!::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat))
+    {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for ALSA").error(),
         .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
@@ -1084,31 +1075,17 @@ namespace ao::audio::backend
 
   PropertyInfo AlsaExclusiveBackend::queryProperty(PropertyId id) const noexcept
   {
-    if (id == PropertyId::Volume)
+    if (id != PropertyId::Volume && id != PropertyId::Muted)
     {
-      bool const available =
-        _implPtr != nullptr && _implPtr->mixerPtr->volumeMode() != detail::AlsaVolumeControlMode::Unavailable;
-      bool const hardware =
-        _implPtr != nullptr && _implPtr->mixerPtr->volumeMode() == detail::AlsaVolumeControlMode::HardwareMixer;
-      return {.canRead = true,
-              .canWrite = true,
-              .isAvailable = available,
-              .emitsChangeNotifications = false,
-              .isHardwareAssisted = hardware};
+      return {};
     }
 
-    if (id == PropertyId::Muted)
-    {
-      bool const available =
-        _implPtr != nullptr && _implPtr->mixerPtr->volumeMode() != detail::AlsaVolumeControlMode::Unavailable;
-      return {.canRead = true,
-              .canWrite = true,
-              .isAvailable = available,
-              .emitsChangeNotifications = false,
-              .isHardwareAssisted = false};
-    }
-
-    return {};
+    auto const mode = _implPtr->mixerPtr->volumeMode();
+    return {.canRead = true,
+            .canWrite = true,
+            .isAvailable = mode != detail::AlsaVolumeControlMode::Unavailable,
+            .emitsChangeNotifications = false,
+            .isHardwareAssisted = id == PropertyId::Volume && mode == detail::AlsaVolumeControlMode::HardwareMixer};
   }
 
   BackendId AlsaExclusiveBackend::backendId() const

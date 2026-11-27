@@ -780,7 +780,16 @@ namespace ao::audio::backend::test
       expectedMapped = true;
     }
 
-    SECTION("second CUSTOM/unknown")
+    SECTION("second mixed WAVE and CUSTOM set")
+    {
+      secondPositions = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL,
+                                                      SPA_AUDIO_CHANNEL_START_Custom,
+                                                      SPA_AUDIO_CHANNEL_RL,
+                                                      SPA_AUDIO_CHANNEL_START_Custom + 1U});
+      expectedNativeMask = 0x11;
+    }
+
+    SECTION("second all CUSTOM set")
     {
       secondPositions = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_START_Custom,
                                                       SPA_AUDIO_CHANNEL_START_Custom + 1U,
@@ -807,7 +816,9 @@ namespace ao::audio::backend::test
     CHECK(openedRes->channelDelivery.nativeSpeakerMask == expectedNativeMask);
     CHECK(openedRes->channelDelivery.nativeSpeakerMask != 0x33);
     CHECK(openedRes->channelDelivery.isMapped == expectedMapped);
+    CHECK_FALSE(openedRes->channelDelivery.hasSharedConversion);
     CHECK_FALSE(openedRes->optEndpoint);
+    CHECK(target.errorCount() == 0);
     requireCapturedEvents(script);
 
     auto const dispatchBeforeStart = script.processDispatchCount();
@@ -832,6 +843,7 @@ namespace ao::audio::backend::test
     CHECK(target.positionCount() == 1);
     CHECK(target.lastPositionFrames() == 2);
     CHECK(target.drainCount() == 0);
+    CHECK(target.errorCount() == 0);
     CHECK(script.unexpectedCallCount() == 0);
 
     backend.close();

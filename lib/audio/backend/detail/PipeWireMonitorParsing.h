@@ -28,10 +28,8 @@ namespace ao::audio::backend::detail
     std::string mediaClass;
     std::string nodeName;
     std::string nodeNick;
-    std::string nodeDescription;
     std::string objectPath;
     std::optional<std::uint64_t> optObjectSerial;
-    std::optional<std::uint32_t> optDriverId;
   };
 
   struct LinkRecord final
@@ -85,11 +83,6 @@ namespace ao::audio::backend::detail
    * @brief Checks if a media class string represents an audio sink.
    */
   bool isSinkMediaClass(std::string_view mediaClass) noexcept;
-
-  /**
-   * @brief Looks up a property in a SPA dict.
-   */
-  std::string lookupProperty(::spa_dict const* props, char const* key) noexcept;
 
   /**
    * @brief Parses a PipeWire decimal uint32 string.
