@@ -11,7 +11,7 @@ This directory binds runtime completion providers to GTK entries.
 ## Invariants
 
 - The controller does not own vocabulary data; `ao::rt::CompletionService` owns and refreshes vocabularies.
-- The controller does not parse query syntax; `ao::rt::QueryExpressionCompleter` owns query context analysis.
+- The controller does not parse query syntax. `ao::query::analyzeQueryCompletion()` owns cursor-context analysis; `ao::rt::QueryExpressionCompleter` combines it with live vocabulary.
 - The controller's `Gio::ListModel` rows are transient rendered `CompletionItem` objects; there is no parallel string/index model.
 - The controller borrows `Gtk::Entry&`; caller code keeps the entry alive until the controller is destroyed.
 - The controller removes every key, click, and focus controller it installed on that borrowed entry before its own callbacks can be released. This matters when a longer-lived entry replaces its completion provider.

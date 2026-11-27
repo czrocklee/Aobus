@@ -4,6 +4,7 @@
 #include <ao/query/FormatExpression.h>
 
 #include "detail/CreditField.h"
+#include "detail/FieldResolver.h"
 #include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
@@ -16,7 +17,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/detail/FieldResolver.h>
 #include <ao/utility/UnicodeText.h>
 #include <ao/utility/VariantVisitor.h>
 
@@ -88,14 +88,11 @@ namespace ao::query
       void compileConstant(ConstantExpression const& constant);
 
       FormatPlan _plan;
-      bool _hasHotAccess = false;
-      bool _hasColdAccess = false;
-      bool _hasDictionaryAccess = false;
     };
 
     bool isUnsupportedScalarField(Field field)
     {
-      return field == Field::Tag || field == Field::TagBloom || field == Field::TagCount || field == Field::CoverArtId;
+      return field == Field::Tag || field == Field::CoverArtId;
     }
 
     DictionaryId boundDictionaryId(std::span<DictionaryId const> ids, std::uint32_t symbol)
@@ -239,7 +236,11 @@ namespace ao::query
     std::visit(utility::makeVisitor(
                  [this](std::unique_ptr<BinaryExpression> const& binaryPtr)
                  {
-                   AO_INVARIANT(binaryPtr != nullptr);
+                   if (!binaryPtr)
+                   {
+                     detail::throwQueryError("missing binary expression");
+                   }
+
                    compileBinary(*binaryPtr);
                  },
                  [](std::unique_ptr<UnaryExpression> const&)
@@ -284,25 +285,18 @@ namespace ao::query
       detail::throwQueryError("field '{}' cannot be formatted as a scalar string", variable.name);
     }
 
-    if (isColdField(field))
-    {
-      _hasColdAccess = true;
-    }
-    else
-    {
-      _hasHotAccess = true;
-    }
+    _plan.accessProfile = combineAccessProfiles(_plan.accessProfile, accessProfile(field));
 
     auto dictionarySymbol = kNoFormatDictionarySymbol;
 
     if (variable.type == VariableType::Custom)
     {
       dictionarySymbol = addDictionarySymbol(variable.name);
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
     }
     else if (isDictionaryField(field) || isCreditField(field))
     {
-      _hasDictionaryAccess = true;
+      _plan.requiresDictionary = true;
     }
 
     _plan.instructions.push_back(FormatInstruction{
@@ -335,25 +329,7 @@ namespace ao::query
   {
     compileExpression(expr);
 
-    if (_hasHotAccess && _hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::HotAndCold;
-    }
-    else if (_hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::ColdOnly;
-    }
-    else if (_hasHotAccess)
-    {
-      _plan.accessProfile = AccessProfile::HotOnly;
-    }
-    else
-    {
-      _plan.accessProfile = AccessProfile::NoTrackData;
-    }
-
-    _plan.requiresDictionary = _hasDictionaryAccess;
-    return _plan;
+    return std::move(_plan);
   }
   catch (detail::QueryException const& ex)
   {

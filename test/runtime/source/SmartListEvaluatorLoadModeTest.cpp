@@ -3,6 +3,7 @@
 
 #include "runtime/source/SmartListEvaluator.h"
 #include "runtime/source/SmartListSource.h"
+#include "test/library/TrackTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "test/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
@@ -16,27 +17,47 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - one reload evaluates pending metadata and property predicates")
+  TEST_CASE("SmartListEvaluator - mixed-profile siblings keep distinct ordered membership after an invalid sibling")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack(makeSmartListSpec("first", 2024, std::chrono::seconds{60}));
+    auto const second = libraryFixture.addTrack(makeSmartListSpec("second", 2010, std::chrono::seconds{250}));
+    auto const both = libraryFixture.addTrack(makeSmartListSpec("both", 2024, std::chrono::seconds{250}));
+    auto sourcePtr = makeMutableTrackSource({both, second, first});
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto sourcePtr = makeMutableTrackSource({});
-    auto& source = *sourcePtr;
 
-    auto metadataList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    metadataList.setExpression("$year >= 2020");
+    auto invalidList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    invalidList.setExpression("   ");
+    hotList.setExpression("$year >= 2020");
+    coldList.setExpression("@duration >= 3m");
 
-    auto propertyList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    propertyList.setExpression("@duration >= 3m");
+    hotList.reload();
 
-    auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
-    auto const batchTrackIds = std::array{t1};
-    source.batchInsert(batchTrackIds);
+    CHECK(invalidList.hasError());
+    CHECK(invalidList.size() == 0);
+    CHECK(sourceTrackIds(hotList) == std::vector{both, first});
+    CHECK(sourceTrackIds(coldList) == std::vector{both, second});
 
-    metadataList.reload();
+    libraryFixture.updateTrack(first,
+                               [](library::test::TrackSpec& spec)
+                               {
+                                 spec.year = 2010;
+                                 spec.duration = std::chrono::seconds{250};
+                               });
+    libraryFixture.updateTrack(second,
+                               [](library::test::TrackSpec& spec)
+                               {
+                                 spec.year = 2024;
+                                 spec.duration = std::chrono::seconds{60};
+                               });
+    sourcePtr->batchUpdate(std::array{first, second});
 
-    CHECK(sourceTrackIds(metadataList) == std::vector{t1});
-    CHECK(sourceTrackIds(propertyList) == std::vector{t1});
+    CHECK(invalidList.hasError());
+    CHECK(invalidList.size() == 0);
+    CHECK(sourceTrackIds(hotList) == std::vector{both, second});
+    CHECK(sourceTrackIds(coldList) == std::vector{both, first});
   }
 
   TEST_CASE("SmartListEvaluator - a compound metadata and property predicate filters membership")

@@ -53,6 +53,10 @@ namespace ao::query
    * PlanEvaluator - Fast execution engine for compiled queries.
    *
    * Uses bloom filter for fast tag rejection and linear instruction execution.
+   * Evaluation mutates scratch registers and may update the binding's cache;
+   * do not share an evaluator or binding across concurrent evaluations.
+   * Independent concurrent batches must also use separate DictionaryReadCache
+   * instances or cache-free dictionary contexts.
    */
   class PlanEvaluator
   {

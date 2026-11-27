@@ -9,6 +9,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
@@ -60,10 +61,11 @@ namespace ao::cli
     auto dictionaryCache = library::DictionaryReadCache{library.dictionary()};
     auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
     auto binding = query::PlanBinding{*planRes, dictionaryContext};
+    auto const profile = query::accessProfile(*planRes);
 
     for (auto const& [id, view] : reader)
     {
-      if (!query::hasRequiredTrackData(planRes->accessProfile, view))
+      if (!query::hasRequiredTrackData(profile, view))
       {
         throwCommandError(Error::Code::CorruptData, "track {} contains invalid data required by the filter", id);
       }

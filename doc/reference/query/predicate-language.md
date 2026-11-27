@@ -32,7 +32,7 @@ as structure. These limits also apply to format expressions through the same
 parser; the grammar may reject an expression within these limits independently.
 Only scalar tokens and commas receive the list exemption. Nested or unclosed
 lists, and lists containing operators or parenthesized groups, are rejected by
-admission before the recursive grammar runs.
+admission as malformed lists rather than as complexity violations.
 
 Admission uses the completion tokenizer before the lexy grammar runs; it does
 not replace syntax validation. Changes to either tokenizer or grammar must keep
@@ -105,8 +105,14 @@ double-quoted-char  ::= any non-control Unicode character except '"' and "\\"
 ```
 
 ASCII whitespace may occur between tokens.
-Keyword operators and booleans are case-insensitive and require an identifier boundary.
+Keyword operators and Boolean literals are case-insensitive.
+Keyword operators require the full bare-identifier boundary: a following ASCII letter, digit, or underscore prevents a keyword match.
 Consequently, every casing of `and`, `or`, `not`, and `in` is reserved as a bare string and must be quoted when used as data.
+
+**Known limitation:** Boolean literals are intended to use the same boundary, but the lexer checks only for a following ASCII letter.
+A digit or underscore does not prevent a Boolean match, so the shared parser can split a bare word such as `TRUE_9` into a Boolean and a second constant instead of treating it as one identifier.
+In a format expression this can produce `true_9` rather than `TRUE_9`.
+Quote the entire word when it is intended as text.
 
 ### Operator precedence
 
@@ -117,7 +123,7 @@ Consequently, every casing of `and`, `or`, `not`, and `in` is reserved as a bare
 |          3 | `+`, adjacency                             | Shared-parser string concatenation; rejected by predicate compilation |
 |          4 | `=`, `!=`, `<`, `<=`, `>`, `>=`, `~`, `in` | Comparison and membership                                             |
 |          5 | `and`, `&&`                                | Conjunction                                                           |
-|          6 | `or`, `                                    |                                                                       | `   | Disjunction |
+|          6 | `or`, `\|\|`                               | Disjunction                                                           |
 
 ### Variable domains
 

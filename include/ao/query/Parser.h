@@ -21,8 +21,8 @@ namespace ao::query
   Result<Expression> parse(std::string_view expr);
 
   /**
-   * @return true if @p expr matches the expression grammar. Cheaper than parse() (no AST is
-   *         built); used by the per-keystroke completion path.
+   * @return true if @p expr passes complexity admission and matches the expression grammar.
+   *         Does not build an AST or check predicate or format semantics.
    */
   bool matchesExpressionSyntax(std::string_view expr);
 } // namespace ao::query

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/query/Expression.h>
+#include <ao/utility/String.h>
 
 #include <lexy/callback/adapter.hpp>
 #include <lexy/callback/forward.hpp>
@@ -37,26 +38,15 @@ namespace ao::query::detail
 {
   namespace dsl = lexy::dsl;
 
-  // Character classification helpers shared between the parser, the completion tokenizer, and the
-  // completion analyzer. Keeping them in one place prevents the tokenizer and analyzer from drifting.
-  constexpr bool isAsciiAlpha(char ch)
-  {
-    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
-  }
-
-  constexpr bool isAsciiDigit(char ch)
-  {
-    return ch >= '0' && ch <= '9';
-  }
-
+  // Identifier boundaries shared by the completion tokenizer and analyzer.
   constexpr bool isQueryIdentifierStart(char ch)
   {
-    return isAsciiAlpha(ch) || ch == '_';
+    return utility::isAsciiAlpha(ch) || ch == '_';
   }
 
   constexpr bool isQueryIdentifierChar(char ch)
   {
-    return isAsciiAlpha(ch) || isAsciiDigit(ch) || ch == '_';
+    return utility::isAsciiAlphaNumeric(ch) || ch == '_';
   }
 
   constexpr bool isSystemVariableSigil(char ch)

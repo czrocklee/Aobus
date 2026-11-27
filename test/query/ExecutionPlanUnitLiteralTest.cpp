@@ -2,14 +2,18 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/query/ExecutionPlanTestSupport.h"
+#include <ao/query/Expression.h>
 #include <ao/query/detail/Bytecode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <tuple>
+#include <utility>
 
 namespace ao::query::test
 {
@@ -112,6 +116,20 @@ namespace ao::query::test
     {
       auto plan = compileOk(parseOk("@duration >= 0s"));
       CHECK(requireLoadConstant(plan) == 0);
+    }
+  }
+
+  TEST_CASE("ExecutionPlan - rejects unit nodes without any segments")
+  {
+    for (auto const* lexeme : {"", "-"})
+    {
+      CAPTURE(lexeme);
+      auto comparisonPtr = std::make_unique<BinaryExpression>();
+      comparisonPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
+      comparisonPtr->optOperation = BinaryExpression::Operation{
+        .op = Operator::Equal, .operand = ConstantExpression{UnitConstantExpression{lexeme}}};
+
+      std::ignore = compileError(Expression{std::move(comparisonPtr)});
     }
   }
 

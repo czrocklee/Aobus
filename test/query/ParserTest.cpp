@@ -533,26 +533,18 @@ namespace ao::query::test
     CHECK(serialize(*nestedRes) == "true");
   }
 
-  TEST_CASE("Parser - admission rejects nested scalar lists before syntax parsing")
+  TEST_CASE("Parser - distinguishes malformed scalar lists from complexity limits")
   {
-    auto const expression = std::string_view{"$year in [[1]]"};
-    auto const res = ::ao::query::parse(expression);
-    REQUIRE_FALSE(res);
-    CHECK(res.error().code == Error::Code::FormatRejected);
-    CHECK(res.error().message.contains("complexity"));
-    CHECK_FALSE(matchesExpressionSyntax(expression));
-  }
-
-  TEST_CASE("Parser - list exemption cannot hide recursive groups or an unclosed tail")
-  {
-    for (auto const& expression : {std::string{"$year in ["} + std::string(65000, '('),
-                                   std::string{"$year in ["} + std::string(1000, '(') + "]",
-                                   std::string{"$year in [1, 2"}})
+    for (auto const& expression : {std::string{"$year in [[1]]"},
+                                   std::string{"$year in [1 + 2]"},
+                                   std::string{"$year in [1, 2"},
+                                   std::string{"$year in ["} + std::string(65000, '('),
+                                   std::string{"$year in ["} + std::string(1000, '(') + "]"})
     {
       auto const res = ::ao::query::parse(expression);
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::FormatRejected);
-      CHECK(res.error().message.contains("complexity"));
+      CHECK(res.error().message.contains("malformed scalar list"));
       CHECK_FALSE(matchesExpressionSyntax(expression));
     }
   }

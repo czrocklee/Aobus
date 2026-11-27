@@ -69,16 +69,15 @@ namespace ao::query::test
 
   TEST_CASE("PlanEvaluator - combines duration and year comparisons")
   {
-    // Note: genre comparison requires dictionary resolution, so we use numeric genreId
     auto expr = parseOk("@duration > 180000 && $year >= 2020");
     auto plan = compileOk(expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 200000};
     auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 200000};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }

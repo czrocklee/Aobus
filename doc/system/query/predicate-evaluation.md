@@ -114,7 +114,7 @@ The [language reference](../../reference/query/predicate-language.md) owns accep
 
 ### Caseless-key lifetime
 
-`PlanBinding` owns only batch-local derived caseless-key caches.
+`PlanBinding` keeps its derived caseless-key caches local to one evaluation batch.
 Dictionary-backed keys are indexed by dictionary id, while title and custom-text keys are indexed by exact admitted text.
 Both tables are bounded and collision-replacing; eviction may recompute a key but cannot change predicate results.
 Keys are never written to the dictionary, Track records, List records, or expression text, and no ICU-version-dependent derived bytes become durable library truth.
@@ -138,6 +138,7 @@ A scaled result that is not an integer is rejected during compilation.
 
 Compilation classifies a plan as `NoTrackData`, `HotOnly`, `ColdOnly`, or `HotAndCold`.
 The profile is the union of the storage tiers required by all field loads in the predicate.
+Consumers read it with `accessProfile(plan)` without depending on the bytecode layout, and can combine multiple profiles with `combineAccessProfiles()`.
 
 Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `matchesFullPlan()`.
 The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
@@ -154,7 +155,7 @@ The public stages are:
 
 1. `parse(text)` produces an AST or `FormatRejected`.
 2. `compileQuery(ast)` validates and NFC-normalizes text literals and dictionary symbols, derives text-substring keys, then produces a dictionary-independent `ExecutionPlan` or `FormatRejected`.
-3. For a dictionary-using plan, `PlanBinding(plan, context)` resolves its symbols under one committed dictionary lock and records that generation.
+3. For a dictionary-using plan, `PlanBinding(plan, context)` resolves its symbols under one committed dictionary lock and retains the resolved IDs, not the dictionary generation.
 4. `PlanEvaluator::matches(binding, track)` returns one membership decision.
 
 Unknown `$` or `@` fields are rejected with a diagnostic generated from the shared field catalog and may include a close-name suggestion.
@@ -210,7 +211,8 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 - [`QueryCompilation.h`](../../../include/ao/query/QueryCompilation.h) and [`ExecutionPlan.h`](../../../include/ao/query/ExecutionPlan.h) define compilation and the opaque plan boundary.
 - [`PlanEvaluator.h`](../../../include/ao/query/PlanEvaluator.h) defines evaluation.
 - [`DictionaryStore.h`](../../../include/ao/library/DictionaryStore.h) defines bounded dictionary contexts, caches, and committed generation.
-- [`ExecutionPlan.cpp`](../../../lib/query/ExecutionPlan.cpp) owns semantic compilation and access profiles.
+- [`Field.h`](../../../include/ao/query/Field.h) defines the shared access-profile type and combination rule.
+- [`ExecutionPlan.cpp`](../../../lib/query/ExecutionPlan.cpp) owns semantic compilation and reports each plan's access profile.
 - [`PlanEvaluator.cpp`](../../../lib/query/PlanEvaluator.cpp) owns track evaluation.
 - [`SmartListSource.cpp`](../../../app/runtime/source/SmartListSource.cpp) adapts expressions into runtime source state.
 - [`SmartListEvaluator.cpp`](../../../app/runtime/source/SmartListEvaluator.cpp) batches plan evaluation over source changes.

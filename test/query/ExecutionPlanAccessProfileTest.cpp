@@ -42,24 +42,6 @@ namespace ao::query::test
     CHECK_FALSE(hasRequiredTrackData(AccessProfile::ColdOnly, malformedView));
   }
 
-  TEST_CASE("ExecutionPlan - reports HotOnly access for hot metadata")
-  {
-    // Metadata variable -> HotOnly
-    auto expr = parseOk("$artist = Bach");
-    auto plan = compileOk(expr);
-
-    CHECK(plan.accessProfile == AccessProfile::HotOnly);
-  }
-
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for custom metadata")
-  {
-    // Custom variable -> ColdOnly
-    auto expr = parseOk("%customkey = value");
-    auto plan = compileOk(expr);
-
-    CHECK(plan.accessProfile == AccessProfile::ColdOnly);
-  }
-
   TEST_CASE("ExecutionPlan - reports HotAndCold access for mixed predicates")
   {
     // Mix of hot and cold -> HotAndCold
@@ -92,15 +74,6 @@ namespace ao::query::test
       CHECK(plan.accessProfile == profile);
       CHECK(plan.requiresDictionary == requiresDictionary);
     }
-  }
-
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for cold property fields")
-  {
-    // Property variable -> ColdOnly (stored in TrackColdHeader)
-    auto expr = parseOk("@duration > 180000");
-    auto plan = compileOk(expr);
-
-    CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
   TEST_CASE("ExecutionPlan - reports HotOnly access for tag fields")

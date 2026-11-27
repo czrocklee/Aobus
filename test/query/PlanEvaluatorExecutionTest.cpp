@@ -66,6 +66,10 @@ namespace ao::query::test
 
     auto emptyView = library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(plan.accessProfile == AccessProfile::NoTrackData);
+    CHECK(evaluator.matches(plan, emptyView));
+
+    // Exercise the compiled true instruction rather than the shortcut.
+    plan.matchesAll = false;
     CHECK(evaluator.matchesFullPlan(plan, emptyView));
 
     auto falsePlan = compileOk(parseOk("false"));

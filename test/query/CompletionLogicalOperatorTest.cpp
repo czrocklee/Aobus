@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -115,8 +116,10 @@ namespace ao::query::test
 
     SECTION("Treats bare tag variables as complete expressions")
     {
-      auto const cases =
-        std::array{std::string{"#rock "}, std::string{R"(#"90s Rock" )"}, std::string{R"(#["90s Rock"] )"}};
+      auto const cases = std::array{std::string{"#rock "},
+                                    std::string{"  #title "},
+                                    std::string{R"(#"90s Rock" )"},
+                                    std::string{R"(#["90s Rock"] )"}};
 
       for (auto const& text : cases)
       {
@@ -144,13 +147,70 @@ namespace ao::query::test
       CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"or"});
     }
 
-    SECTION("Does not offer logical operators after an incomplete comparison")
+    SECTION("Uses the complete predicate at a mid-input cursor despite an unfinished suffix")
     {
-      CHECK_FALSE(analyzeQueryCompletion("$artist = a", 10));
+      auto const predicate = std::string_view{"$trackNumber = $trackTotal"};
+      auto const text = std::string{predicate} + "   and $year in [";
+      auto const cursor = predicate.size() + 1;
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, cursor));
+
+      CHECK(context.replacement.replaceBegin == predicate.size());
+      CHECK(context.replacement.replaceEnd == cursor);
+      CHECK(context.replacement.prefix.empty());
     }
   }
 
-  TEST_CASE("Completion - backward scanner tracks complete predicate boundaries")
+  TEST_CASE("Completion - applies the query byte limit to a standalone tag predicate")
+  {
+    auto text = std::string{"#"} + std::string(65535, 'x') + " ";
+    CHECK(isLogicalOperatorContext(analyzeQueryCompletion(text, text.size())));
+
+    text.insert(1, 1, 'x');
+    CHECK_FALSE(isLogicalOperatorContext(analyzeQueryCompletion(text, text.size())));
+  }
+
+  TEST_CASE("Completion - applies structural limits to the predicate before a logical operator prefix")
+  {
+    auto const checkBoundary = [](std::string_view admitted, std::string_view excessive)
+    {
+      auto const complete = [](std::string_view predicate)
+      {
+        auto const text = std::string{predicate} + " a $year in [";
+        // The cursor is after the typed `a`, before the unfinished suffix.
+        return analyzeQueryCompletion(text, predicate.size() + 2);
+      };
+
+      auto const context = logicalOperatorContext(complete(admitted));
+      CHECK(context.replacement.replaceBegin == admitted.size());
+      CHECK(context.replacement.replaceEnd == admitted.size() + 2);
+      CHECK(context.replacement.prefix == "a");
+      CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"and"});
+      CHECK_FALSE(isLogicalOperatorContext(complete(excessive)));
+    };
+
+    SECTION("64 nested groups are admitted but 65 are not")
+    {
+      auto const wrap = [](std::size_t depth) { return std::string(depth, '(') + "$year?" + std::string(depth, ')'); };
+
+      checkBoundary(wrap(64), wrap(65));
+    }
+
+    SECTION("512 structural tokens are admitted but 513 are not")
+    {
+      auto conjunction = std::string{};
+
+      // Each comparison and conjunction contributes four tokens and two operators.
+      for (std::size_t index = 0; index < 127; ++index)
+      {
+        conjunction += "$year=1 and ";
+      }
+
+      // The final group adds four tokens, or five with negation, at depth one.
+      checkBoundary(conjunction + "($year?)", conjunction + "(!$year?)");
+    }
+  }
+
+  TEST_CASE("Completion - offers logical operators after complete predicates")
   {
     auto const checkCompletePredicateBoundary = [](std::string_view expression)
     {
@@ -172,6 +232,7 @@ namespace ao::query::test
       std::string_view{"$year <= 2000"},
       std::string_view{"$year > 1999"},
       std::string_view{"$year >= 1999"},
+      std::string_view{"$trackNumber = $trackTotal"},
       std::string_view{R"($artist in ["Miles", "Monk"])"},
       std::string_view{"$year in 1990..1999"},
       std::string_view{"@duration in 2m30s..5m"},
@@ -194,7 +255,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner does not promote incomplete expressions")
+  TEST_CASE("Completion - does not offer logical operators after incomplete expressions")
   {
     auto const incompleteExpressions = std::array{
       std::string_view{"$artist ="},
@@ -212,6 +273,7 @@ namespace ao::query::test
       std::string_view{R"(#"unterminated)"},
       std::string_view{R"(%["Replay Gain"?)"},
       std::string_view{R"(($artist = "Miles")"},
+      std::string_view{"and #rock"},
     };
 
     for (auto const expression : incompleteExpressions)
@@ -226,7 +288,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner does not promote non-predicate expressions")
+  TEST_CASE("Completion - does not offer logical operators after non-predicate expressions")
   {
     auto const nonPredicateExpressions = std::array{
       std::string_view{"$title"},
@@ -236,6 +298,7 @@ namespace ao::query::test
       std::string_view{"3m"},
       std::string_view{R"("literal")"},
       std::string_view{R"($title + " - " + $artist)"},
+      std::string_view{"$title + #rock"},
     };
 
     for (auto const expression : nonPredicateExpressions)
@@ -250,7 +313,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - backward scanner rejects invalid group boundaries")
+  TEST_CASE("Completion - rejects invalid group boundaries")
   {
     auto const invalidGroupedExpressions = std::array{
       std::string_view{"($artist =)"},

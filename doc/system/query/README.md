@@ -21,7 +21,7 @@ The linked language references own exact syntax and names; the evaluation and co
 ## Layer boundary
 
 ```text
-GTK / TUI input
+Interactive frontend input
   -> UIModel authoring policy
   -> runtime source or completion service
   -> ao::query parser/compiler/evaluator
@@ -49,6 +49,7 @@ Compilation reads no library dictionary and retains no library pointer.
 Evaluation that needs dictionary values receives an explicit bounded read context and a plan-specific binding.
 Bindings and Unicode-caseless caches are batch-local; no derived key is persisted.
 The parser, compiler, serializer, completion logic, diagnostics, and application bridges share the typed Core field catalog rather than maintaining independent variable-name tables.
+Field resolution, predicate-shape checks, and operator descriptors are private under `lib/query/detail/`; callers can inspect a predicate plan's access profile without including its bytecode.
 
 ## Application composition
 
@@ -68,7 +69,8 @@ Presentation may inspect typed expression fields to recommend a view shape, but 
 Core provides tolerant cursor analysis and the static field/operator catalog.
 Runtime combines that analysis with one source-preserving snapshot of live titles, tags, custom keys, and dictionary-backed values.
 Optional romanized aliases are transient matching aids: completion still displays and inserts admitted source text, and aliases never become expression syntax, identity, ordering, or storage.
-GTK and TUI adapt the resulting replacement range and item metadata; WinUI currently uses the shared filter resolution policy without exposing completion candidates.
+The [shared track filter](../presentation/track-filter.md) composes expression completion with Quick-filter policy.
+[Frontend contracts](../frontend/README.md) own how controls present and apply these results, including List-expression editors.
 
 ### Format consumers
 

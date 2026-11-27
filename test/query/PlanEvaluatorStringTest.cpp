@@ -253,16 +253,4 @@ namespace ao::query::test
     result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == true);
   }
-
-  TEST_CASE("PlanEvaluator - matches quoted title LIKE on multi-field tracks")
-  {
-    // Test LIKE with a Track that has multiple fields set
-    auto expr = parseOk(R"($title ~ "Bach")");
-    auto plan = compileOk(expr);
-    auto evaluator = PlanEvaluator{};
-
-    auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "path", 2021};
-    auto result = evaluator.matchesFullPlan(plan, track.view());
-    CHECK(result == true);
-  }
 } // namespace ao::query::test

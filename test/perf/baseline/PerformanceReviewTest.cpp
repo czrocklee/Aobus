@@ -32,6 +32,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/Completion.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompilation.h>
@@ -75,6 +76,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -1323,6 +1325,68 @@ namespace ao::rt::test
         setPercentiles(measurement, elapsed[phase]);
         measurements.push_back(std::move(measurement));
       }
+    }
+
+    writeReport(measurements, warmups, samples);
+  }
+
+  TEST_CASE("PerformanceReview - query completion analyzer edits")
+  {
+    struct Edit final
+    {
+      std::string_view scenario;
+      std::string_view text;
+      std::optional<std::size_t> optCursor = std::nullopt;
+      bool fieldOperator = false;
+    };
+
+    constexpr auto kMidExpression = std::string_view{R"($artist = "Miles" and #jazz   or $year >= 1959)"};
+    constexpr auto kEdits = std::array{
+      Edit{.scenario = "field-operator-prefix", .text = "$artist i", .fieldOperator = true},
+      Edit{.scenario = "standalone-tag", .text = "#jazz "},
+      Edit{.scenario = "compound-logical-prefix", .text = R"($artist = "Miles" and ($year >= 1959 or #jazz) o)"},
+      Edit{
+        .scenario = "compound-mid-input-cursor", .text = kMidExpression, .optCursor = kMidExpression.find("   ") + 1},
+    };
+    auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);
+    auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", kDefaultWarmups, 0);
+    auto measurements = std::vector<Measurement>{};
+
+    for (auto const& edit : kEdits)
+    {
+      auto const cursor = edit.optCursor.value_or(edit.text.size());
+      auto elapsed = std::vector<std::int64_t>{};
+      elapsed.reserve(samples);
+
+      for (std::size_t run = 0; run < warmups + samples; ++run)
+      {
+        auto const sampleStart = std::chrono::steady_clock::now();
+        auto const optContext = query::analyzeQueryCompletion(edit.text, cursor);
+        auto const sampleEnd = std::chrono::steady_clock::now();
+
+        REQUIRE(optContext);
+
+        if (edit.fieldOperator)
+        {
+          REQUIRE(std::holds_alternative<query::QueryOperatorCompletion>(*optContext));
+        }
+        else
+        {
+          REQUIRE(std::holds_alternative<query::QueryLogicalOperatorCompletion>(*optContext));
+        }
+
+        if (run >= warmups)
+        {
+          elapsed.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(sampleEnd - sampleStart).count());
+        }
+      }
+
+      auto measurement = Measurement{.capability = "query-completion-analysis",
+                                     .scenario = std::string{edit.scenario},
+                                     .dataset = "fixed-editor-input",
+                                     .inputCount = edit.text.size()};
+      setPercentiles(measurement, elapsed);
+      measurements.push_back(std::move(measurement));
     }
 
     writeReport(measurements, warmups, samples);

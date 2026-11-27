@@ -14,11 +14,11 @@
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompilation.h>
-#include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/WritableTagList.h>
@@ -82,6 +82,7 @@ namespace ao::rt
     struct ParentFilterPlan final
     {
       ListId listId = kInvalidListId;
+      query::AccessProfile profile = query::AccessProfile::NoTrackData;
       query::ExecutionPlan plan{};
     };
 
@@ -126,7 +127,8 @@ namespace ao::rt
             return std::unexpected{storedParentFilterError(parentId, std::move(planRes).error())};
           }
 
-          plans.push_back(ParentFilterPlan{.listId = parentId, .plan = std::move(*planRes)});
+          plans.push_back(ParentFilterPlan{
+            .listId = parentId, .profile = query::accessProfile(*planRes), .plan = std::move(*planRes)});
         }
 
         parentId = optParent->parentId();
@@ -196,7 +198,7 @@ namespace ao::rt
 
         for (std::size_t index = 0; index < plans.size(); ++index)
         {
-          AO_INVARIANT(query::hasRequiredTrackData(plans[index].plan.accessProfile, *optTrack),
+          AO_INVARIANT(query::hasRequiredTrackData(plans[index].profile, *optTrack),
                        "Complete Track {} lacks data required by parent List {}",
                        trackId,
                        plans[index].listId);

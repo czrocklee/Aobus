@@ -112,7 +112,6 @@ namespace ao::query
     // equality. kNoDictionarySymbol means there is no symbol in this slot;
     // CompareText may still need a right-hand key or an ID-to-text lookup.
     std::uint32_t dictionarySymbol = kNoDictionarySymbol;
-    char const* data = nullptr;
   };
 
   /**

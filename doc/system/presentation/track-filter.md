@@ -16,7 +16,8 @@ Presentation grouping and ordering belong to [track-list presentation](track-pre
 ## Code boundary
 
 This contract spans the **UIModel**, **application runtime**, and frontend layers from the [system architecture](../overview.md), refined by the [track expression](../query/README.md), [library](../library/structure.md), and [presentation](README.md) architectures.
-UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; runtime view filtering is public through `app/include/ao/rt/ViewService.h`; GTK, TUI, and WinUI adapt those boundaries.
+UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; runtime view filtering is public through `app/include/ao/rt/ViewService.h`.
+The interactive controls adapt those boundaries.
 
 ## Terminology
 
@@ -32,8 +33,7 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 - Filtering changes membership but does not choose or persist a presentation.
 - Clearing the filter restores the base source while retaining the active presentation.
 - A transient filter is represented by base `ListId` plus expression text; it is not a stored List.
-- GTK, TUI, and WinUI use the same UIModel resolver.
-- GTK, TUI, and WinUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
+- The interactive track filters use the same UIModel resolver and completer and therefore share the value set, ranking, replacement, and expression boundary.
 - Runtime evaluates resolved text through the same source and predicate path used by saved Lists.
 - An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
 - An error inherited from the saved-List base source is observable through the same view-state error field and keeps the projection empty.
@@ -166,6 +166,7 @@ Return accepts a chosen value or complete postfix predicate and submits it immed
 Escape closes the native suggestion list while retaining the literal draft.
 Its adapter maps native UTF-16 caret and replacement positions to the shared UTF-8 byte-range contract, including supplementary characters and mid-text replacement.
 Its composed component shows Create List only when the shared state permits it and passes the resolved expression to the ordinary List editor beneath the active saved source.
+AppKit binds its search fields to the shared filter and completer; candidate acceptance and editing behavior belong to the [AppKit text completion contract](../frontend/appkit.md#text-completion).
 Frontend-specific debounce, focus styling, popover rendering, and command syntax remain adapter concerns.
 
 ## Implementation map

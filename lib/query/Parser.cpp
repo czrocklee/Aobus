@@ -21,9 +21,11 @@
 
 #include <ao/query/Parser.h>
 
+#include "detail/CompletionPredicate.h"
 #include "detail/CompletionTokenizer.h"
 #include "detail/Lexical.h"
 #include "detail/Normalize.h"
+#include "detail/Predicate.h"
 #include <ao/Error.h>
 #include <ao/query/Expression.h>
 
@@ -53,35 +55,42 @@
 #include <lexy/input/string_input.hpp>
 
 #include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <format>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace
 {
+  constexpr std::size_t kMaximumExpressionBytes = 65536;
+
+  enum class TokenAdmission : std::uint8_t
+  {
+    Allowed,
+    OverBudget,
+    MalformedList,
+  };
+
   // Bound work before constructing recursively owned nodes. List elements are
   // flat scalar storage; quoted text and lists remain bounded by the byte cap.
   // Keep tokenizer and grammar changes aligned with admission boundary tests;
   // this structural guard does not replace lexy syntax validation.
-  bool acceptsExpression(std::string_view text)
+  TokenAdmission admitTokens(std::span<ao::query::detail::CompletionToken const> tokens)
   {
-    constexpr std::size_t kMaximumBytes = 65536;
     constexpr std::size_t kMaximumStructuralTokens = 512;
     constexpr std::size_t kMaximumGroupDepth = 64;
 
-    if (text.size() > kMaximumBytes)
-    {
-      return false;
-    }
-
     std::size_t structuralTokens = 0;
     std::size_t groupDepth = 0;
-    std::size_t listDepth = 0;
+    bool inList = false;
 
-    for (auto const& token : ao::query::detail::tokenizeCompletionQuery(text))
+    for (auto const& token : tokens)
     {
       using Kind = ao::query::detail::CompletionTokenKind;
 
@@ -90,43 +99,33 @@ namespace
         continue;
       }
 
-      if (token.kind == Kind::CloseList && listDepth != 0)
-      {
-        --listDepth;
-        continue;
-      }
-
-      if (token.kind == Kind::OpenList)
-      {
-        if (++listDepth > 1)
-        {
-          return false;
-        }
-      }
-      else if (listDepth != 0)
+      if (inList)
       {
         // Only flat scalar storage is exempt from structural counting. An
         // unclosed list must not hide later operators or recursive groups.
         switch (token.kind)
         {
+          case Kind::CloseList: inList = false; continue;
           case Kind::StringLiteral:
           case Kind::Bareword:
           case Kind::BooleanLiteral:
           case Kind::IntegerLiteral:
           case Kind::UnitLiteral:
           case Kind::Comma: continue;
-          default: return false;
+          default: return TokenAdmission::MalformedList;
         }
       }
 
+      inList = token.kind == Kind::OpenList;
+
       if (++structuralTokens > kMaximumStructuralTokens)
       {
-        return false;
+        return TokenAdmission::OverBudget;
       }
 
       if (token.kind == Kind::OpenGroup && ++groupDepth > kMaximumGroupDepth)
       {
-        return false;
+        return TokenAdmission::OverBudget;
       }
 
       if (token.kind == Kind::CloseGroup && groupDepth != 0)
@@ -135,7 +134,14 @@ namespace
       }
     }
 
-    return listDepth == 0;
+    return inList ? TokenAdmission::MalformedList : TokenAdmission::Allowed;
+  }
+
+  std::unexpected<ao::Error> complexityLimitError()
+  {
+    return ao::makeError(
+      ao::Error::Code::FormatRejected,
+      "Query expression exceeds complexity limits (65536 bytes, 512 structural tokens, 64 nested groups)");
   }
 
   // LEXY grammar: rule/value/op/operand/operation names follow framework conventions.
@@ -279,13 +285,28 @@ namespace
     static constexpr auto value = lexy::forward<Expression>;
   };
   // NOLINTEND(readability-identifier-naming)
+
+  std::optional<Expression> parseAdmittedExpression(std::string_view expr)
+  {
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
+
+    if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
+    {
+      auto root = Expression{std::move(optResult).value()};
+      normalize(root);
+      return root;
+    }
+
+    return std::nullopt;
+  }
 } // namespace
 
 namespace ao::query
 {
   bool matchesExpressionSyntax(std::string_view expr)
   {
-    if (!acceptsExpression(expr))
+    if (expr.size() > kMaximumExpressionBytes ||
+        admitTokens(detail::tokenizeCompletionQuery(expr)) != TokenAdmission::Allowed)
     {
       return false;
     }
@@ -296,25 +317,58 @@ namespace ao::query
 
   Result<Expression> parse(std::string_view expr)
   {
-    if (!acceptsExpression(expr))
+    if (expr.size() > kMaximumExpressionBytes)
     {
-      return makeError(
-        Error::Code::FormatRejected,
-        "Query expression exceeds complexity limits (65536 bytes, 512 structural tokens, 64 nested groups)");
+      return complexityLimitError();
     }
 
-    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
-
-    if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
+    switch (admitTokens(detail::tokenizeCompletionQuery(expr)))
     {
-      auto root = Expression{std::move(optResult).value()};
+      case TokenAdmission::OverBudget: return complexityLimitError();
+      case TokenAdmission::MalformedList:
+        return makeError(Error::Code::FormatRejected, "Query expression contains a malformed scalar list");
+      case TokenAdmission::Allowed: break;
+    }
 
-      normalize(root);
-
-      return root;
+    if (auto optExpression = parseAdmittedExpression(expr); optExpression)
+    {
+      return std::move(*optExpression);
     }
 
     return makeError(Error::Code::FormatRejected, std::format("failed to parse query expression '{}'", expr));
+  }
+
+  bool detail::hasCompletionPredicateShape(std::string_view prefix, std::span<CompletionToken const> tokens)
+  {
+    if (prefix.size() > kMaximumExpressionBytes)
+    {
+      return false;
+    }
+
+    if (!tokens.empty() && tokens.front().kind == CompletionTokenKind::Whitespace)
+    {
+      tokens = tokens.subspan(1);
+    }
+
+    if (tokens.empty())
+    {
+      return false;
+    }
+
+    if (tokens.size() == 1 && tokens.front().kind == CompletionTokenKind::Variable)
+    {
+      // The scanner uses the complete variable grammar. Only a tag is a
+      // predicate by itself; the sigil classifies it without building an AST.
+      return prefix[tokens.front().begin] == '#';
+    }
+
+    if (admitTokens(tokens) != TokenAdmission::Allowed)
+    {
+      return false;
+    }
+
+    auto const optExpression = parseAdmittedExpression(prefix);
+    return optExpression && isPredicateExpression(*optExpression);
   }
 } // namespace ao::query
 

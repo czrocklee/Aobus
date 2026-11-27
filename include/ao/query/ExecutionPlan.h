@@ -15,7 +15,12 @@
 // layout directly (engine internals and white-box tests), include
 // <ao/query/detail/Bytecode.h>.
 
+#include <cstdint>
+
 namespace ao::query
 {
   struct ExecutionPlan;
+  enum class AccessProfile : std::uint8_t;
+
+  AccessProfile accessProfile(ExecutionPlan const& plan) noexcept;
 } // namespace ao::query

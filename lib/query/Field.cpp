@@ -4,6 +4,7 @@
 #include <ao/query/Field.h>
 
 #include "detail/CreditField.h"
+#include "detail/FieldResolver.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/Credits.h>
@@ -12,7 +13,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/FieldCatalog.h>
 #include <ao/query/Serializer.h>
-#include <ao/query/detail/FieldResolver.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -77,16 +78,6 @@ namespace ao::query::detail
       return result;
     }
 
-    char lowerAscii(char ch)
-    {
-      if (ch >= 'A' && ch <= 'Z')
-      {
-        return static_cast<char>(ch - 'A' + 'a');
-      }
-
-      return ch;
-    }
-
     std::size_t editDistanceInsensitive(std::string_view lhs, std::string_view rhs)
     {
       auto previous = std::vector<std::size_t>(rhs.size() + 1);
@@ -103,7 +94,8 @@ namespace ao::query::detail
 
         for (std::size_t rhsIndex = 0; rhsIndex < rhs.size(); ++rhsIndex)
         {
-          auto const substitutionCost = lowerAscii(lhs[lhsIndex]) == lowerAscii(rhs[rhsIndex]) ? 0U : 1U;
+          auto const substitutionCost =
+            utility::toAsciiLower(lhs[lhsIndex]) == utility::toAsciiLower(rhs[rhsIndex]) ? 0U : 1U;
           current[rhsIndex + 1] =
             std::min({previous[rhsIndex + 1] + 1, current[rhsIndex] + 1, previous[rhsIndex] + substitutionCost});
         }
@@ -177,29 +169,14 @@ namespace ao::query::detail
 
   Result<Field> resolveVariableField(VariableType type, std::string_view name)
   {
-    switch (type)
+    if (auto const optField = lookupVariableField(type, name); optField)
     {
-      case VariableType::Property:
-      {
-        if (auto const* descriptor = findQueryVariableDescriptor(type, name); descriptor != nullptr)
-        {
-          return descriptor->field;
-        }
+      return *optField;
+    }
 
-        return std::unexpected{unknownFieldError(type, name)};
-      }
-      case VariableType::Metadata:
-      {
-        if (auto const* descriptor = findQueryVariableDescriptor(type, name); descriptor != nullptr)
-        {
-          return descriptor->field;
-        }
-
-        return std::unexpected{unknownFieldError(type, name)};
-      }
-      case VariableType::Tag: return Field::Tag;
-      case VariableType::Custom: return Field::Custom;
-      default: break;
+    if (type == VariableType::Property || type == VariableType::Metadata)
+    {
+      return std::unexpected{unknownFieldError(type, name)};
     }
 
     return makeError(Error::Code::FormatRejected, std::format("unsupported variable type for '{}'", name));
@@ -238,7 +215,7 @@ namespace ao::query::detail
 
 namespace ao::query
 {
-  bool isColdField(Field field)
+  AccessProfile accessProfile(Field field)
   {
     switch (field)
     {
@@ -261,8 +238,8 @@ namespace ao::query
       case Field::Custom:
       case Field::Duration:
       case Field::Bitrate:
-      case Field::Channels: return true;
-      default: return false;
+      case Field::Channels: return AccessProfile::ColdOnly;
+      default: return AccessProfile::HotOnly;
     }
   }
 
@@ -351,29 +328,17 @@ namespace ao::query
     return variableDisplayName(variable.type, variable.name);
   }
 
-  bool isHotDataRequired(AccessProfile profile)
-  {
-    return profile == AccessProfile::HotOnly || profile == AccessProfile::HotAndCold;
-  }
-
-  bool isColdDataRequired(AccessProfile profile)
-  {
-    return profile == AccessProfile::ColdOnly || profile == AccessProfile::HotAndCold;
-  }
-
   bool hasRequiredTrackData(AccessProfile profile, library::TrackView const& track)
   {
-    if (isHotDataRequired(profile) && !track.isHotValid())
+    switch (profile)
     {
-      return false;
+      case AccessProfile::NoTrackData: return true;
+      case AccessProfile::HotOnly: return track.isHotValid();
+      case AccessProfile::ColdOnly: return track.isColdValid();
+      case AccessProfile::HotAndCold: return track.isHotValid() && track.isColdValid();
     }
 
-    if (isColdDataRequired(profile) && !track.isColdValid())
-    {
-      return false;
-    }
-
-    return true;
+    return false;
   }
 
   DictionaryId dictionaryFieldId(library::TrackView const& track, Field field)

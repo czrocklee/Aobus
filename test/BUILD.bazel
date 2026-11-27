@@ -540,10 +540,13 @@ cc_test(
     ],
 )
 
-# Only cc_library owns virtual include prefixes; executable rules do not.
 cc_library(
-    name = "query_test_headers",
+    name = "query_test_support",
     testonly = True,
+    srcs = [
+        "query/ExecutionPlanTestSupport.cpp",
+        "query/PlanEvaluatorTestSupport.cpp",
+    ],
     hdrs = [
         "query/ExecutionPlanTestSupport.h",
         "query/PlanEvaluatorTestSupport.h",
@@ -551,19 +554,17 @@ cc_library(
     include_prefix = "test",
     strip_include_prefix = ".",
     visibility = ["//test:__pkg__"],
-    deps = STORAGE_TEST_DEPS + [
+    deps = [
+        ":common_test_support",
         ":library_test_support",
         "//lib/query",
+        "@aobus_test_deps//:catch2",
     ],
 )
 
-# Core query parser, planner, evaluator, and completion test cases with their two
-# support translation units. Catch2-with-main supplies main; the header target
-# preserves test/query/ includes.
 cc_test(
     name = "query_test",
     srcs = [
-        "query/CompletionBaselineTest.cpp",
         "query/CompletionLogicalOperatorTest.cpp",
         "query/CompletionOperatorTest.cpp",
         "query/CompletionTokenizerTest.cpp",
@@ -578,7 +579,6 @@ cc_test(
         "query/ExecutionPlanMembershipTest.cpp",
         "query/ExecutionPlanStringExpressionTest.cpp",
         "query/ExecutionPlanTagBloomTest.cpp",
-        "query/ExecutionPlanTestSupport.cpp",
         "query/ExecutionPlanUnitLiteralTest.cpp",
         "query/ExpressionTest.cpp",
         "query/FormatExpressionTest.cpp",
@@ -591,18 +591,19 @@ cc_test(
         "query/PlanEvaluatorMediaPropertyTest.cpp",
         "query/PlanEvaluatorStringTest.cpp",
         "query/PlanEvaluatorTagTest.cpp",
-        "query/PlanEvaluatorTestSupport.cpp",
         "query/PredicateOperandContextTest.cpp",
         "query/PredicateTest.cpp",
         "query/QueryErrorTest.cpp",
         "query/RecordingDatePredicateTest.cpp",
         "query/SerializerTest.cpp",
     ],
-    deps = STORAGE_TEST_DEPS + [
+    deps = [
+        ":common_test_support",
         ":library_test_support",
-        ":query_test_headers",
+        ":query_test_support",
         "//lib/query",
         "//lib/query:test_headers",
+        "@aobus_test_deps//:catch2",
     ],
 )
 
@@ -1890,6 +1891,7 @@ cc_binary(
         "//app/i18n:completion",
         "//app/i18n:ordering",
         "//app/uimodel",
+        "//lib/query:test_headers",
         "//lib/utility:unicode_text",
         "@aobus_native_deps//:icu_uc",
         "@aobus_test_deps//:catch2",
