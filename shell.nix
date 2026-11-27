@@ -9,6 +9,7 @@ let
   buildifierToolchain = builtins.fromJSON (builtins.readFile ./script/ao/buildifier.json);
   prettierToolchain = builtins.fromJSON (builtins.readFile ./script/ao/prettier.json);
   aobus-prettier = pkgs.prettier.override { nodejs = pkgs.nodejs_24; };
+  rapidyamlPatch = ./config/vcpkg/ports/ryml/escape-scalar-nul.patch;
   # Every local file this expression reads. The shell exports the list, and ./ao
   # hashes it with the normalized GTK debug mode to reuse a matching shell
   # without duplicating the stdenv compiler and linker flags.
@@ -19,6 +20,7 @@ let
     ./script/ao/bazel-toolchain.json
     ./script/ao/buildifier.json
     ./script/ao/prettier.json
+    rapidyamlPatch
   ];
   portalFingerprint = builtins.hashString "sha256" (
     pkgs.lib.concatMapStrings (file: builtins.hashFile "sha256" file + "\n") portalInputs
@@ -97,6 +99,9 @@ let
       "-DSPDLOG_USE_STD_FORMAT=ON"
       "-DSPDLOG_FMT_EXTERNAL=OFF"
     ];
+  });
+  aobus-rapidyaml = pkgs.rapidyaml.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or [ ]) ++ [ rapidyamlPatch ];
   });
   aobus-icu = pkgs.icu78;
   # Nixpkgs dropped alac as unmaintained and vulnerable. Until Aobus owns its
@@ -261,7 +266,7 @@ let
       spdlog = dependencyEntry aobus-spdlog;
       catch2 = dependencyEntry pkgs.catch2_3;
       cli11 = dependencyEntry pkgs.cli11;
-      rapidyaml = dependencyEntry pkgs.rapidyaml;
+      rapidyaml = dependencyEntry aobus-rapidyaml;
       gsl-lite = dependencyEntry pkgs.gsl-lite;
       lexy = dependencyEntry lexy;
       gperf = dependencyEntry pkgs.gperf;
@@ -379,7 +384,7 @@ pkgs.mkShell {
       cli11
       catch2_3
       gsl-lite
-      rapidyaml
+      aobus-rapidyaml
       ftxui
       libxml2
 

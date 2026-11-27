@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAPIDYAML_PATCH = "config/vcpkg/ports/ryml/escape-scalar-nul.patch"
 SHELL_INPUTS = (
     "shell.nix",
     "config/nixpkgs.json",
@@ -18,6 +19,7 @@ SHELL_INPUTS = (
     "script/ao/bazel-toolchain.json",
     "script/ao/buildifier.json",
     "script/ao/prettier.json",
+    RAPIDYAML_PATCH,
 )
 # Flags and search paths that nix-shell setup hooks extend for each target role rather than replace.
 INHERITED_SEARCH_STATE = (
@@ -242,6 +244,15 @@ class NativeNixPortalTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
 
+    def test_rapidyaml_patch_change_invalidates_the_entered_shell(self):
+        fingerprint = self._fingerprint()
+        patch = self.checkout / RAPIDYAML_PATCH
+        patch.write_bytes(patch.read_bytes() + b"\n")
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=fingerprint)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "nix-shell re-entered")
+
     def test_gtk_debug_mode_changes_invalidate_the_entered_shell(self):
         # The fingerprint-mismatch mechanism is direction-independent, and
         # gtk-mode normalization is proven by the nix-fingerprint test below.
@@ -375,8 +386,10 @@ class NativeNixPortalTest(unittest.TestCase):
                     )
                     self.assertEqual(evaluated.returncode, 0, evaluated.stderr)
                     exported[name] = json.loads(evaluated.stdout)
-                # A fingerprint can agree on both sides even if it omits the pin.
-                self.assertIn("config/nixpkgs.json", exported["AO_NIX_SHELL_INPUTS"].split())
+                # A fingerprint can agree on both sides even if it omits native SDK inputs.
+                shell_inputs = exported["AO_NIX_SHELL_INPUTS"].split()
+                self.assertIn("config/nixpkgs.json", shell_inputs)
+                self.assertIn(RAPIDYAML_PATCH, shell_inputs)
                 fingerprints[mode] = exported["AO_NIX_SHELL_FINGERPRINT"]
                 result = self._run_portal(**exported, AOBUS_NIX_UNSTRIPPED_GTK=mode)
 

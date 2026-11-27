@@ -154,11 +154,13 @@ jobs:
             ${{ env.AOBUS_BAZEL_DISK_CACHE }}/cas
           key: >-
             bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
-              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix',
+                        'config/vcpkg/ports/ryml/escape-scalar-nul.patch', 'MODULE.bazel')
             }}-${{ github.sha }}
           restore-keys: >-
             bazel-disk-v2-trusted-main-${{ runner.os }}-${{ runner.arch }}-${{
-              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix', 'MODULE.bazel')
+              hashFiles('.bazelversion', 'script/ao/bazel-toolchain.json', 'config/nixpkgs.json', 'shell.nix',
+                        'config/vcpkg/ports/ryml/escape-scalar-nul.patch', 'MODULE.bazel')
             }}-
 
       # Mark restored entries after restore, outside the archived directory.

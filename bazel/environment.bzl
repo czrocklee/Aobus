@@ -150,6 +150,7 @@ def _environment_impl(ctx):
         ctx.watch(nix)
         for name in ["shell.nix", "config/nixpkgs.json", "script/ao/toolchain.json", "script/ao/bazel-toolchain.json"]:
             ctx.watch(root.get_child(name))
+        ctx.watch(ctx.path(Label("//:config/vcpkg/ports/ryml/escape-scalar-nul.patch")))
         arguments.extend(["--test-launcher", str(ctx.path("check-tool-test-launcher.json"))])
         interpreter = _quote(python) if python else '"$AO_NIX_PORTAL_PYTHON"'
         command = "exec " + interpreter + " -I -S -B -X utf8 -X "

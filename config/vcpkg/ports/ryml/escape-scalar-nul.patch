@@ -1,0 +1,93 @@
+--- a/src/c4/yml/emitter.def.hpp
++++ b/src/c4/yml/emitter.def.hpp
+@@ -388,6 +388,13 @@
+     NodeType ty = m_tree->type(node);
+     write_pws_and_pend_(PWS_NONE_);
+     RYML_ASSERT_VISIT_CB_(m_tree->callbacks(), ty.has_key(), m_tree, node);
++    const csubstr key = m_tree->key(node);
++    // Escapes can push a key over YAML's 1024-character simple-key limit.
++    if(!(ty.m_bits & KEYREF) && key.find('\0') != npos)
++    {
++        ty.set_key_style(KEY_DQUO);
++        write_("? ");
++    }
+     if(ty.m_bits & KEYANCH)
+     {
+         write_pws_and_pend_(PWS_SPACE_);
+@@ -407,7 +414,6 @@
+     else
+     {
+         write_pws_and_pend_(PWS_NONE_);
+-        csubstr key = m_tree->key(node);
+         if(!(ty.m_bits & detail::styles_flow_key_))
+             ty.m_bits |= scalar_style_choose_flow(key) & detail::styles_flow_key_;
+         flow_write_scalar_(key, ty.m_bits & detail::styles_flow_key_);
+@@ -547,9 +553,15 @@
+     NodeType ty = m_tree->type(node);
+     RYML_ASSERT_VISIT_CB_(m_tree->callbacks(), ty.has_key(), m_tree, node);
+     csubstr key = m_tree->key(node);
+-    if(!(ty.m_bits & (KEY_STYLE|KEYREF)))
+-        ty.m_bits |= (scalar_style_choose_block(key).m_bits & KEY_STYLE);
++    const bool nul_key = !(ty.m_bits & KEYREF) && key.find('\0') != npos;
+     write_pws_and_pend_(PWS_NONE_);
++    if(nul_key)
++    {
++        ty.set_key_style(KEY_DQUO);
++        write_("? ");
++    }
++    else if(!(ty.m_bits & (KEY_STYLE|KEYREF)))
++        ty.m_bits |= (scalar_style_choose_block(key).m_bits & KEY_STYLE);
+     if(ty.m_bits & KEYANCH)
+     {
+         write_pws_and_pend_(PWS_SPACE_);
+@@ -573,6 +585,8 @@
+         if(!use_qmrk)
+         {
+             blck_write_scalar_(key, ty.m_bits & KEY_STYLE);
++            if(nul_key)
++                pend_newl_();
+         }
+         else
+         {
+@@ -954,6 +968,8 @@
+ void Emitter<Writer>::flow_write_scalar_(csubstr str, type_bits ty)
+ {
+     RYML_ASSERT_BASIC_CB_(m_tree->callbacks(), !(ty & detail::styles_block_));
++    if(!(ty & detail::styles_dquo_) && str.find('\0') != npos)
++        ty = SCALAR_DQUO;
+     if((ty & detail::styles_plain_) || !(ty & SCALAR_STYLE))
+     {
+         write_scalar_plain_(str, m_ilevel);
+@@ -971,6 +987,8 @@
+ template<class Writer>
+ void Emitter<Writer>::blck_write_scalar_(csubstr str, type_bits ty)
+ {
++    if(!(ty & detail::styles_dquo_) && str.find('\0') != npos)
++        ty = SCALAR_DQUO;
+     if((ty & detail::styles_plain_) || !(ty & SCALAR_STYLE))
+     {
+         write_scalar_plain_(str, m_ilevel);
+@@ -1217,6 +1235,11 @@
+         const char curr = s.str[i];
+         switch(curr) // NOLINT
+         {
++        case '\0':
++            write_(s.range(pos, i));
++            write_("\\0");
++            pos = i + 1;
++            break;
+         case '"':
+         case '\\':
+         {
+@@ -1615,6 +1638,11 @@
+     {
+         switch(s.str[i])
+         {
++        case '\0':
++            write_(s.range(pos, i));
++            write_("\\u0000");
++            pos = i + 1;
++            break;
+         case '"':
+             write_(s.range(pos, i));
+             write_("\\\"");

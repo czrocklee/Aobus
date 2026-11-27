@@ -116,6 +116,7 @@ windows_utf8_manifest_checks(
         ":ao_audio_fatal_probe",
         ":ao_tui_signal_probe",
         ":ao_fatal_probe",
+        ":ao_yaml_emission_probe",
         ":ao_detached_process_probe",
         ":library_test",
         ":query_test",
@@ -265,6 +266,7 @@ test_suite(
         ":tui_help_smoke",
         ":winui_localization_probe_test",
         ":winui_track_item_probe_test",
+        ":yaml_emission_test",
     ],
 )
 
@@ -345,8 +347,33 @@ cc_test(
         "//lib/utility:test_headers",
         "//lib/utility:unicode_text",
         "@aobus_native_deps//:boost",
+        "@aobus_native_deps//:gsl_lite",
         "@aobus_native_deps//:icu_uc",
         "@aobus_test_deps//:catch2",
+    ],
+)
+
+cc_binary(
+    name = "ao_yaml_emission_probe",
+    testonly = True,
+    srcs = ["helper/YamlEmissionProbe.cpp"],
+    deps = [
+        "//include:yaml_headers",
+        "//lib/utility",
+        "@aobus_native_deps//:rapidyaml",
+    ],
+)
+
+py_test(
+    name = "yaml_emission_test",
+    size = "small",
+    srcs = ["utility/yaml_emission_test.py"],
+    args = ["$(rlocationpath :ao_yaml_emission_probe)"],
+    data = [":ao_yaml_emission_probe"],
+    main = "utility/yaml_emission_test.py",
+    deps = [
+        "@aobus_test_pyyaml//:parser",
+        "@rules_python//python/runfiles",
     ],
 )
 

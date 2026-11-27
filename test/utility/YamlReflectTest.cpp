@@ -132,4 +132,30 @@ namespace ao::yaml::test
     CHECK_FALSE(jsonText.contains("\"omitted\""));
     CHECK(jsonText.contains("\"new\": 5"));
   }
+
+  TEST_CASE("YamlReflect - JSON map keys and values distinguish NUL from literal backslash-zero")
+  {
+    constexpr auto kNulKey = std::string_view{"key\0end", 7};
+    constexpr auto kNulValue = std::string_view{"value\0end", 9};
+    constexpr auto kLiteralKey = std::string_view{R"(key\0end)"};
+    constexpr auto kLiteralValue = std::string_view{R"(value\0end)"};
+    auto dto = ReflectFixtureDto{};
+    dto.labels.emplace(kNulKey, kNulValue);
+    dto.labels.emplace(kLiteralKey, kLiteralValue);
+
+    auto const jsonText = toJsonString(dto);
+    CHECK_FALSE(jsonText.contains('\0'));
+    CHECK(jsonText.contains(R"("key\u0000end")"));
+    CHECK(jsonText.contains(R"("value\u0000end")"));
+
+    auto parsed = parseYaml(jsonText);
+    auto const labels = findChild(parsed.rootref(), "labels");
+    REQUIRE(labels.readable());
+    auto const nulEntry = findChild(labels, kNulKey);
+    auto const literalEntry = findChild(labels, kLiteralKey);
+    REQUIRE(nulEntry.readable());
+    REQUIRE(literalEntry.readable());
+    CHECK(scalarView(nulEntry) == kNulValue);
+    CHECK(scalarView(literalEntry) == kLiteralValue);
+  }
 } // namespace ao::yaml::test

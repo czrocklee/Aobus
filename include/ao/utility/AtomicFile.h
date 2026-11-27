@@ -19,7 +19,8 @@ namespace ao::utility
    * replacement. An uncommitted temp file owns best-effort RAII cleanup.
    *
    * Success means the platform replacement call succeeded; it does not promise
-   * absolute power-loss durability. See
+   * absolute power-loss durability. For both atomic operations a relative POSIX
+   * target requires a stable process working directory throughout the call. See
    * doc/system/persistence/atomic-replacement.md for the exact boundary.
    */
   Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data);

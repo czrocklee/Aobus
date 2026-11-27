@@ -55,6 +55,28 @@ register_execution_platforms(
 # declared by the host-tools repository; tests run on the installed SDK.
 register_toolchains("@aobus_native_tools//:python3_toolchain")
 
+# Independent YAML test oracle. Use only the sdist's Python modules, without
+# running its build or using the optional LibYAML extension.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "aobus_test_pyyaml",
+    build_file_content = """
+load("@rules_python//python:defs.bzl", "py_library")
+
+py_library(
+    name = "parser",
+    testonly = True,
+    srcs = glob(["lib/yaml/*.py"], allow_empty = False),
+    imports = ["lib"],
+    visibility = ["//visibility:public"],
+)
+""",
+    integrity = "sha256-12YjNzQh3yL7TPiBcCDLt+8VxyW51eRfF+GJv8OEGQ8=",
+    strip_prefix = "pyyaml-6.0.3",
+    urls = ["https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz"],
+)
+
 docs_wheels = use_repo_rule("//bazel:docs_wheels.bzl", "docs_wheels")
 
 docs_wheels(name = "aobus_docs_wheels")

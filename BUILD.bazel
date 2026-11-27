@@ -14,6 +14,7 @@ exports_files([
     "config/bazel/dependencies.json",
     "config/dependency-contract.json",
     "config/nixpkgs.json",
+    "config/vcpkg/ports/ryml/escape-scalar-nul.patch",
     "config/vcpkg/ports/stb/vcpkg.json",
     "config/vcpkg/vcpkg-configuration.json",
     "config/vcpkg/vcpkg.json",
@@ -356,6 +357,7 @@ filegroup(
         "//test:lint_test",
         "//test:sanitizer_profile",
         "//test:tui_test",
+        "//test:yaml_emission_test",
     ] + select({
         "@platforms//os:linux": [
             "//bazel/header_share:sparse_headers_test",

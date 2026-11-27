@@ -8,6 +8,7 @@
 #include <ao/utility/Path.h>
 
 #include <c4/substr.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 #include <ryml.hpp>
 
 #include <cstddef>
@@ -43,7 +44,7 @@ namespace ao::yaml
 
     std::string callbackFilename(void* const userData)
     {
-      auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
+      auto const* const state = static_cast<ErrorCallbackState const*>(userData);
       return state != nullptr ? state->filename() : std::string{"<buffer>"};
     }
 
@@ -127,22 +128,16 @@ namespace ao::yaml
     Result<> parseWithResult(ryml::Tree& tree, ErrorCallbackState& state, Parse parse)
     {
       tree.callbacks(parseCallbacks(state));
+      auto const restoreCallbacks = gsl_lite::finally([&tree] { tree.callbacks(callbacks()); });
 
       try
       {
         parse();
-        tree.callbacks(callbacks());
         return {};
       }
       catch (YamlParseFailure const& failure)
       {
-        tree.callbacks(callbacks());
         return makeError(Error::Code::FormatRejected, failure.what());
-      }
-      catch (...)
-      {
-        tree.callbacks(callbacks());
-        throw;
       }
     }
   } // namespace
@@ -171,17 +166,13 @@ namespace ao::yaml
     return {value.data(), value.size()};
   }
 
-  ryml::substr toSubstr(std::vector<char>& buffer) noexcept
-  {
-    return {buffer.data(), buffer.size()};
-  }
-
   Result<> parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state)
   {
-    return parseWithResult(tree,
-                           state,
-                           [&tree, &buffer, &state]
-                           { ryml::parse_in_place(toCsubstr(state.filename()), toSubstr(buffer), &tree); });
+    return parseWithResult(
+      tree,
+      state,
+      [&tree, &buffer, &state]
+      { ryml::parse_in_place(toCsubstr(state.filename()), {buffer.data(), buffer.size()}, &tree); });
   }
 
   Result<> parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state)
@@ -197,16 +188,6 @@ namespace ao::yaml
     return parseWithResult(tree, state, [&tree] { tree.resolve(); });
   }
 
-  ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value)
-  {
-    return tree.to_arena(toCsubstr(value));
-  }
-
-  ryml::csubstr copyToArena(ryml::NodeRef node, std::string_view value)
-  {
-    return node.tree()->to_arena(toCsubstr(value));
-  }
-
   ryml::ConstNodeRef findChild(ryml::ConstNodeRef node, std::string_view key) noexcept
   {
     return node.find_child(toCsubstr(key));
@@ -219,12 +200,12 @@ namespace ao::yaml
 
   void setKey(ryml::NodeRef node, std::string_view key)
   {
-    node.set_key(copyToArena(node, key));
+    node.set_key(node.tree()->to_arena(toCsubstr(key)));
   }
 
   void setValue(ryml::NodeRef node, std::string_view value)
   {
-    node.set_val(copyToArena(node, value));
+    node.set_val(node.tree()->to_arena(toCsubstr(value)));
   }
 
   std::string boundedErrorContext(std::string_view context)
@@ -374,11 +355,6 @@ namespace ao::yaml
 
   bool readBoolOr(ryml::ConstNodeRef const& node, bool defaultValue)
   {
-    if (!node.has_val())
-    {
-      return defaultValue;
-    }
-
     bool value = false;
     return tryReadScalar(node, value) ? value : defaultValue;
   }

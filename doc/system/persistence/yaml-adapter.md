@@ -7,6 +7,7 @@ id: persistence.yaml-adapter
 ## Scope
 
 This specification owns the current behavior of the Core `ao::yaml` mechanisms in [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) and [`Serialization.h`](../../../include/ao/yaml/Serialization.h): RapidYAML callback construction, in-place and arena parsing, callback and source lifetime requirements, complete-file reading, borrowed node views, map and sequence validation, explicit map readers and writers, explicitly directed sequence traversal, required-child lookup, bounded field context, arena-owned key and value writes, and strict scalar conversion.
+It also describes the scalar escaping shared by callers of the governed RapidYAML writer.
 
 It does not own a YAML document schema, reflection-derived aggregate mapping, enum or identifier representation, reflected emission, group behavior, atomic file replacement, semantic validation, version migration, or a caller's public error translation.
 Those contracts belong to the grouped store, model schema, payload specification, format reference, and semantic owner above this adapter.
@@ -28,7 +29,7 @@ Managed-state schemas are owner-local application code layered above the adapter
 
 ## Terminology
 
-- A **callback state** is an `ErrorCallbackState` containing the diagnostic filename used by RapidYAML error callbacks.
+- A **callback state** is an `ErrorCallbackState` owning the source name used in parse and alias-resolution diagnostics.
 - A **source buffer** is the mutable `std::vector<char>` passed to in-place parsing.
 - A **tree arena** is memory owned by a `ryml::Tree` for copied input, keys, and values.
 - A **borrowed view** is a `std::string_view`, `ryml::csubstr`, or `ryml::substr` that does not own its referenced bytes.
@@ -42,8 +43,7 @@ Managed-state schemas are owner-local application code layered above the adapter
 
 ## Invariants
 
-- `ErrorCallbackState` owns its filename string; a `ryml::Callbacks` value created from it stores only a raw pointer to that state.
-- Callback state must outlive every tree operation that can invoke callbacks configured with that state.
+- `parseInPlace()`, `parseInArena()`, and `resolve()` borrow the callback state only for the duration of the call. They leave the tree with fail-fast callbacks on every exit, including exception unwinding.
 - `parseInPlace()` mutates and borrows the supplied source buffer; the buffer must outlive the parsed tree's use of source-backed nodes.
 - `parseInArena()` copies the supplied source into the tree arena; the input `string_view` need not outlive the call.
 - Arena-copied keys and values remain valid only while the owning tree and the corresponding arena storage remain valid.
@@ -58,67 +58,45 @@ Managed-state schemas are owner-local application code layered above the adapter
 - A present YAML null is not a missing optional string; strict conversion returns `FormatRejected` and preserves the destination.
 - `MapWriter` retains the first nested-value or sequence-writer failure and appends no later fields after that failure.
 - Sequence deserialization requires a sequence and reports element failures with a bounded numeric index in the caller's context.
-- Diagnostic context returned by the adapter is bounded to 160 bytes, including the `...` truncation suffix.
+- Caller-provided field context is bounded to 160 bytes, including the `...` truncation suffix. This is not a limit on the complete parser or I/O diagnostic.
 - The adapter does not assign schema meaning, validate enum membership, select defaults, or decide whether a malformed value may be skipped.
 - The adapter has no shared global callback state, parser singleton, lock, asynchronous work, or cancellation point.
 
 ## State model
 
-The adapter itself retains no process-wide state.
-Callers compose three lifetime domains:
-
-| Domain                 | Owner                             | Required lifetime                                                                |
-| ---------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
-| Callback state         | The caller or a containing store. | Until callbacks are replaced or every callback-using tree operation is complete. |
-| In-place source buffer | The caller or a containing store. | Through every read of nodes that may reference the parsed source.                |
-| Tree arena             | `ryml::Tree`.                     | Through every borrowed arena key, value, or arena-parsed node view.              |
-
-`ConfigStore` keeps its callback state, input buffer, and tree in one object so the first two lifetimes cover the cached document.
-Short-lived importers and frontend adapters keep all three values within one parse operation.
-A helper that returns a tree parsed with a local callback state must replace those callbacks or retain the state before the local state is destroyed.
+There is no process-wide parser state. A tree can outlive its parse's diagnostic state, but a cached in-place document still needs its input buffer for as long as any source-backed node is used. `ConfigStore` retains that buffer with the tree. An arena-parsed tree instead owns its input bytes.
 
 ## Commands and transitions
 
 ### Callback construction
 
-`callbacks()` returns fail-fast RapidYAML callbacks for basic, parse, and visit errors outside an admitted parse operation.
-Such a callback indicates an internal tree-operation fault and enters the AO fatal facility with `<buffer>` context.
-
-`callbacks(state)` is used by `parseInPlace()`, `parseInArena()`, and
-`resolve()` to install private throwing callbacks whose user data points to
-`state`.
-Those callbacks build a bounded parser diagnostic and throw one implementation-only carrier.
-
-The private carrier is caught inside the same public parse function and never becomes part of the public API.
+`callbacks()` returns fail-fast callbacks for ordinary tree operations. A RapidYAML callback outside the recoverable parse or alias-resolution boundary enters the AO fatal facility.
 
 ### Parsing
 
-`parseInPlace(tree, buffer, state)` performs this sequence:
+`parseInPlace(tree, buffer, state)` parses the complete mutable buffer in place. `parseInArena(tree, source, state)` copies the source into the tree before parsing. After a successful parse, `resolve(tree, state)` can resolve aliases.
 
-1. Install callbacks referencing `state` on `tree`.
-2. Pass the state's filename to RapidYAML as the source name.
-3. Parse and mutate the complete `buffer` in place into `tree`.
+All three operations return `Result<>`. RapidYAML diagnostics at these boundaries become `FormatRejected` with source and location context. Unrelated exceptions are not translated. Fail-fast callbacks are restored on every exit and do not retain the callback state. A tree left by a rejected operation is not a usable document.
 
-`parseInArena(tree, source, state)` performs the same callback and source-name setup but asks RapidYAML to copy `source` into the tree arena before building nodes.
-`resolve(tree, state)` applies the same private-carrier containment to RapidYAML alias resolution after a successful parse.
+### Tree emission
 
-All three operations return `Result<>`.
-A RapidYAML diagnostic invokes the configured private callback; the owning
-adapter operation catches its exact carrier, restores fail-fast callbacks that
-do not borrow `state`, and returns `FormatRejected` with the callback
-diagnostic.
-The tree's exact partial state after a rejected parse is not a usable document contract.
+Callers use RapidYAML's emitters directly.
+Aobus applies the [same source patch](../../../config/vcpkg/ports/ryml/escape-scalar-nul.patch) to its governed RapidYAML builds, so the writer handles NUL escaping for all callers without changing the source tree or its scalar bytes.
+
+The writer emits a NUL byte in a mapping key or scalar value as `\0` inside a double-quoted YAML scalar or as `\u0000` inside a JSON string.
+A literal backslash followed by `0` remains two characters: in double quotes, `"\\0"` represents those characters, not NUL.
+The rule applies to scalar payloads, not YAML syntax tokens such as tags, anchor names, and alias names. It does not add support for arbitrary binary input.
 
 ### File reading
 
-`readFileResult(path, optMaxBytes)` opens the file in binary mode at end, obtains its size, applies an optional caller-owned ceiling, seeks to the beginning, allocates one exact-size `std::vector<char>`, and reads that byte count.
+`readFileResult(path, optMaxBytes)` reads a regular file as binary bytes. It sizes the buffer from the stream's inspected extent and requires a complete read of that extent.
 It returns:
 
-| Condition                                                                  | Result                                    |
-| -------------------------------------------------------------------------- | ----------------------------------------- |
-| Open, size inspection, seek, or complete read fails                        | `IoError` with path context.              |
-| The inspected size exceeds `optMaxBytes` or the stream-size representation | `ValueTooLarge` before buffer allocation. |
-| Complete read succeeds, including a zero-length file                       | The byte vector.                          |
+| Condition                                                                                           | Result                                    |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| A path is found not to be a regular file, or open, size inspection, seek, or complete read fails    | `IoError` with path context.              |
+| The inspected size exceeds `optMaxBytes` or cannot be represented by the buffer or stream size type | `ValueTooLarge` before buffer allocation. |
+| Complete read succeeds, including a zero-length file                                                | The byte vector.                          |
 
 The ceiling defaults to absent; the adapter does not select a document-size policy.
 The helper does not impose text serialization, terminator, newline, or YAML validation.
@@ -129,11 +107,8 @@ Callers use `readFileResult()` and preserve or deliberately translate its `Error
 
 ### Tree and node helpers
 
-`toCsubstr()` and `toSubstr()` construct borrowed RapidYAML views without copying.
-`copyToArena(tree, value)` and `copyToArena(node, value)` copy bytes into the owning tree arena.
-
-`findChild(node, key)` returns RapidYAML's matching child reference or an unreadable reference when absent.
-`setKey()` and `setValue()` first copy their input into the tree arena, so the caller's string storage may end after the call.
+`toCsubstr()` borrows the input bytes without copying. `findChild(node, key)` returns the matching child reference or an unreadable reference when absent.
+`setKey()` and `setValue()` copy their input into the tree arena, so the caller's string storage need not outlive the call.
 
 `scalarView()` and `keyView()` return an empty view when the node lacks the corresponding value or key.
 An empty returned view alone therefore does not distinguish absence from a present empty scalar; callers use RapidYAML's `has_val()` or `has_key()` when that distinction matters.
@@ -151,7 +126,7 @@ The helper validates structural membership only; it does not require allowlisted
 
 `appendChild(node, key)` creates a child and copies the key into the owning tree arena.
 `writeScalar()` writes strings, booleans, and arithmetic values.
-String bytes are copied into the arena and marked double-quoted so values such as `null`, `true`, and `42` remain strings after emission and parsing; booleans use canonical lower-case text, and integral formatting is delegated to RapidYAML/c4.
+String values, including C++ string literals, are copied into the arena and emitted double-quoted. For example, writing the C++ literal `"true"` emits YAML `"true"`, while writing the `bool` `true` emits YAML `true` without quotes. Overwriting a quoted value with a number or Boolean does not retain its quotes. Character arrays use their extent, excluding a final terminator; raw pointers require an explicit string view. Integral formatting uses RapidYAML/c4.
 Finite floating values use the shortest locale-independent `std::format` representation, copied into the arena without marking the value as a string.
 Finite `float` and `double` values round-trip through their corresponding scalar readers without losing precision, including the sign of zero; emission must not inherit the platform-dependent precision of RapidYAML/c4's default floating formatter.
 Nonfinite values retain RapidYAML's `.inf`, `-.inf`, and `.nan` spellings, which the strict scalar reader rejects with `FormatRejected`; finite precision handling does not change that existing rejection boundary.
@@ -195,12 +170,11 @@ The string-view overload borrows the node's storage; the string overload copies 
 Both string overloads reject YAML null rather than converting it to empty text.
 
 `scalarAs<T>(node, context)` returns the converted scalar or `FormatRejected` with caller-supplied context.
-It is the adapter's only result-returning scalar conversion helper.
+`uuidScalar()` requires a non-null scalar in hyphenated UUID form and returns the parsed bytes or `FormatRejected`.
 
 `readBoolOr(node, defaultValue)` and `asInt<T>(node, defaultValue)` are lenient accessors.
 They return the supplied default for absence or malformed scalar text and provide no diagnostic that fallback occurred.
-`readBoolOr` accepts only the exact scalar text `true` or `false`; numbers and
-other strings use the fallback rather than truthiness coercion.
+Boolean reads check the scalar's text, not its YAML quoting style: both `true` and `"true"` supply the text `true`. `readBoolOr` uses its default for numbers and other text rather than applying truthiness coercion.
 The model or payload owner decides where such fallback is permitted.
 
 ## Failure and cancellation
@@ -209,8 +183,8 @@ The low-level channel depends on the operation:
 
 | Operation family                                                        | Failure channel                                                                                        |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `parseInPlace()`, `parseInArena()`, or `resolve()` RapidYAML diagnostic | `Result<>` with `FormatRejected`; the private callback carrier is caught inside the adapter operation. |
-| RapidYAML callback outside an admitted parse operation                  | AO fatal invariant; the caller has no usable partial tree contract.                                    |
+| `parseInPlace()`, `parseInArena()`, or `resolve()` RapidYAML diagnostic | `Result<>` with `FormatRejected`.                                                                      |
+| RapidYAML callback outside those operations                             | AO fatal invariant.                                                                                    |
 | Complete-file read                                                      | `Result` with `IoError`, or `ValueTooLarge` for a configured/representational size violation.          |
 | Strict `tryParseScalar` or `tryReadScalar`                              | `false`, with destination retained.                                                                    |
 | Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation  | `Result` with `FormatRejected` and bounded caller context.                                             |
@@ -250,12 +224,12 @@ A frontend file adapter may log or fall back only according to the specification
 
 ## Test map
 
-- [`RymlAdapterTest.cpp`](../../../test/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
-- [`YamlSerializationTest.cpp`](../../../test/utility/YamlSerializationTest.cpp) protects quoted string type preservation, exact finite float/double round trips at adjacent and representational boundaries, signed zero, unchanged nonfinite spelling and rejection, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
+- [`RymlAdapterTest.cpp`](../../../test/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, directory rejection, empty-file reading, arena source lifetime, and callback filename ownership.
+- [`YamlSerializationTest.cpp`](../../../test/utility/YamlSerializationTest.cpp) protects owned and quoted text (including string literals), UUID scalar parsing, exact finite float/double round trips at adjacent and representational boundaries, signed zero, unchanged nonfinite spelling and rejection, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
 - [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
 - Library transfer, layout model, and component-state tests protect their domain-specific use of the adapter without making those schemas part of this contract.
 
-Current focused tests do not directly protect zero-length file reading, in-place buffer lifetime, callback replacement before state destruction, or each individual file-read failure stage.
+Current focused tests do not directly protect the in-place buffer lifetime, callback restoration on every exit, or each individual file-read failure stage.
 
 ## Related documents
 
