@@ -39,14 +39,14 @@ namespace ao::audio::backend::detail
     return mediaClass.ends_with("/Sink") || mediaClass.ends_with("/Duplex");
   }
 
-  std::string lookupProperty(::spa_dict const* props, char const* key) noexcept
-  {
-    auto const* value = props != nullptr ? ::spa_dict_lookup(props, key) : nullptr;
-    return value != nullptr ? std::string{value} : std::string{};
-  }
-
   namespace
   {
+    std::string lookupProperty(::spa_dict const* props, char const* key) noexcept
+    {
+      auto const* value = props != nullptr ? ::spa_dict_lookup(props, key) : nullptr;
+      return value != nullptr ? std::string{value} : std::string{};
+    }
+
     template<typename UInt>
     std::optional<UInt> parseUnsigned(char const* value) noexcept
     {
@@ -84,19 +84,8 @@ namespace ao::audio::backend::detail
     record.mediaClass = lookupProperty(props, PW_KEY_MEDIA_CLASS);
     record.nodeName = lookupProperty(props, PW_KEY_NODE_NAME);
     record.nodeNick = lookupProperty(props, PW_KEY_NODE_NICK);
-    record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
-
     record.optObjectSerial = pipeWireObjectSerial(props);
-
-    if (auto const optId = parsePipeWireUint32(::spa_dict_lookup(props, "node.driver-id")); optId)
-    {
-      record.optDriverId = optId;
-    }
-    else if (auto const optIdFallback = parsePipeWireUint32(::spa_dict_lookup(props, "node.driver")); optIdFallback)
-    {
-      record.optDriverId = optIdFallback;
-    }
 
     return record;
   }

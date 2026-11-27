@@ -229,9 +229,9 @@ namespace ao::audio::backend::test
 
             REQUIRE(deliveryRes);
             CHECK(deliveryRes->clientFormat == decoded.outputFormat);
-            CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == route.mask);
-            CHECK(deliveryRes->channelDelivery.isMapped);
-            CHECK_FALSE(deliveryRes->channelDelivery.hasSharedConversion);
+            CHECK(native.channelDelivery().nativeSpeakerMask == route.mask);
+            CHECK(native.channelDelivery().isMapped);
+            CHECK_FALSE(native.channelDelivery().hasSharedConversion);
             CHECK(deliveryRes->needsPermutation == (sourceMask != 0U && frontSwapped));
             auto pipeWirePcm = std::vector<std::byte>{blockRes->bytes.begin(), blockRes->bytes.end()};
             detail::applyRawStreamDelivery(pipeWirePcm, *deliveryRes);

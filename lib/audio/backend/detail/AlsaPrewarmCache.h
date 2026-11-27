@@ -35,8 +35,6 @@ namespace ao::audio::backend::detail
 
     void store(SignalFormat const& sourceFormat, PcmFormat const& clientFormat);
 
-    void clear() noexcept { _entries.clear(); }
-
   private:
     struct Entry final
     {

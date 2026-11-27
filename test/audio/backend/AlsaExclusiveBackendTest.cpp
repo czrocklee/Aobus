@@ -371,7 +371,7 @@ namespace ao::audio::backend::test
     CHECK(mixerStatePtr->refreshCount == refreshCountBeforeMuteRead);
     CHECK(graphUpdateCount == 1U);
 
-    auto constexpr kUnknownProperty = static_cast<PropertyId>(999);
+    auto constexpr kUnknownProperty = static_cast<PropertyId>(UINT8_C(0xff));
     auto const unknownRes = backend.property(kUnknownProperty);
     REQUIRE_FALSE(unknownRes);
     CHECK(unknownRes.error().code == Error::Code::NotSupported);
@@ -387,7 +387,17 @@ namespace ao::audio::backend::test
     CHECK(graph.nodes.back().isMuted);
     CHECK(graph.nodes.back().hardwareVolumeNotUnity);
     CHECK_FALSE(graph.nodes.back().softwareVolumeNotUnity);
-    CHECK(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
+
+    auto constexpr kHardwareVolumeInfo = PropertyInfo{.canRead = true,
+                                                      .canWrite = true,
+                                                      .isAvailable = true,
+                                                      .emitsChangeNotifications = false,
+                                                      .isHardwareAssisted = true};
+    auto constexpr kSoftwareControlInfo =
+      PropertyInfo{.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+    CHECK(backend.queryProperty(PropertyId::Volume) == kHardwareVolumeInfo);
+    CHECK(backend.queryProperty(PropertyId::Muted) == kSoftwareControlInfo);
+    CHECK(backend.queryProperty(kUnknownProperty) == PropertyInfo{});
 
     REQUIRE(backend.set(props::kMuted, true));
     CHECK(graph.nodes.back().isMuted);
@@ -403,11 +413,11 @@ namespace ao::audio::backend::test
     REQUIRE(fallbackVolumeRes);
     CHECK(graphUpdateCount == updateCountBeforeFallback + 1U);
     CHECK(std::get<float>(*fallbackVolumeRes) == 1.0F);
-    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
     REQUIRE(graph.nodes.size() == 2U);
     CHECK_FALSE(graph.nodes.back().isMuted);
     CHECK_FALSE(graph.nodes.back().hardwareVolumeNotUnity);
     CHECK_FALSE(graph.nodes.back().softwareVolumeNotUnity);
+    CHECK(backend.queryProperty(PropertyId::Volume) == kSoftwareControlInfo);
 
     backend.close();
     auto const updateCountAfterClose = graphUpdateCount;
@@ -421,6 +431,10 @@ namespace ao::audio::backend::test
     CHECK_FALSE(std::get<bool>(*closedMutedRes));
     CHECK(graphUpdateCount == updateCountAfterClose);
     CHECK(graph.nodes.empty());
+
+    auto constexpr kClosedControlInfo = PropertyInfo{.canRead = true, .canWrite = true};
+    CHECK(backend.queryProperty(PropertyId::Volume) == kClosedControlInfo);
+    CHECK(backend.queryProperty(PropertyId::Muted) == kClosedControlInfo);
   }
 
   TEST_CASE("AlsaExclusiveBackend - software fallback survives close and reopen after a mixer write failure")

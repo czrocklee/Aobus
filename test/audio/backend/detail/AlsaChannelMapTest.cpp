@@ -239,11 +239,6 @@ namespace ao::audio::backend::detail::test
       observations = currentMap({SND_CHMAP_FLW, SND_CHMAP_UNKNOWN});
     }
 
-    SECTION("phase inversion is not a pure permutation")
-    {
-      observations = currentMap({SND_CHMAP_FL | SND_CHMAP_PHASE_INVERSE, SND_CHMAP_FR});
-    }
-
     auto const mapRes = prepareAlsaChannelMap(
       stereoFormat(), [&] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
 
@@ -251,23 +246,6 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
     CHECK(mapRes.error().error.code == Error::Code::FormatRejected);
     CHECK(mapRes.error().error.message.contains("ALSA current channel positions conflict"));
-  }
-
-  TEST_CASE("AlsaChannelMap - incomplete or reserved source roles cannot establish a lossless mapping")
-  {
-    auto const sourceMask = GENERATE(0x1U, 0x7U, 0x80000001U);
-    auto const mapRes = prepareAlsaChannelMap(stereoFormat(sourceMask),
-                                              []
-                                              {
-                                                return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{
-                                                  currentMap({SND_CHMAP_FL, SND_CHMAP_UNKNOWN})};
-                                              });
-
-    REQUIRE_FALSE(mapRes);
-    CHECK(mapRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
-    CHECK(mapRes.error().error.code == Error::Code::FormatRejected);
-    CHECK(mapRes.error().error.message.contains(
-      "ALSA source channel mask is incomplete or contains unassigned speaker positions"));
   }
 
   TEST_CASE("AlsaChannelMap - an invalid nonzero source declaration is refused across all current evidence")

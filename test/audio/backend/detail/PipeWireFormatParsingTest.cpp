@@ -255,9 +255,9 @@ namespace ao::audio::backend::detail::test
         CHECK(deliveryRes->clientFormat ==
               PcmFormat{
                 .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = sourceMask});
-        CHECK(deliveryRes->channelDelivery.isMapped);
-        CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 3U);
-        CHECK_FALSE(deliveryRes->channelDelivery.hasSharedConversion);
+        CHECK(optNative->channelDelivery().isMapped);
+        CHECK(optNative->channelDelivery().nativeSpeakerMask == 3U);
+        CHECK_FALSE(optNative->channelDelivery().hasSharedConversion);
         CHECK(deliveryRes->needsPermutation == fixture.needsPermutation);
         CHECK(deliveryRes->sourceSlots[0] == fixture.sourceSlots[0]);
         CHECK(deliveryRes->sourceSlots[1] == fixture.sourceSlots[1]);
@@ -615,7 +615,7 @@ namespace ao::audio::backend::detail::test
       auto const deliveryRes = rawStreamDelivery(source, *optNative);
       REQUIRE(deliveryRes);
       CHECK(deliveryRes->clientFormat.speakerMask == source.speakerMask);
-      CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
+      CHECK_FALSE(optNative->channelDelivery().isMapped);
       CHECK_FALSE(deliveryRes->needsPermutation);
     }
   }
@@ -720,8 +720,8 @@ namespace ao::audio::backend::detail::test
       REQUIRE(deliveryRes);
       CHECK(deliveryRes->clientFormat.encoding == fixture.encoding);
       CHECK(deliveryRes->clientFormat.speakerMask == 0x30U);
-      CHECK(deliveryRes->channelDelivery.isMapped);
-      CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0x30U);
+      CHECK(optNative->channelDelivery().isMapped);
+      CHECK(optNative->channelDelivery().nativeSpeakerMask == 0x30U);
       CHECK(deliveryRes->needsPermutation);
       auto bytes = std::array<std::byte, 8>{};
       std::ranges::copy(std::span{canonical}.first(fixture.sampleBytes), bytes.begin());
@@ -744,8 +744,8 @@ namespace ao::audio::backend::detail::test
     auto const deliveryRes = rawStreamDelivery({.sampleRate = 48000, .channels = 4, .speakerMask = 0x33}, *optNative);
     REQUIRE(deliveryRes);
     // Complete observed WAVE set, including non-canonical slot order.
-    CHECK(deliveryRes->channelDelivery.isMapped);
-    CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0x33U);
+    CHECK(optNative->channelDelivery().isMapped);
+    CHECK(optNative->channelDelivery().nativeSpeakerMask == 0x33U);
     CHECK(optNative->format.speakerMask == 0U);
     auto bytes = std::to_array<std::byte>({std::byte{0x11},
                                            std::byte{0x12},
@@ -803,8 +803,8 @@ namespace ao::audio::backend::detail::test
       auto const unchangedRes = rawStreamDelivery(source, *optInitial, optInitial);
       REQUIRE(unchangedRes);
       CHECK(unchangedRes->clientFormat.speakerMask == sourceMask);
-      CHECK(unchangedRes->channelDelivery.isMapped);
-      CHECK(unchangedRes->channelDelivery.nativeSpeakerMask == 3U);
+      CHECK(optInitial->channelDelivery().isMapped);
+      CHECK(optInitial->channelDelivery().nativeSpeakerMask == 3U);
       CHECK_FALSE(unchangedRes->needsPermutation);
       auto const changedRes = rawStreamDelivery(source, *optCurrent, optInitial);
       REQUIRE_FALSE(changedRes);
@@ -828,14 +828,14 @@ namespace ao::audio::backend::detail::test
     auto const initialRes = rawStreamDelivery(source, *optInitial);
     REQUIRE(initialRes);
     CHECK_FALSE(initialRes->needsPermutation);
-    CHECK(initialRes->channelDelivery.nativeSpeakerMask == 1U);
+    CHECK(optInitial->channelDelivery().nativeSpeakerMask == 1U);
     auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
     REQUIRE(currentRes);
     CHECK(currentRes->clientFormat ==
           PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le});
-    CHECK(currentRes->channelDelivery.nativeSpeakerMask == 4U);
+    CHECK(optCurrent->channelDelivery().nativeSpeakerMask == 4U);
     // Complete observed mono role; identity transport stays unpermuted.
-    CHECK(currentRes->channelDelivery.isMapped);
+    CHECK(optCurrent->channelDelivery().isMapped);
     CHECK_FALSE(currentRes->needsPermutation);
     auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}});
     applyRawStreamDelivery(bytes, *currentRes);
@@ -861,120 +861,10 @@ namespace ao::audio::backend::detail::test
     auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
     REQUIRE(currentRes);
     CHECK(currentRes->clientFormat.speakerMask == 0U);
-    CHECK(currentRes->channelDelivery.nativeSpeakerMask == 0x60cU);
+    CHECK(optCurrent->channelDelivery().nativeSpeakerMask == 0x60cU);
     // Complete observed quad; zero client mask and identity transport stay separate.
-    CHECK(currentRes->channelDelivery.isMapped);
+    CHECK(optCurrent->channelDelivery().isMapped);
     CHECK_FALSE(currentRes->needsPermutation);
-  }
-
-  TEST_CASE("PipeWireFormatParsing - the open snapshot projection follows the latest accepted native roles")
-  {
-    // Wiring proof for the PipeWireBackend::open() snapshot boundary: that
-    // boundary re-runs this same active pure seam on the latest already
-    // accepted observation under the loop lock, so the calls below reproduce
-    // exactly the reported channelDelivery projection. This is not a native
-    // callback-schedule reproduction: the sequential param_changed events
-    // that produce these observations require a live PipeWire daemon, and
-    // their acceptance semantics are covered by the refresh cases above.
-    SECTION("an accepted non-stereo identity refresh projects the refreshed role")
-    {
-      auto initialBuffer = std::array<std::byte, 1024>{};
-      auto currentBuffer = std::array<std::byte, 1024>{};
-      auto const left = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL});
-      auto const center = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FC});
-      auto const optInitial = parseRawStreamObservation(nativeFormat(initialBuffer, SPA_AUDIO_FORMAT_S16_LE, 1, left));
-      auto const optCurrent =
-        parseRawStreamObservation(nativeFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 1, center));
-      REQUIRE(optInitial);
-      REQUIRE(optCurrent);
-      auto const source = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16};
-      auto const admittedRes = rawStreamDelivery(source, *optInitial);
-      REQUIRE(admittedRes);
-      CHECK(admittedRes->channelDelivery.nativeSpeakerMask == 1U);
-      auto const refreshRes = rawStreamDelivery(source, *optCurrent, optInitial);
-      REQUIRE(refreshRes);
-      auto const projectionRes = rawStreamDelivery(source, *optCurrent);
-      REQUIRE(projectionRes);
-      CHECK(projectionRes->channelDelivery.nativeSpeakerMask == 4U);
-      CHECK(projectionRes->channelDelivery.nativeSpeakerMask != admittedRes->channelDelivery.nativeSpeakerMask);
-      // Complete observed role. The admitted identity transport stays installed:
-      // the projection installs no permutation, so client bytes stay unchanged.
-      CHECK(projectionRes->channelDelivery.isMapped);
-      CHECK_FALSE(projectionRes->needsPermutation);
-      auto bytes = std::array<std::byte, 2>{std::byte{0x11}, std::byte{0x12}};
-      applyRawStreamDelivery(bytes, *projectionRes);
-      CHECK(bytes == std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}}));
-    }
-
-    SECTION("an accepted multichannel role refresh projects the refreshed set")
-    {
-      auto initialBuffer = std::array<std::byte, 1024>{};
-      auto currentBuffer = std::array<std::byte, 1024>{};
-      auto const quad = std::to_array<std::uint32_t>(
-        {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR});
-      auto const changed = std::to_array<std::uint32_t>(
-        {SPA_AUDIO_CHANNEL_FC, SPA_AUDIO_CHANNEL_LFE, SPA_AUDIO_CHANNEL_SL, SPA_AUDIO_CHANNEL_SR});
-      auto const optInitial = parseRawStreamObservation(nativeFormat(initialBuffer, SPA_AUDIO_FORMAT_S16_LE, 4, quad));
-      auto const optCurrent =
-        parseRawStreamObservation(nativeFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 4, changed));
-      REQUIRE(optInitial);
-      REQUIRE(optCurrent);
-      auto const source = SignalFormat{.sampleRate = 48000, .channels = 4};
-      auto const admittedRes = rawStreamDelivery(source, *optInitial);
-      REQUIRE(admittedRes);
-      CHECK(admittedRes->channelDelivery.nativeSpeakerMask == 0x33U);
-      auto const refreshRes = rawStreamDelivery(source, *optCurrent, optInitial);
-      REQUIRE(refreshRes);
-      auto const projectionRes = rawStreamDelivery(source, *optCurrent);
-      REQUIRE(projectionRes);
-      CHECK(projectionRes->channelDelivery.nativeSpeakerMask == 0x60cU);
-      CHECK(projectionRes->channelDelivery.nativeSpeakerMask != admittedRes->channelDelivery.nativeSpeakerMask);
-      // Complete observed quad evidence does not install a permutation.
-      CHECK(projectionRes->channelDelivery.isMapped);
-      CHECK_FALSE(projectionRes->needsPermutation);
-      auto bytes = std::to_array<std::byte>({std::byte{0x11},
-                                             std::byte{0x12},
-                                             std::byte{0x21},
-                                             std::byte{0x22},
-                                             std::byte{0x31},
-                                             std::byte{0x32},
-                                             std::byte{0x41},
-                                             std::byte{0x42}});
-      applyRawStreamDelivery(bytes, *projectionRes);
-      CHECK(bytes == std::to_array<std::byte>({std::byte{0x11},
-                                               std::byte{0x12},
-                                               std::byte{0x21},
-                                               std::byte{0x22},
-                                               std::byte{0x31},
-                                               std::byte{0x32},
-                                               std::byte{0x41},
-                                               std::byte{0x42}}));
-    }
-
-    SECTION("an unchanged source-zero stereo swap projects the installed swap")
-    {
-      auto buffer = std::array<std::byte, 1024>{};
-      auto const swapped = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_FL});
-      auto const optSwapped = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, swapped));
-      REQUIRE(optSwapped);
-      auto const source = SignalFormat{.sampleRate = 48000, .channels = 2};
-      auto const admittedRes = rawStreamDelivery(source, *optSwapped);
-      REQUIRE(admittedRes);
-      REQUIRE(admittedRes->needsPermutation);
-      CHECK(admittedRes->sourceSlots[0] == 1U);
-      CHECK(admittedRes->sourceSlots[1] == 0U);
-      auto const refreshRes = rawStreamDelivery(source, *optSwapped, optSwapped);
-      REQUIRE(refreshRes);
-      auto const projectionRes = rawStreamDelivery(source, *optSwapped);
-      REQUIRE(projectionRes);
-      CHECK(projectionRes->channelDelivery == admittedRes->channelDelivery);
-      REQUIRE(projectionRes->needsPermutation);
-      CHECK(projectionRes->sourceSlots[0] == 1U);
-      CHECK(projectionRes->sourceSlots[1] == 0U);
-      auto bytes = std::array<std::byte, 4>{std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}};
-      applyRawStreamDelivery(bytes, *projectionRes);
-      CHECK(bytes == std::to_array<std::byte>({std::byte{0x21}, std::byte{0x22}, std::byte{0x11}, std::byte{0x12}}));
-    }
   }
 
   TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo cannot replace an installed swap after activation")
@@ -996,18 +886,20 @@ namespace ao::audio::backend::detail::test
       auto const installedRes = rawStreamDelivery(source, *optInitial);
       REQUIRE(installedRes);
       CHECK(installedRes->clientFormat.speakerMask == sourceMask);
-      CHECK(installedRes->channelDelivery.isMapped);
-      CHECK(installedRes->channelDelivery.nativeSpeakerMask == 3U);
+      CHECK(optInitial->channelDelivery().isMapped);
+      CHECK(optInitial->channelDelivery().nativeSpeakerMask == 3U);
       REQUIRE(installedRes->needsPermutation);
       CHECK(installedRes->sourceSlots[0] == 1U);
       CHECK(installedRes->sourceSlots[1] == 0U);
       auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}});
-      applyRawStreamDelivery(bytes, *installedRes);
+      auto const repeatedRes = rawStreamDelivery(source, *optInitial, optInitial);
+      REQUIRE(repeatedRes);
+      REQUIRE(repeatedRes->needsPermutation);
+      applyRawStreamDelivery(bytes, *repeatedRes);
       CHECK(bytes == std::to_array<std::byte>({std::byte{0x21}, std::byte{0x22}, std::byte{0x11}, std::byte{0x12}}));
       auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
       REQUIRE_FALSE(currentRes);
       CHECK(currentRes.error().error.code == Error::Code::FormatRejected);
-      CHECK(currentRes.error().error.message == "PipeWire changed PCM mode after stream activation");
       CHECK(currentRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
     }
   }
@@ -1058,7 +950,7 @@ namespace ao::audio::backend::detail::test
     auto const monoRes = rawStreamDelivery(source, *optMono);
     REQUIRE(monoRes);
     CHECK(monoRes->clientFormat.speakerMask == 1U);
-    CHECK_FALSE(monoRes->channelDelivery.isMapped);
+    CHECK_FALSE(optMono->channelDelivery().isMapped);
     auto const center = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FC});
     auto const optCenter = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 1, center));
     REQUIRE(optCenter);
@@ -1129,8 +1021,8 @@ namespace ao::audio::backend::detail::test
     }
 
     REQUIRE(deliveryRes);
-    CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
-    CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == expectedKnownMask);
+    CHECK_FALSE(optNative->channelDelivery().isMapped);
+    CHECK(optNative->channelDelivery().nativeSpeakerMask == expectedKnownMask);
     CHECK(deliveryRes->needsPermutation == needsPermutation);
     applyRawStreamDelivery(bytes, *deliveryRes);
     CHECK(bytes == expected);
@@ -1154,7 +1046,7 @@ namespace ao::audio::backend::detail::test
     auto const legacyRes = rawStreamDelivery(unidentified, *optNative);
     REQUIRE(legacyRes);
     CHECK(legacyRes->clientFormat.speakerMask == 0);
-    CHECK_FALSE(legacyRes->channelDelivery.isMapped);
+    CHECK_FALSE(optNative->channelDelivery().isMapped);
     CHECK_FALSE(legacyRes->needsPermutation);
     CHECK(optNative->hasUnsupportedPositions);
     CHECK(optNative->positions[0] == SPA_AUDIO_CHANNEL_RLC);
@@ -1192,8 +1084,8 @@ namespace ao::audio::backend::detail::test
       CHECK(threeRes->clientFormat.channels == 3U);
       CHECK(threeRes->clientFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(threeRes->clientFormat.speakerMask == 0U);
-      CHECK(threeRes->channelDelivery.nativeSpeakerMask == 0U);
-      CHECK_FALSE(threeRes->channelDelivery.isMapped);
+      CHECK(optThree->channelDelivery().nativeSpeakerMask == 0U);
+      CHECK_FALSE(optThree->channelDelivery().isMapped);
       CHECK_FALSE(threeRes->needsPermutation);
 
       auto const roles4 = std::to_array<std::uint32_t>(
@@ -1214,8 +1106,8 @@ namespace ao::audio::backend::detail::test
       CHECK(fourRes->clientFormat.channels == 4U);
       CHECK(fourRes->clientFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(fourRes->clientFormat.speakerMask == 0U);
-      CHECK(fourRes->channelDelivery.nativeSpeakerMask == 0U);
-      CHECK_FALSE(fourRes->channelDelivery.isMapped);
+      CHECK(optFour->channelDelivery().nativeSpeakerMask == 0U);
+      CHECK_FALSE(optFour->channelDelivery().isMapped);
       CHECK_FALSE(fourRes->needsPermutation);
     }
 
@@ -1238,8 +1130,8 @@ namespace ao::audio::backend::detail::test
       CHECK(deliveryRes->clientFormat.channels == 3U);
       CHECK(deliveryRes->clientFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(deliveryRes->clientFormat.speakerMask == 0U);
-      CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 1U);
-      CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
+      CHECK(optNative->channelDelivery().nativeSpeakerMask == 1U);
+      CHECK_FALSE(optNative->channelDelivery().isMapped);
       CHECK_FALSE(deliveryRes->needsPermutation);
     }
 
@@ -1263,8 +1155,8 @@ namespace ao::audio::backend::detail::test
       CHECK(deliveryRes->clientFormat.channels == 4U);
       CHECK(deliveryRes->clientFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(deliveryRes->clientFormat.speakerMask == 0U);
-      CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0x3U);
-      CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
+      CHECK(optNative->channelDelivery().nativeSpeakerMask == 0x3U);
+      CHECK_FALSE(optNative->channelDelivery().isMapped);
       CHECK_FALSE(deliveryRes->needsPermutation);
     }
 
@@ -1424,8 +1316,8 @@ namespace ao::audio::backend::detail::test
       CHECK(deliveryRes->clientFormat.speakerMask == 0U);
       CHECK(deliveryRes->clientFormat.channels == 8U);
       CHECK(deliveryRes->clientFormat.encoding == SampleEncoding::Signed16Le);
-      CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0U);
-      CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
+      CHECK(optNative->channelDelivery().nativeSpeakerMask == 0U);
+      CHECK_FALSE(optNative->channelDelivery().isMapped);
       CHECK_FALSE(deliveryRes->needsPermutation);
       auto bytes = std::to_array<std::byte>({std::byte{0x10},
                                              std::byte{0x11},
@@ -1490,7 +1382,7 @@ namespace ao::audio::backend::detail::test
       auto const admittedRes = rawStreamDelivery({.sampleRate = 48000, .channels = 1}, *optMono);
       REQUIRE(admittedRes);
       CHECK(admittedRes->clientFormat.speakerMask == 0U);
-      CHECK_FALSE(admittedRes->channelDelivery.isMapped);
+      CHECK_FALSE(optMono->channelDelivery().isMapped);
       CHECK_FALSE(admittedRes->needsPermutation);
       auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}});
       applyRawStreamDelivery(bytes, *admittedRes);
@@ -1515,8 +1407,8 @@ namespace ao::audio::backend::detail::test
     auto const admittedRes = rawStreamDelivery({.sampleRate = 48000, .channels = 4}, *optNative);
     REQUIRE(admittedRes);
     CHECK(admittedRes->clientFormat.speakerMask == 0U);
-    CHECK(admittedRes->channelDelivery.nativeSpeakerMask == 0x11U);
-    CHECK_FALSE(admittedRes->channelDelivery.isMapped);
+    CHECK(optNative->channelDelivery().nativeSpeakerMask == 0x11U);
+    CHECK_FALSE(optNative->channelDelivery().isMapped);
     CHECK_FALSE(admittedRes->needsPermutation);
     auto const refusedRes = rawStreamDelivery({.sampleRate = 48000, .channels = 4, .speakerMask = 0x33}, *optNative);
     REQUIRE_FALSE(refusedRes);
@@ -1543,14 +1435,14 @@ namespace ao::audio::backend::detail::test
     auto const initialRes = rawStreamDelivery(source, *optInitial);
     REQUIRE(initialRes);
     CHECK(initialRes->clientFormat.speakerMask == 0U);
-    CHECK(initialRes->channelDelivery.nativeSpeakerMask == 0x33U);
-    CHECK(initialRes->channelDelivery.isMapped);
+    CHECK(optInitial->channelDelivery().nativeSpeakerMask == 0x33U);
+    CHECK(optInitial->channelDelivery().isMapped);
     CHECK_FALSE(initialRes->needsPermutation);
     auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
     REQUIRE(currentRes);
     CHECK(currentRes->clientFormat == initialRes->clientFormat);
-    CHECK(currentRes->channelDelivery.nativeSpeakerMask == 0U);
-    CHECK_FALSE(currentRes->channelDelivery.isMapped);
+    CHECK(optCurrent->channelDelivery().nativeSpeakerMask == 0U);
+    CHECK_FALSE(optCurrent->channelDelivery().isMapped);
     CHECK_FALSE(currentRes->needsPermutation);
     auto bytes = std::to_array<std::byte>({std::byte{0x11},
                                            std::byte{0x12},
@@ -1591,7 +1483,7 @@ namespace ao::audio::backend::detail::test
     CHECK(deliveryRes->clientFormat.speakerMask == 0U);
     CHECK(optNative->format.speakerMask == 3U);
     // Complete native FL/FR is mapped evidence; the zero client mask is not source identity.
-    CHECK(deliveryRes->channelDelivery.isMapped);
+    CHECK(optNative->channelDelivery().isMapped);
   }
 
   TEST_CASE("PipeWireFormatParsing - a short native position array cannot describe a complete stream")

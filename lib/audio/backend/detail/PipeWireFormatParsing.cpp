@@ -621,6 +621,12 @@ namespace ao::audio::backend::detail
     return native;
   }
 
+  ChannelDeliveryEvidence RawStreamFormat::channelDelivery() const noexcept
+  {
+    return {.isMapped = !hasUnsupportedPositions && isCompleteWaveSpeakerMask(nativeSpeakerMask, format.channels),
+            .nativeSpeakerMask = nativeSpeakerMask};
+  }
+
   std::expected<RawStreamDelivery, BackendOpenFailure> rawStreamDelivery(
     SignalFormat const& sourceFormat,
     RawStreamFormat const& native,
@@ -674,11 +680,6 @@ namespace ao::audio::backend::detail
     }
 
     auto delivery = RawStreamDelivery{.clientFormat = pcmFormat(sourceFormat, native.format.encoding)};
-    delivery.channelDelivery.nativeSpeakerMask = optPositions->mask;
-    // Observed native evidence only. Source identity, canonical client order,
-    // and zero-mask non-stereo identity transport do not set or clear this flag.
-    delivery.channelDelivery.isMapped =
-      !optPositions->hasUnsupportedPositions && isCompleteWaveSpeakerMask(optPositions->mask, native.format.channels);
 
     if (optPositions->mask == 0U || offeredMask == 0U)
     {

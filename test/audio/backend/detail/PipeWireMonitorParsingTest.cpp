@@ -104,18 +104,6 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(isSinkMediaClass("Video/Sink"));
   }
 
-  TEST_CASE("PipeWireMonitorParsing - dictionary property lookup")
-  {
-    auto const items = std::to_array<::spa_dict_item>(
-      {::spa_dict_item{.key = "key1", .value = "val1"}, ::spa_dict_item{.key = "key2", .value = "val2"}});
-    auto const dict = makeDict(items);
-
-    CHECK(lookupProperty(&dict, "key1") == "val1");
-    CHECK(lookupProperty(&dict, "key2") == "val2");
-    CHECK(lookupProperty(&dict, "key3").empty());
-    CHECK(lookupProperty(nullptr, "key1").empty());
-  }
-
   TEST_CASE("PipeWireMonitorParsing - strict unsigned integer properties")
   {
     CHECK(parsePipeWireUint32(nullptr) == std::nullopt);
@@ -131,21 +119,46 @@ namespace ao::audio::backend::detail::test
     CHECK(parsePipeWireUint32("4294967295") == 4294967295U);
   }
 
-  TEST_CASE("PipeWireMonitorParsing - node record fields")
+  TEST_CASE("PipeWireMonitorParsing - node records keep routing and display properties")
   {
-    auto const items =
-      std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
-                                      ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
-                                      ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "4294967303"},
-                                      ::spa_dict_item{.key = "node.driver-id", .value = "5678"}});
-    auto const dict = makeDict(items);
+    SECTION("reported properties")
+    {
+      auto const items =
+        std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
+                                        ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
+                                        ::spa_dict_item{.key = PW_KEY_NODE_NICK, .value = "Test Speakers"},
+                                        ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "4294967303"}});
+      auto const dict = makeDict(items);
 
-    auto record = parseNodeRecord(1, &dict);
-    CHECK(record.version == 1);
-    CHECK(record.mediaClass == "Audio/Sink");
-    CHECK(record.nodeName == "test-node");
-    CHECK(record.optObjectSerial == 4294967303ULL);
-    CHECK(record.optDriverId == 5678);
+      auto const record = parseNodeRecord(1, &dict);
+      CHECK(record.version == 1);
+      CHECK(record.mediaClass == "Audio/Sink");
+      CHECK(record.nodeName == "test-node");
+      CHECK(record.nodeNick == "Test Speakers");
+      CHECK(record.objectPath.empty());
+      CHECK(record.optObjectSerial == 4294967303ULL);
+    }
+
+    SECTION("object path without a nick or serial")
+    {
+      auto const items = std::to_array<::spa_dict_item>({{.key = PW_KEY_OBJECT_PATH, .value = "test/device:playback"}});
+      auto const dict = makeDict(items);
+      auto const record = parseNodeRecord(1, &dict);
+      CHECK(record.objectPath == "test/device:playback");
+      CHECK(record.nodeNick.empty());
+      CHECK_FALSE(record.optObjectSerial);
+    }
+
+    SECTION("no property dictionary")
+    {
+      auto const record = parseNodeRecord(1, nullptr);
+      CHECK(record.version == 1);
+      CHECK(record.mediaClass.empty());
+      CHECK(record.nodeName.empty());
+      CHECK(record.nodeNick.empty());
+      CHECK(record.objectPath.empty());
+      CHECK_FALSE(record.optObjectSerial);
+    }
   }
 
   TEST_CASE("PipeWireMonitorParsing - object serial rejects an invalid low 32-bit tag")

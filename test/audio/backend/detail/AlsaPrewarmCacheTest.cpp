@@ -9,7 +9,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <cstdint>
 
 namespace ao::audio::backend::detail::test
@@ -67,16 +66,6 @@ namespace ao::audio::backend::detail::test
     auto const optCenterBack = cache.find(quadSource(kQuadCenterBackMask));
     REQUIRE(optCenterBack);
     CHECK(*optCenterBack == centerBackClient);
-
-    // Frame stride follows the channel count and encoding alone; raw speaker
-    // bits never change the byte geometry.
-    CHECK(frameBytes(backPairClient) == std::size_t{16});
-    CHECK(frameBytes(centerBackClient) == std::size_t{12});
-    CHECK(frameBytes(PcmFormat{
-            .sampleRate = 48000,
-            .channels = 4,
-            .encoding = SampleEncoding::Signed24In32Le,
-          }) == std::size_t{16});
   }
 
   TEST_CASE("AlsaPrewarmCache - an unrecorded zero mask does not match identified layouts")
@@ -153,29 +142,29 @@ namespace ao::audio::backend::detail::test
     CHECK(*optCenterBack == centerBackClient);
   }
 
-  TEST_CASE("AlsaPrewarmCache - clear empties every stored entry")
+  TEST_CASE("AlsaPrewarmCache - a full cache evicts the oldest stored signal")
   {
+    constexpr std::uint32_t kFirstRate = 48000;
     auto cache = AlsaPrewarmCache{};
-    cache.store(quadSource(kQuadBackPairMask),
-                PcmFormat{
-                  .sampleRate = 48000,
-                  .channels = 4,
-                  .encoding = SampleEncoding::Signed24In32Le,
-                  .speakerMask = kQuadBackPairMask,
-                });
-    cache.store(quadSource(kQuadCenterBackMask),
-                PcmFormat{
-                  .sampleRate = 48000,
-                  .channels = 4,
-                  .encoding = SampleEncoding::Signed24PackedLe,
-                  .speakerMask = kQuadCenterBackMask,
-                });
-    REQUIRE(cache.find(quadSource(kQuadBackPairMask)).has_value());
-    REQUIRE(cache.find(quadSource(kQuadCenterBackMask)).has_value());
+    auto const sourceAt = [](std::uint32_t rate)
+    { return SignalFormat{.sampleRate = rate, .channels = 2, .precisionBits = 16}; };
+    auto const clientAt = [](std::uint32_t rate)
+    { return PcmFormat{.sampleRate = rate, .channels = 2, .encoding = SampleEncoding::Signed16Le}; };
+    auto const newestRate = kFirstRate + static_cast<std::uint32_t>(AlsaPrewarmCache::kCapacity);
 
-    cache.clear();
+    for (auto rate = kFirstRate; rate < newestRate; ++rate)
+    {
+      cache.store(sourceAt(rate), clientAt(rate));
+    }
 
-    CHECK_FALSE(cache.find(quadSource(kQuadBackPairMask)).has_value());
-    CHECK_FALSE(cache.find(quadSource(kQuadCenterBackMask)).has_value());
+    REQUIRE(cache.find(sourceAt(kFirstRate)) == clientAt(kFirstRate));
+    cache.store(sourceAt(newestRate), clientAt(newestRate));
+
+    CHECK_FALSE(cache.find(sourceAt(kFirstRate)));
+
+    for (auto rate = kFirstRate + 1U; rate <= newestRate; ++rate)
+    {
+      CHECK(cache.find(sourceAt(rate)) == clientAt(rate));
+    }
   }
 } // namespace ao::audio::backend::detail::test

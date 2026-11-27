@@ -180,7 +180,6 @@ namespace ao::audio::backend
     PipeWireEnvironmentGuard envGuard;
     RenderTarget* renderTarget = nullptr;
     SignalFormat sourceFormat;
-    PcmFormat format;
     std::optional<RawStreamFormat> optNativeFormat;
     RawStreamDelivery delivery;
     std::optional<SignalFormat> optLastSourceFormat;
@@ -206,37 +205,18 @@ namespace ao::audio::backend
 
     void applyCachedControls() const;
     void stopRenderCycles();
-    PropertyInfo volumePropertyInfo() const noexcept
-    {
-      return {.canRead = true,
-              .canWrite = true,
-              .isAvailable = outputControlAvailable.load(std::memory_order_relaxed),
-              .emitsChangeNotifications = true,
-              .isHardwareAssisted = false};
-    }
-
-    PropertyInfo mutedPropertyInfo() const noexcept
-    {
-      return {.canRead = true,
-              .canWrite = true,
-              .isAvailable = outputControlAvailable.load(std::memory_order_relaxed),
-              .emitsChangeNotifications = true,
-              .isHardwareAssisted = false};
-    }
-
     PropertyInfo propertyInfo(PropertyId id) const noexcept
     {
-      if (id == PropertyId::Volume)
+      if (id != PropertyId::Volume && id != PropertyId::Muted)
       {
-        return volumePropertyInfo();
+        return {};
       }
 
-      if (id == PropertyId::Muted)
-      {
-        return mutedPropertyInfo();
-      }
-
-      return {};
+      return {.canRead = true,
+              .canWrite = true,
+              .isAvailable = outputControlAvailable.load(std::memory_order_relaxed),
+              .emitsChangeNotifications = true,
+              .isHardwareAssisted = false};
     }
 
     PropertySnapshot propertySnapshot(PropertyId id, PropertyValue const& value) const
@@ -303,9 +283,10 @@ namespace ao::audio::backend
     auto const maxSize = buffer->buffer->datas[0].maxsize;
     auto stride = buffer->buffer->datas[0].chunk->stride;
 
-    if (stride == 0 && format.channels > 0 && format.encoding != SampleEncoding::Unknown)
+    if (auto const& clientFormat = delivery.clientFormat;
+        stride == 0 && clientFormat.channels > 0 && clientFormat.encoding != SampleEncoding::Unknown)
     {
-      stride = static_cast<std::int32_t>(frameBytes(format));
+      stride = static_cast<std::int32_t>(frameBytes(clientFormat));
     }
 
     if (stride == 0)
@@ -412,7 +393,6 @@ namespace ao::audio::backend
             // Render transport is immutable after admission. Accepted legacy
             // identity refreshes update only the control-side native observation.
             delivery = *deliveryRes;
-            format = delivery.clientFormat;
           }
 
           optNativeFormat = *optNegotiated;
@@ -753,9 +733,6 @@ namespace ao::audio::backend
 
       _implPtr->renderTarget = &target;
       _implPtr->sourceFormat = sourceFormat;
-      _implPtr->format = {};
-      _implPtr->optNativeFormat.reset();
-      _implPtr->delivery = {};
       _implPtr->offeredEncodings = offeredEncodings;
       _implPtr->optOpenFailure.reset();
       _implPtr->optPendingRouteAnchor.reset();
@@ -815,9 +792,9 @@ namespace ao::audio::backend
             // An inactive PipeWire stream is not guaranteed to negotiate its
             // Format param. Activate it while render admission remains closed,
             // then return it to the prepared state before decoder setup.
-            while (!_implPtr->optOpenFailure && (_implPtr->format.encoding == SampleEncoding::Unknown ||
-                                                 (_implPtr->streamState != PW_STREAM_STATE_PAUSED &&
-                                                  _implPtr->streamState != PW_STREAM_STATE_STREAMING)))
+            while (!_implPtr->optOpenFailure &&
+                   (!_implPtr->optNativeFormat || (_implPtr->streamState != PW_STREAM_STATE_PAUSED &&
+                                                   _implPtr->streamState != PW_STREAM_STATE_STREAMING)))
             {
               if (::pw_thread_loop_timed_wait_full(_implPtr->threadLoopPtr.get(), &deadline) < 0)
               {
@@ -834,23 +811,11 @@ namespace ao::audio::backend
             }
             else if (!optError)
             {
-              negotiatedFormat = _implPtr->format;
-              channelDelivery = _implPtr->delivery.channelDelivery;
-
-              // An accepted non-stereo same-storage refresh updated only the
-              // native observation; the render delivery stays the immutable
-              // admitted one. Re-project the latest accepted roles on this
-              // same pure seam so the snapshot reports them. The projection of
-              // an observation already accepted against a stricter predecessor
-              // cannot fail, so the admitted projection remains the fallback.
-              if (_implPtr->optNativeFormat)
-              {
-                if (auto const projectionRes = rawStreamDelivery(sourceFormat, *_implPtr->optNativeFormat);
-                    projectionRes)
-                {
-                  channelDelivery = projectionRes->channelDelivery;
-                }
-              }
+              negotiatedFormat = _implPtr->delivery.clientFormat;
+              // Only the latest accepted native observation can update the
+              // reported roles. The first accepted format still owns transport.
+              AO_INVARIANT(_implPtr->optNativeFormat);
+              channelDelivery = _implPtr->optNativeFormat->channelDelivery();
 
               optRouteAnchor = std::move(_implPtr->optPendingRouteAnchor);
               _implPtr->applyCachedControls();
@@ -965,7 +930,6 @@ namespace ao::audio::backend
     _implPtr->stopRenderCycles();
     _implPtr->destroyStream();
     _implPtr->renderTarget = nullptr;
-    _implPtr->format = {};
     _implPtr->optNativeFormat.reset();
     _implPtr->delivery = {};
     _implPtr->offeredEncodings.clear();
@@ -1047,16 +1011,6 @@ namespace ao::audio::backend
 
   PropertyInfo PipeWireBackend::queryProperty(PropertyId id) const noexcept
   {
-    if (id == PropertyId::Volume || id == PropertyId::Muted)
-    {
-      if (_implPtr != nullptr)
-      {
-        return _implPtr->propertyInfo(id);
-      }
-
-      return {.canRead = true, .canWrite = true, .emitsChangeNotifications = true};
-    }
-
-    return {};
+    return _implPtr->propertyInfo(id);
   }
 } // namespace ao::audio::backend
