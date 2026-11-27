@@ -38,6 +38,10 @@ Application composition keeps the default through `rt::LibraryDurability::Durabl
 An unflushed commit survives a process crash, but an operating-system crash or power loss can lose the most recent commits or corrupt the library, so only disposable libraries use it.
 The effective capacity comes from the persistent LMDB lock file: an opener that acquires the exclusive environment lock may grow a smaller table to the requested size, a concurrent opener adopts the existing size, and no opener shrinks a larger table.
 Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot until destruction under `MDB_NOTLS`.
+If a process exits without releasing its snapshots while another process keeps the library open, its slots can remain occupied.
+`MusicLibrary::open` opens a writable LMDB environment and asks LMDB to reclaim abandoned slots.
+LMDB keeps a slot if it cannot confirm the owning process has exited.
+This check preserves live snapshots and changes the lock table, not library data or revision.
 Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../system/library/structure.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
 That map is the capacity this environment may grow into, not disk it occupies: as the [LMDB adapter](../../../system/persistence/lmdb-operation.md) specifies, the data file grows with the pages transactions use, never with the map, on every supported platform, and a full map remains the point at which mutation fails with `StorageFull`.
 A mutation that rolls back can leave the data file longer than its committed pages, and later mutations reuse that space; on a Windows volume without sparse files, such as exFAT, the whole extension stays allocated until then.

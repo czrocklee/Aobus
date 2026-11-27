@@ -191,11 +191,17 @@ namespace ao::lmdb
       return std::unexpected{res.error()};
     }
 
-    // A read-only environment maps whatever already exists and could not commit
-    // a larger size anyway, so capacity management has nothing to offer it.
     if (!readOnly)
     {
       if (auto res = applyCapacityPolicy(envPtr.get(), options.capacity); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      // A concurrent opener shares the reader table, including slots left by exited processes.
+      std::int32_t cleared = 0;
+
+      if (auto res = resultFromCode("mdb_reader_check", ::mdb_reader_check(envPtr.get(), &cleared)); !res)
       {
         return std::unexpected{res.error()};
       }
