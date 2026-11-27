@@ -20,9 +20,8 @@ namespace ao::async
   {
     Task<> deferTaskStartAsync(boost::asio::thread_pool* workerPool, Task<> task)
     {
-      // A parallel_group initiates deferred operations sequentially. Suspend
-      // each child once so all operations start before user code can block an
-      // initiating worker thread.
+      // A parallel_group initiates deferred operations sequentially. Queue
+      // each child so its user code cannot block initiation inline.
       co_await boost::asio::post(*workerPool, boost::asio::use_awaitable);
       co_await std::move(task);
     }

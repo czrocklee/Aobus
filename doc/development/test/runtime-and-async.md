@@ -48,7 +48,7 @@ Deadlines guard against a hung test; queue observations, barriers, and terminal 
 Library-owning fixtures first close write/publication admission while workers can still retire admitted commands, then stop and join the runtime before releasing the Library and its change bus, including assertion-unwinding paths.
 The lower-level `WriteLaneFixture` closes admission by destroying the lane, whose lifetime state waits for active owner leases; it keeps the change bus, executor, and storage alive through runtime stop and join.
 
-Example shape:
+Example with a `ManualExecutor` and an `AsyncTestState<bool>`:
 
 ```cpp
 runtime.spawnWithLifetime(
@@ -58,9 +58,9 @@ runtime.spawnWithLifetime(
 REQUIRE(executor.tryWaitUntilQueued());
 
 scope.cancelAll();
-executor.runOne();
+REQUIRE(executor.tryRunOne());
 
-CHECK_FALSE(completed.get());
+CHECK_FALSE(completed.load());
 ```
 
 `spawnCancellable()` and `spawnWithLifetime()` share the same cooperative
@@ -76,11 +76,11 @@ Both accept a task factory rather than an already-created coroutine. Pass its
 operations. This lets cancellation be observed before the factory body starts
 and after every suspension point that can outlive the owner.
 
-Controlled test executors expose operations like:
+A `ManualExecutor` test can also drive the remaining queued work explicitly:
 
 ```cpp
 executor.checkQueued();
-executor.runOne();
+REQUIRE(executor.tryRunOne());
 executor.runUntilIdle();
 CHECK(executor.queuedCount() == 0);
 ```

@@ -3,10 +3,12 @@
 
 #include "test/runtime/ExecutorTestSupport.h"
 
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <semaphore>
 #include <stdexcept>
@@ -127,6 +129,26 @@ namespace ao::rt::test
     REQUIRE(executor.tryRunOne());
     CHECK(callbackThread == ownerThread);
     CHECK_FALSE(executor.tryRunOne());
+  }
+
+  TEMPLATE_TEST_CASE("Test executor - an expired deadline leaves newly queued work for the next turn",
+                     "",
+                     ManualExecutor,
+                     QueuedExecutor)
+  {
+    std::int32_t completed = 0;
+    auto executor = TestType{};
+    executor.defer(
+      [&]
+      {
+        ++completed;
+        executor.defer([&] { ++completed; });
+      });
+
+    bool const drained = executor.tryDrainUntil([&] { return completed == 2; }, std::chrono::milliseconds{0});
+    CHECK_FALSE(drained);
+    CHECK(completed == 1);
+    CHECK(executor.queuedCount() == 1);
   }
 
   TEST_CASE("ManualExecutor - draining observes worker-only completion before its deadline", "[concurrency]")

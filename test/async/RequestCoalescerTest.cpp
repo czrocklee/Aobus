@@ -58,18 +58,35 @@ namespace ao::async::test
     CHECK(observed == std::vector<std::string>{"first:ready", "second:ready", "other:done"});
   }
 
-  TEST_CASE("RequestCoalescer - prefetch and empty callbacks reserve work once")
+  TEST_CASE("RequestCoalescer - callback-free work reserves a flight for later interests")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
     auto coalescer = Coalescer{};
-    std::int32_t starts = 0;
+    auto optToken = std::optional<Coalescer::FlightToken>{};
+    auto observed = std::vector<std::int32_t>{};
+    auto start = [&](Coalescer::FlightToken token) { optToken = std::move(token); };
 
-    coalescer.prefetch(1, [&](Coalescer::FlightToken) { ++starts; });
-    auto emptyRequest = coalescer.request(1, {}, [&](Coalescer::FlightToken) { ++starts; });
+    SECTION("Explicit prefetch")
+    {
+      coalescer.prefetch(1, start);
+    }
 
-    CHECK(starts == 1);
-    CHECK_FALSE(emptyRequest);
+    SECTION("Request with an empty callback")
+    {
+      CHECK_FALSE(coalescer.request(1, {}, start));
+    }
+
+    REQUIRE(optToken);
+    std::int32_t extraStarts = 0;
+    auto unexpectedStart = [&](Coalescer::FlightToken) { ++extraStarts; };
+    coalescer.prefetch(1, unexpectedStart);
+    CHECK_FALSE(coalescer.request(1, {}, unexpectedStart));
+    auto request = coalescer.request(1, [&](std::int32_t value) { observed.push_back(value); }, unexpectedStart);
+    CHECK(extraStarts == 0);
+
+    coalescer.complete(*optToken, 42);
+    CHECK(observed == std::vector<std::int32_t>{42});
   }
 
   TEST_CASE("RequestCoalescer - cancellation affects only its own interest", "[concurrency]")
@@ -146,7 +163,8 @@ namespace ao::async::test
       request = coalescer.request(1, [](std::int32_t) {}, [](Coalescer::FlightToken) {});
     }
 
-    CHECK_NOTHROW(request.reset());
+    auto worker = std::jthread{[request = std::move(request)] mutable { request.reset(); }};
+    worker.join();
   }
 
   TEST_CASE("RequestCoalescer - completion permits a reentrant same-key flight")
@@ -195,15 +213,22 @@ namespace ao::async::test
     auto coalescer = Coalescer{};
     auto optToken = std::optional<Coalescer::FlightToken>{};
     auto later = Coalescer::Request{};
-    bool laterCalled = false;
+    auto observed = std::vector<std::int32_t>{};
     auto earlier = coalescer.request(
-      1, [&](std::int32_t) { later.reset(); }, [&](Coalescer::FlightToken value) { optToken = std::move(value); });
-    later = coalescer.request(1, [&](std::int32_t) { laterCalled = true; }, [](Coalescer::FlightToken) {});
+      1,
+      [&](std::int32_t value)
+      {
+        observed.push_back(value);
+        later.reset();
+      },
+      [&](Coalescer::FlightToken value) { optToken = std::move(value); });
+    later =
+      coalescer.request(1, [&](std::int32_t value) { observed.push_back(-value); }, [](Coalescer::FlightToken) {});
 
     REQUIRE(optToken);
-    coalescer.complete(*optToken, 0);
+    coalescer.complete(*optToken, 3);
 
-    CHECK_FALSE(laterCalled);
+    CHECK(observed == std::vector<std::int32_t>{3});
   }
 
   TEST_CASE("RequestCoalescer - callback exceptions do not stop fanout")
@@ -228,21 +253,28 @@ namespace ao::async::test
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
-    auto coalescer = Coalescer{};
     std::int32_t starts = 0;
+    std::int32_t failedReleases = 0;
+    std::int32_t replacementReleases = 0;
+    auto coalescer = Coalescer{};
 
     SECTION("The failed flight permits a retry")
     {
+      bool retained = false;
       CHECK_THROWS_AS(coalescer.request(
                         1,
                         [](std::int32_t) {},
-                        [&](Coalescer::FlightToken)
+                        [&](Coalescer::FlightToken token)
                         {
                           ++starts;
+                          retained = coalescer.tryRetainDependency(
+                            token, utility::ScopedRegistration{[&] { ++failedReleases; }});
                           throw std::runtime_error{"start"};
                         }),
                       std::runtime_error);
 
+      CHECK(retained);
+      CHECK(failedReleases == 1);
       auto retry = coalescer.request(1, [](std::int32_t) {}, [&](Coalescer::FlightToken) { ++starts; });
 
       CHECK(starts == 2);
@@ -253,12 +285,16 @@ namespace ao::async::test
       auto replacement = Coalescer::Request{};
       auto optReplacementToken = std::optional<Coalescer::FlightToken>{};
       auto observed = std::vector<std::int32_t>{};
+      bool failedRetained = false;
+      bool replacementRetained = false;
       CHECK_THROWS_AS(coalescer.request(
                         1,
                         [&](std::int32_t value) { observed.push_back(-value); },
-                        [&](Coalescer::FlightToken)
+                        [&](Coalescer::FlightToken failedToken)
                         {
                           ++starts;
+                          failedRetained = coalescer.tryRetainDependency(
+                            failedToken, utility::ScopedRegistration{[&] { ++failedReleases; }});
                           coalescer.clear();
                           replacement = coalescer.request(
                             1,
@@ -266,6 +302,8 @@ namespace ao::async::test
                             [&](Coalescer::FlightToken token)
                             {
                               ++starts;
+                              replacementRetained = coalescer.tryRetainDependency(
+                                token, utility::ScopedRegistration{[&] { ++replacementReleases; }});
                               optReplacementToken = std::move(token);
                             });
                           throw std::runtime_error{"start"};
@@ -273,9 +311,15 @@ namespace ao::async::test
                       std::runtime_error);
 
       REQUIRE(optReplacementToken);
+      CHECK(failedRetained);
+      CHECK(replacementRetained);
+      CHECK(failedReleases == 1);
+      CHECK(replacementReleases == 0);
       coalescer.prefetch(1, [&](Coalescer::FlightToken) { ++starts; });
       CHECK(starts == 2);
       coalescer.complete(*optReplacementToken, 7);
+      CHECK(failedReleases == 1);
+      CHECK(replacementReleases == 1);
       CHECK(observed == std::vector<std::int32_t>{7});
     }
   }
@@ -384,7 +428,7 @@ namespace ao::async::test
     CHECK(releases == 2);
   }
 
-  TEST_CASE("RequestCoalescer - retired tokens cannot attach to a reentrant replacement", "[concurrency]")
+  TEST_CASE("RequestCoalescer - retired tokens cannot affect a reentrant replacement", "[concurrency]")
   {
     using Coalescer = RequestCoalescer<std::int32_t, std::int32_t>;
 
@@ -393,15 +437,20 @@ namespace ao::async::test
     auto coalescer = Coalescer{};
     auto optFirstToken = std::optional<Coalescer::FlightToken>{};
     auto optReplacementToken = std::optional<Coalescer::FlightToken>{};
+    auto observed = std::vector<std::int32_t>{};
     auto replacement = Coalescer::Request{};
     auto first = coalescer.request(
       1,
       [&](std::int32_t)
       {
         replacement = coalescer.request(
-          1, [](std::int32_t) {}, [&](Coalescer::FlightToken token) { optReplacementToken = std::move(token); });
+          1,
+          [&](std::int32_t value) { observed.push_back(value); },
+          [&](Coalescer::FlightToken token) { optReplacementToken = std::move(token); });
+        // The outer fanout still holds the retired flight alive.
         staleAccepted =
           coalescer.tryRetainDependency(*optFirstToken, utility::ScopedRegistration{[&] { ++staleReleases; }});
+        coalescer.complete(*optFirstToken, 2);
       },
       [&](Coalescer::FlightToken token) { optFirstToken = std::move(token); });
 
@@ -411,5 +460,9 @@ namespace ao::async::test
     REQUIRE(optReplacementToken);
     CHECK_FALSE(staleAccepted);
     CHECK(staleReleases == 1);
+    CHECK(observed.empty());
+
+    coalescer.complete(*optReplacementToken, 3);
+    CHECK(observed == std::vector<std::int32_t>{3});
   }
 } // namespace ao::async::test

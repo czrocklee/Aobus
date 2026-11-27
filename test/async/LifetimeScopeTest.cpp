@@ -15,8 +15,11 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <barrier>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
@@ -94,15 +97,44 @@ namespace ao::rt::test
       completed.set(true);
     }
 
-    Task<void> racingSleepAsync(Runtime* runtime, AsyncTestState<bool> taskExited, std::stop_token const stopToken)
+    enum class SleepOutcome : std::uint8_t
     {
-      auto exitObserver = TaskExitObserver{taskExited};
-      co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
+      Expired,
+      Cancelled
+    };
+
+    Task<void> racingSleepAsync(Runtime* runtime, std::promise<SleepOutcome> outcome, std::stop_token const stopToken)
+    {
+      try
+      {
+        co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
+        outcome.set_value(SleepOutcome::Expired);
+      }
+      catch (OperationCancelled const&)
+      {
+        outcome.set_value(SleepOutcome::Cancelled);
+      }
     }
 
     Task<void> noOpAsync()
     {
       co_return;
+    }
+
+    Task<bool> holdWorkerAsync(AsyncTestState<bool> entered, AsyncTestState<bool> release)
+    {
+      entered.set(true);
+      // If cancellation incorrectly waits for the queued task, free the only
+      // worker independently and report that the driver did not release it.
+      co_return release.tryWaitUntil(true, std::chrono::seconds{30});
+    }
+
+    std::future<bool> occupyWorker(Runtime& runtime, AsyncTestState<bool> release)
+    {
+      auto entered = AsyncTestState<bool>::create(false);
+      auto task = runtime.spawn(holdWorkerAsync(entered, std::move(release)));
+      REQUIRE(entered.tryWaitUntil(true));
+      return std::async(std::launch::async, [task = std::move(task)] mutable { return task.get(); });
     }
   } // namespace
 
@@ -205,20 +237,13 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - a closed scope does not submit a task", "[concurrency]")
   {
-    auto barrier = AsyncBarrier{};
-    auto reachedBarrier = AsyncTestState<bool>::create(false);
+    auto worker = std::future<bool>{};
+    auto release = AsyncTestState<bool>::create(false);
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor, 1};
     auto scope = LifetimeScope{};
-    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
-    auto holdWorkerAsync = [](AsyncBarrier* barrier, AsyncTestState<bool> reachedBarrier) -> Task<void>
-    {
-      reachedBarrier.set(true);
-      barrier->wait();
-      co_return;
-    };
-    auto worker = runtime.spawn(holdWorkerAsync(&barrier, reachedBarrier));
-    REQUIRE(reachedBarrier.tryWaitUntil(true));
+    auto cleanup = gsl_lite::finally([&release] { release.set(true); });
+    worker = occupyWorker(runtime, release);
     scope.cancelAll();
     scope.cancelAll();
 
@@ -236,10 +261,49 @@ namespace ao::rt::test
     CHECK(weakSentinelPtr.expired());
     CHECK(scope.empty());
 
-    barrier.release();
-    worker.get();
+    release.set(true);
+    REQUIRE(worker.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    REQUIRE(worker.get());
     runtime.join();
     CHECK(factoryEntries.load() == 0);
+  }
+
+  TEST_CASE("Runtime - cancelling an admitted task before its worker turn skips the factory", "[concurrency]")
+  {
+    auto worker = std::future<bool>{};
+    auto release = AsyncTestState<bool>::create(false);
+    auto factoryEntered = AsyncTestState<bool>::create(false);
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor, 1};
+    auto cleanup = gsl_lite::finally([&release] { release.set(true); });
+    worker = occupyWorker(runtime, release);
+
+    auto makeTask = [factoryEntered](std::stop_token)
+    {
+      factoryEntered.set(true);
+      return noOpAsync();
+    };
+
+    SECTION("Resetting its handle")
+    {
+      auto handle = runtime.spawnCancellable(makeTask);
+      handle.reset();
+    }
+
+    SECTION("Closing its scope")
+    {
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(scope, makeTask);
+      REQUIRE_FALSE(scope.empty());
+      scope.cancelAll();
+      CHECK(scope.empty());
+    }
+
+    release.set(true);
+    REQUIRE(worker.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    REQUIRE(worker.get());
+    runtime.join();
+    CHECK_FALSE(factoryEntered.load());
   }
 
   TEST_CASE("LifetimeScope - a task factory can cancel its own scope before returning", "[concurrency]")
@@ -388,13 +452,13 @@ namespace ao::rt::test
 
     for (std::size_t iteration = 0; iteration < kIterations; ++iteration)
     {
-      auto taskExited = AsyncTestState<bool>::create(false);
+      auto outcome = std::promise<SleepOutcome>{};
+      auto result = outcome.get_future();
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(scope,
-                                [&runtime, taskExited](std::stop_token const stopToken)
-                                { return racingSleepAsync(&runtime, taskExited, stopToken); });
+                                [&runtime, outcome = std::move(outcome)](std::stop_token const stopToken) mutable
+                                { return racingSleepAsync(&runtime, std::move(outcome), stopToken); });
       REQUIRE(sleeper.tryWaitForCallCount(iteration + 1));
-      auto const sleepId = sleeper.call(iteration).id;
       auto start = std::barrier{2};
       bool completionDispatched = false;
 
@@ -402,14 +466,17 @@ namespace ao::rt::test
         auto completionThread = std::jthread{[&]
                                              {
                                                start.arrive_and_wait();
-                                               completionDispatched = sleeper.tryFireById(sleepId);
+                                               completionDispatched = sleeper.tryFire(iteration);
                                              }};
         start.arrive_and_wait();
         scope.cancelAll();
       }
 
-      CHECK((completionDispatched || sleeper.call(iteration).cancelled));
-      REQUIRE(taskExited.tryWaitUntil(true));
+      CHECK(completionDispatched != sleeper.call(iteration).cancelled);
+      REQUIRE(result.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+      // A claimed expiry may still lose to Runtime's post-wait stop checkpoint.
+      auto const terminal = result.get();
+      CHECK((terminal == SleepOutcome::Cancelled || completionDispatched));
     }
 
     runtime.requestStop();

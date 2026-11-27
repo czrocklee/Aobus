@@ -3,52 +3,92 @@
 
 #include "test/runtime/AsyncTestSupport.h"
 
+#include <ao/Contract.h>
 #include <ao/async/Task.h>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/system/system_error.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdint>
-#include <functional>
+#include <future>
 #include <memory>
 #include <mutex>
-#include <ranges>
+#include <optional>
+#include <source_location>
 #include <stop_token>
 #include <thread>
 #include <tuple>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
+  ScopedTestDeadline::ScopedTestDeadline(std::source_location location)
+    : _watchdog{[finished = _finished.get_future(), location]
+                {
+                  if (finished.wait_for(std::chrono::seconds{30}) != std::future_status::ready)
+                  {
+                    AO_FATAL_AT(location, "Test process deadline exceeded");
+                  }
+                }}
+  {
+  }
+
+  ScopedTestDeadline::~ScopedTestDeadline()
+  {
+    _finished.set_value();
+  }
+
   struct ControlledSleeper::Impl final
   {
-    using StopCallback = std::stop_callback<std::function<void()>>;
-
     struct Entry final
     {
-      std::uint64_t id = 0;
       Delay delay{};
       std::weak_ptr<boost::asio::steady_timer> timerPtr;
       bool active = false;
-      // Driver methods observe an entry only after its stop callback is
-      // registered, so cancellation cannot race publication.
+      // Drivers may observe the entry only after its stop callback is registered.
       bool published = false;
       bool cancelled = false;
       std::thread::id startedOn = {};
       std::thread::id cancelledOn = {};
+
+      bool isPending() const { return published && active; }
     };
 
-    std::vector<Entry>::iterator entry(std::uint64_t const id) { return std::ranges::find(entries, id, &Entry::id); }
+    std::optional<std::size_t> tryWaitForPendingIndex(std::optional<Delay> const optDelay,
+                                                      std::chrono::milliseconds const timeout = std::chrono::seconds{
+                                                        10}) const
+    {
+      auto lock = std::unique_lock{mutex};
+      auto optIndex = std::optional<std::size_t>{};
+      auto matches = [optDelay](Entry const& candidate)
+      { return candidate.isPending() && (!optDelay || candidate.delay == *optDelay); };
+
+      std::ignore = cv.wait_for(lock,
+                                timeout,
+                                [&]
+                                {
+                                  auto const it = std::ranges::find_if(entries, matches);
+
+                                  if (it == entries.end())
+                                  {
+                                    return false;
+                                  }
+
+                                  optIndex = static_cast<std::size_t>(it - entries.begin());
+                                  return true;
+                                });
+      return optIndex;
+    }
 
     std::vector<Delay> pendingDelaysLocked() const
     {
@@ -56,7 +96,7 @@ namespace ao::rt::test
 
       for (auto const& candidate : entries)
       {
-        if (candidate.published && candidate.active)
+        if (candidate.isPending())
         {
           delays.push_back(candidate.delay);
         }
@@ -70,28 +110,30 @@ namespace ao::rt::test
       auto executor = co_await boost::asio::this_coro::executor;
       auto timerPtr = std::make_shared<boost::asio::steady_timer>(executor);
       timerPtr->expires_at(std::chrono::steady_clock::time_point::max());
-      auto const id = nextId.fetch_add(1);
+      std::size_t index = 0;
 
       {
         auto const lock = std::scoped_lock{mutex};
-        entries.push_back(Entry{
-          .id = id, .delay = delay, .timerPtr = timerPtr, .active = true, .startedOn = std::this_thread::get_id()});
+        index = entries.size();
+        entries.push_back(
+          Entry{.delay = delay, .timerPtr = timerPtr, .active = true, .startedOn = std::this_thread::get_id()});
       }
 
-      auto stopCallback = StopCallback{
+      // Entries are append-only, so this index remains valid across registrations.
+      auto stopCallback = std::stop_callback{
         stopToken,
-        [this, id, timerPtr]
+        [this, index, timerPtr]
         {
           bool wonCancellation = false;
 
           {
             auto const lock = std::scoped_lock{mutex};
 
-            if (auto const it = entry(id); it != entries.end() && it->active)
+            if (auto& call = entries[index]; call.active)
             {
-              it->cancelled = true;
-              it->cancelledOn = std::this_thread::get_id();
-              it->active = false;
+              call.cancelled = true;
+              call.cancelledOn = std::this_thread::get_id();
+              call.active = false;
               wonCancellation = true;
             }
           }
@@ -106,7 +148,7 @@ namespace ao::rt::test
 
       {
         auto const lock = std::scoped_lock{mutex};
-        entry(id)->published = true;
+        entries[index].published = true;
       }
 
       cv.notify_all();
@@ -132,7 +174,6 @@ namespace ao::rt::test
     mutable std::mutex mutex;
     mutable std::condition_variable cv;
     std::vector<Entry> entries;
-    std::atomic_uint64_t nextId{1};
   };
 
   ControlledSleeper::ControlledSleeper()
@@ -182,12 +223,11 @@ namespace ao::rt::test
 
   ControlledSleeper::Call ControlledSleeper::call(std::size_t const index) const
   {
-    auto lock = std::unique_lock{_implPtr->mutex};
-    _implPtr->cv.wait(
-      lock, [this, index] { return _implPtr->entries.size() > index && _implPtr->entries[index].published; });
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    REQUIRE(index < _implPtr->entries.size());
     auto const& entryValue = _implPtr->entries[index];
-    return {.id = entryValue.id,
-            .delay = entryValue.delay,
+    REQUIRE(entryValue.published);
+    return {.delay = entryValue.delay,
             .cancelled = entryValue.cancelled,
             .startedOn = entryValue.startedOn,
             .cancelledOn = entryValue.cancelledOn};
@@ -212,7 +252,7 @@ namespace ao::rt::test
     {
       auto const lock = std::scoped_lock{_implPtr->mutex};
 
-      if (index >= _implPtr->entries.size() || !_implPtr->entries[index].published || !_implPtr->entries[index].active)
+      if (index >= _implPtr->entries.size() || !_implPtr->entries[index].isPending())
       {
         return false;
       }
@@ -234,86 +274,14 @@ namespace ao::rt::test
 
   bool ControlledSleeper::tryFireNext()
   {
-    std::size_t index = 0;
-
-    {
-      auto lock = std::unique_lock{_implPtr->mutex};
-
-      if (!_implPtr->cv.wait_for(lock,
-                                 std::chrono::seconds{10},
-                                 [this]
-                                 {
-                                   return std::ranges::any_of(_implPtr->entries,
-                                                              [](Impl::Entry const& candidate)
-                                                              { return candidate.published && candidate.active; });
-                                 }))
-      {
-        return false;
-      }
-
-      auto const it = std::ranges::find_if(
-        _implPtr->entries, [](Impl::Entry const& candidate) { return candidate.published && candidate.active; });
-      index = static_cast<std::size_t>(it - _implPtr->entries.begin());
-    }
-
-    return tryFire(index);
+    auto const optIndex = _implPtr->tryWaitForPendingIndex(std::nullopt);
+    return optIndex && tryFire(*optIndex);
   }
 
   bool ControlledSleeper::tryFireNext(Delay const delay)
   {
-    std::size_t index = 0;
-
-    {
-      auto lock = std::unique_lock{_implPtr->mutex};
-
-      if (!_implPtr->cv.wait_for(lock,
-                                 std::chrono::seconds{10},
-                                 [this, delay]
-                                 {
-                                   return std::ranges::any_of(
-                                     _implPtr->entries,
-                                     [delay](Impl::Entry const& candidate)
-                                     { return candidate.published && candidate.active && candidate.delay == delay; });
-                                 }))
-      {
-        return false;
-      }
-
-      auto const it =
-        std::ranges::find_if(_implPtr->entries,
-                             [delay](Impl::Entry const& candidate)
-                             { return candidate.published && candidate.active && candidate.delay == delay; });
-      index = static_cast<std::size_t>(it - _implPtr->entries.begin());
-    }
-
-    return tryFire(index);
-  }
-
-  bool ControlledSleeper::tryFireById(std::uint64_t const id)
-  {
-    std::size_t index = 0;
-
-    {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
-      auto const it = _implPtr->entry(id);
-
-      if (it == _implPtr->entries.end())
-      {
-        return false;
-      }
-
-      index = static_cast<std::size_t>(it - _implPtr->entries.begin());
-    }
-
-    return tryFire(index);
-  }
-
-  std::uint64_t ControlledSleeper::lastScheduledId() const
-  {
-    auto lock = std::unique_lock{_implPtr->mutex};
-    _implPtr->cv.wait(lock, [this] { return std::ranges::any_of(_implPtr->entries, &Impl::Entry::published); });
-    auto const it = std::ranges::find_if(_implPtr->entries | std::views::reverse, &Impl::Entry::published);
-    return it->id;
+    auto const optIndex = _implPtr->tryWaitForPendingIndex(delay);
+    return optIndex && tryFire(*optIndex);
   }
 
   std::vector<ControlledSleeper::Delay> ControlledSleeper::pendingDelays() const
@@ -332,16 +300,7 @@ namespace ao::rt::test
 
   bool ControlledSleeper::tryWaitForPendingDelay(Delay const delay, std::chrono::milliseconds const timeout) const
   {
-    auto lock = std::unique_lock{_implPtr->mutex};
-    return _implPtr->cv.wait_for(lock,
-                                 timeout,
-                                 [this, delay]
-                                 {
-                                   return std::ranges::any_of(
-                                     _implPtr->entries,
-                                     [delay](Impl::Entry const& candidate)
-                                     { return candidate.published && candidate.active && candidate.delay == delay; });
-                                 });
+    return _implPtr->tryWaitForPendingIndex(delay, timeout).has_value();
   }
 
   struct AsyncBarrier::Impl final
