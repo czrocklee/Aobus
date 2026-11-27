@@ -605,31 +605,55 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - gapless lookahead never lowers a higher-precision successor")
+  TEST_CASE("Engine - a wider successor requires an explicit reopen at full precision", "[concurrency]")
   {
     auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const secondFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
+    auto const secondData =
+      std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}, std::byte{0x25}, std::byte{0x26}};
+    auto ended = CallbackLatch{};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr),
                          makeEngineTestDevice(),
                          makePathScriptedDecoderFactory({
-                           {.path = "first.flac",
-                            .info = makeScriptedStreamInfo(firstFormat),
-                            .data = std::vector<std::byte>(4, std::byte{0x11})},
-                           {.path = "second.flac",
-                            .info = makeScriptedStreamInfo(secondFormat),
-                            .data = std::vector<std::byte>(6, std::byte{0x22})},
+                           {.path = "first.flac", .info = makeScriptedStreamInfo(firstFormat), .data = firstData},
+                           {.path = "second.flac", .info = makeScriptedStreamInfo(secondFormat), .data = secondData},
                          })};
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { ended.notify(); });
 
-    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
-
+    auto const nextItem = makePlaybackItem("second.flac");
+    engine.play(makePlaybackItem("first.flac"));
+    REQUIRE(engine.transport() == Transport::Playing);
+    auto const preparedRes = engine.setNext(nextItem);
     REQUIRE(preparedRes);
     CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
     CHECK(backendRaw->currentFormat() == firstFormat);
     CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
+
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+    auto firstOutput = std::array<std::byte, 4>{};
+    REQUIRE(target->renderPcm(firstOutput).bytesWritten == firstOutput.size());
+    CHECK(std::vector<std::byte>{firstOutput.begin(), firstOutput.end()} == firstData);
+    auto const drain = target->renderPcm(firstOutput);
+    REQUIRE(drain.drained);
+    CHECK(drain.bytesWritten == 0);
+    backendRaw->emitDrainComplete();
+    REQUIRE(ended.tryWaitForCount(1));
+    REQUIRE(engine.transport() == Transport::Idle);
+
+    engine.play(nextItem);
+    REQUIRE(engine.transport() == Transport::Playing);
+    CHECK(backendRaw->currentFormat() == secondFormat);
+    CHECK(countBackendEvents(backendRaw->events(), "open") == 2);
+    auto* const reopenedTarget = backendRaw->target();
+    REQUIRE(reopenedTarget != nullptr);
+    auto secondOutput = std::array<std::byte, 6>{};
+    REQUIRE(reopenedTarget->renderPcm(secondOutput).bytesWritten == secondOutput.size());
+    CHECK(std::vector<std::byte>{secondOutput.begin(), secondOutput.end()} == secondData);
   }
 
   TEST_CASE("Engine - gapless lookahead widens a lower-precision successor into the active PCM mode")
@@ -1431,39 +1455,5 @@ namespace ao::audio::test
       CHECK(failure->generation == preparedRes->generation);
       CHECK(engine.transport() == Transport::Error);
     }
-  }
-
-  namespace
-  {
-    DecodedStreamInfo scriptedInfoFor(PcmFormat const& format)
-    {
-      return makeScriptedStreamInfo(format);
-    }
-  } // namespace
-
-  TEST_CASE("Engine - an unreduced mode never pulls a wider successor down for a splice")
-  {
-    // Sonata case: 16-bit is playing because the track is 16-bit, not because
-    // the device is limited. Reusing it would quietly downgrade a 24-bit
-    // successor that this device can almost certainly carry in full.
-    auto const currentFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
-    auto const successorFormat =
-      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
-    auto const data = std::vector{std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}};
-    auto engine = Engine{std::make_unique<FakeCapturingBackend>(),
-                         makeEngineTestDevice(),
-                         makePathScriptedDecoderFactory({
-                           {.path = "current-16.flac", .info = scriptedInfoFor(currentFormat), .data = data},
-                           {.path = "next-24.flac", .info = scriptedInfoFor(successorFormat), .data = data},
-                         })};
-
-    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current-16.flac"}));
-    REQUIRE(engine.status().transport == Transport::Playing);
-
-    auto const preparedRes = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "next-24.flac"}));
-
-    REQUIRE(preparedRes);
-    CHECK(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
-    engine.stop();
   }
 } // namespace ao::audio::test

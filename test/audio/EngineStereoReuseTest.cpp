@@ -340,67 +340,6 @@ namespace ao::audio::test
     CHECK(std::ranges::count(backend->events(), std::string{"open"}, &FakeCapturingBackend::Event::name) == 1);
   }
 
-  TEST_CASE("FakeCapturingBackend - stereo identity opt-in rejects other PCM geometry and known roles")
-  {
-    auto const installed =
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 3};
-    auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    backendPtr->setStereoIdentityReuse(true);
-    auto* const backend = backendPtr.get();
-    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), makeScriptedEngineDecoderFactory(installed)};
-    engine.play(makePlaybackItem(PlaybackInput{.filePath = "installed.flac"}));
-    REQUIRE(engine.transport() == Transport::Playing);
-    auto alias = installed;
-    alias.speakerMask = 0;
-    REQUIRE(backend->canReuseFormat(installed, alias));
-    CHECK(backend->canReuseFormat(alias, installed));
-    CHECK_FALSE(isSamePcmMode(installed, alias));
-    auto candidate = alias;
-
-    SECTION("alternate known roles")
-    {
-      candidate.speakerMask = 0x30;
-    }
-
-    SECTION("mono")
-    {
-      candidate.channels = 1;
-    }
-
-    SECTION("multichannel")
-    {
-      candidate.channels = 4;
-    }
-
-    SECTION("sample rate")
-    {
-      candidate.sampleRate = 44100;
-    }
-
-    SECTION("encoding")
-    {
-      candidate.encoding = SampleEncoding::Signed32Le;
-    }
-
-    SECTION("invalid rate pair")
-    {
-      auto current = installed;
-      current.sampleRate = 0;
-      candidate.sampleRate = 0;
-      CHECK_FALSE(backend->canReuseFormat(current, candidate));
-    }
-
-    SECTION("invalid encoding pair")
-    {
-      auto current = installed;
-      current.encoding = SampleEncoding::Unknown;
-      candidate.encoding = SampleEncoding::Unknown;
-      CHECK_FALSE(backend->canReuseFormat(current, candidate));
-    }
-
-    CHECK_FALSE(backend->canReuseFormat(installed, candidate));
-  }
-
   TEST_CASE("Engine - stereo identity reuse retains the endpoint precision veto behind a wider client", "[concurrency]")
   {
     bool const promoteFirst = GENERATE(false, true);

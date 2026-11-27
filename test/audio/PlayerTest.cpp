@@ -2148,7 +2148,8 @@ namespace ao::audio::test
     CHECK(probePtr->routeCount() == 0);
   }
 
-  TEST_CASE("Player - accepted play and stop filter an old track end already queued on its executor", "[concurrency]")
+  TEST_CASE("Player - accepted commits and stop filter an old track end already queued on its executor",
+            "[concurrency]")
   {
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -2178,15 +2179,39 @@ namespace ao::audio::test
     REQUIRE(executor.tryWaitUntilQueuedCount(3, std::chrono::seconds{5}));
 
     auto barrier = Engine::PreparedCancellationBarrier{};
+    auto failures = std::vector<Engine::PlaybackFailure>{};
+    auto const candidate =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{41}, .input = PlaybackInput{.filePath = "replacement.flac"}};
 
     SECTION("successful explicit play")
     {
-      auto candidateRes = player.stagePlayback(
-        Engine::PlaybackItem{.id = Engine::PlaybackItemId{41}, .input = PlaybackInput{.filePath = "replacement.flac"}});
+      auto candidateRes = player.stagePlayback(candidate);
       REQUIRE(candidateRes);
       auto receiptRes = player.commitPlayback(std::move(*candidateRes));
       REQUIRE(receiptRes);
+      REQUIRE(receiptRes->playbackStarted);
       barrier = receiptRes->cancellationBarrier;
+    }
+
+    SECTION("replacement open fails after accepting the candidate")
+    {
+      auto candidateRes = player.stagePlayback(candidate);
+      REQUIRE(candidateRes);
+      player.setOnPlaybackFailure([&](Engine::PlaybackFailure const& failure) { failures.push_back(failure); });
+      probePtr->setOpenError(Error{.code = Error::Code::ResourceBusy, .message = "replacement device busy"});
+      auto const receiptRes = player.commitPlayback(std::move(*candidateRes));
+      REQUIRE(receiptRes);
+      REQUIRE_FALSE(receiptRes->playbackStarted);
+      barrier = receiptRes->cancellationBarrier;
+
+      REQUIRE(executor.tryDrainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
+      executor.drain();
+      REQUIRE(failures.size() == 1);
+      CHECK(failures.front().itemId == candidate.id);
+      CHECK(failures.front().generation == receiptRes->generation);
+      CHECK(failures.front().kind == Engine::PlaybackFailureKind::RouteActivation);
+      CHECK(failures.front().error.code == Error::Code::ResourceBusy);
+      CHECK_FALSE(failures.front().recoverable);
     }
 
     SECTION("completed stop")

@@ -13,7 +13,6 @@
 #include <ao/audio/flow/Graph.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
-#include <boost/unordered/unordered_flat_map_fwd.hpp>
 
 #include <algorithm>
 #include <bit>
@@ -296,9 +295,9 @@ namespace ao::audio
                             flow::Graph const& graph,
                             NodeQualityAssessment& targetAssessment)
     {
-      if (inputSources.contains(node.id))
+      if (auto const it = inputSources.find(node.id); it != inputSources.end())
       {
-        auto const& sources = inputSources.at(node.id);
+        auto const& sources = it->second;
         auto otherAppNames = std::vector<std::string>{};
         bool hasExternalSource = false;
 
@@ -309,11 +308,11 @@ namespace ao::audio
           if (!isInternal)
           {
             hasExternalSource = true;
-            auto const it = std::ranges::find(graph.nodes, sourceId, &flow::Node::id);
+            auto const sourceIt = std::ranges::find(graph.nodes, sourceId, &flow::Node::id);
 
-            if (it != graph.nodes.end() && !it->name.empty())
+            if (sourceIt != graph.nodes.end() && !sourceIt->name.empty())
             {
-              otherAppNames.push_back(it->name);
+              otherAppNames.push_back(sourceIt->name);
             }
           }
         }

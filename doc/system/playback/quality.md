@@ -138,7 +138,7 @@ Each accepted graph replaces the previous provider evidence for that route and t
 - There is one merged quality graph and one analyzer result per Player, not one interpretation per frontend.
 - Engine owns Aobus-side route truth; the provider owns system-side observation; Player owns the join.
 - The analyzer consumes immutable graph snapshots and owns no subscription or asynchronous lifetime.
-- Player status, PlaybackService state, and `QualityChanged` preserve the same accepted analyzer result for the fields currently projected into runtime and UIModel; analyzer channel confidence and source interpretation history remain Core-internal and are not yet projected ([staging boundary](quality-analysis.md#result-axes-and-confidence)).
+- Player status, the PlaybackService snapshot, and `QualityChanged` carry the same accepted quality result. Runtime projects the analyzer's [channel confidence](quality-analysis.md#result-axes-and-confidence) to UIModel for a separate channel note; the quality snapshot does not expose the source's raw layout evidence.
 - Platform graph callbacks never mutate PlaybackService or UIModel directly.
 - Missing provider evidence remains visible through verification state instead of being backfilled from desired route configuration.
 - Frontends render ordered node assessments supplied by runtime and never reconstruct path order.

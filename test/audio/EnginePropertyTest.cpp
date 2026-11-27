@@ -240,7 +240,7 @@ namespace ao::audio::test
     CHECK(statusAfterNaN.volumeIsHardwareAssisted == statusBeforeNaN.volumeIsHardwareAssisted);
   }
 
-  TEST_CASE("Engine - property callbacks refresh observed capability and intent")
+  TEST_CASE("Engine - property callbacks refresh observed capability and intent", "[concurrency]")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
@@ -250,30 +250,32 @@ namespace ao::audio::test
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), makePropertyDecoderFactory()};
     auto const desc = PlaybackInput{.filePath = "test.flac"};
 
-    SECTION("handlePropertyChanged callback updates engine volume status")
+    SECTION("an external volume change updates gain and hardware capability")
     {
+      engine.play(makePlaybackItem(desc));
+      REQUIRE(backendRaw->target() != nullptr);
+      auto const before = engine.status();
+      REQUIRE(before.volume == Catch::Approx{1.0F});
+      REQUIRE_FALSE(before.volumeIsHardwareAssisted);
+
+      REQUIRE(backendRaw->setProperty(PropertyId::Volume, PropertyValue{0.58F}));
       backendRaw->setMockPropertyInfo(PropertyId::Volume,
                                       PropertyInfo{
                                         .canRead = true,
                                         .canWrite = true,
                                         .isAvailable = true,
-                                        .emitsChangeNotifications = false,
+                                        .emitsChangeNotifications = true,
                                         .isHardwareAssisted = true,
                                       });
-
-      // Play must be called so the backend target is initialized
-      engine.play(makePlaybackItem(desc));
-      REQUIRE(backendRaw->target() != nullptr);
-
       engine.setOnStateChanged([&] { stateChanged.notify(); });
-
       backendRaw->emitPropertyChanged(PropertyId::Volume);
 
-      CHECK(stateChanged.tryWaitForCount(1));
-      CHECK(engine.status().volume == Catch::Approx{1.0F});
-      CHECK(engine.volume() == Catch::Approx{1.0F});
-      CHECK(engine.status().volumeAvailable == true);
-      CHECK(engine.status().volumeIsHardwareAssisted == true);
+      REQUIRE(stateChanged.tryWaitForCount(1));
+      auto const after = engine.status();
+      CHECK(after.volume == Catch::Approx{0.58F});
+      CHECK(engine.volume() == Catch::Approx{0.58F});
+      CHECK(after.volumeAvailable);
+      CHECK(after.volumeIsHardwareAssisted);
     }
 
     SECTION("handlePropertyChanged handles backend read errors gracefully")

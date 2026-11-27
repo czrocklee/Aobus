@@ -4,6 +4,7 @@
 #include "ScriptedDecoderSession.h"
 #include "lib/audio/PcmFrameRing.h"
 #include "lib/audio/StreamingSource.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
@@ -127,9 +128,10 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("StreamingSource - growing preroll returns without a consumer and preserves all PCM")
+  TEST_CASE("StreamingSource - growing preroll returns without a consumer and preserves all PCM", "[concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
+    auto deadline = rt::test::ScopedTestDeadline{};
     auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
@@ -156,6 +158,7 @@ namespace ao::audio::test
             "[concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
+    auto deadline = rt::test::ScopedTestDeadline{};
     auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
@@ -175,6 +178,7 @@ namespace ao::audio::test
             "[concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
+    auto deadline = rt::test::ScopedTestDeadline{};
     auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
@@ -203,6 +207,7 @@ namespace ao::audio::test
   TEST_CASE("StreamingSource - destruction stops a pending preroll write without a consumer", "[concurrency]")
   {
     bool const activate = GENERATE(false, true);
+    auto deadline = rt::test::ScopedTestDeadline{};
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
     auto errors = std::atomic<int>{0};
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(prerollStreamInfo());
@@ -225,6 +230,7 @@ namespace ao::audio::test
 
   TEST_CASE("StreamingSource - active growing block write remains stoppable without a consumer", "[concurrency]")
   {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
     auto errors = std::atomic<int>{0};
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(prerollStreamInfo());

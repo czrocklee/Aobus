@@ -41,16 +41,6 @@ namespace ao::audio
 {
   namespace
   {
-    QualityResult qualityResultFromStatus(Player::Status const& status)
-    {
-      return QualityResult{.sourceQuality = status.sourceQuality,
-                           .pipelineQuality = status.pipelineQuality,
-                           .overall = status.quality,
-                           .fullyVerified = status.qualityFullyVerified,
-                           .channelConfidence = status.channelConfidence,
-                           .assessments = status.qualityAssessments};
-    }
-
     std::unexpected<Error> preparationRejectedError()
     {
       return makeError(Error::Code::Conflict, "Playback preparation was superseded during acceptance");
@@ -615,14 +605,12 @@ namespace ao::audio
 
     // Keep the engine's current device identity and metadata up-to-date.
     auto const currentSnap = enginePtr->status();
-    auto const allDevicesCopy = allDevices;
-
     auto const activeIt =
-      std::ranges::find_if(allDevicesCopy,
+      std::ranges::find_if(allDevices,
                            [&](Device const& dev)
                            { return dev.backendId == currentSnap.backendId && dev.id == currentSnap.currentDeviceId; });
 
-    if (activeIt != allDevicesCopy.end())
+    if (activeIt != allDevices.end())
     {
       enginePtr->updateDevice(*activeIt);
     }
@@ -657,12 +645,9 @@ namespace ao::audio
     cachedSystemGraph = std::move(*optGraph);
     updateMergedGraph();
 
-    auto const playerStatus = snapshot();
     gatePtr->dispatch(
-      [observationPtr = std::move(observationPtr),
-       generation,
-       quality = qualityResultFromStatus(playerStatus),
-       ready = playerStatus.isReady](Impl& self) mutable
+      [observationPtr = std::move(observationPtr), generation, quality = qualityRes, ready = isReady()](
+        Impl& self) mutable
       {
         if (observationPtr == self.graphObservationPtr &&
             generation == self.playbackGeneration.load(std::memory_order_acquire))
@@ -892,8 +877,7 @@ namespace ao::audio
 
     updateMergedGraph();
 
-    auto const playerStatus = snapshot();
-    dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
+    dispatchOutward(&Impl::onQualityChanged, qualityRes, isReady());
   }
 
   void Player::Impl::updateMergedGraph()
@@ -1058,12 +1042,11 @@ namespace ao::audio
       {
         if (!callbackGatePtr->canAcceptCallbacks())
         {
-          return false;
+          return;
         }
 
         callbackGatePtr->dispatch([provider, devices = std::vector<Device>{devices}](Impl& self)
                                   { self.handleOutputDevicesChanged(provider, devices); });
-        return true;
       });
 
     if (_implPtr->gatePtr->canAcceptCallbacks())

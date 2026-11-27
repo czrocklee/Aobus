@@ -7,6 +7,7 @@
 #include "lib/audio/StreamingSource.h"
 #include "lib/audio/detail/RenderPath.h"
 #include "lib/audio/detail/RenderTimeline.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmFormat.h>
@@ -14,12 +15,14 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -64,11 +67,21 @@ namespace ao::audio::test
       return expected;
     }
 
-    std::unique_ptr<StreamingSource> makeParkedPartialWriteSource()
+    std::unique_ptr<StreamingSource> makeParkedPartialWriteSource(std::vector<std::byte> finalBlock = {},
+                                                                  std::function<void(std::size_t)> onRead = {})
     {
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(alignedStreamInfo());
-      decoderPtr->setReadScript({{markerBlock(kFirstBlockBytes, std::byte{0x10}), false},
-                                 {markerBlock(kGrowingBlockBytes, std::byte{0x20}), true}});
+      auto script = std::vector<ScriptedDecoderSession::ReadScriptEntry>{
+        {markerBlock(kFirstBlockBytes, std::byte{0x10}), false},
+        {markerBlock(kGrowingBlockBytes, std::byte{0x20}), finalBlock.empty()}};
+
+      if (!finalBlock.empty())
+      {
+        script.push_back({std::move(finalBlock), true});
+      }
+
+      decoderPtr->setReadScript(std::move(script));
+      decoderPtr->setReadObserver(std::move(onRead));
       return std::make_unique<StreamingSource>(
         std::move(decoderPtr), alignedStreamInfo(), kPrerollDuration, std::chrono::milliseconds{10000});
     }
@@ -90,7 +103,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("StreamingSource - parked partial write keeps every read whole-frame aligned and lossless")
+  TEST_CASE("StreamingSource - parked partial write keeps every read whole-frame aligned and lossless", "[concurrency]")
   {
     REQUIRE(frameBytes(alignedStreamInfo().outputFormat) == kFrameByteCount);
     auto errors = std::atomic<std::int32_t>{0};
@@ -129,33 +142,45 @@ namespace ao::audio::test
     CHECK(errors.load() == 0);
   }
 
-  TEST_CASE("Engine render path - starved render across a parked partial write stays frame aligned")
+  TEST_CASE("Engine render path - starved render delivers the final EOF frames before attempting splice or drain",
+            "[concurrency]")
   {
     REQUIRE(frameBytes(alignedStreamInfo().outputFormat) == kFrameByteCount);
+    auto processDeadline = rt::test::ScopedTestDeadline{};
     auto errors = std::atomic<std::int32_t>{0};
-    auto sourcePtr = makeParkedPartialWriteSource();
+    auto finalReadEntered = rt::test::AsyncTestState<bool>::create(false);
+    auto releaseFinalRead = rt::test::AsyncBarrier{};
+    auto const finalBlock = markerBlock(5 * kFrameByteCount, std::byte{0x30});
+    auto timeline = detail::RenderTimeline{};
+    auto sourcePtr = makeParkedPartialWriteSource(finalBlock,
+                                                  [&](std::size_t read)
+                                                  {
+                                                    if (read == 3)
+                                                    {
+                                                      finalReadEntered.set(true);
+                                                      releaseFinalRead.wait();
+                                                    }
+                                                  });
+    auto cleanup = gsl_lite::finally([&releaseFinalRead] { releaseFinalRead.release(); });
     REQUIRE(sourcePtr->prepare());
     sourcePtr->activate([&](Error const&, std::stop_token) { ++errors; });
     waitUntilRingFull(*sourcePtr);
 
-    auto timeline = detail::RenderTimeline{};
     auto nodePtr = std::make_unique<detail::RenderTimeline::Node>();
     nodePtr->sourcePtr = std::shared_ptr<PcmSource>{std::move(sourcePtr)};
-    nodePtr->backendFormat = alignedStreamInfo().outputFormat;
     nodePtr->info = alignedStreamInfo();
     timeline.publishCurrent(std::move(nodePtr));
 
     auto engineFrameBytes = std::atomic<std::uint32_t>{kFrameByteCount};
     auto playbackDrainPending = std::atomic<bool>{false};
-    auto const expected = expectedStream();
+    auto expected = expectedStream();
+    auto const prefixSize = expected.size();
+    expected.insert(expected.end(), finalBlock.begin(), finalBlock.end());
     auto ledger = std::vector<std::byte>{};
     ledger.reserve(expected.size());
 
-    auto output = std::vector<std::byte>(kRingByteCapacity + (kFrameByteCount * 2));
-    bool drained = false;
-    auto const deadline = std::chrono::steady_clock::now() + kCompletionTimeout;
-
-    while (!drained && std::chrono::steady_clock::now() < deadline)
+    bool spliceAttempted = false;
+    auto render = [&](std::span<std::byte> output)
     {
       auto const result = detail::renderPcm(
         timeline,
@@ -164,23 +189,60 @@ namespace ao::audio::test
         1,
         output,
         [](std::uint64_t) noexcept { return true; },
-        [](std::uint64_t) noexcept { return false; });
+        [&](std::uint64_t) noexcept
+        {
+          spliceAttempted = true;
+          return false;
+        });
 
       CHECK(result.bytesWritten % kFrameByteCount == 0);
       CHECK(result.positionFrameOffset == 0);
       CHECK(result.positionFrames == result.bytesWritten / kFrameByteCount);
       ledger.insert(ledger.end(), output.begin(), output.begin() + static_cast<std::ptrdiff_t>(result.bytesWritten));
-      drained = result.drained;
 
-      if (result.bytesWritten == 0 && !drained)
+      if (spliceAttempted || playbackDrainPending.load() || result.drained)
+      {
+        REQUIRE(ledger.size() == expected.size());
+        REQUIRE(std::ranges::equal(ledger, expected));
+      }
+      else if (result.bytesWritten == 0)
       {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
+
+      return result;
+    };
+
+    auto output = std::vector<std::byte>(kRingByteCapacity + (kFrameByteCount * 2));
+    auto const deadline = std::chrono::steady_clock::now() + kCompletionTimeout;
+
+    while (ledger.size() < prefixSize && std::chrono::steady_clock::now() < deadline)
+    {
+      render(output);
+    }
+
+    REQUIRE(ledger.size() == prefixSize);
+    REQUIRE(finalReadEntered.tryWaitUntil(true));
+    auto const starved = render(output);
+    REQUIRE(starved.bytesWritten == 0);
+    REQUIRE_FALSE(starved.drained);
+    REQUIRE_FALSE(playbackDrainPending.load());
+    REQUIRE_FALSE(spliceAttempted);
+
+    // Only the ring and EOF publication synchronize these renders with the
+    // worker. Consume the last marker across several callbacks, without a join
+    // or a worker acknowledgement after the write.
+    releaseFinalRead.release();
+    bool drained = false;
+    auto const finalDeadline = std::chrono::steady_clock::now() + kCompletionTimeout;
+
+    while (!drained && std::chrono::steady_clock::now() < finalDeadline)
+    {
+      drained = render(std::span{output}.first(2 * kFrameByteCount)).drained;
     }
 
     REQUIRE(drained);
-    REQUIRE(ledger.size() == expected.size());
-    CHECK(std::ranges::equal(ledger, expected));
+    CHECK(spliceAttempted);
     CHECK(playbackDrainPending.load());
     CHECK(errors.load() == 0);
   }

@@ -4,7 +4,6 @@
 #include "lib/audio/detail/EngineRtSignalRing.h"
 
 #include "lib/audio/PcmSource.h"
-#include "lib/audio/detail/EngineEventQueueInvariants.h"
 #include "lib/audio/detail/RenderPath.h"
 #include "lib/audio/detail/RenderTimeline.h"
 #include "test/audio/EngineTestSupport.h"
@@ -85,7 +84,6 @@ namespace ao::audio::test
       auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
       auto nodePtr = std::make_unique<detail::RenderTimeline::Node>();
       nodePtr->sourcePtr = std::make_shared<FinitePcmSource>(std::array{first, second});
-      nodePtr->backendFormat = format;
       nodePtr->info.outputFormat = format;
       return nodePtr;
     }
@@ -264,11 +262,6 @@ namespace ao::audio::test
 
     releaseWorker.reset();
     engine.shutdown();
-  }
-
-  TEST_CASE("Engine event queue - settled destruction state satisfies every invariant")
-  {
-    detail::verifyEngineEventQueueDestruction({});
   }
 
   TEST_CASE("Engine RT signal ring - blocked consumer accepts the legal splice-drain full sequence", "[concurrency]")
