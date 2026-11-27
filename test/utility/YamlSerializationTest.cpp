@@ -27,6 +27,11 @@ namespace ao::test
 {
   namespace
   {
+    template<typename T>
+    concept WritableScalar = requires(ryml::NodeRef node, T const& value) { yaml::writeScalar(node, value); };
+
+    static_assert(!WritableScalar<char const*>);
+
     struct YamlStringIdTag final
     {};
 
@@ -180,9 +185,9 @@ namespace ao::test
     CHECK(readRes.error().message.contains("values.1"));
   }
 
-  TEST_CASE("YamlSerialization - UUID scalars accept only the canonical text form")
+  TEST_CASE("YamlSerialization - UUID scalars require hyphenated hexadecimal text")
   {
-    auto tree = parseYaml("{id: 123e4567-e89b-12d3-a456-426614174000, short: 123e4567, nested: [1]}");
+    auto tree = parseYaml("{id: 123E4567-E89B-12D3-A456-426614174000, short: 123e4567, nested: [1]}");
     auto const root = tree.rootref();
 
     auto const idRes = yaml::uuidScalar(root["id"], "state.id");
@@ -228,6 +233,62 @@ namespace ao::test
       CHECK(ryml::emitrs_yaml<std::string>(tree).contains("owned after scope"));
     }
 
+    SECTION("a string literal is text, not a pointer converted to true")
+    {
+      auto tree = ryml::Tree{yaml::callbacks()};
+      yaml::writeScalar(tree.rootref(), "false");
+      auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
+      CHECK(parsed.rootref().is_val_quoted());
+      CHECK(yaml::scalarView(parsed.rootref()) == "false");
+    }
+
+    SECTION("character arrays use their extent rather than scanning for a terminator")
+    {
+      auto const checkExtent = [](auto& text, std::string_view expected)
+      {
+        CAPTURE(expected);
+        auto tree = ryml::Tree{yaml::callbacks()};
+        yaml::writeScalar(tree.rootref(), text);
+        CHECK(yaml::scalarView(tree.rootref()) == expected);
+      };
+
+      // Keep C arrays to exercise overload resolution without decaying to a pointer or losing qualifiers.
+      // NOLINTNEXTLINE(aobus-modernize-local-initialization-style,modernize-avoid-c-arrays)
+      char mutableText[]{'a', '\0', 'b'};
+      // NOLINTNEXTLINE(aobus-modernize-local-initialization-style,modernize-avoid-c-arrays)
+      constexpr char kConstText[]{'c', '\0', 'd'};
+      // The first NUL is payload; the second is the terminator.
+      // NOLINTNEXTLINE(aobus-modernize-local-initialization-style,modernize-avoid-c-arrays)
+      constexpr char kTrailingText[]{'a', '\0', '\0'};
+      checkExtent(mutableText, std::string_view{"a\0b", 3});
+      checkExtent(kConstText, std::string_view{"c\0d", 3});
+      checkExtent(kTrailingText, std::string_view{"a\0", 2});
+    }
+
+    SECTION("an empty literal round trips as an empty string rather than null")
+    {
+      auto tree = ryml::Tree{yaml::callbacks()};
+      yaml::writeScalar(tree.rootref(), "");
+      auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
+      auto const readRes = yaml::scalarAs<std::string_view>(parsed.rootref(), "empty string");
+
+      REQUIRE(readRes);
+      CHECK(readRes->empty());
+    }
+
+    SECTION("text replaces a parsed block scalar with a double-quoted string")
+    {
+      auto tree = parseYaml("|-\n  original\n");
+      yaml::writeScalar(tree.rootref(), "null");
+      auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+      CHECK(encoded.starts_with(R"("null")"));
+
+      auto parsed = parseYaml(encoded);
+      auto const readRes = yaml::scalarAs<std::string_view>(parsed.rootref(), "replacement");
+      REQUIRE(readRes);
+      CHECK(*readRes == "null");
+    }
+
     SECTION("writeScalar preserves strings that resemble YAML scalar types")
     {
       for (auto const value : {std::string_view{"null"}, std::string_view{"true"}, std::string_view{"42"}})
@@ -244,6 +305,164 @@ namespace ao::test
         CHECK(*readRes == value);
       }
     }
+  }
+
+  TEST_CASE("YamlSerialization - emitted YAML escapes NUL bytes without changing scalar text")
+  {
+    auto tree = ryml::Tree{yaml::callbacks()};
+
+    SECTION("a standalone scalar consists of one NUL byte")
+    {
+      constexpr auto kPayload = std::string_view{"\0", 1};
+      yaml::writeScalar(tree.rootref(), "\0");
+      auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+      CHECK_FALSE(encoded.contains('\0'));
+
+      auto parsed = parseYaml(encoded);
+      auto const readRes = yaml::scalarAs<std::string_view>(parsed.rootref(), "standalone NUL");
+      REQUIRE(readRes);
+      CHECK(readRes->size() == kPayload.size());
+      CHECK(*readRes == kPayload);
+    }
+
+    SECTION("map values distinguish embedded NUL from literal backslash-zero")
+    {
+      constexpr auto kEmbedded = std::string_view{"a\0b", 3};
+      constexpr auto kLiteral = std::string_view{"a\\0b"};
+      auto writer = yaml::MapWriter{tree.rootref()};
+      writer.scalar("embedded", "a\0b").scalar("literal", "a\\0b");
+      auto const writeRes = std::move(writer).finish();
+      REQUIRE(writeRes);
+
+      auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+      CHECK_FALSE(encoded.contains('\0'));
+
+      auto parsed = parseYaml(encoded);
+      auto const embeddedRes = yaml::requireScalar<std::string_view>(parsed.rootref(), "embedded", "map");
+      auto const literalRes = yaml::requireScalar<std::string_view>(parsed.rootref(), "literal", "map");
+      REQUIRE(embeddedRes);
+      REQUIRE(literalRes);
+      CHECK(embeddedRes->size() == kEmbedded.size());
+      CHECK(*embeddedRes == kEmbedded);
+      CHECK(literalRes->size() == kLiteral.size());
+      CHECK(*literalRes == kLiteral);
+    }
+  }
+
+  TEST_CASE("YamlSerialization - emitting NUL in non-double-quoted values preserves aliases and the source tree")
+  {
+    constexpr auto kPayload = std::string_view{"top\nline\0last", 13};
+    auto tree = parseYaml("literal: &text |-\n  original\nsingle: 'original'\nplain: original\nalias: *text\n");
+
+    for (auto const field : std::to_array<std::string_view>({"literal", "single", "plain"}))
+    {
+      yaml::setValue(yaml::findChild(tree.rootref(), field), kPayload);
+    }
+
+    auto const literal = tree.rootref()["literal"];
+    REQUIRE((literal.type().m_bits & ryml::VAL_STYLE) == ryml::VAL_LITERAL);
+    REQUIRE(yaml::scalarView(literal) == kPayload);
+
+    auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+    CHECK_FALSE(encoded.contains('\0'));
+    CHECK(encoded.contains("*text"));
+    CHECK((literal.type().m_bits & ryml::VAL_STYLE) == ryml::VAL_LITERAL);
+    CHECK(yaml::scalarView(literal) == kPayload);
+
+    auto parsed = parseYaml(encoded);
+    auto state = yaml::ErrorCallbackState{};
+    REQUIRE(yaml::resolve(parsed, state));
+
+    for (auto const field : std::to_array<std::string_view>({"literal", "single", "plain", "alias"}))
+    {
+      CAPTURE(field);
+      auto const readRes = yaml::requireScalar<std::string_view>(parsed.rootref(), field, "map");
+      REQUIRE(readRes);
+      CHECK(*readRes == kPayload);
+    }
+  }
+
+  TEST_CASE("YamlSerialization - flow mapping preserves dynamic keys with backslashes and NUL")
+  {
+    constexpr auto kNulKey = std::string_view{"a\\\0b", 4};
+    constexpr auto kLiteralKey = std::string_view{R"(a\0b)"};
+    auto tree = parseYaml("{first: nul value, second: literal value}");
+    yaml::setKey(tree.rootref()["first"], kNulKey);
+    yaml::setKey(tree.rootref()["second"], kLiteralKey);
+
+    auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+    CHECK_FALSE(encoded.contains('\0'));
+
+    auto parsed = parseYaml(encoded);
+    auto const nulRes = yaml::requireScalar<std::string_view>(parsed.rootref(), kNulKey, "map");
+    auto const literalRes = yaml::requireScalar<std::string_view>(parsed.rootref(), kLiteralKey, "map");
+    REQUIRE(nulRes);
+    REQUIRE(literalRes);
+    CHECK(*nulRes == "nul value");
+    CHECK(*literalRes == "literal value");
+  }
+
+  TEST_CASE("YamlSerialization - block and flow maps emit long escaped keys explicitly")
+  {
+    // The quotes and 512 two-byte escapes make the emitted key too long for implicit syntax.
+    auto const key = std::string(512, '\0');
+
+    for (auto const source : {std::string_view{"first: value\n"}, std::string_view{"{first: value}"}})
+    {
+      CAPTURE(source);
+      auto tree = parseYaml(source);
+      yaml::setKey(tree.rootref()["first"], key);
+
+      auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+      CHECK_FALSE(encoded.contains('\0'));
+      CHECK(encoded.contains('?'));
+      CHECK(encoded.contains('{') == source.starts_with('{'));
+
+      auto parsed = parseYaml(encoded);
+      auto const entry = parsed.rootref().first_child();
+      REQUIRE(entry.readable());
+      CHECK(yaml::keyView(entry) == key);
+      CHECK(yaml::scalarView(entry) == "value");
+    }
+  }
+
+  TEST_CASE("YamlSerialization - scalar escaping leaves distinct anchor and alias names alone")
+  {
+    // RapidYAML accepts raw NUL in these names, but YAML forbids it. This pins the scalar
+    // escaping boundary, not support for emitting invalid names as valid YAML.
+    constexpr auto kSource = std::to_array("first: &a\0b \"\\0\"\n"
+                                           "second: &a\\0b literal\n"
+                                           "firstAlias: *a\0b\n"
+                                           "secondAlias: *a\\0b\n");
+    auto tree = parseYaml(std::string_view{kSource.data(), kSource.size() - 1});
+    auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+    CHECK(encoded.contains(std::string_view{"&a\0b", 4}));
+    CHECK(encoded.contains(R"(&a\0b)"));
+    CHECK(encoded.contains(std::string_view{"*a\0b", 4}));
+    CHECK(encoded.contains(R"(*a\0b)"));
+
+    auto parsed = parseYaml(encoded);
+    auto state = yaml::ErrorCallbackState{};
+    REQUIRE(yaml::resolve(parsed, state));
+    CHECK(yaml::scalarView(yaml::findChild(parsed.rootref(), "firstAlias")) == std::string_view{"\0", 1});
+    CHECK(yaml::scalarView(yaml::findChild(parsed.rootref(), "secondAlias")) == "literal");
+  }
+
+  TEST_CASE("YamlSerialization - overwriting a parsed string with a typed scalar removes quoting")
+  {
+    auto const checkOverwrite = [](auto value)
+    {
+      auto tree = parseYaml("'false'");
+      yaml::writeScalar(tree.rootref(), value);
+      auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
+      CHECK_FALSE(parsed.rootref().is_val_quoted());
+      auto const replacementRes = yaml::scalarAs<decltype(value)>(parsed.rootref(), "replacement");
+      REQUIRE(replacementRes);
+      CHECK(*replacementRes == value);
+    };
+    checkOverwrite(true);
+    checkOverwrite(42);
+    checkOverwrite(0.25);
   }
 
   TEST_CASE("YamlSerialization - map writers compose owned values and preserve failures")

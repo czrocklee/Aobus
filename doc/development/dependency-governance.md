@@ -189,6 +189,29 @@ cover-art loader test, the Windows native TUI tests, and both platforms' full
 checks. Do not let the overlay become an untracked fork or intentionally
 change unrelated stb headers in its frozen payload.
 
+The temporary [`ryml` overlay](../../config/vcpkg/ports/ryml/portfile.cmake)
+uses the `0.16.0#0` port tree from the [pinned vcpkg baseline](../../config/vcpkg/vcpkg-configuration.json).
+It retains the upstream source pin and native CMake packaging, including the
+existing CMake fix. The macOS and Windows overlay port applies the same
+[scalar NUL patch](../../config/vcpkg/ports/ryml/escape-scalar-nul.patch) as
+[Linux Nix](../../shell.nix).
+No released fix was found when the overlay was adopted. A baseline or registry
+pin, minimum version, or exact override alone could not select a fixed release;
+a separate custom registry is not warranted for this temporary patch.
+
+Reprovision the selected macOS and Windows SDKs with `setup deps` before
+validation. The unchanged version and port revision cannot distinguish a
+patched installation from an unpatched one.
+
+Remove the overlay and Nix patch only after unpatched official providers pass
+the [scalar emission contract](../system/persistence/yaml-adapter.md#tree-emission)
+on Linux, macOS, and Windows. Run `//test:yaml_emission_test` and the affected
+Aobus consumer tests. The interoperability test reads actual writer output with
+Python's JSON decoder and test-only PyYAML. It distinguishes NUL from literal
+backslash-zero and checks tagged, aliased keys whose escaped form exceeds the
+simple-key limit in block and flow mappings. A new version or a RapidYAML-only
+round trip is not sufficient.
+
 ### Windows App SDK and C++/WinRT
 
 WinUI's top-level package versions are governed by the shared contract. The

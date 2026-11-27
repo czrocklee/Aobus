@@ -13,8 +13,10 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::test
 {
@@ -75,6 +77,59 @@ namespace ao::test
       value = true;
       CHECK_FALSE(yaml::tryReadScalar(numericTree.rootref(), value));
       CHECK(value == true);
+    }
+  }
+
+  TEST_CASE("RymlAdapter - integer parsing accepts endpoints and preserves destinations on overflow")
+  {
+    SECTION("signed 32-bit bounds")
+    {
+      constexpr std::int32_t kSeed = 42;
+      auto value = kSeed;
+      REQUIRE(yaml::tryParseScalar("-2147483648", value));
+      CHECK(value == std::numeric_limits<std::int32_t>::min());
+      REQUIRE(yaml::tryParseScalar("2147483647", value));
+      CHECK(value == std::numeric_limits<std::int32_t>::max());
+
+      for (auto const* text : {"-2147483649", "2147483648"})
+      {
+        INFO(text);
+        value = kSeed;
+        CHECK_FALSE(yaml::tryParseScalar(text, value));
+        CHECK(value == kSeed);
+      }
+    }
+
+    SECTION("signed 64-bit bounds")
+    {
+      constexpr std::int64_t kSeed = 42;
+      auto value = kSeed;
+      REQUIRE(yaml::tryParseScalar("-9223372036854775808", value));
+      CHECK(value == std::numeric_limits<std::int64_t>::min());
+      REQUIRE(yaml::tryParseScalar("9223372036854775807", value));
+      CHECK(value == std::numeric_limits<std::int64_t>::max());
+
+      for (auto const* text : {"-9223372036854775809", "9223372036854775808"})
+      {
+        INFO(text);
+        value = kSeed;
+        CHECK_FALSE(yaml::tryParseScalar(text, value));
+        CHECK(value == kSeed);
+      }
+    }
+
+    SECTION("unsigned 64-bit bounds")
+    {
+      constexpr std::uint64_t kSeed = 42;
+      auto value = kSeed;
+      REQUIRE(yaml::tryParseScalar("0", value));
+      CHECK(value == 0);
+      REQUIRE(yaml::tryParseScalar("18446744073709551615", value));
+      CHECK(value == std::numeric_limits<std::uint64_t>::max());
+
+      value = kSeed;
+      CHECK_FALSE(yaml::tryParseScalar("18446744073709551616", value));
+      CHECK(value == kSeed);
     }
   }
 
@@ -189,6 +244,7 @@ namespace ao::test
     {
       auto source = std::string{"name: preserved\n"};
       REQUIRE(yaml::parseInArena(tree, source, state));
+      CHECK(tree.callbacks() == yaml::callbacks());
       source.assign(source.size(), '#');
     }
 
@@ -205,5 +261,34 @@ namespace ao::test
     REQUIRE_FALSE(parsedRes);
     CHECK(parsedRes.error().code == Error::Code::FormatRejected);
     CHECK(parsedRes.error().message.contains("fixture.yaml"));
+    CHECK(tree.callbacks() == yaml::callbacks());
+  }
+
+  TEST_CASE("RymlAdapter - malformed in-place parsing restores fail-fast callbacks")
+  {
+    constexpr auto kSource = std::string_view{"root: [unterminated"};
+    auto buffer = std::vector<char>{kSource.begin(), kSource.end()};
+    auto state = yaml::ErrorCallbackState{"malformed-in-place.yaml"};
+    auto tree = ryml::Tree{yaml::callbacks()};
+    auto const parsedRes = yaml::parseInPlace(tree, buffer, state);
+
+    REQUIRE_FALSE(parsedRes);
+    CHECK(parsedRes.error().code == Error::Code::FormatRejected);
+    CHECK(parsedRes.error().message.contains("malformed-in-place.yaml"));
+    CHECK(tree.callbacks() == yaml::callbacks());
+  }
+
+  TEST_CASE("RymlAdapter - unresolved alias restores fail-fast callbacks")
+  {
+    auto state = yaml::ErrorCallbackState{"unresolved-alias.yaml"};
+    auto tree = ryml::Tree{yaml::callbacks()};
+    REQUIRE(yaml::parseInArena(tree, "item: *missing\n", state));
+
+    auto const resolvedRes = yaml::resolve(tree, state);
+
+    REQUIRE_FALSE(resolvedRes);
+    CHECK(resolvedRes.error().code == Error::Code::FormatRejected);
+    CHECK(resolvedRes.error().message.contains("unresolved-alias.yaml"));
+    CHECK(tree.callbacks() == yaml::callbacks());
   }
 } // namespace ao::test

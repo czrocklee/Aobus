@@ -7,7 +7,6 @@
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
-#include <c4/format.hpp>
 #include <ryml.hpp>
 
 #include <algorithm>
@@ -15,8 +14,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
-#include <vector>
 
 namespace ao::yaml
 {
@@ -66,7 +65,7 @@ namespace ao::yaml
       return res;
     }
 
-    auto seenKeys = std::vector<std::string_view>{};
+    auto seenKeys = std::unordered_set<std::string_view>{};
     seenKeys.reserve(node.num_children());
 
     for (auto const& child : node.children())
@@ -79,12 +78,10 @@ namespace ao::yaml
 
       auto const key = keyView(child);
 
-      if (std::ranges::contains(seenKeys, key))
+      if (!seenKeys.insert(key).second)
       {
         return makeError(Error::Code::FormatRejected, fieldContext(context, key) + " appears more than once");
       }
-
-      seenKeys.push_back(key);
 
       if (unknownKeyPolicy == UnknownKeyPolicy::Reject && !std::ranges::contains(allowedKeys, key))
       {
@@ -109,7 +106,7 @@ namespace ao::yaml
 
   Result<utility::UuidBytes> uuidScalar(ryml::ConstNodeRef node, std::string_view context)
   {
-    auto textRes = scalarAs<std::string>(node, context);
+    auto textRes = scalarAs<std::string_view>(node, context);
 
     if (!textRes)
     {
@@ -135,16 +132,6 @@ namespace ao::yaml
   {
     setValue(node, value);
     node.set_val_style(ryml::VAL_DQUO);
-  }
-
-  void writeScalar(ryml::NodeRef node, std::string const& value)
-  {
-    writeScalar(node, std::string_view{value});
-  }
-
-  void writeScalar(ryml::NodeRef node, bool value)
-  {
-    node.save(c4::fmt::boolalpha(value));
   }
 
   MapWriter::MapWriter(ryml::NodeRef node)

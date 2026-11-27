@@ -42,12 +42,9 @@ namespace ao::yaml
   ryml::Callbacks callbacks();
 
   ryml::csubstr toCsubstr(std::string_view value) noexcept;
-  ryml::substr toSubstr(std::vector<char>& buffer) noexcept;
   Result<> parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state);
   Result<> parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state);
   Result<> resolve(ryml::Tree& tree, ErrorCallbackState& state);
-  ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value);
-  ryml::csubstr copyToArena(ryml::NodeRef node, std::string_view value);
   ryml::ConstNodeRef findChild(ryml::ConstNodeRef node, std::string_view key) noexcept;
   ryml::NodeRef findChild(ryml::NodeRef node, std::string_view key) noexcept;
   void setKey(ryml::NodeRef node, std::string_view key);
@@ -79,35 +76,18 @@ namespace ao::yaml
       return false;
     }
 
-    if constexpr (std::signed_integral<T>)
+    using Wide = std::conditional_t<std::signed_integral<T>, std::int64_t, std::uint64_t>;
+    Wide parsed = 0;
+    auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+
+    if (ec != std::errc{} || ptr != text.data() + text.size() || parsed < std::numeric_limits<T>::min() ||
+        parsed > std::numeric_limits<T>::max())
     {
-      std::int64_t parsed = 0;
-      auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
-
-      if (ec != std::errc{} || ptr != text.data() + text.size() ||
-          parsed < static_cast<std::int64_t>(std::numeric_limits<T>::min()) ||
-          parsed > static_cast<std::int64_t>(std::numeric_limits<T>::max()))
-      {
-        return false;
-      }
-
-      value = static_cast<T>(parsed);
-      return true;
+      return false;
     }
-    else
-    {
-      std::uint64_t parsed = 0;
-      auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
 
-      if (ec != std::errc{} || ptr != text.data() + text.size() ||
-          parsed > static_cast<std::uint64_t>(std::numeric_limits<T>::max()))
-      {
-        return false;
-      }
-
-      value = static_cast<T>(parsed);
-      return true;
-    }
+    value = static_cast<T>(parsed);
+    return true;
   }
 
   template<std::floating_point T>
@@ -138,20 +118,7 @@ namespace ao::yaml
     requires(std::is_arithmetic_v<T>)
   inline bool tryReadScalar(ryml::ConstNodeRef const& node, T& value)
   {
-    if (!node.has_val())
-    {
-      return false;
-    }
-
-    T parsed = {};
-
-    if (!tryParseScalar(scalarView(node), parsed))
-    {
-      return false;
-    }
-
-    value = parsed;
-    return true;
+    return node.has_val() && tryParseScalar(scalarView(node), value);
   }
 
   template<typename T>
@@ -178,11 +145,6 @@ namespace ao::yaml
   template<typename T>
   inline T asInt(ryml::ConstNodeRef const& node, T defaultValue = 0)
   {
-    if (!node.has_val())
-    {
-      return defaultValue;
-    }
-
     auto val = T{};
     return tryReadScalar(node, val) ? val : defaultValue;
   }

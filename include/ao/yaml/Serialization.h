@@ -8,6 +8,7 @@
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <c4/format.hpp>
 #include <ryml.hpp>
 
 #include <cmath>
@@ -39,28 +40,52 @@ namespace ao::yaml
                            std::string_view context,
                            UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject);
   Result<ryml::ConstNodeRef> requireChild(ryml::ConstNodeRef node, std::string_view key, std::string_view context);
-  /** Reads a scalar in the canonical UUID text form that utility::formatUuid writes. */
+  /** Reads a hyphenated UUID scalar with upper- or lowercase hex digits. */
   Result<utility::UuidBytes> uuidScalar(ryml::ConstNodeRef node, std::string_view context);
   ryml::NodeRef appendChild(ryml::NodeRef node, std::string_view key);
   void writeScalar(ryml::NodeRef node, std::string_view value);
-  void writeScalar(ryml::NodeRef node, std::string const& value);
-  void writeScalar(ryml::NodeRef node, bool value);
+
+  // Keep the extent of string literals; a pointer overload cannot do this.
+  template<std::size_t N>
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+  inline void writeScalar(ryml::NodeRef node, char const (&text)[N])
+  {
+    auto const chars = std::span<char const, N>{text};
+    writeScalar(node, std::string_view{chars.data(), chars.back() == '\0' ? N - 1 : N});
+  }
+
+  // Pointer callers must supply a length or establish a valid C string explicitly.
+  template<typename T>
+    requires std::is_pointer_v<T>
+  void writeScalar(ryml::NodeRef, T const&) = delete;
 
   template<typename T>
-    requires(std::is_arithmetic_v<T> && !std::same_as<T, bool>)
+    requires(std::is_arithmetic_v<T>)
   inline void writeScalar(ryml::NodeRef node, T value)
   {
-    if constexpr (std::floating_point<T>)
+    if constexpr (std::same_as<T, bool>)
+    {
+      node.save(c4::fmt::boolalpha(value));
+    }
+    else if constexpr (std::floating_point<T>)
     {
       if (std::isfinite(value))
       {
         // ryml's printf fallback can discard precision. Keep finite values locale-independent and lossless.
         setValue(node, std::format("{}", value));
-        return;
+      }
+      else
+      {
+        node.save(value);
       }
     }
+    else
+    {
+      node.save(value);
+    }
 
-    node.save(value);
+    // Discard the previous scalar's style, just as for a fresh node.
+    node.set_val_style(ryml::NOTYPE);
   }
 
   template<typename T, typename ElementReader>
