@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -126,6 +127,58 @@ namespace ao::media::wav::test
     CHECK(requiredRes->data.size() == 2);
     REQUIRE(completeRes);
     CHECK(completeRes->data.size() == 2);
+  }
+
+  TEST_CASE("WAV RIFF parser - accepts data before fmt and observes its declared chunk extent")
+  {
+    auto const audio = std::vector<std::uint8_t>{0x64, 0, 0x65, 0};
+    auto body = std::vector<std::uint8_t>{'W', 'A', 'V', 'E'};
+    ao::test::wav::appendChunk(body, "data", audio);
+    ao::test::wav::appendChunk(body, "JUNK", std::array<std::uint8_t, 1>{0x53});
+    ao::test::wav::appendChunk(body, "fmt ", ao::test::wav::makeFmtChunk({.sampleRate = 48000}));
+    ao::test::wav::appendChunk(body, "JUNK", std::array<std::uint8_t, 1>{0x42});
+    auto bytes = std::vector<std::uint8_t>{'R', 'I', 'F', 'F'};
+    ao::test::wav::appendLe32(bytes, static_cast<std::uint32_t>(body.size()));
+    bytes.append_range(body);
+    bytes.push_back(0xFF); // Outside RIFF; not the start of another chunk.
+    auto const view = utility::bytes::view(bytes.data(), bytes.size());
+
+    auto const requiredRes = parseWave(view, WaveParseExtent::RequiredAudio);
+    auto const completeRes = parseWave(view, WaveParseExtent::Complete);
+    REQUIRE(requiredRes);
+    REQUIRE(completeRes);
+    CHECK(requiredRes->chunks.size() == 3);
+    CHECK(completeRes->chunks.size() == 4);
+
+    for (auto const* parsed : {&*requiredRes, &*completeRes})
+    {
+      CHECK(parsed->format.sampleRate == 48000);
+      CHECK(parsed->dataOffset == 20);
+      CHECK(std::ranges::equal(parsed->data, utility::bytes::view(audio.data(), audio.size())));
+    }
+  }
+
+  TEST_CASE("WAV RIFF parser - complete extent rejects a pad byte outside the RIFF boundary")
+  {
+    auto body = std::vector<std::uint8_t>{'W', 'A', 'V', 'E'};
+    ao::test::wav::appendChunk(body, "fmt ", ao::test::wav::makeFmtChunk({}));
+    ao::test::wav::appendChunk(body, "data", std::array<std::uint8_t, 2>{0x64, 0});
+    ao::test::wav::appendChunk(body, "JUNK", std::array<std::uint8_t, 1>{0x42});
+    auto bytes = std::vector<std::uint8_t>{'R', 'I', 'F', 'F'};
+    // The final payload fits; only its pad byte is outside the declared extent.
+    ao::test::wav::appendLe32(bytes, static_cast<std::uint32_t>(body.size() - 1U));
+    bytes.append_range(body);
+
+    auto const view = utility::bytes::view(bytes.data(), bytes.size());
+    auto const requiredRes = parseWave(view, WaveParseExtent::RequiredAudio);
+    REQUIRE(requiredRes);
+    CHECK(requiredRes->dataOffset == 44);
+    CHECK(requiredRes->data.data() == view.data() + 44);
+    CHECK(std::ranges::equal(requiredRes->data, std::array{std::byte{0x64}, std::byte{0}}));
+
+    auto const completeRes = parseWave(view, WaveParseExtent::Complete);
+    REQUIRE_FALSE(completeRes);
+    CHECK(completeRes.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("WAV RIFF parser - rejects malformed or unsupported RIFF data")

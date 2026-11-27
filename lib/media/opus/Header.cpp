@@ -23,6 +23,7 @@ namespace ao::media::opus
   {
     constexpr std::string_view kHeadMagic = "OpusHead";
     constexpr std::string_view kTagsMagic = "OpusTags";
+    constexpr std::uint8_t kSilentChannelMapping = 255;
 
     // The identification packet is fixed up to the channel mapping family; a
     // family other than 0 appends a stream count, a coupled count, and one
@@ -139,7 +140,7 @@ namespace ao::media::opus
       auto const value = static_cast<std::uint8_t>(mapping[std::size_t{2} + channel]);
 
       // 255 marks a silent channel; every other index must name a decoded one.
-      if (value != kMaxChannels && value >= streamChannelCount)
+      if (value != kSilentChannelMapping && value >= streamChannelCount)
       {
         return makeError(Error::Code::CorruptData, "opus channel mapping table names a missing stream channel");
       }

@@ -230,6 +230,7 @@ namespace ao::media::ogg::test
       CHECK(demuxerRes->packet(0).bytes.size() == 265);
       CHECK(hasOnlyEqualBytes(demuxerRes->packet(0).bytes, 7));
       CHECK(demuxerRes->packet(0).granulePosition == 960);
+      CHECK(demuxerRes->packetPageOffset(0) == 0);
       CHECK_FALSE(demuxerRes->hasIncompleteTail());
     }
 
@@ -278,6 +279,8 @@ namespace ao::media::ogg::test
       CHECK(demuxerRes->packet(2).bytes.size() == 3);
       CHECK(hasOnlyEqualBytes(demuxerRes->packet(2).bytes, 10));
       CHECK(demuxerRes->packet(2).granulePosition == 960);
+      CHECK(demuxerRes->packetPageOffset(1) == 0);
+      CHECK(demuxerRes->packetPageOffset(2) == 288);
     }
   }
 
@@ -509,6 +512,72 @@ namespace ao::media::ogg::test
     auto const restart = demuxerRes->restartAtGranule(2000);
     CHECK(restart.packetIndex == 3);
     CHECK(restart.granulePosition == 1000);
+  }
+
+  TEST_CASE("Ogg Demuxer - starts from the first page when granules are equal")
+  {
+    auto const pages =
+      std::array{Page{.headerType = kBeginOfStreamFlag, .granulePosition = 0, .lacingValues = {1}, .payload = {1}},
+                 Page{.granulePosition = 0, .pageSequence = 1, .lacingValues = {1}, .payload = {2}},
+                 Page{.headerType = kEndOfStreamFlag,
+                      .granulePosition = 480,
+                      .pageSequence = 2,
+                      .lacingValues = {1},
+                      .payload = {3}}};
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
+    REQUIRE(demuxerRes);
+    auto const atZero = demuxerRes->restartAtGranule(0);
+    CHECK(atZero.packetIndex == 0);
+    CHECK(atZero.granulePosition == 0);
+    auto const afterZero = demuxerRes->restartAtGranule(1);
+    CHECK(afterZero.packetIndex == 2);
+    CHECK(afterZero.granulePosition == 0);
+  }
+
+  TEST_CASE("Ogg Demuxer - decreasing granules select the first qualifying group in file order")
+  {
+    auto const pages = std::array{
+      Page{.headerType = kBeginOfStreamFlag, .granulePosition = 1000, .lacingValues = {1, 1}, .payload = {1, 2}},
+      Page{.granulePosition = 4000, .pageSequence = 1, .lacingValues = {1}, .payload = {3}},
+      Page{.granulePosition = 2000, .pageSequence = 2, .lacingValues = {1}, .payload = {4}},
+      Page{.headerType = kEndOfStreamFlag,
+           .granulePosition = 3000,
+           .pageSequence = 3,
+           .lacingValues = {1},
+           .payload = {5}}};
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
+    REQUIRE(demuxerRes);
+    REQUIRE(demuxerRes->packetCount() == 5);
+    CHECK(demuxerRes->finalGranulePosition() == 3000);
+
+    // The second page qualifies even when the request exceeds the final granule.
+    for (auto const requested : {2500, 3500, 4000})
+    {
+      CAPTURE(requested);
+      auto const restart = demuxerRes->restartAtGranule(requested);
+      CHECK(restart.packetIndex == 2);
+      CHECK(restart.granulePosition == 1000);
+    }
+
+    auto const beyondAll = demuxerRes->restartAtGranule(4001);
+    CHECK(beyondAll.packetIndex == 5);
+    CHECK(beyondAll.granulePosition == 3000);
+  }
+
+  TEST_CASE("Ogg Demuxer - without a granule anchor restart begins at the first recovered packet")
+  {
+    auto const pages =
+      std::array{Page{.headerType = kBeginOfStreamFlag | kEndOfStreamFlag, .lacingValues = {1}, .payload = {1}}};
+    auto const stream = makeStream(pages);
+    auto const demuxerRes = Demuxer::parse(stream);
+    REQUIRE(demuxerRes);
+    REQUIRE(demuxerRes->packetCount() == 1);
+
+    auto const restart = demuxerRes->restartAtGranule(1000);
+    CHECK(restart.packetIndex == 0);
+    CHECK(restart.granulePosition == 0);
   }
 
   TEST_CASE("Ogg Demuxer - maps a granule position to its page restart point")

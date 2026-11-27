@@ -214,10 +214,15 @@ namespace ao::media::ogg
           demuxer._packets.size() > firstPacketIndex && granulePosition != kUnsetGranulePosition)
       {
         demuxer._packets.back().granulePosition = granulePosition;
+
+        if (!demuxer._pageEnds.empty() && granulePosition < demuxer._pageEnds.back().granulePosition)
+        {
+          demuxer._granulesOrdered = false;
+        }
+
         demuxer._pageEnds.push_back(PageEnd{.firstPacketIndex = firstPacketIndex,
                                             .granulePosition = granulePosition,
                                             .endsOnEndOfStreamPage = isEndOfStream});
-        demuxer._finalGranulePosition = granulePosition;
       }
 
       offset += page.totalSize;
@@ -258,7 +263,7 @@ namespace ao::media::ogg
 
   std::int64_t Demuxer::finalGranulePosition() const noexcept
   {
-    return _finalGranulePosition;
+    return _pageEnds.empty() ? kUnsetGranulePosition : _pageEnds.back().granulePosition;
   }
 
   std::size_t Demuxer::pageGroupCount() const noexcept
@@ -284,16 +289,18 @@ namespace ao::media::ogg
       return Restart{.packetIndex = 0, .granulePosition = 0};
     }
 
-    auto const iterator = std::ranges::lower_bound(_pageEnds, granulePosition, {}, &PageEnd::granulePosition);
+    // Granule order is a codec property, not required for packet recovery.
+    auto const iterator =
+      _granulesOrdered
+        ? std::ranges::lower_bound(_pageEnds, granulePosition, {}, &PageEnd::granulePosition)
+        : std::ranges::find_if(
+            _pageEnds, [granulePosition](PageEnd const& page) { return page.granulePosition >= granulePosition; });
 
     if (iterator == _pageEnds.end())
     {
-      return Restart{.packetIndex = _packets.size(), .granulePosition = _finalGranulePosition};
+      return Restart{.packetIndex = _packets.size(), .granulePosition = finalGranulePosition()};
     }
 
-    // The preceding page group ends where this one begins. Reading it from the
-    // page index rather than from a packet keeps the answer exact even when a
-    // page completes packets without declaring a granule position.
     auto const resumeGranule = iterator == _pageEnds.begin() ? std::int64_t{0} : std::prev(iterator)->granulePosition;
     return Restart{.packetIndex = iterator->firstPacketIndex, .granulePosition = resumeGranule};
   }

@@ -98,7 +98,7 @@ namespace ao::media::cue
       return token;
     }
 
-    Result<std::string> takeText(std::string_view& text)
+    Result<std::string_view> parseText(std::string_view text)
     {
       text = trim(text);
 
@@ -121,7 +121,7 @@ namespace ao::media::cue
           return makeError(Error::Code::InvalidInput, "Unexpected text after quoted CUE value");
         }
 
-        return std::string{*tokenRes};
+        return *tokenRes;
       }
 
       if (text.contains('"'))
@@ -129,23 +129,27 @@ namespace ao::media::cue
         return makeError(Error::Code::InvalidInput, "Quote inside an unquoted CUE value");
       }
 
-      auto value = std::string{text};
-      text = {};
-      return value;
+      return text;
     }
 
     Result<std::uint64_t> parseUnsigned(std::string_view const token)
     {
-      if (token.empty() ||
-          !std::ranges::all_of(token, [](char const character) { return character >= '0' && character <= '9'; }))
+      if (token.empty())
       {
         return makeError(Error::Code::InvalidInput, "Expected an unsigned decimal CUE number");
       }
 
       std::uint64_t value = 0;
-      auto const converted = std::from_chars(token.data(), token.data() + token.size(), value);
+      auto const* const first = token.data();
+      auto const* const end = first + token.size();
+      auto const converted = std::from_chars(first, end, value);
 
-      if (converted.ec != std::errc{} || converted.ptr != token.data() + token.size())
+      if (converted.ptr != end)
+      {
+        return makeError(Error::Code::InvalidInput, "Expected an unsigned decimal CUE number");
+      }
+
+      if (converted.ec != std::errc{})
       {
         return makeError(Error::Code::InvalidInput, "CUE number exceeds the supported integer range");
       }
@@ -275,7 +279,7 @@ namespace ao::media::cue
         }
       }
 
-      auto valueRes = takeText(text);
+      auto const valueRes = parseText(text);
 
       if (!valueRes)
       {
@@ -284,18 +288,25 @@ namespace ao::media::cue
 
       // An identical copy changes nothing; choosing between different ones
       // would silently drop one of them.
-      if (target->has_value() && **target != *valueRes)
+      if (target->has_value())
       {
-        return makeError(Error::Code::InvalidInput, "Metadata is repeated with a different value within one CUE scope");
+        if (**target != *valueRes)
+        {
+          return makeError(
+            Error::Code::InvalidInput, "Metadata is repeated with a different value within one CUE scope");
+        }
+      }
+      else
+      {
+        target->emplace(*valueRes);
       }
 
-      *target = std::move(*valueRes);
       return {};
     }
 
     Result<> parseFile(ParseState& state, std::string_view text)
     {
-      if (state.hasFile || !state.sheet.tracks.empty())
+      if (state.hasFile)
       {
         return makeError(Error::Code::InvalidInput, "A CUE sheet must contain exactly one FILE before its TRACKs");
       }

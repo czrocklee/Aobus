@@ -11,8 +11,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <utility>
@@ -66,7 +68,9 @@ namespace ao::media::opus::test
 
     // One packet per audio page, each page declaring the granule position the
     // caller gives it, so a test can name any origin or end trim it wants.
-    std::vector<std::byte> makeStreamBytes(std::span<std::int64_t const> audioGranules, bool closeStream = true)
+    std::vector<std::byte> makeStreamBytes(std::span<std::int64_t const> audioGranules,
+                                           bool closeStream = true,
+                                           std::uint8_t toc = kSixtyMillisecondToc)
     {
       auto pages = std::vector<Page>{};
       std::uint32_t sequence = 0;
@@ -83,14 +87,16 @@ namespace ao::media::opus::test
                            .lacingValues = ao::test::ogg::lacingFor({tags.size()}),
                            .payload = tags});
 
+      auto const audio = makeAudioPacket(toc);
+
       for (std::size_t index = 0; index < audioGranules.size(); ++index)
       {
         auto const isLast = index + 1 == audioGranules.size();
         pages.push_back(Page{.headerType = isLast && closeStream ? ogg::kEndOfStreamFlag : std::uint8_t{0},
                              .granulePosition = audioGranules[index],
                              .pageSequence = sequence++,
-                             .lacingValues = ao::test::ogg::lacingFor({makeAudioPacket().size()}),
-                             .payload = makeAudioPacket()});
+                             .lacingValues = ao::test::ogg::lacingFor({audio.size()}),
+                             .payload = audio});
       }
 
       return makeStream(pages);
@@ -146,7 +152,7 @@ namespace ao::media::opus::test
       CHECK(packetSampleCount(ao::test::ogg::toBytes(makeAudioPacket(0x1A))) == 2 * kSixtyMillisecondFrames);
 
       auto packet = makeAudioPacket(0x83);
-      packet[1] = 4;
+      packet[1] = 0xC4; // Padding and VBR bits are not part of the frame count.
       CHECK(packetSampleCount(ao::test::ogg::toBytes(packet)) == 480);
     }
 
@@ -265,6 +271,30 @@ namespace ao::media::opus::test
                            .payload = stunted});
 
       CHECK(timelineError(makeStream(pages)) == Error::Code::CorruptData);
+    }
+  }
+
+  TEST_CASE("deriveOggTimeline bounds the playback start even when the stream is incomplete")
+  {
+    constexpr auto kMaxGranule = std::numeric_limits<std::int64_t>::max();
+    constexpr std::uint8_t kShortCeltToc = 0x80; // One 2.5 ms frame (120 samples).
+    // The header's pre-skip is 312, so playback starts 192 samples after the
+    // first page granule. With no EOS, that page does not also bound playback.
+    constexpr std::int64_t kLastRepresentablePageGranule = kMaxGranule - 192;
+
+    SECTION("Playback can start at the largest representable granule")
+    {
+      auto const granules = std::to_array<std::int64_t>({kLastRepresentablePageGranule});
+      auto const timeline = requireTimeline(makeStreamBytes(granules, false, kShortCeltToc));
+      CHECK(timeline.decodeStartGranule == kMaxGranule - kPreSkip);
+      CHECK(timeline.playbackStartGranule == kMaxGranule);
+      CHECK_FALSE(timeline.optTotalFrames);
+    }
+
+    SECTION("A playback start one sample past the limit is corrupt")
+    {
+      auto const granules = std::to_array<std::int64_t>({kLastRepresentablePageGranule + 1});
+      CHECK(timelineError(makeStreamBytes(granules, false, kShortCeltToc)) == Error::Code::CorruptData);
     }
   }
 } // namespace ao::media::opus::test

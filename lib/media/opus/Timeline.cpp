@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 
@@ -126,7 +127,7 @@ namespace ao::media::opus
   {
     auto const optGroup = firstAudioPageGroup(demuxer);
 
-    if (!optGroup || demuxer.packetCount() <= kFirstAudioPacketIndex)
+    if (!optGroup)
     {
       return makeError(Error::Code::CorruptData, "ogg opus stream carries no audio packets");
     }
@@ -143,6 +144,11 @@ namespace ao::media::opus
       if (!optSamples)
       {
         return makeError(Error::Code::CorruptData, "opus packet declares an unusable table of contents");
+      }
+
+      if (*optSamples > std::numeric_limits<std::int64_t>::max() - pageSamples)
+      {
+        return makeError(Error::Code::CorruptData, "opus audio before the first granule exceeds the timeline range");
       }
 
       pageSamples += *optSamples;
@@ -168,17 +174,21 @@ namespace ao::media::opus
       timeline.decodeStartGranule = optGroup->granulePosition - pageSamples;
     }
 
+    if (timeline.decodeStartGranule > std::numeric_limits<std::int64_t>::max() - head.preSkip)
+    {
+      return makeError(Error::Code::CorruptData, "opus pre-skip exceeds the timeline range");
+    }
+
     timeline.playbackStartGranule = timeline.decodeStartGranule + head.preSkip;
 
-    auto const finalGranulePosition = demuxer.finalGranulePosition();
-
-    // Only a stream that reached its declared end states a length. Anything
-    // that stopped early leaves the total unknown so a reader still decodes the
-    // packets it does have.
-    if (finalGranulePosition == ogg::Demuxer::kUnsetGranulePosition || demuxer.hasIncompleteTail())
+    // Only a stream that reached its declared end states a length. Finding an
+    // audio page group above already establishes at least one granule anchor.
+    if (demuxer.hasIncompleteTail())
     {
       return timeline;
     }
+
+    auto const finalGranulePosition = demuxer.finalGranulePosition();
 
     if (finalGranulePosition < timeline.playbackStartGranule)
     {

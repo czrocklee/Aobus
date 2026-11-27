@@ -8,7 +8,6 @@
 #include <boost/endian/buffers.hpp>
 
 #include <cstdint>
-#include <cstring>
 #include <string_view>
 #include <vector>
 
@@ -86,8 +85,6 @@ namespace ao::test::mp4
                                                      std::uint16_t precisionBits)
   {
     auto sampleEntry = media::mp4::AudioSampleEntryLayout{};
-    sampleEntry.common.length = sizeof(media::mp4::AudioSampleEntryLayout);
-    std::memcpy(sampleEntry.common.type.data(), sampleEntryType.data(), 4);
     sampleEntry.channelCount = channels;
     sampleEntry.sampleSize = precisionBits;
     sampleEntry.sampleRate = (sampleRate << 16);
@@ -101,22 +98,14 @@ namespace ao::test::mp4
     return makeAtom(sampleEntryType, sampleEntryBody);
   }
 
-  std::vector<std::uint8_t> makeSampleEntryAtom(std::string_view sampleEntryType, std::vector<std::uint8_t> const& body)
-  {
-    return makeAtom(sampleEntryType, body);
-  }
-
   std::vector<std::uint8_t> makeStsdAtom(std::string_view sampleEntryType,
                                          std::vector<std::uint8_t> const& sampleEntryExtensions,
                                          std::uint32_t sampleRate,
                                          std::uint16_t channels,
                                          std::uint16_t precisionBits)
   {
-    auto stsdBody = std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 0, 1};
-    auto const sampleEntryAtom =
-      makeAudioSampleEntryAtom(sampleEntryType, sampleEntryExtensions, sampleRate, channels, precisionBits);
-    stsdBody.insert(stsdBody.end(), sampleEntryAtom.begin(), sampleEntryAtom.end());
-    return makeAtom("stsd", stsdBody);
+    return makeStsdAtomFromSampleEntry(
+      makeAudioSampleEntryAtom(sampleEntryType, sampleEntryExtensions, sampleRate, channels, precisionBits));
   }
 
   std::vector<std::uint8_t> makeStsdAtomFromSampleEntries(
@@ -154,9 +143,6 @@ namespace ao::test::mp4
   std::vector<std::uint8_t> makeMdhdAtom(std::uint32_t timescale, std::uint32_t duration)
   {
     auto mdhd = media::mp4::MdhdAtomLayout{};
-    mdhd.common.length = sizeof(media::mp4::MdhdAtomLayout);
-    std::memcpy(mdhd.common.type.data(), "mdhd", 4);
-    mdhd.timescale = 44100;
     mdhd.timescale = timescale;
     mdhd.duration = duration;
 
@@ -241,17 +227,7 @@ namespace ao::test::mp4
                                           std::uint32_t timescale,
                                           std::uint32_t duration)
   {
-    auto const mdhdAtom = makeMdhdAtom(timescale, duration);
-    auto const hdlrAtom = makeHdlrAtom(handlerType);
-    auto const minfAtom = makeAtom("minf", stblAtom);
-
-    auto mdiaBody = std::vector<std::uint8_t>{};
-    mdiaBody.insert(mdiaBody.end(), mdhdAtom.begin(), mdhdAtom.end());
-    mdiaBody.insert(mdiaBody.end(), hdlrAtom.begin(), hdlrAtom.end());
-    mdiaBody.insert(mdiaBody.end(), minfAtom.begin(), minfAtom.end());
-    auto const mdiaAtom = makeAtom("mdia", mdiaBody);
-
-    return makeAtom("trak", mdiaAtom);
+    return makeTrackAtomWithMdhd(handlerType, stblAtom, makeMdhdAtom(timescale, duration));
   }
 
   std::vector<std::uint8_t> makeTrackAtomWithMdhd(std::string_view handlerType,
@@ -295,7 +271,7 @@ namespace ao::test::mp4
 
   std::vector<std::uint8_t> makeVideoTrackAtom(std::string_view sampleEntryType)
   {
-    auto const sampleEntry = makeSampleEntryAtom(sampleEntryType, std::vector<std::uint8_t>(78, 0));
+    auto const sampleEntry = makeAtom(sampleEntryType, std::vector<std::uint8_t>(78, 0));
     auto const stsdAtom = makeStsdAtomFromSampleEntry(sampleEntry);
     auto const stblAtom = makeAtom("stbl", stsdAtom);
     return makeTrackAtom("vide", stblAtom, 90000, 90000);

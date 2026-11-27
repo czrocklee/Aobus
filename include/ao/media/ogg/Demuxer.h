@@ -91,8 +91,8 @@ namespace ao::media::ogg
     std::size_t packetPageOffset(std::size_t index) const noexcept;
 
     /**
-     * @brief Granule position of the last page of the logical bitstream, or
-     *        kUnsetGranulePosition when no page carried one.
+     * @brief Last declared granule position on a page completing a packet, or
+     *        kUnsetGranulePosition when there is none.
      */
     std::int64_t finalGranulePosition() const noexcept;
 
@@ -134,10 +134,12 @@ namespace ao::media::ogg
     /**
      * @brief Maps a granule position to the point decoding must restart from.
      *
-     * The restart is the first packet of the page group whose end granule
-     * position first reaches the requested position, which is the earliest point
-     * that can produce it, paired with the granule position that group begins
-     * at. A position beyond the end of the stream restarts at packetCount().
+     * The restart is the first packet of the first indexed page group in file
+     * order whose end granule reaches the requested position, paired with the
+     * previous indexed group's granule (or zero for the first group). With no
+     * indexed groups, returns {0, 0}. If the index is nonempty but no group
+     * qualifies, returns packetCount() paired with the last indexed group's
+     * declared granule, which need not be the maximum.
      */
     Restart restartAtGranule(std::int64_t granulePosition) const noexcept;
 
@@ -191,7 +193,7 @@ namespace ao::media::ogg
     std::vector<PacketEntry> _packets;
     std::vector<PageEnd> _pageEnds;
     std::uint32_t _serialNumber = 0;
-    std::int64_t _finalGranulePosition = kUnsetGranulePosition;
+    bool _granulesOrdered = true;
     bool _hasIncompleteTail = true;
   };
 } // namespace ao::media::ogg

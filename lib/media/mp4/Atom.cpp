@@ -61,7 +61,8 @@ namespace ao::media::mp4
 
   AtomCursor AtomView::children() const noexcept
   {
-    return AtomCursor{_childBytes, _type};
+    // The synthetic root has no wire type, even though findAtom names it "root".
+    return AtomCursor{_childBytes, _headerSize == 0 ? std::string_view{} : _type};
   }
 
   AtomView AtomView::asContainer() const noexcept
@@ -88,7 +89,7 @@ namespace ao::media::mp4
 
     if (compactLength == 0)
     {
-      if (_parentType != "root")
+      if (!_parentType.empty())
       {
         return makeError(Error::Code::FormatRejected, "mp4 end-of-file atom size is only valid at file root");
       }

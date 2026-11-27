@@ -156,7 +156,19 @@ FILE "C:\old rip\disc.wav" WAVE
                                       "TRACK 02 AUDIO\nTITLE Second\nINDEX 01 00:01:00\n");
     REQUIRE(scopedRes);
     CHECK(scopedRes->metadata.optTitle == "Album");
+    REQUIRE(scopedRes->tracks.size() == 2);
+    CHECK(scopedRes->tracks[0].metadata.optTitle == "First");
     CHECK(scopedRes->tracks[1].metadata.optTitle == "Second");
+
+    auto const blankRes =
+      parseSheet("TITLE \"\"\nTITLE \"\"\n" + std::string{kFile} + "TRACK 01 AUDIO\nINDEX 01 00:00:00\n");
+    REQUIRE(blankRes);
+    CHECK(blankRes->metadata.optTitle == "");
+
+    auto const conflictRes =
+      parseSheet("TITLE \"\"\nTITLE Album\n" + std::string{kFile} + "TRACK 01 AUDIO\nINDEX 01 00:00:00\n");
+    REQUIRE_FALSE(conflictRes);
+    CHECK(conflictRes.error().code == Error::Code::InvalidInput);
   }
 
   TEST_CASE("CUE sheet - diagnostics escape control bytes from the sheet")
@@ -222,6 +234,8 @@ FILE "C:\old rip\disc.wav" WAVE
     for (auto const tracks : {cueLiteral("TRACK 00 AUDIO\nINDEX 01 00:00:00"),
                               cueLiteral("TRACK 100 AUDIO\nINDEX 01 00:00:00"),
                               cueLiteral("TRACK -1 AUDIO\nINDEX 01 00:00:00"),
+                              cueLiteral("TRACK +1 AUDIO\nINDEX 01 00:00:00"),
+                              cueLiteral("TRACK 01x AUDIO\nINDEX 01 00:00:00"),
                               cueLiteral("TRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 01 AUDIO\nINDEX 01 00:01:00"),
                               cueLiteral("TRACK 03 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 00:01:00"),
                               cueLiteral("TRACK 18446744073709551616 AUDIO\nINDEX 01 00:00:00")})
@@ -476,6 +490,7 @@ FILE "C:\old rip\disc.wav" WAVE
                             cueLiteral("00:00:0"),
                             cueLiteral("00:00:00:00"),
                             cueLiteral("00:aa:00"),
+                            cueLiteral("01x:00:00"),
                             cueLiteral("18446744073709551616:00:00"),
                             cueLiteral("4099276460824344:48:16"),
                             cueLiteral("4099276460824345:00:00")})

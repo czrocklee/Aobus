@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -220,40 +221,6 @@ namespace ao::media::wav
               static_cast<char>(std::to_integer<unsigned char>(bytes[offset + 2])),
               static_cast<char>(std::to_integer<unsigned char>(bytes[offset + 3]))};
     }
-
-    Result<> applyChunk(ParsedWave& parsed, ChunkView const& chunk, bool& hasFormat, bool& hasData)
-    {
-      if (hasChunkId(chunk, "fmt "))
-      {
-        if (hasFormat)
-        {
-          return makeError(Error::Code::CorruptData, "WAV file has multiple fmt chunks");
-        }
-
-        auto formatRes = parseFormatChunk(chunk.bytes);
-
-        if (!formatRes)
-        {
-          return std::unexpected{formatRes.error()};
-        }
-
-        parsed.format = *formatRes;
-        hasFormat = true;
-      }
-      else if (hasChunkId(chunk, "data") && !chunk.bytes.empty())
-      {
-        if (hasData)
-        {
-          return makeError(Error::Code::CorruptData, "WAV file has multiple data chunks");
-        }
-
-        parsed.dataOffset = chunk.offset;
-        parsed.data = chunk.bytes;
-        hasData = true;
-      }
-
-      return {};
-    }
   } // namespace
 
   Result<ParsedWave> parseWave(std::span<std::byte const> bytes, WaveParseExtent extent)
@@ -282,8 +249,7 @@ namespace ao::media::wav
 
     auto const riffEnd = static_cast<std::size_t>(riffSize) + 8U;
     auto parsed = ParsedWave{};
-    bool hasFormat = false;
-    bool hasData = false;
+    auto optFormat = std::optional<FormatChunk>{};
     auto offset = kRiffHeaderSize;
 
     while (offset < riffEnd)
@@ -296,47 +262,68 @@ namespace ao::media::wav
       auto const chunkId = readChunkId(bytes, offset);
       auto const chunkSize = readLe32(bytes, offset + 4U);
       auto const payloadOffset = offset + kChunkHeaderSize;
-      auto const payloadEnd = payloadOffset + static_cast<std::size_t>(chunkSize);
-      auto const paddedEnd = payloadEnd + (chunkSize & 1U);
+      auto const padding = chunkSize & 1U;
 
-      if (payloadEnd < payloadOffset || paddedEnd < payloadEnd || paddedEnd > riffEnd)
+      if (auto const remaining = riffEnd - payloadOffset; chunkSize > remaining || padding > remaining - chunkSize)
       {
         return makeError(Error::Code::CorruptData, "WAV chunk size exceeds RIFF bounds");
       }
 
-      auto chunk = ChunkView{.id = chunkId, .offset = payloadOffset, .bytes = bytes.subspan(payloadOffset, chunkSize)};
+      auto const chunk =
+        ChunkView{.id = chunkId, .offset = payloadOffset, .bytes = bytes.subspan(payloadOffset, chunkSize)};
       parsed.chunks.push_back(chunk);
 
-      auto applyRes = applyChunk(parsed, chunk, hasFormat, hasData);
-
-      if (!applyRes)
+      if (hasChunkId(chunk, "fmt "))
       {
-        return std::unexpected{applyRes.error()};
+        if (optFormat)
+        {
+          return makeError(Error::Code::CorruptData, "WAV file has multiple fmt chunks");
+        }
+
+        auto const formatRes = parseFormatChunk(chunk.bytes);
+
+        if (!formatRes)
+        {
+          return std::unexpected{formatRes.error()};
+        }
+
+        optFormat = *formatRes;
+      }
+      else if (hasChunkId(chunk, "data") && !chunk.bytes.empty())
+      {
+        if (!parsed.data.empty())
+        {
+          return makeError(Error::Code::CorruptData, "WAV file has multiple data chunks");
+        }
+
+        parsed.dataOffset = chunk.offset;
+        parsed.data = chunk.bytes;
       }
 
-      offset = paddedEnd;
-
-      if (extent == WaveParseExtent::RequiredAudio && hasFormat && hasData)
+      if (extent == WaveParseExtent::RequiredAudio && optFormat && !parsed.data.empty())
       {
         break;
       }
+
+      offset = payloadOffset + chunkSize + padding;
     }
 
-    if (!hasFormat)
+    if (!optFormat)
     {
       return makeError(Error::Code::CorruptData, "WAV file has no fmt chunk");
     }
 
-    if (!hasData || parsed.data.empty())
+    if (parsed.data.empty())
     {
       return makeError(Error::Code::CorruptData, "WAV file has no audio data");
     }
 
-    if ((parsed.data.size() % parsed.format.blockAlign) != 0)
+    if ((parsed.data.size() % optFormat->blockAlign) != 0)
     {
       return makeError(Error::Code::CorruptData, "WAV data chunk is not frame-aligned");
     }
 
+    parsed.format = *optFormat;
     return parsed;
   }
 

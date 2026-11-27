@@ -85,8 +85,7 @@ namespace ao::media::file::opus
 
     std::chrono::milliseconds streamDuration(Timeline const& timeline) noexcept
     {
-      // A stream that never declared a complete ending reports no duration
-      // rather than a guess; a stream that declared zero audible frames does.
+      // Without a complete ending there is no frame count to convert.
       if (!timeline.optTotalFrames)
       {
         return std::chrono::milliseconds{0};

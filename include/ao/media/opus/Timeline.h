@@ -45,9 +45,8 @@ namespace ao::media::opus
     // advanced past the pre-skip. Pre-skip is a length measured from the decode
     // start, not a region of the absolute timeline, so the two add.
     std::int64_t playbackStartGranule = 0;
-    // Audible frames the stream holds. Engaged and zero is a stream that is
-    // valid and silent; disengaged means no complete ending established a
-    // length, and a reader must decode what it finds.
+    // An engaged count of zero means the stream has no audible frames.
+    // Without a complete ending the count is disengaged; a reader must decode what it finds.
     std::optional<std::uint64_t> optTotalFrames;
   };
 
@@ -57,7 +56,9 @@ namespace ao::media::opus
    * @return Error::Code::CorruptData when the stream carries no audio, holds a
    *         packet whose table of contents is unusable, gives a non-final first
    *         audio page fewer granules than its completed packets decode, or
-   *         completes before its own pre-skip.
+   *         completes before its own pre-skip. The same error is returned if
+   *         the sample count up to the first audio granule or the playback start
+   *         (decode start plus pre-skip) cannot fit in a signed 64-bit granule.
    */
   Result<Timeline> deriveOggTimeline(ogg::Demuxer const& demuxer, Head const& head);
 } // namespace ao::media::opus
