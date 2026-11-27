@@ -89,7 +89,7 @@ They may observe an intermediate transport until the active control command or e
 Backend property observation runs outside Engine's state mutex because a concrete getter may refresh native state and synchronously publish provider graph evidence.
 Synchronous backend/provider graph subscribers may call state-only Engine queries such as `volume()`, `isMuted()`, and `isVolumeAvailable()`, including during an initial subscription callback.
 Those observations may reflect the command's prior intent because graph publication precedes Engine's scalar-state commit; separate queries are not an aggregate snapshot.
-They must not call the complete `status()`, control methods, or `shutdown()`, synchronously destroy Engine, or wait for those operations: graph delivery can hold a provider callback gate or run under Engine control serialization.
+They must not call the complete `status()`, control methods, or `shutdown()`, synchronously destroy Engine, or wait for those operations: graph delivery can occupy a provider's exclusive dispatch turn or run under Engine control serialization.
 Defer that work until after the graph callback returns. Engine's own event-worker callbacks retain their separate control-reentrancy contract below.
 
 Every public control command settles pending splice signals at entry under the control lock.
@@ -797,14 +797,13 @@ A target callback must defer close and target replacement on its invoking backen
 This includes a graph callback nested beneath that same backend's target callback.
 Graph-observer close remains supported when no callback to that backend's target remains on the same call stack.
 A target callback must not wait for observer-driven close or synchronously destroy its own target or backend; the current callback's borrow must remain alive through return.
-Core Audio target callbacks have an additional shared-gate precondition: they must defer operations that may acquire or wait for the same registry's delivery gate until the target callback returns, and must not wait for that deferred work.
-This includes subscription, subscription reset or destruction, ordinary publication or clear, pending-ticket delivery, registry retirement, and backend/provider operations that reach the gate indirectly.
-A different route anchor or backend identity does not avoid this precondition when it uses the same registry.
-An ordinary graph observer may already hold the gate while waiting for a run control's target serialization; synchronous gate entry from the target callback would invert that order and can deadlock across threads.
-Use a non-waiting handoff and perform the gate-dependent operation after the target callback has returned; a marker set inside the callback does not by itself establish that return.
-`preparePublish()` and `prepareClear()` only commit graph facts under the registry state mutex, not the delivery gate: a non-render notification may prepare a ticket, retain it, and defer its delivery.
-That distinction permits no new render-domain work or synchronous backend controls from render callbacks.
-This deliberately narrows raw callback composition rather than changing the locking mechanism; the cross-thread gate-order precondition is not runtime-enforced.
+Core Audio target callbacks must defer operations that may wait for the provider's dispatch turn or for an observer that depends on the target callback's return. They must not wait for that deferred work.
+Graph or device subscription, ordinary publication or clear, ticket delivery, and registry retirement can require the turn, including through backend/provider operations that reach it indirectly. Reset does not require the turn, but it can wait for the registration's admitted call; defer a reset or destruction that would create the same dependency.
+A different route anchor or backend identity does not avoid this precondition when it uses the same dispatcher.
+For example, an observer may own the dispatch turn while waiting for a run control's target serialization. If that target callback waits for the turn or for the observer to return, neither thread can proceed.
+Use a non-waiting handoff and perform the dependent operation after the target callback has returned; a marker set inside the callback does not by itself establish that return.
+`preparePublish()` and `prepareClear()` only commit graph facts under the registry state mutex. A non-render notification may prepare a ticket, retain it, and defer its delivery.
+This caller precondition is not runtime-enforced. Preparing a ticket does not permit new render-domain work or synchronous backend controls from render callbacks.
 Native SDK calls and close settlement may block; the boundary is lifetime safety, not a wait-free timing guarantee.
 Close retires native listeners and the AudioUnit before delivering the prepared clear.
 Core Audio additionally diagnoses same-backend target-origin open/close misuse at runtime: every RenderTarget callback boundary is marked with the shared `utility::CallbackStackScope` identity, and `open()` and `close()` assert that identity is absent before mutating target or native state.
@@ -815,18 +814,15 @@ A separate per-backend render-domain marker rejects `start()`, `pause()`, `resum
 Drain completion runs on the control worker rather than the realtime thread, but remains part of the serialized render-producer domain.
 The marker is distinct from the general target-callback identity, so the supported route/format-origin start/stop paths remain allowed.
 These diagnostics cover only the named Core Audio mutation boundaries, not every SDK or native-fault path, and other backends are not promised equivalent runtime diagnostics; they remain bound by the Backend callback preconditions.
-Property writes retain synchronous native error reporting and cached intent, but coalesce graph-publication requests on the existing non-realtime control worker when a graph registry is present.
-That handoff avoids outward graph delivery on a target callback's property-write stack and publishes current state rather than replaying an old property snapshot.
 
-The callback gate serializes delivery without holding the registry state mutex across callbacks.
-Each publisher retains responsibility for its own thread's delivery: a different publishing thread may update the route revision while waiting for the gate, but never transfers its callbacks to the active publisher's thread.
-Only same-thread reentrant work joins the active delivery drain.
-This does not authorize callbacks to wait for another thread's publication or cancellation while retaining the gate.
+#### Core Audio control-worker publication and teardown
 
-Registry retirement is a separate synchronous path, not ordinary queued delivery.
-Shutdown discards pending ordinary deliveries, closes admission, and sends final empty graphs to subscriptions that have not been cancelled.
-An external shutdown caller waits behind in-flight callbacks; after retirement returns, no new callback starts and retained publishers are inert.
-Shutdown initiated on a graph callback stack can synchronously nest final-empty callbacks so that observer state can be released after that shutdown call returns; ordinary non-nesting does not weaken this lifetime boundary or the provider's separate quiescence contract.
+Property writes retain synchronous native error reporting and cached intent. When a registry is present they set one coalesced pending graph-publication request for the non-realtime control worker, rather than queuing a graph per write.
+The worker commits current state and delivers it serially with a stop-aware dispatch wait. The bound is on pending publication requests, not callback duration. This handoff avoids outward graph delivery on the setter's call stack, but stop cannot interrupt a callback that has already begun.
+
+Backend destruction first closes the native unit and listeners, revokes the render target, and supersedes pending graph publications. It then requests stop, wakes the control `std::jthread`, and joins it from any other thread.
+A caller that owns the provider's dispatch turn does not need to give up that turn to join a worker waiting for it: stop cancels the wait. Only destruction on the control worker itself detaches; the independently retained runtime state lets the current call unwind and the worker exit.
+The caller must defer teardown with a non-waiting handoff if an observer already running on the control worker synchronously waits for that caller. Stop cannot break such a dependency, including one through a different provider or other user code such as capture cleanup. Destruction from the backend's own `RenderTarget` callback remains prohibited.
 
 ### ALSA mixer controls
 

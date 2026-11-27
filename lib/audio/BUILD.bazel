@@ -39,6 +39,8 @@ cc_library(
         "backend/detail/AudioBackendRenderBuffer.cpp",
         "backend/detail/BackendDeviceRegistry.cpp",
         "backend/detail/BackendGraphRegistry.cpp",
+        "backend/detail/BackendObserverDispatcher.cpp",
+        "backend/detail/BackendObserverSlot.cpp",
         "backend/detail/CallbackFence.cpp",
         "detail/DecoderError.cpp",
         "detail/DecoderOutputAdapter.cpp",

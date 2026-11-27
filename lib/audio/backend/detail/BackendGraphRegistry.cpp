@@ -3,17 +3,20 @@
 
 #include "backend/detail/BackendGraphRegistry.h"
 
+#include "backend/detail/BackendObserverDispatcher.h"
+#include "backend/detail/BackendObserverSlot.h"
 #include <ao/Contract.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
+#include <list>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -22,117 +25,161 @@
 
 namespace ao::audio::backend::detail
 {
-  struct BackendGraphRegistry::State final
-  {
-    struct Subscriber final
-    {
-      std::uint64_t id = 0;
-      std::string routeAnchor{};
-      Callback callback{};
-    };
-
-    struct Delivery final
-    {
-      std::string routeAnchor{};
-      // Initial subscription snapshots precede later publications and have no route revision.
-      std::uint64_t revision = 0;
-      flow::Graph graph{};
-      std::vector<Subscriber> subscribers{};
-      char const* context = "audio backend graph observer";
-    };
-
-    std::mutex mutex{};
-    std::recursive_mutex callbackMutex{};
-    // Only the callback-gate owner may enqueue or drain reentrant delivery.
-    // Other publishing threads retain their own delivery while waiting for the gate.
-    std::deque<Delivery> pendingDeliveries{};
-    bool delivering = false;
-    std::unordered_map<std::string, flow::Graph> graphs{};
-    std::unordered_map<std::string, std::uint64_t> revisions{};
-    std::vector<Subscriber> subscribers{};
-    std::uint64_t nextSubscriberId = 1;
-    std::uint64_t nextRevision = 1;
-    bool shutdown = false;
-  };
-
   namespace
   {
-    bool containsSubscriber(auto const& state, std::uint64_t const id)
-    {
-      return std::ranges::any_of(state.subscribers, [id](auto const& subscriber) { return subscriber.id == id; });
-    }
+    using Slot = BackendObserverSlot<BackendGraphRegistry::DeliveryCallback>;
 
-    void invokeGraphCallback(BackendGraphRegistry::Callback const& callback,
-                             flow::Graph const& graph,
-                             char const* const context) noexcept
+    void notifySlot(Slot& slot, flow::Graph const& graph, bool const isTerminal, char const* const context) noexcept
     {
       try
       {
-        callback(graph);
+        slot.invoke([&](BackendGraphRegistry::DeliveryCallback const& callback) { callback(graph, isTerminal); });
       }
       catch (...)
       {
         AO_FATAL_EXCEPTION(std::current_exception(), context);
       }
     }
+  } // namespace
 
-    void publishToSubscribers(auto const& statePtr, auto const& delivery)
+  struct BackendGraphRegistry::State final
+  {
+    struct Subscriber final
     {
-      for (auto const& subscriber : delivery.subscribers)
+      std::string routeAnchor;
+      std::shared_ptr<Slot> slotPtr;
+    };
+
+    struct Delivery final
+    {
+      std::string routeAnchor;
+      // Initial subscription snapshots precede later publications and have no route revision.
+      std::uint64_t revision = 0;
+      flow::Graph graph{};
+      std::vector<std::weak_ptr<Slot>> recipients{};
+      char const* context = "audio backend graph observer";
+    };
+
+    explicit State(std::shared_ptr<BackendObserverDispatcher> sharedDispatcherPtr)
+      : dispatcherPtr{std::move(sharedDispatcherPtr)}
+    {
+      AO_INVARIANT(dispatcherPtr);
+    }
+
+    static PendingDelivery makeDelivery(std::shared_ptr<State> const& statePtr, Delivery delivery)
+    {
+      if (delivery.recipients.empty())
+      {
+        return {};
+      }
+
+      return PendingDelivery{
+        [weakStatePtr = std::weak_ptr{statePtr}, delivery = std::move(delivery)](std::stop_token stop) mutable
+        {
+          if (auto const statePtr = weakStatePtr.lock(); statePtr)
+          {
+            statePtr->dispatcherPtr->dispatch([&] { statePtr->drain(std::move(delivery)); }, std::move(stop));
+          }
+        }};
+    }
+
+    void snapshotRecipients(Delivery& delivery) const
+    {
+      for (auto const& subscriber : subscribers)
+      {
+        if (subscriber.routeAnchor == delivery.routeAnchor)
+        {
+          delivery.recipients.emplace_back(subscriber.slotPtr);
+        }
+      }
+    }
+
+    bool isCurrent(Delivery const& delivery) const
+    {
+      return !closed && (delivery.revision == 0 || revisions.at(delivery.routeAnchor) == delivery.revision);
+    }
+
+    // Called on a dispatcher turn. Competing publishers retain their tickets
+    // on their own threads; only reentry into this registry appends to the drain.
+    void drain(Delivery delivery)
+    {
+      publications.invoke(
+        [&]
+        {
+          pending.push_back(std::move(delivery));
+
+          if (draining)
+          {
+            return;
+          }
+
+          draining = true;
+
+          while (!pending.empty())
+          {
+            auto next = std::move(pending.front());
+            pending.pop_front();
+
+            for (auto const& weakSlotPtr : next.recipients)
+            {
+              {
+                auto const lock = std::scoped_lock{mutex};
+
+                if (!isCurrent(next))
+                {
+                  break;
+                }
+              }
+
+              if (auto const slotPtr = weakSlotPtr.lock(); slotPtr)
+              {
+                notifySlot(*slotPtr, next.graph, false, next.context);
+              }
+            }
+          }
+
+          draining = false;
+        });
+    }
+
+    void deliverFinals(std::list<Subscriber>& retired)
+    {
+      for (;;)
       {
         {
-          auto const lock = std::scoped_lock{statePtr->mutex};
+          auto const lock = std::scoped_lock{mutex};
 
-          if (statePtr->shutdown)
+          if (subscribers.empty())
           {
             return;
           }
 
-          auto const revisionIt = statePtr->revisions.find(delivery.routeAnchor);
-
-          if (delivery.revision != 0 &&
-              (revisionIt == statePtr->revisions.end() || revisionIt->second != delivery.revision))
-          {
-            return;
-          }
-
-          if (!containsSubscriber(*statePtr, subscriber.id))
-          {
-            continue;
-          }
+          // Claim only the next notification. A nested shutdown must drain or
+          // revoke the remaining registrations before returning to this one.
+          retired.splice(retired.end(), subscribers, subscribers.begin());
         }
 
-        invokeGraphCallback(subscriber.callback, delivery.graph, delivery.context);
+        // Reset still reaches this slot directly and waits on its call lease.
+        notifySlot(*retired.back().slotPtr, {}, true, "audio backend graph shutdown observer");
       }
     }
 
-    void deliverGraph(auto const& statePtr, auto delivery)
-    {
-      auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-      statePtr->pendingDeliveries.push_back(std::move(delivery));
-
-      if (statePtr->delivering)
-      {
-        return;
-      }
-
-      statePtr->delivering = true;
-
-      while (!statePtr->pendingDeliveries.empty())
-      {
-        auto nextDelivery = std::move(statePtr->pendingDeliveries.front());
-        statePtr->pendingDeliveries.pop_front();
-        // Revision checks discard superseded reentrant snapshots before their callbacks run.
-        publishToSubscribers(statePtr, nextDelivery);
-      }
-
-      statePtr->delivering = false;
-    }
-  } // namespace
+    std::shared_ptr<BackendObserverDispatcher> dispatcherPtr;
+    BackendObserverCalls publications{};
+    // Confined to a dispatcher turn. Tickets contain only weak observer references.
+    std::deque<Delivery> pending{};
+    bool draining = false;
+    std::mutex mutex{};
+    std::unordered_map<std::string, flow::Graph> graphs{};
+    std::unordered_map<std::string, std::uint64_t> revisions{};
+    std::list<Subscriber> subscribers{};
+    std::uint64_t nextRevision = 1;
+    bool closed = false;
+  };
 
   BackendGraphRegistry::PendingDelivery::~PendingDelivery() = default;
 
-  BackendGraphRegistry::PendingDelivery::PendingDelivery(std::function<void()> callback) noexcept
+  BackendGraphRegistry::PendingDelivery::PendingDelivery(std::function<void(std::stop_token)> callback) noexcept
     : _callback{std::move(callback)}
   {
   }
@@ -153,16 +200,16 @@ namespace ao::audio::backend::detail
     return *this;
   }
 
-  void BackendGraphRegistry::PendingDelivery::deliver() &&
+  void BackendGraphRegistry::PendingDelivery::deliver(std::stop_token stop) &&
   {
     if (auto callback = std::exchange(_callback, {}); callback)
     {
-      callback();
+      callback(std::move(stop));
     }
   }
 
-  BackendGraphRegistry::BackendGraphRegistry()
-    : _statePtr{std::make_shared<State>()}
+  BackendGraphRegistry::BackendGraphRegistry(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+    : _statePtr{std::make_shared<State>(std::move(dispatcherPtr))}
   {
   }
 
@@ -180,131 +227,135 @@ namespace ao::audio::backend::detail
       return {};
     }
 
+    return subscribeWithDelivery(
+      routeAnchor,
+      [callback = std::move(callback)](flow::Graph const& graph, bool) { callback(graph); },
+      std::move(initialGraph));
+  }
+
+  utility::ScopedRegistration BackendGraphRegistry::subscribeWithDelivery(std::string_view const routeAnchor,
+                                                                          DeliveryCallback callback,
+                                                                          flow::Graph initialGraph)
+  {
+    if (!callback)
+    {
+      return {};
+    }
+
     auto const statePtr = _statePtr;
+    {
+      auto const lock = std::scoped_lock{statePtr->mutex};
+
+      if (statePtr->closed)
+      {
+        return {};
+      }
+    }
+
+    auto const slotPtr = std::make_shared<Slot>(std::move(callback));
     auto const anchor = std::string{routeAnchor};
-    std::uint64_t subscriberId = 0;
-    auto delivery = State::Delivery{.routeAnchor = anchor, .context = "audio backend initial graph observer"};
-    auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+    statePtr->dispatcherPtr->dispatch(
+      [&]
+      {
+        auto delivery = State::Delivery{
+          .routeAnchor = anchor, .recipients = {slotPtr}, .context = "audio backend initial graph observer"};
+        {
+          auto const lock = std::scoped_lock{statePtr->mutex};
 
+          if (statePtr->closed)
+          {
+            return;
+          }
+
+          statePtr->subscribers.push_back({.routeAnchor = anchor, .slotPtr = slotPtr});
+          auto const it = statePtr->graphs.find(anchor);
+          delivery.graph = it != statePtr->graphs.end() ? it->second : std::move(initialGraph);
+        }
+
+        statePtr->drain(std::move(delivery));
+      });
+
+    bool closed = false;
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
-
-      if (statePtr->shutdown)
-      {
-        return {};
-      }
-
-      subscriberId = statePtr->nextSubscriberId++;
-      statePtr->subscribers.push_back({.id = subscriberId, .routeAnchor = anchor, .callback = std::move(callback)});
-
-      if (auto const it = statePtr->graphs.find(anchor); it != statePtr->graphs.end())
-      {
-        initialGraph = it->second;
-      }
-
-      delivery.graph = std::move(initialGraph);
-      delivery.subscribers.push_back(statePtr->subscribers.back());
+      closed = statePtr->closed;
     }
 
-    deliverGraph(statePtr, std::move(delivery));
-
+    if (closed)
     {
-      auto const lock = std::scoped_lock{statePtr->mutex};
-
-      if (statePtr->shutdown || !containsSubscriber(*statePtr, subscriberId))
-      {
-        return {};
-      }
+      slotPtr->retire();
+      return {};
     }
 
-    auto const weakStatePtr = std::weak_ptr<State>{statePtr};
-    return utility::ScopedRegistration{[weakStatePtr, subscriberId]
-                                       {
-                                         auto const statePtr = weakStatePtr.lock();
+    return utility::ScopedRegistration{
+      [weakStatePtr = std::weak_ptr{statePtr}, weakSlotPtr = std::weak_ptr{slotPtr}]
+      {
+        auto const slotPtr = weakSlotPtr.lock();
 
-                                         if (!statePtr)
-                                         {
-                                           return;
-                                         }
+        if (!slotPtr)
+        {
+          return;
+        }
 
-                                         auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-                                         auto const lock = std::scoped_lock{statePtr->mutex};
-                                         auto const it = std::ranges::find(
-                                           statePtr->subscribers, subscriberId, &State::Subscriber::id);
+        slotPtr->retire();
 
-                                         if (it != statePtr->subscribers.end())
-                                         {
-                                           statePtr->subscribers.erase(it);
-                                         }
-                                       }};
+        if (auto const statePtr = weakStatePtr.lock(); statePtr)
+        {
+          auto const lock = std::scoped_lock{statePtr->mutex};
+          std::erase_if(statePtr->subscribers, [&](auto const& subscriber) { return subscriber.slotPtr == slotPtr; });
+        }
+      }};
   }
 
   BackendGraphRegistry::PendingDelivery BackendGraphRegistry::preparePublish(std::string_view const routeAnchor,
                                                                              flow::Graph graph)
   {
     auto const statePtr = _statePtr;
-    auto const anchor = std::string{routeAnchor};
-    auto delivery = State::Delivery{.routeAnchor = anchor, .graph = std::move(graph)};
+    auto delivery = State::Delivery{.routeAnchor = std::string{routeAnchor}, .graph = std::move(graph)};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
 
-      if (statePtr->shutdown)
+      if (statePtr->closed)
       {
         return {};
       }
 
-      if (auto const it = statePtr->graphs.find(anchor); it != statePtr->graphs.end() && it->second == delivery.graph)
+      if (auto const it = statePtr->graphs.find(delivery.routeAnchor);
+          it != statePtr->graphs.end() && it->second == delivery.graph)
       {
         return {};
       }
 
-      statePtr->graphs[anchor] = delivery.graph;
+      statePtr->graphs[delivery.routeAnchor] = delivery.graph;
       delivery.revision = statePtr->nextRevision++;
-      statePtr->revisions[anchor] = delivery.revision;
-
-      for (auto const& subscriber : statePtr->subscribers)
-      {
-        if (subscriber.routeAnchor == anchor)
-        {
-          delivery.subscribers.push_back(subscriber);
-        }
-      }
+      statePtr->revisions[delivery.routeAnchor] = delivery.revision;
+      statePtr->snapshotRecipients(delivery);
     }
 
-    return PendingDelivery{[statePtr, delivery = std::move(delivery)] mutable
-                           { deliverGraph(statePtr, std::move(delivery)); }};
+    return State::makeDelivery(statePtr, std::move(delivery));
   }
 
   BackendGraphRegistry::PendingDelivery BackendGraphRegistry::prepareClear(std::string_view const routeAnchor)
   {
     auto const statePtr = _statePtr;
-    auto const anchor = std::string{routeAnchor};
-    auto delivery = State::Delivery{.routeAnchor = anchor};
+    auto delivery = State::Delivery{.routeAnchor = std::string{routeAnchor}};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
 
-      if (statePtr->shutdown)
+      if (statePtr->closed)
       {
         return {};
       }
 
-      statePtr->graphs.erase(anchor);
+      statePtr->graphs.erase(delivery.routeAnchor);
       delivery.revision = statePtr->nextRevision++;
-      statePtr->revisions[anchor] = delivery.revision;
-
-      for (auto const& subscriber : statePtr->subscribers)
-      {
-        if (subscriber.routeAnchor == anchor)
-        {
-          delivery.subscribers.push_back(subscriber);
-        }
-      }
+      statePtr->revisions[delivery.routeAnchor] = delivery.revision;
+      statePtr->snapshotRecipients(delivery);
     }
 
-    return PendingDelivery{[statePtr, delivery = std::move(delivery)] mutable
-                           { deliverGraph(statePtr, std::move(delivery)); }};
+    return State::makeDelivery(statePtr, std::move(delivery));
   }
 
   void BackendGraphRegistry::publish(std::string_view const routeAnchor, flow::Graph graph)
@@ -319,46 +370,40 @@ namespace ao::audio::backend::detail
     std::move(delivery).deliver();
   }
 
-  void BackendGraphRegistry::shutdown() noexcept
+  void BackendGraphRegistry::shutdown(bool const deliverTerminal) noexcept
   {
     auto const statePtr = _statePtr;
-    auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-
+    auto retired = std::list<State::Subscriber>{};
+    bool needsFinals = false;
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
-
-      if (statePtr->shutdown)
-      {
-        return;
-      }
-
-      statePtr->shutdown = true;
+      statePtr->closed = true;
       statePtr->graphs.clear();
       statePtr->revisions.clear();
-    }
 
-    // Retirement is synchronous even on a callback stack. Do not defer final
-    // empties: the caller may destroy its observer state as soon as shutdown returns.
-    statePtr->pendingDeliveries.clear();
-    auto const emptyGraph = flow::Graph{};
-
-    while (true)
-    {
-      auto subscriber = State::Subscriber{};
-
+      if (deliverTerminal)
       {
-        auto const lock = std::scoped_lock{statePtr->mutex};
-
-        if (statePtr->subscribers.empty())
-        {
-          return;
-        }
-
-        subscriber = std::move(statePtr->subscribers.front());
-        statePtr->subscribers.erase(statePtr->subscribers.begin());
+        needsFinals = !statePtr->subscribers.empty();
       }
-
-      invokeGraphCallback(subscriber.callback, emptyGraph, "audio backend graph shutdown observer");
+      else
+      {
+        retired.swap(statePtr->subscribers);
+      }
     }
+
+    for (auto const& subscriber : retired)
+    {
+      subscriber.slotPtr->retire();
+    }
+
+    if (needsFinals)
+    {
+      statePtr->dispatcherPtr->dispatch([&]
+                                        { statePtr->publications.invoke([&] { statePtr->deliverFinals(retired); }); });
+    }
+
+    // An external caller also waits for self-cancelled or self-retired
+    // publications to unwind. No unrelated dispatcher turn is needed to wait.
+    statePtr->publications.retire();
   }
 } // namespace ao::audio::backend::detail

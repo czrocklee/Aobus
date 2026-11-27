@@ -4,6 +4,8 @@
 #include "backend/WasapiProvider.h"
 
 #include "backend/WasapiSharedBackend.h"
+#include "backend/detail/BackendDeviceRegistry.h"
+#include "backend/detail/BackendObserverDispatcher.h"
 #include "backend/detail/WasapiGraphRegistry.h"
 #include "backend/detail/WasapiProviderMonitorHooks.h"
 #include "backend/detail/WasapiStrings.h"
@@ -13,7 +15,6 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/utility/CallbackStackScope.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/ThreadName.h>
 
@@ -33,7 +34,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -42,7 +42,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -58,7 +58,6 @@ namespace ao::audio::backend
     // Plug/unplug bursts fire several endpoint notifications back to back;
     // wait briefly so one re-enumeration covers the whole burst.
     constexpr auto kChangeCoalesceDelay = std::chrono::milliseconds{250};
-    constexpr auto kCallbackGatePollDelay = std::chrono::milliseconds{10};
 
     void invokeHook(std::function<void()> const& hook, char const* const context) noexcept
     {
@@ -303,20 +302,11 @@ namespace ao::audio::backend
       std::function<void()> _onChanged;
     };
 
-    struct DeviceSub
-    {
-      std::uint64_t id;
-      OnDevicesChangedCallback callback;
-    };
-
     struct MonitorState final
     {
       MtaUsage mtaUsage;
+      std::shared_ptr<detail::BackendDeviceRegistry> deviceRegistryPtr;
       std::shared_ptr<detail::WasapiProviderMonitorHooks> monitorHooksPtr;
-
-      mutable std::mutex mutex;
-      mutable std::recursive_timed_mutex callbackMutex;
-      std::vector<Device> cachedDevices;
 
       ComPtr<IMMDeviceEnumerator> enumerator;
       NotificationClient notificationClient;
@@ -325,14 +315,12 @@ namespace ao::audio::backend
       HANDLE stopEvent = nullptr;
       HANDLE changeEvent = nullptr;
 
-      std::vector<DeviceSub> deviceSubs;
-      std::uint64_t nextSubId = 1;
-      std::atomic<bool> shutdownRequested{false};
-
-      explicit MonitorState(std::shared_ptr<detail::WasapiProviderMonitorHooks> hooksPtr)
+      MonitorState(std::shared_ptr<detail::BackendDeviceRegistry> registryPtr,
+                   std::shared_ptr<detail::WasapiProviderMonitorHooks> hooksPtr)
         // The notification callback only signals an event: re-enumerating inside
         // an IMMNotificationClient callback risks deadlocking the MMDevice lock.
-        : monitorHooksPtr{std::move(hooksPtr)}
+        : deviceRegistryPtr{std::move(registryPtr)}
+        , monitorHooksPtr{std::move(hooksPtr)}
         , notificationClient{[this]
                              {
                                if (changeEvent != nullptr)
@@ -345,12 +333,12 @@ namespace ao::audio::backend
       {
         if (monitorHooksPtr && monitorHooksPtr->enumerateDevices)
         {
-          cachedDevices = monitorHooksPtr->enumerateDevices();
+          deviceRegistryPtr->publish(monitorHooksPtr->enumerateDevices());
         }
         else if (SUCCEEDED(
                    ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator))))
         {
-          cachedDevices = enumerateWasapiRenderDevices(enumerator.Get());
+          deviceRegistryPtr->publish(enumerateWasapiRenderDevices(enumerator.Get()));
           notificationsRegistered = SUCCEEDED(enumerator->RegisterEndpointNotificationCallback(&notificationClient));
         }
       }
@@ -369,16 +357,9 @@ namespace ao::audio::backend
           ::CloseHandle(stopEvent);
         }
 
-        if (monitorHooksPtr && monitorHooksPtr->onMonitorStateDestroyed)
+        if (monitorHooksPtr)
         {
-          try
-          {
-            monitorHooksPtr->onMonitorStateDestroyed();
-          }
-          catch (...)
-          {
-            AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI monitor destruction callback");
-          }
+          invokeHook(monitorHooksPtr->onMonitorStateDestroyed, "WASAPI monitor destruction observer");
         }
       }
 
@@ -397,115 +378,11 @@ namespace ao::audio::backend
         return enumerator.Get() != nullptr ? enumerateWasapiRenderDevices(enumerator.Get()) : std::vector<Device>{};
       }
 
-      bool tryAcquireCallbackGate(std::unique_lock<std::recursive_timed_mutex>& callbackLock) const
-      {
-        while (!shutdownRequested.load(std::memory_order_acquire))
-        {
-          if (callbackLock.try_lock_for(kCallbackGatePollDelay))
-          {
-            return true;
-          }
-        }
-
-        return false;
-      }
-
-      bool isDeviceSubscriptionActive(std::uint64_t id) const
-      {
-        auto const lock = std::scoped_lock{mutex};
-        return !shutdownRequested.load(std::memory_order_relaxed) &&
-               std::ranges::find(deviceSubs, id, &DeviceSub::id) != deviceSubs.end();
-      }
-
-      void removeDeviceSubscription(std::uint64_t id)
-      {
-        auto const lock = std::scoped_lock{mutex};
-        auto const it = std::ranges::find(deviceSubs, id, &DeviceSub::id);
-
-        if (it != deviceSubs.end())
-        {
-          deviceSubs.erase(it);
-        }
-      }
-
-      void notifyDeviceCallbacksReady() const noexcept
-      {
-        if (!monitorHooksPtr || !monitorHooksPtr->onDeviceCallbacksReady)
-        {
-          return;
-        }
-
-        try
-        {
-          monitorHooksPtr->onDeviceCallbacksReady();
-        }
-        catch (...)
-        {
-          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device-callback readiness observer");
-        }
-      }
-
-      bool tryProcessDeviceCallback(DeviceSub const& sub, std::vector<Device> const& snapshot)
-      {
-        auto callbackLock = std::unique_lock{callbackMutex, std::defer_lock};
-
-        if (!tryAcquireCallbackGate(callbackLock))
-        {
-          return false;
-        }
-
-        if (!isDeviceSubscriptionActive(sub.id))
-        {
-          return true;
-        }
-
-        try
-        {
-          if (sub.callback)
-          {
-            sub.callback(snapshot);
-          }
-        }
-        catch (...)
-        {
-          removeDeviceSubscription(sub.id);
-          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device observer");
-        }
-
-        return true;
-      }
-
-      bool tryNotifyRefreshComplete()
-      {
-        if (!monitorHooksPtr || !monitorHooksPtr->onRefreshComplete)
-        {
-          return true;
-        }
-
-        auto callbackLock = std::unique_lock{callbackMutex, std::defer_lock};
-
-        if (!tryAcquireCallbackGate(callbackLock) || shutdownRequested.load(std::memory_order_relaxed))
-        {
-          return false;
-        }
-
-        try
-        {
-          monitorHooksPtr->onRefreshComplete();
-        }
-        catch (...)
-        {
-          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI refresh-completion observer");
-        }
-
-        return true;
-      }
-
-      void monitorLoop()
+      void monitorLoop(std::stop_token const& stop)
       {
         auto const handles = std::array<HANDLE, 2>{stopEvent, changeEvent};
 
-        while (!shutdownRequested.load(std::memory_order_acquire))
+        while (!stop.stop_requested())
         {
           auto const waited =
             ::WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE, INFINITE);
@@ -524,48 +401,28 @@ namespace ao::audio::backend
           ::ResetEvent(changeEvent); // absorb notifications that arrived while coalescing
 
           auto newDevices = enumerateDevices();
-          auto subs = std::vector<DeviceSub>{};
-          auto snapshot = std::vector<Device>{};
 
-          {
-            auto const lock = std::scoped_lock{mutex};
-
-            if (shutdownRequested.load(std::memory_order_relaxed))
-            {
-              return;
-            }
-
-            cachedDevices = std::move(newDevices);
-            snapshot = cachedDevices;
-            subs = deviceSubs;
-          }
-
-          notifyDeviceCallbacksReady();
-
-          for (auto const& sub : subs)
-          {
-            if (!tryProcessDeviceCallback(sub, snapshot))
-            {
-              return;
-            }
-          }
-
-          if (!tryNotifyRefreshComplete())
+          if (stop.stop_requested())
           {
             return;
+          }
+
+          if (monitorHooksPtr)
+          {
+            invokeHook(monitorHooksPtr->onDeviceCallbacksReady, "WASAPI device-callback readiness observer");
+          }
+
+          deviceRegistryPtr->publish(std::move(newDevices), stop);
+
+          if (!stop.stop_requested() && monitorHooksPtr)
+          {
+            invokeHook(monitorHooksPtr->onRefreshComplete, "WASAPI refresh-completion observer");
           }
         }
       }
 
-      // Lock failure at this noexcept lifecycle boundary is unrecoverable and
-      // intentionally retains the provider's fail-fast contract.
       void requestShutdown() noexcept
       {
-        if (shutdownRequested.exchange(true, std::memory_order_acq_rel))
-        {
-          return;
-        }
-
         if (stopEvent != nullptr)
         {
           ::SetEvent(stopEvent);
@@ -576,11 +433,6 @@ namespace ao::audio::backend
           enumerator->UnregisterEndpointNotificationCallback(&notificationClient);
           notificationsRegistered = false;
         }
-
-        auto const callbackLock = std::scoped_lock{callbackMutex};
-        auto const lock = std::scoped_lock{mutex};
-        cachedDevices.clear();
-        deviceSubs.clear();
       }
     };
 
@@ -588,12 +440,14 @@ namespace ao::audio::backend
     {
     public:
       explicit Control(std::shared_ptr<detail::WasapiProviderMonitorHooks> monitorHooksPtr)
-        : _graphRegistryPtr{std::make_shared<detail::WasapiGraphRegistry>()}
-        , _monitorStatePtr{std::make_shared<MonitorState>(std::move(monitorHooksPtr))}
+        : _dispatcherPtr{std::make_shared<detail::BackendObserverDispatcher>()}
+        , _deviceRegistryPtr{std::make_shared<detail::BackendDeviceRegistry>(_dispatcherPtr)}
+        , _graphRegistryPtr{std::make_shared<detail::WasapiGraphRegistry>(_dispatcherPtr)}
+        , _monitorStatePtr{std::make_shared<MonitorState>(_deviceRegistryPtr, std::move(monitorHooksPtr))}
       {
       }
 
-      ~Control() { shutdown(); }
+      ~Control() = default;
 
       Control(Control const&) = delete;
       Control& operator=(Control const&) = delete;
@@ -628,18 +482,19 @@ namespace ao::audio::backend
         {
           auto const retainedControlPtr = shared_from_this();
           _monitorThread =
-            std::jthread{[retainedControlPtr, statePtr]
+            std::jthread{[retainedControlPtr](std::stop_token const& stop)
                          {
+                           auto& state = *retainedControlPtr->_monitorStatePtr;
                            retainedControlPtr->markMonitorStarted();
 
                            try
                            {
                              setCurrentThreadName("WasapiDeviceMonitor");
-                             statePtr->monitorLoop();
+                             state.monitorLoop(stop);
 
-                             if (statePtr->monitorHooksPtr)
+                             if (state.monitorHooksPtr)
                              {
-                               invokeHook(statePtr->monitorHooksPtr->onMonitorExit, "WASAPI monitor-exit observer");
+                               invokeHook(state.monitorHooksPtr->onMonitorExit, "WASAPI monitor-exit observer");
                              }
                            }
                            catch (...)
@@ -660,12 +515,11 @@ namespace ao::audio::backend
       void shutdown() noexcept
       {
         bool returnWithoutWaiting = false;
-        bool startedShutdown = false;
-        bool waitForExistingShutdown = false;
+        bool const dispatching = _dispatcherPtr->isDispatchingOnThisThread();
 
         {
-          auto const lock = std::scoped_lock{_lifecycleMutex};
-          returnWithoutWaiting = isCurrentCallback() || _monitorThreadId == std::this_thread::get_id();
+          auto lock = std::unique_lock{_lifecycleMutex};
+          returnWithoutWaiting = dispatching || _monitorThreadId == std::this_thread::get_id();
 
           if (_lifecycle == Lifecycle::Stopped)
           {
@@ -674,39 +528,28 @@ namespace ao::audio::backend
 
           if (_lifecycle == Lifecycle::Stopping)
           {
-            if (returnWithoutWaiting)
+            // Dropping a retired registration can call shutdown again on the initiator.
+            if (returnWithoutWaiting || _retiringThread == std::this_thread::get_id())
             {
               return;
             }
 
-            waitForExistingShutdown = true;
+            lock.unlock();
+            notifyShutdownWait();
+            lock.lock();
+            _completionChanged.wait(lock, [this] { return _lifecycle == Lifecycle::Stopped; });
+            return;
           }
-          else
-          {
-            _lifecycle = Lifecycle::Stopping;
-            startedShutdown = true;
-          }
+
+          _lifecycle = Lifecycle::Stopping;
+          _retiringThread = std::this_thread::get_id();
         }
 
-        if (waitForExistingShutdown)
-        {
-          notifyShutdownWait();
-          waitForCompletion();
-          return;
-        }
-
-        if (startedShutdown)
-        {
-          notifyShutdownStarted();
-        }
-
-        // Retain the COM-bearing monitor state until endpoint notifications and
-        // both callback registries have retired. Callback-origin shutdown then
-        // leaves these shared owners alive until callback and worker unwind.
-        auto const monitorStatePtr = _monitorStatePtr;
-        auto const graphRegistryPtr = _graphRegistryPtr;
-        monitorStatePtr->requestShutdown();
-        graphRegistryPtr->shutdown();
+        notifyShutdownStarted();
+        _monitorThread.request_stop();
+        _monitorStatePtr->requestShutdown();
+        _graphRegistryPtr->shutdown(!returnWithoutWaiting);
+        _deviceRegistryPtr->shutdown();
 
         if (_monitorThread.joinable())
         {
@@ -722,6 +565,7 @@ namespace ao::audio::backend
 
         {
           auto lock = std::unique_lock{_lifecycleMutex};
+          _retiringThread = {};
           _registriesRetired = true;
           updateCompletionLocked();
 
@@ -742,90 +586,22 @@ namespace ao::audio::backend
         }
 
         auto const weakControlPtr = weak_from_this();
-        callback = [weakControlPtr, callback = std::move(callback)](std::vector<Device> const& devices)
-        {
-          if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+        auto sub = _deviceRegistryPtr->subscribe(
+          [weakControlPtr, callback = std::move(callback)](std::vector<Device> const& devices)
           {
-            controlPtr->invokeDeviceCallback(callback, devices);
-          }
-        };
-
-        auto const statePtr = _monitorStatePtr;
-        std::uint64_t id = 0;
-        auto devices = std::vector<Device>{};
-        // Linearize registration, snapshot capture, and initial delivery with
-        // monitor refresh callbacks without holding the device-state lock in user code.
-        auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-
-        {
-          auto const lock = std::scoped_lock{statePtr->mutex};
-
-          if (statePtr->shutdownRequested.load(std::memory_order_relaxed))
-          {
-            return {};
-          }
-
-          id = statePtr->nextSubId++;
-          statePtr->deviceSubs.push_back({.id = id, .callback = callback});
-          devices = statePtr->cachedDevices;
-        }
-
-        {
-          auto const lock = std::scoped_lock{statePtr->mutex};
-
-          if (statePtr->shutdownRequested.load(std::memory_order_relaxed) ||
-              std::ranges::find(statePtr->deviceSubs, id, &DeviceSub::id) == statePtr->deviceSubs.end())
-          {
-            return {};
-          }
-        }
-
-        try
-        {
-          callback(devices);
-        }
-        catch (...)
-        {
-          auto const lock = std::scoped_lock{statePtr->mutex};
-          auto const it = std::ranges::find(statePtr->deviceSubs, id, &DeviceSub::id);
-
-          if (it != statePtr->deviceSubs.end())
-          {
-            statePtr->deviceSubs.erase(it);
-          }
-
-          AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device observer");
-        }
-
-        {
-          auto const lock = std::scoped_lock{statePtr->mutex};
-
-          if (statePtr->shutdownRequested.load(std::memory_order_relaxed) ||
-              std::ranges::find(statePtr->deviceSubs, id, &DeviceSub::id) == statePtr->deviceSubs.end())
-          {
-            return {};
-          }
-        }
+            if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+            {
+              controlPtr->invokeDeviceCallback(callback, devices);
+            }
+          });
 
         if (!acceptsSubscriptions())
         {
-          statePtr->removeDeviceSubscription(id);
+          sub.reset();
           return {};
         }
 
-        return utility::ScopedRegistration{[weakStatePtr = std::weak_ptr{statePtr}, id]
-                                           {
-                                             auto const retainedStatePtr = weakStatePtr.lock();
-
-                                             if (!retainedStatePtr)
-                                             {
-                                               return;
-                                             }
-
-                                             auto const callbackLock =
-                                               std::scoped_lock{retainedStatePtr->callbackMutex};
-                                             retainedStatePtr->removeDeviceSubscription(id);
-                                           }};
+        return sub;
       }
 
       utility::ScopedRegistration subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
@@ -836,15 +612,15 @@ namespace ao::audio::backend
         }
 
         auto const weakControlPtr = weak_from_this();
-        auto sub =
-          _graphRegistryPtr->subscribe(routeAnchor,
-                                       [weakControlPtr, callback = std::move(callback)](flow::Graph const& graph)
-                                       {
-                                         if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
-                                         {
-                                           controlPtr->invokeGraphCallback(callback, graph);
-                                         }
-                                       });
+        auto sub = _graphRegistryPtr->subscribeWithDelivery(
+          routeAnchor,
+          [weakControlPtr, callback = std::move(callback)](flow::Graph const& graph, bool const isTerminal)
+          {
+            if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+            {
+              controlPtr->invokeGraphCallback(callback, graph, isTerminal);
+            }
+          });
 
         if (!acceptsSubscriptions())
         {
@@ -857,9 +633,7 @@ namespace ao::audio::backend
 
       std::vector<Device> devices() const
       {
-        auto const statePtr = _monitorStatePtr;
-        auto const lock = std::scoped_lock{statePtr->mutex};
-        return statePtr->cachedDevices;
+        return acceptsSubscriptions() ? _deviceRegistryPtr->snapshot() : std::vector<Device>{};
       }
 
       std::shared_ptr<detail::WasapiGraphRegistry> graphRegistry() const { return _graphRegistryPtr; }
@@ -875,29 +649,25 @@ namespace ao::audio::backend
       class [[nodiscard]] CallbackScope final
       {
       public:
-        explicit CallbackScope(Control& control)
+        explicit CallbackScope(Control& control, bool const isTerminal = false)
           : _control{control}
         {
           auto const lock = std::scoped_lock{_control._lifecycleMutex};
 
-          auto const callbackAlreadyActive = utility::CallbackStackScope::containsIdentity(&_control);
-
-          if (_control._lifecycle == Lifecycle::Running ||
-              (_control._lifecycle == Lifecycle::Stopping && !callbackAlreadyActive))
+          if (_control._lifecycle == Lifecycle::Running || (_control._lifecycle == Lifecycle::Stopping && isTerminal))
           {
             ++_control._activeCallbackCount;
-            _optCallbackStackScope.emplace(&_control);
+            _admitted = true;
           }
         }
 
         ~CallbackScope()
         {
-          if (!_optCallbackStackScope)
+          if (!_admitted)
           {
             return;
           }
 
-          _optCallbackStackScope.reset();
           auto const lock = std::scoped_lock{_control._lifecycleMutex};
           --_control._activeCallbackCount;
           _control.updateCompletionLocked();
@@ -908,11 +678,11 @@ namespace ao::audio::backend
         CallbackScope(CallbackScope&&) = delete;
         CallbackScope& operator=(CallbackScope&&) = delete;
 
-        bool isAdmitted() const noexcept { return _optCallbackStackScope.has_value(); }
+        bool isAdmitted() const noexcept { return _admitted; }
 
       private:
         Control& _control;
-        std::optional<utility::CallbackStackScope> _optCallbackStackScope;
+        bool _admitted = false;
       };
 
       bool acceptsSubscriptions() const
@@ -921,21 +691,26 @@ namespace ao::audio::backend
         return _lifecycle == Lifecycle::Running;
       }
 
-      bool isCurrentCallback() const noexcept { return utility::CallbackStackScope::containsIdentity(this); }
-
       void invokeDeviceCallback(OnDevicesChangedCallback const& callback, std::vector<Device> const& devices)
       {
         auto const scope = CallbackScope{*this};
 
         if (scope.isAdmitted())
         {
-          callback(devices);
+          try
+          {
+            callback(devices);
+          }
+          catch (...)
+          {
+            AO_FATAL_EXCEPTION(std::current_exception(), "WASAPI device observer");
+          }
         }
       }
 
-      void invokeGraphCallback(OnGraphChangedCallback const& callback, flow::Graph const& graph)
+      void invokeGraphCallback(OnGraphChangedCallback const& callback, flow::Graph const& graph, bool const isTerminal)
       {
-        auto const scope = CallbackScope{*this};
+        auto const scope = CallbackScope{*this, isTerminal};
 
         if (scope.isAdmitted())
         {
@@ -966,12 +741,6 @@ namespace ao::audio::backend
         }
       }
 
-      void waitForCompletion() noexcept
-      {
-        auto lock = std::unique_lock{_lifecycleMutex};
-        _completionChanged.wait(lock, [this] { return _lifecycle == Lifecycle::Stopped; });
-      }
-
       void notifyShutdownStarted() const noexcept
       {
         if (_monitorStatePtr->monitorHooksPtr)
@@ -988,12 +757,15 @@ namespace ao::audio::backend
         }
       }
 
+      std::shared_ptr<detail::BackendObserverDispatcher> _dispatcherPtr;
+      std::shared_ptr<detail::BackendDeviceRegistry> _deviceRegistryPtr;
       std::shared_ptr<detail::WasapiGraphRegistry> _graphRegistryPtr;
       std::shared_ptr<MonitorState> _monitorStatePtr;
       mutable std::mutex _lifecycleMutex;
       std::condition_variable _completionChanged;
       std::jthread _monitorThread;
       std::thread::id _monitorThreadId{};
+      std::thread::id _retiringThread{};
       std::size_t _activeCallbackCount = 0U;
       Lifecycle _lifecycle = Lifecycle::Running;
       bool _registriesRetired = false;
@@ -1008,11 +780,7 @@ namespace ao::audio::backend
       controlPtr->startMonitor();
     }
 
-    ~Impl()
-    {
-      auto const retainedControlPtr = controlPtr;
-      retainedControlPtr->shutdown();
-    }
+    ~Impl() = default;
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;

@@ -5,6 +5,7 @@
 
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
+#include "backend/detail/BackendObserverDispatcher.h"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/flow/Graph.h>
@@ -21,7 +22,12 @@ namespace ao::audio::backend::detail
 {
   struct AlsaGraphPublicationState final
   {
-    BackendGraphRegistry registry{};
+    explicit AlsaGraphPublicationState(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+      : registry{std::move(dispatcherPtr)}
+    {
+    }
+
+    BackendGraphRegistry registry;
   };
 
   namespace
@@ -127,8 +133,8 @@ namespace ao::audio::backend::detail
     }
   }
 
-  AlsaGraphRegistry::AlsaGraphRegistry()
-    : _statePtr{std::make_shared<AlsaGraphPublicationState>()}
+  AlsaGraphRegistry::AlsaGraphRegistry(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+    : _statePtr{std::make_shared<AlsaGraphPublicationState>(std::move(dispatcherPtr))}
   {
   }
 
@@ -142,6 +148,15 @@ namespace ao::audio::backend::detail
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
     return statePtr->registry.subscribe(anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
+  }
+
+  utility::ScopedRegistration AlsaGraphRegistry::subscribeWithDelivery(std::string_view const routeAnchor,
+                                                                       DeliveryCallback callback)
+  {
+    auto const statePtr = _statePtr;
+    auto const anchor = std::string{routeAnchor};
+    return statePtr->registry.subscribeWithDelivery(
+      anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
   }
 
   AlsaGraphPublisher AlsaGraphRegistry::publisher() const
@@ -159,9 +174,9 @@ namespace ao::audio::backend::detail
     publisher().clear(routeAnchor);
   }
 
-  void AlsaGraphRegistry::shutdown() noexcept
+  void AlsaGraphRegistry::shutdown(bool const deliverTerminal) noexcept
   {
     auto const statePtr = _statePtr;
-    statePtr->registry.shutdown();
+    statePtr->registry.shutdown(deliverTerminal);
   }
 } // namespace ao::audio::backend::detail

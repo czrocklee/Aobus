@@ -1158,6 +1158,7 @@ cc_test(
     }),
     tags = ["external"],
     deps = [
+        ":async_test_support",
         ":audio_platform_test_support",
         ":audio_test_support",
         ":fatal_probe_support",
@@ -1903,7 +1904,10 @@ cc_test(
             "@aobus_native_deps//:fdk_aac",
             "@aobus_native_deps//:pipewire",
         ],
-        "@platforms//os:macos": [":coreaudio_test_support"],
+        "@platforms//os:macos": [
+            ":async_test_support",
+            ":coreaudio_test_support",
+        ],
         "//conditions:default": [],
     }),
 )

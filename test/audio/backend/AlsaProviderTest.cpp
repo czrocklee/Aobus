@@ -4,6 +4,7 @@
 #include "lib/audio/backend/AlsaProvider.h"
 
 #include "lib/audio/backend/detail/AlsaProviderMonitorHooks.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -12,6 +13,7 @@
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -19,6 +21,7 @@
 #include <memory>
 #include <semaphore>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -161,39 +164,97 @@ namespace ao::audio::backend::test
     CHECK_FALSE(sub);
   }
 
-  TEST_CASE("AlsaProvider - graph callback may destroy provider and retained backend stays inert", "[concurrency]")
+  TEST_CASE("AlsaProvider - graph observer or its discarded capture may destroy provider during publication",
+            "[concurrency]")
   {
-    auto monitorExited = std::binary_semaphore{0};
+    struct ExitHandoff final
+    {
+      std::binary_semaphore publicationReturned{0};
+      std::binary_semaphore monitorExited{0};
+      bool publisherReleasedMonitor = false;
+    };
+
+    auto handoffPtr = std::make_shared<ExitHandoff>();
     auto hooksPtr = makeMonitorHooks();
-    hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
+    hooksPtr->onMonitorExit = [handoffPtr]
+    {
+      // The monitor can need the publisher to return before it can exit.
+      handoffPtr->publisherReleasedMonitor = handoffPtr->publicationReturned.try_acquire_for(kWaitTimeout);
+      handoffPtr->monitorExited.release();
+    };
     auto providerPtr = std::make_unique<AlsaProvider>(hooksPtr);
     std::size_t graphUpdateCount = 0U;
     bool destroyProvider = false;
-    auto graphSub = providerPtr->subscribeGraph("hw:127,0",
-                                                [&](flow::Graph const&)
-                                                {
-                                                  ++graphUpdateCount;
+    bool const destroyFromCapture = GENERATE(false, true);
+    auto capturePtr =
+      destroyFromCapture ? std::make_shared<utility::ScopedRegistration>([&] { providerPtr.reset(); }) : nullptr;
+    auto graphSub = utility::ScopedRegistration{};
+    graphSub = providerPtr->subscribeGraph("hw:127,0",
+                                           [&, capturePtr = std::move(capturePtr)](flow::Graph const&)
+                                           {
+                                             ++graphUpdateCount;
 
-                                                  if (destroyProvider)
-                                                  {
-                                                    providerPtr.reset();
-                                                  }
-                                                });
+                                             if (destroyProvider)
+                                             {
+                                               if (capturePtr)
+                                               {
+                                                 graphSub.reset();
+                                               }
+                                               else
+                                               {
+                                                 providerPtr.reset();
+                                               }
+                                             }
+                                           });
     auto backendPtr = providerPtr->createBackend(syntheticDevice(), kProfileExclusive);
     REQUIRE(graphSub);
     REQUIRE(backendPtr);
     destroyProvider = true;
 
-    REQUIRE(backendPtr->set(props::kVolume, 0.5F));
-
+    auto const volumeRes = backendPtr->set(props::kVolume, 0.5F);
+    handoffPtr->publicationReturned.release();
+    REQUIRE(handoffPtr->monitorExited.try_acquire_for(kWaitTimeout));
+    REQUIRE(volumeRes);
     CHECK_FALSE(providerPtr);
-    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
+    CHECK(handoffPtr->publisherReleasedMonitor);
     REQUIRE(graphUpdateCount == 2U);
     REQUIRE(backendPtr->set(props::kVolume, 0.25F));
     backendPtr->close();
     CHECK(graphUpdateCount == 2U);
     graphSub.reset();
     CHECK_FALSE(graphSub);
+  }
+
+  TEST_CASE("AlsaProvider - retiring a subscriber may reenter shutdown")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto provider = AlsaProvider{makeMonitorHooks()};
+    bool captureRetired = false;
+    auto capturePtr = std::make_shared<utility::ScopedRegistration>(
+      [&]
+      {
+        provider.shutdown();
+        captureRetired = true;
+      });
+    auto sub = utility::ScopedRegistration{};
+
+    SECTION("device capture")
+    {
+      sub = provider.subscribeDevices([capturePtr = std::move(capturePtr)](std::vector<Device> const&) {});
+    }
+
+    SECTION("graph capture")
+    {
+      sub = provider.subscribeGraph("hw:127,0", [capturePtr = std::move(capturePtr)](flow::Graph const&) {});
+    }
+
+    REQUIRE(sub);
+    REQUIRE_FALSE(captureRetired);
+
+    provider.shutdown();
+
+    CHECK(captureRetired);
+    CHECK(provider.status().devices.empty());
   }
 
   TEST_CASE("AlsaProvider - device and graph subscriptions may outlive provider", "[concurrency]")
@@ -289,6 +350,61 @@ namespace ao::audio::backend::test
     CHECK(firstCalls.load(std::memory_order_relaxed) == 2U);
     CHECK(secondCalls.load(std::memory_order_relaxed) == 1U);
     provider.shutdown();
+  }
+
+  TEST_CASE("AlsaProvider - stopping drops copied device and ordinary graph updates but delivers the terminal graph",
+            "[concurrency]")
+  {
+    auto entered = std::binary_semaphore{0};
+    auto resume = std::binary_semaphore{0};
+    auto refreshed = std::binary_semaphore{0};
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onRefreshComplete = [&] { refreshed.release(); };
+    auto provider = AlsaProvider{hooksPtr};
+    auto backendPtr = provider.createBackend(syntheticDevice(), kProfileExclusive);
+    std::size_t firstCalls = 0U;
+    bool resumedDuringShutdown = false;
+    auto firstSub = provider.subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        if (++firstCalls == 2U)
+        {
+          entered.release();
+          resumedDuringShutdown = resume.try_acquire_for(kWaitTimeout);
+        }
+      });
+    std::size_t secondCalls = 0U;
+    auto secondSub = provider.subscribeDevices([&](std::vector<Device> const&) { ++secondCalls; });
+    auto emptyGraphs = std::vector<bool>{};
+    auto graphSub = provider.subscribeGraph(
+      "hw:127,0", [&](flow::Graph const& graph) { emptyGraphs.push_back(graph.nodes.empty()); });
+    REQUIRE(firstSub);
+    REQUIRE(secondSub);
+    REQUIRE(graphSub);
+    REQUIRE(backendPtr);
+
+    bool refreshFinished = false;
+    bool volumeSet = false;
+    bool inventoryEmpty = false;
+    hooksPtr->onShutdownStarted = [&]
+    {
+      // Let the monitor try its already-captured second subscriber before either registry retires.
+      resume.release();
+      refreshFinished = refreshed.try_acquire_for(kWaitTimeout);
+      inventoryEmpty = provider.status().devices.empty();
+      volumeSet = backendPtr->set(props::kVolume, 0.5F).has_value();
+    };
+    hooksPtr->requestRefresh();
+    auto const publicationEntered = entered.try_acquire_for(kWaitTimeout);
+    provider.shutdown();
+
+    REQUIRE(publicationEntered);
+    REQUIRE(resumedDuringShutdown);
+    REQUIRE(refreshFinished);
+    REQUIRE(volumeSet);
+    CHECK(inventoryEmpty);
+    CHECK(secondCalls == 1U);
+    CHECK((emptyGraphs == std::vector<bool>{false, true}));
   }
 
   TEST_CASE("AlsaProvider - concurrent external shutdown callers share callback quiescence", "[concurrency]")

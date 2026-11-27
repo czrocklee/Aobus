@@ -5,6 +5,7 @@
 
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
+#include "backend/detail/BackendObserverDispatcher.h"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
@@ -78,11 +79,16 @@ namespace ao::audio::backend::detail
 
   struct WasapiGraphRegistry::Impl final
   {
-    BackendGraphRegistry registry{};
+    explicit Impl(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+      : registry{std::move(dispatcherPtr)}
+    {
+    }
+
+    BackendGraphRegistry registry;
   };
 
-  WasapiGraphRegistry::WasapiGraphRegistry()
-    : _implPtr{std::make_unique<Impl>()}
+  WasapiGraphRegistry::WasapiGraphRegistry(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+    : _implPtr{std::make_unique<Impl>(std::move(dispatcherPtr))}
   {
   }
 
@@ -92,6 +98,14 @@ namespace ao::audio::backend::detail
   {
     auto const anchor = std::string{routeAnchor};
     return _implPtr->registry.subscribe(
+      anchor, std::move(callback), buildGraph(WasapiRouteState{.routeAnchor = anchor}));
+  }
+
+  utility::ScopedRegistration WasapiGraphRegistry::subscribeWithDelivery(std::string_view routeAnchor,
+                                                                         DeliveryCallback callback)
+  {
+    auto const anchor = std::string{routeAnchor};
+    return _implPtr->registry.subscribeWithDelivery(
       anchor, std::move(callback), buildGraph(WasapiRouteState{.routeAnchor = anchor}));
   }
 
@@ -106,8 +120,8 @@ namespace ao::audio::backend::detail
     _implPtr->registry.clear(routeAnchor);
   }
 
-  void WasapiGraphRegistry::shutdown() noexcept
+  void WasapiGraphRegistry::shutdown(bool const deliverTerminal) noexcept
   {
-    _implPtr->registry.shutdown();
+    _implPtr->registry.shutdown(deliverTerminal);
   }
 } // namespace ao::audio::backend::detail
