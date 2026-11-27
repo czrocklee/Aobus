@@ -51,6 +51,7 @@ extern "C"
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -64,6 +65,33 @@ namespace ao::audio::backend
 
   namespace
   {
+    bool isTransientPcmStatus(std::int32_t status) noexcept
+    {
+      return status == -EAGAIN || status == -EINTR;
+    }
+
+    bool needsPcmRecovery(std::int32_t status) noexcept
+    {
+      return status == -EPIPE || status == -ESTRPIPE;
+    }
+
+    std::int32_t retryPcmControl(::snd_pcm_t* pcm,
+                                 std::int32_t (*operation)(::snd_pcm_t*),
+                                 std::stop_token const& stopToken)
+    {
+      while (!stopToken.stop_requested())
+      {
+        if (auto const status = operation(pcm); !isTransientPcmStatus(status))
+        {
+          return status;
+        }
+
+        std::this_thread::sleep_for(kPollRetryDelay);
+      }
+
+      return -EINTR;
+    }
+
     bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
     {
       return sourceFormat.sampleRate != 0U && sourceFormat.channels != 0U &&
@@ -160,8 +188,9 @@ namespace ao::audio::backend
     }
 
     void playbackLoop(std::stop_token const& stopToken) const;
-    void syncPauseState(bool& devicePaused) const;
-    void recoverFromXrun(std::int32_t err) const;
+    void applyPauseState(bool wantPaused, std::stop_token const& stopToken) const;
+    void handlePcmError(std::int32_t status, std::stop_token const& stopToken) const;
+    void reportPcmFailure(std::int32_t status, std::string_view operation, std::stop_token const& stopToken) const;
 
     detail::AlsaMixerStateSnapshot observeAndPublishMixerState() const;
     void publishGraphState() const;
@@ -182,13 +211,13 @@ namespace ao::audio::backend
                                                                         SignalFormat const& sourceFormat);
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
-    bool tryWaitForFrames(::snd_pcm_uframes_t periodSize) const;
-    void handleXrun(std::int32_t err) const;
+    bool tryWaitForFrames(::snd_pcm_uframes_t bufferSize,
+                          ::snd_pcm_uframes_t periodSize,
+                          std::stop_token const& stopToken) const;
     void commitFrames(::snd_pcm_uframes_t offset,
                       ::snd_pcm_uframes_t framesRead,
                       RenderPcmResult const& renderRes,
-                      ::snd_pcm_uframes_t bufferSize,
-                      ::snd_pcm_uframes_t startThreshold) const;
+                      std::stop_token const& stopToken) const;
   };
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken) const
@@ -218,21 +247,25 @@ namespace ao::audio::backend
     // count representation and the widest supported sample container.
     auto permutationScratch = std::array<std::byte, detail::kAlsaPermutationScratchBytes>{};
 
-    // Tracks the device-side pause state owned exclusively by this thread.
-    // pause()/resume() only flip the `paused` atomic; the edge is applied here.
-    bool devicePaused = false;
+    // The worker gates rendering even when a PREPARED device is paused logically.
+    bool pauseApplied = false;
 
     while (!stopToken.stop_requested() && !fatalStreamError.load(std::memory_order_relaxed))
     {
-      syncPauseState(devicePaused);
+      if (bool const wantPaused = paused.load(std::memory_order_relaxed); wantPaused != pauseApplied)
+      {
+        pauseApplied = wantPaused;
+        applyPauseState(wantPaused, stopToken);
+        continue; // Recheck stop and terminal failure before admitting another render.
+      }
 
-      if (devicePaused)
+      if (pauseApplied)
       {
         std::this_thread::sleep_for(kPollRetryDelay);
         continue;
       }
 
-      if (!tryWaitForFrames(periodSize))
+      if (!tryWaitForFrames(bufferSize, periodSize, stopToken))
       {
         continue;
       }
@@ -243,7 +276,7 @@ namespace ao::audio::backend
 
       if (auto const err = ::snd_pcm_mmap_begin(pcmPtr.get(), &areas, &offset, &frames); err < 0)
       {
-        handleXrun(err);
+        handlePcmError(err, stopToken);
         continue;
       }
 
@@ -290,7 +323,7 @@ namespace ao::audio::backend
         detail::applyAlsaChannelPermutation({dst, committedBytes}, channelMap, permutationScratch);
         detail::applyAlsaSoftwareGain({dst, committedBytes}, clientFormat.encoding, mixerPtr->renderGain());
 
-        commitFrames(offset, framesRead, renderRes, bufferSize, periodSize);
+        commitFrames(offset, framesRead, renderRes, stopToken);
       }
       else
       {
@@ -308,92 +341,110 @@ namespace ao::audio::backend
     }
   }
 
-  void AlsaExclusiveBackend::Impl::syncPauseState(bool& devicePaused) const
+  void AlsaExclusiveBackend::Impl::applyPauseState(bool wantPaused, std::stop_token const& stopToken) const
   {
-    // All snd_pcm_* state transitions are marshalled onto this loop thread
-    // because snd_pcm_t is not thread-safe. Detect the pause/resume edge and
-    // drive the device locally.
-    if (bool const wantPaused = paused.load(std::memory_order_relaxed); wantPaused != devicePaused)
+    // Check on both edges: a PREPARED stream hasn't started and needs no
+    // native unpause or re-prepare, which would discard its queued frames.
+    if (canPause && ::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_PREPARED)
     {
-      if (wantPaused)
-      {
-        if (canPause)
-        {
-          ::snd_pcm_pause(pcmPtr.get(), 1);
-        }
-        else
-        {
-          ::snd_pcm_drop(pcmPtr.get());
-        }
-      }
-      else if (!canPause || ::snd_pcm_pause(pcmPtr.get(), 0) < 0)
-      {
-        ::snd_pcm_prepare(pcmPtr.get());
-      }
+      return;
+    }
 
-      devicePaused = wantPaused;
+    if (wantPaused)
+    {
+      if (canPause)
+      {
+        ::snd_pcm_pause(pcmPtr.get(), 1);
+      }
+      else
+      {
+        ::snd_pcm_drop(pcmPtr.get());
+      }
+    }
+    else if (!canPause || ::snd_pcm_pause(pcmPtr.get(), 0) < 0)
+    {
+      if (auto const status = retryPcmControl(pcmPtr.get(), ::snd_pcm_prepare, stopToken); status < 0)
+      {
+        reportPcmFailure(status, "prepare", stopToken);
+      }
     }
   }
 
   void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset,
                                                 ::snd_pcm_uframes_t framesRead,
                                                 RenderPcmResult const& renderRes,
-                                                ::snd_pcm_uframes_t bufferSize,
-                                                ::snd_pcm_uframes_t startThreshold) const
+                                                std::stop_token const& stopToken) const
   {
     auto const committed = ::snd_pcm_mmap_commit(pcmPtr.get(), offset, framesRead);
 
     if (committed < 0)
     {
-      handleXrun(static_cast<std::int32_t>(committed));
-    }
-    else
-    {
-      if (::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_PREPARED)
+      if (auto const status = static_cast<std::int32_t>(committed); needsPcmRecovery(status))
       {
-        if (auto const available = ::snd_pcm_avail_update(pcmPtr.get()); available < 0)
-        {
-          handleXrun(static_cast<std::int32_t>(available));
-        }
-        else
-        {
-          auto const availableFrames = static_cast<::snd_pcm_uframes_t>(available);
-          auto const queuedFrames = availableFrames < bufferSize ? bufferSize - availableFrames : 0;
-
-          if (queuedFrames >= startThreshold)
-          {
-            if (auto const startStatus = ::snd_pcm_start(pcmPtr.get()); startStatus < 0)
-            {
-              handleXrun(startStatus);
-            }
-          }
-        }
+        handlePcmError(status, stopToken);
+      }
+      else
+      {
+        // renderPcm consumed this input. Even EINTR/EAGAIN doesn't give us
+        // a fresh mapping or a way to replay the same frames.
+        reportPcmFailure(status, "mmap commit", stopToken);
       }
 
-      auto const committedPositionFrames = detail::committedPositionFrames(
-        static_cast<std::uint64_t>(committed), renderRes.positionFrameOffset, renderRes.positionFrames);
-      renderTarget->handlePositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
+      return;
     }
+
+    auto const committedPositionFrames = detail::committedPositionFrames(
+      static_cast<std::uint64_t>(committed), renderRes.positionFrameOffset, renderRes.positionFrames);
+    renderTarget->handlePositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
   }
 
-  bool AlsaExclusiveBackend::Impl::tryWaitForFrames(::snd_pcm_uframes_t periodSize) const
+  bool AlsaExclusiveBackend::Impl::tryWaitForFrames(::snd_pcm_uframes_t bufferSize,
+                                                    ::snd_pcm_uframes_t periodSize,
+                                                    std::stop_token const& stopToken) const
   {
     auto const avail = ::snd_pcm_avail_update(pcmPtr.get());
 
     if (avail < 0)
     {
-      handleXrun(static_cast<std::int32_t>(avail));
+      handlePcmError(static_cast<std::int32_t>(avail), stopToken);
       return false;
     }
 
-    if (std::cmp_less(avail, periodSize))
+    auto const state = ::snd_pcm_state(pcmPtr.get());
+
+    // A nonnegative availability snapshot alone doesn't prove the PCM is usable.
+    switch (state)
     {
-      // Only block on the pollfd when the device is truly running.
-      // In PREPARED / XRUN / SUSPENDED states the fd may never signal,
-      // so we fall back to a short sleep to keep the loop responsive.
-      if (::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_RUNNING)
+      case SND_PCM_STATE_XRUN: handlePcmError(-EPIPE, stopToken); return false;
+      case SND_PCM_STATE_SUSPENDED: handlePcmError(-ESTRPIPE, stopToken); return false;
+      case SND_PCM_STATE_DISCONNECTED: handlePcmError(-ENODEV, stopToken); return false;
+      default: break;
+    }
+
+    auto const availableFrames = static_cast<::snd_pcm_uframes_t>(avail);
+
+    // Resume can restore a full PREPARED buffer. Start before waiting for
+    // writable space: until the queued frames play, there may be none.
+    if (state == SND_PCM_STATE_PREPARED && bufferSize - std::min(bufferSize, availableFrames) >= periodSize)
+    {
+      if (auto const status = retryPcmControl(pcmPtr.get(), ::snd_pcm_start, stopToken); status < 0)
       {
-        ::snd_pcm_wait(pcmPtr.get(), static_cast<std::int32_t>(kAlsaWaitTimeout.count()));
+        handlePcmError(status, stopToken);
+      }
+
+      return false; // Recheck availability and state after the transition.
+    }
+
+    if (availableFrames < periodSize)
+    {
+      // Only block on the pollfd while running; a PREPARED PCM may never signal.
+      if (state == SND_PCM_STATE_RUNNING)
+      {
+        if (auto const status = ::snd_pcm_wait(pcmPtr.get(), static_cast<std::int32_t>(kAlsaWaitTimeout.count()));
+            status < 0)
+        {
+          handlePcmError(status, stopToken);
+        }
       }
       else
       {
@@ -406,30 +457,61 @@ namespace ao::audio::backend
     return true;
   }
 
-  void AlsaExclusiveBackend::Impl::handleXrun(std::int32_t err) const
+  void AlsaExclusiveBackend::Impl::handlePcmError(std::int32_t status, std::stop_token const& stopToken) const
   {
-    recoverFromXrun(err);
-  }
-
-  void AlsaExclusiveBackend::Impl::recoverFromXrun(std::int32_t err) const
-  {
-    if (err == -EPIPE)
+    if (stopToken.stop_requested())
     {
-      renderTarget->handleUnderrun();
-      ::snd_pcm_prepare(pcmPtr.get());
+      return;
     }
-    else if (err == -ESTRPIPE)
+
+    if (isTransientPcmStatus(status))
     {
-      while (::snd_pcm_resume(pcmPtr.get()) == -EAGAIN)
+      std::this_thread::sleep_for(kPollRetryDelay);
+      return;
+    }
+
+    if (!needsPcmRecovery(status))
+    {
+      reportPcmFailure(status, "playback", stopToken);
+      return;
+    }
+
+    // An underrun or a device that cannot resume needs a fresh buffer.
+    if (status == -EPIPE || retryPcmControl(pcmPtr.get(), ::snd_pcm_resume, stopToken) < 0)
+    {
+      if (status == -EPIPE)
       {
-        std::this_thread::sleep_for(kPollRetryDelay);
+        renderTarget->handleUnderrun();
+      }
+
+      if (auto const prepareStatus = retryPcmControl(pcmPtr.get(), ::snd_pcm_prepare, stopToken); prepareStatus < 0)
+      {
+        reportPcmFailure(prepareStatus, "prepare", stopToken);
+        return;
       }
     }
-    else if (detail::isUnrecoverableAlsaPcmError(err))
+
+    // A successful recovery call need not mean the next PCM operation can
+    // make progress. Pace repeated suspend or underrun notifications.
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+
+  void AlsaExclusiveBackend::Impl::reportPcmFailure(std::int32_t status,
+                                                    std::string_view operation,
+                                                    std::stop_token const& stopToken) const
+  {
+    if (!stopToken.stop_requested())
     {
-      auto const errorMsg = std::string{"ALSA: Unrecoverable stream state"};
       fatalStreamError.store(true, std::memory_order_relaxed);
-      renderTarget->handleBackendError(errorMsg);
+
+      if (status == -ENODEV || ::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_DISCONNECTED)
+      {
+        renderTarget->handleBackendError("ALSA playback device disconnected");
+      }
+      else
+      {
+        renderTarget->handleBackendError(std::format("ALSA {} failed: {}", operation, ::snd_strerror(status)));
+      }
     }
   }
 

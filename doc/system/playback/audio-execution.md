@@ -735,6 +735,17 @@ The target remains open, permitting stop/flush/start seek flows, while non-rende
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
 
+When the ALSA render worker handles `-EPIPE`, it reports an underrun and requires successful PCM preparation to continue.
+For `-ESTRPIPE`, it tries to resume and falls back to checked PCM preparation if resume fails with a non-temporary error.
+Even when availability is nonnegative, the worker handles `XRUN` and `SUSPENDED` as underrun and suspend, and treats `DISCONNECTED` as terminal before using the available frame count.
+The worker also checks PCM preparation when native unpause fails or hardware pause is unavailable.
+After `-EAGAIN` or `-EINTR` from an availability check, start, resume, or these prepare calls, the worker delays and checks for stop before retrying.
+The worker starts a `PREPARED` PCM with at least one period queued before waiting for more writable space, including when a successful resume leaves it in that state.
+The worker credits committed position frames once and does not replay or credit a block rejected by a nonempty MMAP commit.
+A commit returning `-EAGAIN` or `-EINTR` is terminal because rendering has already consumed that block.
+A commit returning `-EPIPE` or `-ESTRPIPE` can recover the stream, allowing later accepted blocks to advance position.
+A terminal render-worker failure ends that run and reports one backend error; the error does not by itself establish a physical disconnect.
+
 Volume and application mute are Engine runtime intent, including when a backend reports that a valid requested write failed.
 Backend mute properties expose application intent, not an observed effective route mute, so an external hardware switch cannot become Engine or persisted application mute.
 Engine captures backend property values and Volume metadata without its state mutex and then applies that observation under the mutex.

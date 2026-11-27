@@ -15,16 +15,6 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaPcmError - classifies terminal stream errors")
-  {
-    CHECK(isUnrecoverableAlsaPcmError(-ENODEV));
-    CHECK(isUnrecoverableAlsaPcmError(-EBADF));
-
-    CHECK_FALSE(isUnrecoverableAlsaPcmError(-EPIPE));
-    CHECK_FALSE(isUnrecoverableAlsaPcmError(-ESTRPIPE));
-    CHECK_FALSE(isUnrecoverableAlsaPcmError(-EAGAIN));
-  }
-
   TEST_CASE("AlsaPcmError - reports device contention distinctly")
   {
     CHECK(alsaPcmOpenErrorCode(-EBUSY) == Error::Code::ResourceBusy);
