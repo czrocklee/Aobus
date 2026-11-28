@@ -15,7 +15,6 @@
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/Serialization.h>
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -27,7 +26,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::rt
 {
@@ -110,18 +108,18 @@ namespace ao::rt
         return makeError(Error::Code::CorruptData, "Playback session contains too many sort terms");
       }
 
-      auto seenFields = std::vector<TrackSortField>{};
-      seenFields.reserve(state.sortBy.size());
+      auto seenFields = std::array<bool, kTrackSortFieldCount>{};
 
       for (auto const& term : state.sortBy)
       {
-        if (static_cast<std::size_t>(term.field) >= kTrackSortFieldCount ||
-            std::ranges::contains(seenFields, term.field))
+        auto const index = static_cast<std::size_t>(term.field);
+
+        if (index >= seenFields.size() || seenFields[index])
         {
           return makeError(Error::Code::CorruptData, "Playback session contains invalid or duplicate sort fields");
         }
 
-        seenFields.push_back(term.field);
+        seenFields[index] = true;
       }
 
       auto parsedRes = query::parse(state.quickFilterExpression.empty() ? "true" : state.quickFilterExpression);

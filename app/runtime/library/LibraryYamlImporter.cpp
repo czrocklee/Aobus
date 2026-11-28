@@ -211,19 +211,6 @@ namespace ao::rt
     }
 
     template<typename T>
-    Result<T> requireScalarAs(ryml::ConstNodeRef const& node, std::string_view context)
-    {
-      auto valueRes = yaml::scalarAs<T>(node, context);
-
-      if (!valueRes)
-      {
-        return std::unexpected{valueRes.error()};
-      }
-
-      return *valueRes;
-    }
-
-    template<typename T>
     Result<T> requireScalarInFieldContextAs(ryml::ConstNodeRef const& node,
                                             std::string_view context,
                                             std::string_view field)
@@ -419,7 +406,7 @@ namespace ao::rt
       {
         if (auto const scalar = yaml::findChild(trackNode, field); scalar.readable())
         {
-          auto valueRes = requireScalarAs<std::uint32_t>(scalar, field);
+          auto valueRes = yaml::scalarAs<std::uint32_t>(scalar, field);
 
           if (!valueRes)
           {
@@ -1151,7 +1138,7 @@ namespace ao::rt
 
       if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
       {
-        auto yamlIdRes = requireScalarAs<std::uint32_t>(idNode, "Track record.id");
+        auto yamlIdRes = yaml::scalarAs<std::uint32_t>(idNode, "Track record.id");
 
         if (!yamlIdRes)
         {
@@ -1279,7 +1266,7 @@ namespace ao::rt
     {
       if (auto const parentIdNode = yaml::findChild(listNode, "parent-id"); parentIdNode.readable())
       {
-        auto parentIdRes = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parent-id");
+        auto parentIdRes = yaml::scalarAs<std::uint32_t>(parentIdNode, "List record.parent-id");
 
         if (!parentIdRes)
         {
@@ -1308,7 +1295,7 @@ namespace ao::rt
     {
       if (orderRef.is_val())
       {
-        auto trackIdRes = requireScalarAs<std::uint32_t>(orderRef, "List record.order[]");
+        auto trackIdRes = yaml::scalarAs<std::uint32_t>(orderRef, "List record.order[]");
 
         if (!trackIdRes)
         {
@@ -1345,7 +1332,7 @@ namespace ao::rt
           return makeError(Error::Code::FormatRejected, "List order ordinal requires uri");
         }
 
-        auto trackIdRes = requireScalarAs<std::uint32_t>(trackIdNode, "List record.order[].id");
+        auto trackIdRes = yaml::scalarAs<std::uint32_t>(trackIdNode, "List record.order[].id");
 
         if (!trackIdRes)
         {
@@ -1373,7 +1360,7 @@ namespace ao::rt
 
       if (ordinalNode.readable())
       {
-        auto ordinalRes = requireScalarAs<std::uint16_t>(ordinalNode, "List record.order[].ordinal");
+        auto ordinalRes = yaml::scalarAs<std::uint16_t>(ordinalNode, "List record.order[].ordinal");
 
         if (!ordinalRes)
         {
@@ -1618,7 +1605,6 @@ namespace ao::rt
     Result<> importLists(std::vector<ValidatedList> const& lists,
                          library::LibraryWrite& transaction,
                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                         ImportMode strategy,
                          ImportReport& report) const;
 
     Result<> importCovers(ryml::ConstNodeRef const& trackNode,
@@ -1628,12 +1614,12 @@ namespace ao::rt
                                std::string_view uriStr,
                                std::optional<library::FileManifestView> const& optManifest,
                                library::FileManifestBuilder& manifestBuilder) const;
-    Result<> buildListOrder(library::ListBuilder& builder,
-                            ValidatedList const& importedList,
-                            std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                            library::FileManifestStore::Reader const& manifestReader,
-                            library::TrackStore::Reader const& trackReader,
-                            ImportReport& report) const;
+    void buildListOrder(library::ListBuilder& builder,
+                        ValidatedList const& importedList,
+                        std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                        library::FileManifestStore::Reader const& manifestReader,
+                        library::TrackStore::Reader const& trackReader,
+                        ImportReport& report) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
                               library::ListWriter& listWriter,
@@ -1882,7 +1868,7 @@ namespace ao::rt
 
     if (!validated.lists.empty())
     {
-      return importLists(validated.lists, transaction, yamlTrackIdToInternalId, prepared.mode, report);
+      return importLists(validated.lists, transaction, yamlTrackIdToInternalId, report);
     }
 
     return {};
@@ -2015,7 +2001,7 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "Missing 'version' field in YAML");
     }
 
-    auto versionRes = requireScalarAs<std::uint32_t>(versionNode, "version");
+    auto versionRes = yaml::scalarAs<std::uint32_t>(versionNode, "version");
 
     if (!versionRes)
     {
@@ -2096,12 +2082,6 @@ namespace ao::rt
       {
         return makeError(Error::Code::FormatRejected, "library.tracks is forbidden for a list-only payload");
       }
-
-      // A list-only payload carries no track, so it can carry no table either.
-      if (auto res = validateResources(library, validated); !res)
-      {
-        return res;
-      }
     }
     else
     {
@@ -2119,15 +2099,16 @@ namespace ao::rt
       {
         return std::unexpected{res.error()};
       }
+    }
 
-      // The table is validated after the tracks, and before the closure that
-      // joins the two: a document's tracks are its content, so a fault in one of
-      // them is the more useful thing to report first.
-      if (auto res = validateResources(library, validated); !res)
-      {
-        return res;
-      }
+    // Report track faults before resource table or cover-reference faults.
+    if (auto res = validateResources(library, validated); !res)
+    {
+      return res;
+    }
 
+    if (validated.payloadMode != ExportMode::ListOnly)
+    {
       if (auto res = validateCoverReferences(validated); !res)
       {
         return res;
@@ -2583,21 +2564,22 @@ namespace ao::rt
     auto const& uri = preparedTrack.uri;
     auto const optExistingTrackId = preparedTrack.optExistingTrackId;
     auto builder = preparedTrack.builder.makeBuilder();
-    auto manifestBuilder = preparedTrack.manifest;
     auto targetTrackId = kInvalidTrackId;
 
     if (optExistingTrackId)
     {
       targetTrackId = *optExistingTrackId;
 
-      if (auto replaceRes = trackWriter.replace(targetTrackId, builder, manifestBuilder); !replaceRes)
+      if (auto replaceRes = trackWriter.replace(targetTrackId, builder, preparedTrack.manifest); !replaceRes)
       {
         return yamlRepresentationError(std::move(replaceRes.error()), std::format("Track '{}'", uri));
       }
+
+      ++report.tracksUpdated;
     }
     else
     {
-      auto createRes = trackWriter.create(builder, manifestBuilder);
+      auto createRes = trackWriter.create(builder, preparedTrack.manifest);
 
       if (!createRes)
       {
@@ -2605,14 +2587,6 @@ namespace ao::rt
       }
 
       targetTrackId = *createRes;
-    }
-
-    if (optExistingTrackId)
-    {
-      ++report.tracksUpdated;
-    }
-    else
-    {
       ++report.tracksCreated;
     }
 
@@ -2627,7 +2601,7 @@ namespace ao::rt
   /**
    * @brief Applies the cover references a document declares.
    *
-   * A present `contains` collection replaces the baseline's covers, and an absent
+   * A present `covers` collection replaces the baseline's covers, and an absent
    * one preserves them: that overlay rule is what makes a `metadata` or `delta`
    * restore keep whatever its file baseline read, now that neither mode carries a
    * cover.
@@ -2728,7 +2702,7 @@ namespace ao::rt
 
     if (fileSizeNode.readable())
     {
-      auto fileSizeRes = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.file-size");
+      auto fileSizeRes = yaml::scalarAs<std::uint64_t>(fileSizeNode, "Track record.file-size");
 
       if (!fileSizeRes)
       {
@@ -3058,14 +3032,12 @@ namespace ao::rt
                                                                  ryml::ConstNodeRef const& trackNode) const
   {
     using U32Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint32_t);
-    using U16Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint16_t);
     using U8Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint8_t);
 
     struct Dispatch
     {
       rt::TrackField field;
       U32Setter u32Setter = nullptr;
-      U16Setter u16Setter = nullptr;
       U8Setter u8Setter = nullptr;
     };
 
@@ -3115,17 +3087,6 @@ namespace ao::rt
 
           map.u32Setter(builder.property(), *valueRes);
         }
-        else if (map.u16Setter != nullptr)
-        {
-          auto valueRes = requireScalarInFieldContextAs<std::uint16_t>(node, "Track record", key);
-
-          if (!valueRes)
-          {
-            return std::unexpected{valueRes.error()};
-          }
-
-          map.u16Setter(builder.property(), *valueRes);
-        }
         else if (map.u8Setter != nullptr)
         {
           auto valueRes = requireScalarInFieldContextAs<std::uint8_t>(node, "Track record", key);
@@ -3147,7 +3108,6 @@ namespace ao::rt
     std::vector<ValidatedList> const& lists,
     library::LibraryWrite& transaction,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-    ImportMode /*strategy*/,
     ImportReport& report) const
   {
     auto listWriter = transaction.lists();
@@ -3163,13 +3123,7 @@ namespace ao::rt
                        .description(importedList.description)
                        .filter(importedList.filter);
 
-      if (auto res =
-            buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, trackReader, report);
-          !res)
-      {
-        return res;
-      }
-
+      buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, trackReader, report);
       auto createRes = listWriter.create(builder);
 
       if (!createRes)
@@ -3205,7 +3159,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<> LibraryYamlImporter::Impl::buildListOrder(
+  void LibraryYamlImporter::Impl::buildListOrder(
     library::ListBuilder& builder,
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
@@ -3244,8 +3198,6 @@ namespace ao::rt
         ++report.danglingReferencesIgnored;
       }
     }
-
-    return {};
   }
 
   Result<> LibraryYamlImporter::Impl::updateListParent(

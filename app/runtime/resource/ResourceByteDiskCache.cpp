@@ -82,8 +82,7 @@ namespace ao::rt
     }
 
     /// One entry's eviction inputs, or nothing when the entry cannot be measured.
-    /// Each query carries its own error code: sharing one would let a later
-    /// success clear an earlier failure and rank an entry on an unset length.
+    /// Check each query immediately; the next successful query can clear the error code.
     std::optional<CachedEntry> measureEntry(std::filesystem::directory_entry const& entry)
     {
       auto errorCode = std::error_code{};
@@ -264,7 +263,6 @@ namespace ao::rt
 
       if (errorCode)
       {
-        errorCode.clear();
         continue;
       }
 

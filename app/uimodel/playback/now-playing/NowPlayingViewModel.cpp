@@ -16,7 +16,6 @@
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
-#include <algorithm>
 #include <array>
 #include <format>
 #include <functional>
@@ -24,7 +23,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::uimodel
 {
@@ -32,14 +30,16 @@ namespace ao::uimodel
   {
     std::string sourceStreamInfo(AudioQualityFormatter const& formatter, rt::QualityState const& quality)
     {
-      auto const it =
-        std::ranges::find_if(quality.assessments,
-                             [](auto const& assessment)
-                             { return assessment.nodeType == audio::flow::NodeType::Source && assessment.optFormat; });
+      for (auto const& assessment : quality.assessments)
+      {
+        if (assessment.nodeType == audio::flow::NodeType::Source && assessment.optFormat)
+        {
+          // The source node carries the track's native format, not the padded transport format.
+          return formatter.formatLabel(*assessment.optFormat);
+        }
+      }
 
-      // The source node carries the track's native format, so show its true
-      // resolution (valid bits) rather than a padded transport container width.
-      return (it != quality.assessments.end() && it->optFormat) ? formatter.formatLabel(*it->optFormat) : std::string{};
+      return {};
     }
   } // namespace
 

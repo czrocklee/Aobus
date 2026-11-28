@@ -69,17 +69,15 @@ namespace ao::uimodel
     }
 
     auto const clampedElapsed = clampElapsed(elapsed);
+    auto const shouldCommit = _pointerOccurrenceCurrent && _pendingFinalSeek;
     _pointerActive = false;
+    retirePointerInteraction();
 
-    if (!_pointerOccurrenceCurrent || !_pendingFinalSeek)
+    if (!shouldCommit)
     {
-      _pointerOccurrenceCurrent = false;
-      _pendingFinalSeek = false;
       return {};
     }
 
-    _pointerOccurrenceCurrent = false;
-    _pendingFinalSeek = false;
     return {.action = SeekSliderAction::Commit,
             .occurrenceId = _pointerOccurrenceId,
             .elapsed = clampedElapsed,
@@ -105,7 +103,6 @@ namespace ao::uimodel
       return {};
     }
 
-    _pendingFinalSeek = false;
     return {.action = SeekSliderAction::Commit, .occurrenceId = _occurrenceId, .elapsed = clampElapsed(elapsed)};
   }
 

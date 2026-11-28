@@ -30,18 +30,6 @@ namespace ao::rt
 
     static Elapsed normalizeElapsed(Elapsed const elapsed) noexcept { return std::max(elapsed, Elapsed::zero()); }
 
-    void start(Elapsed const elapsed)
-    {
-      if (shuttingDown)
-      {
-        return;
-      }
-
-      active = true;
-      running = true;
-      synchronize(normalizeElapsed(elapsed));
-    }
-
     void resume(Elapsed const elapsed)
     {
       if (shuttingDown || !active)
@@ -207,7 +195,7 @@ namespace ao::rt
 
   void PlaybackRestartDeadline::start(Elapsed const elapsed)
   {
-    _statePtr->start(elapsed);
+    _statePtr->resetCurrent(elapsed, true);
   }
 
   void PlaybackRestartDeadline::resume(Elapsed const elapsed)

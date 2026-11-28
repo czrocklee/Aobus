@@ -22,6 +22,21 @@
 
 namespace ao::uimodel
 {
+  namespace
+  {
+    Result<rt::DeleteListSubtreeReply> asSingleListSubtree(ListId const listId, Result<rt::DeleteListReply> replyRes)
+    {
+      if (!replyRes)
+      {
+        return std::unexpected{std::move(replyRes).error()};
+      }
+
+      auto subtree = rt::DeleteListSubtreeReply{.rootListId = listId};
+      subtree.deletedLists.push_back(std::move(*replyRes));
+      return subtree;
+    }
+  } // namespace
+
   ListDeletionLabels listDeletionLabels(bool const includeDescendants) noexcept
   {
     using i18n::MessageId;
@@ -142,14 +157,7 @@ namespace ao::uimodel
       co_return co_await commands.previewDeleteListAndDescendantsAsync(listId);
     }
 
-    auto res = co_await commands.previewDeleteListAsync(listId);
-
-    if (!res)
-    {
-      co_return std::unexpected{std::move(res).error()};
-    }
-
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*res)}};
+    co_return asSingleListSubtree(listId, co_await commands.previewDeleteListAsync(listId));
   }
 
   async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(LibraryEditing const editing,
@@ -164,13 +172,6 @@ namespace ao::uimodel
       co_return co_await commands.deleteListAndDescendantsAsync(listId, options);
     }
 
-    auto res = co_await commands.deleteListAsync(listId, options);
-
-    if (!res)
-    {
-      co_return std::unexpected{std::move(res).error()};
-    }
-
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*res)}};
+    co_return asSingleListSubtree(listId, co_await commands.deleteListAsync(listId, options));
   }
 } // namespace ao::uimodel

@@ -320,7 +320,7 @@ namespace ao::rt
           std::ignore = nextHistory.tryCommit(navigationPoint(state, state.presentation));
         }
 
-        installCommit(prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation));
+        commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
       }
       catch (...)
       {
@@ -551,11 +551,11 @@ namespace ao::rt
       return {};
     }
 
-    Result<> closeViews(std::span<ViewId const> viewIds, WorkspaceChangeCause const cause)
+    void closeViews(std::span<ViewId const> viewIds, WorkspaceChangeCause const cause)
     {
       if (viewIds.empty())
       {
-        return {};
+        return;
       }
 
       auto nextSnapshot = currentSnapshot;
@@ -573,8 +573,6 @@ namespace ao::rt
       {
         views.destroyView(viewId);
       }
-
-      return {};
     }
 
     Result<> close(ViewId const viewId)
@@ -590,7 +588,8 @@ namespace ao::rt
       }
 
       auto const ids = std::array{viewId};
-      return closeViews(ids, WorkspaceChangeCause::Close);
+      closeViews(ids, WorkspaceChangeCause::Close);
+      return {};
     }
 
     Result<> applyPresentation(TrackPresentationSpec const& requested, PresentationChangeOptions const& options)
@@ -611,7 +610,8 @@ namespace ao::rt
 
       auto const presentation = normalizeTrackPresentationSpec(requested);
       auto nextHistory = navigationHistory;
-      auto changed = stateRes->presentation != presentation;
+      auto const presentationChanged = stateRes->presentation != presentation;
+      auto changed = presentationChanged;
 
       if (options.recordHistory)
       {
@@ -630,7 +630,7 @@ namespace ao::rt
 
       auto pending = prepareCommit(currentSnapshot, std::move(nextHistory), WorkspaceChangeCause::Presentation);
 
-      if (stateRes->presentation != presentation)
+      if (presentationChanged)
       {
         if (auto res = views.setPresentation(viewId, presentation); !res)
         {
@@ -795,10 +795,7 @@ namespace ao::rt
       auto const toClose =
         changeSet.libraryReset ? viewsOfAbsentLists() : viewsOfLists(std::span{changeSet.listsDeleted});
 
-      if (!toClose.empty())
-      {
-        std::ignore = closeViews(toClose, WorkspaceChangeCause::ListDeletion);
-      }
+      closeViews(toClose, WorkspaceChangeCause::ListDeletion);
     }
 
     std::vector<ViewId> viewsOfLists(std::span<ListId const> const listIds) const

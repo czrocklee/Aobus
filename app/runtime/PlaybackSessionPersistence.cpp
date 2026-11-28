@@ -28,7 +28,6 @@
 #include <ao/utility/Uuid.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -36,6 +35,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <tuple>
 #include <utility>
 
 namespace ao::rt
@@ -75,7 +75,7 @@ namespace ao::rt
                                        std::string currentTrackUri,
                                        std::uint16_t const currentTrackOrdinal,
                                        std::size_t const anchorIndex,
-                                       std::chrono::milliseconds const elapsed,
+                                       std::uint64_t const positionMs,
                                        PlaybackSnapshot const& snapshot)
     {
       return PlaybackSessionState{
@@ -87,7 +87,7 @@ namespace ao::rt
         .currentTrackUri = std::move(currentTrackUri),
         .currentTrackOrdinal = currentTrackOrdinal,
         .anchorIndex = static_cast<std::uint64_t>(anchorIndex),
-        .positionMs = static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count()),
+        .positionMs = positionMs,
         .shuffleMode = snapshot.succession.shuffle,
         .repeatMode = snapshot.succession.repeat,
         .volume = snapshot.transport.volume.level,
@@ -175,13 +175,8 @@ namespace ao::rt
           return;
         }
 
-        auto const reader = _library.snapshot();
-
-        if (auto optUri = reader.trackUri(trackId); optUri)
+        if (auto const reader = _library.snapshot(); tryConfirmTrack(reader, trackId))
         {
-          _confirmedTrackId = trackId;
-          _confirmedTrackUri = std::move(*optUri);
-          _confirmedTrackOrdinal = trackOrdinalFor(reader, trackId);
           // Persist the new file without waiting for the next playback change.
           requestDebouncedSave();
         }
@@ -244,9 +239,19 @@ namespace ao::rt
     return shouldSave ? save() : Result<>{};
   }
 
-  bool PlaybackSessionPersistence::hasActiveSession() const
+  bool PlaybackSessionPersistence::tryConfirmTrack(LibrarySnapshot const& reader, TrackId const trackId)
   {
-    return _succession.hasActivePlaybackSession();
+    auto optUri = reader.trackUri(trackId);
+
+    if (!optUri)
+    {
+      return false;
+    }
+
+    _confirmedTrackId = trackId;
+    _confirmedTrackUri = std::move(*optUri);
+    _confirmedTrackOrdinal = trackOrdinalFor(reader, trackId);
+    return true;
   }
 
   void PlaybackSessionPersistence::handleSnapshot(PlaybackSnapshot const& snapshot)
@@ -256,7 +261,16 @@ namespace ao::rt
       return;
     }
 
-    auto const previous = _lastSnapshot;
+    auto const& previous = _lastSnapshot.transport;
+    auto const& current = snapshot.transport;
+    auto const subjectChanged = current.nowPlaying.trackId != previous.nowPlaying.trackId ||
+                                current.nowPlaying.sourceListId != previous.nowPlaying.sourceListId;
+    auto const committedPositionChanged = current.finalSeekRevision != previous.finalSeekRevision;
+    auto const volumeChanged =
+      current.volume.level != previous.volume.level || current.volume.muted != previous.volume.muted;
+    auto const settledTransport =
+      current.transport != previous.transport &&
+      (current.transport == audio::Transport::Paused || current.transport == audio::Transport::Idle);
     _lastSnapshot = snapshot;
 
     if (_restorePublicationPending)
@@ -268,26 +282,15 @@ namespace ao::rt
       return;
     }
 
-    auto const subjectChanged =
-      snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
-      snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
-    auto const committedPositionChanged = snapshot.transport.finalSeekRevision != previous.transport.finalSeekRevision;
-    auto const volumeChanged = snapshot.transport.volume.level != previous.transport.volume.level ||
-                               snapshot.transport.volume.muted != previous.transport.volume.muted;
-
     if (volumeChanged && !committedPositionChanged)
     {
       requestDebouncedSave();
     }
 
-    if (committedPositionChanged && _sessionDiscarded && hasActiveSession())
+    if (committedPositionChanged && _sessionDiscarded && _succession.hasActivePlaybackSession())
     {
       _sessionDiscarded = false;
     }
-
-    auto const settledTransport = snapshot.transport.transport != previous.transport.transport &&
-                                  (snapshot.transport.transport == audio::Transport::Paused ||
-                                   snapshot.transport.transport == audio::Transport::Idle);
 
     if (subjectChanged || committedPositionChanged || settledTransport)
     {
@@ -295,18 +298,10 @@ namespace ao::rt
     }
   }
 
-  bool PlaybackSessionPersistence::hasRestorableSession() const
-  {
-    auto launchSpec = PlaybackLaunchSpec{};
-    auto trackId = kInvalidTrackId;
-    std::size_t anchorIndex = 0;
-    return _succession.tryCapturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
-  }
-
   void PlaybackSessionPersistence::requestDebouncedSave()
   {
-    if (auto const active = hasActiveSession();
-        _lifecycle != Lifecycle::Observing || _restoring || !hasRestorableSession() || (_sessionDiscarded && !active))
+    if (_lifecycle != Lifecycle::Observing || _restoring || !_succession.hasRestorablePlaybackSession() ||
+        (_sessionDiscarded && !_succession.hasActivePlaybackSession()))
     {
       return;
     }
@@ -371,13 +366,11 @@ namespace ao::rt
 
     auto const& snapshot = _playback.snapshot();
     auto const transportSession = _playbackTransport.playbackTransportSessionState();
-    auto const elapsed =
-      std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(transportSession.positionMs)};
     auto const publicSubjectMatches =
       snapshot.transport.nowPlaying.trackId == currentTrackId && snapshot.succession.currentTrackId == currentTrackId;
 
     AO_INVARIANT(transportSession.trackId != kInvalidTrackId && transportSession.trackId == currentTrackId &&
-                   (!hasActiveSession() || publicSubjectMatches),
+                   (!_succession.hasActivePlaybackSession() || publicSubjectMatches),
                  "Playback cursor and transport current tracks disagree during save");
 
     // A relink keeps the track id but changes its file, and the transport keeps
@@ -386,16 +379,7 @@ namespace ao::rt
     // file the track last played, which the restored library may now hold.
     // Trusting the id here relies on the open library never reissuing an id;
     // switching libraries retires this persistence.
-    {
-      auto const reader = _library.snapshot();
-
-      if (auto optUri = reader.trackUri(currentTrackId); optUri)
-      {
-        _confirmedTrackId = currentTrackId;
-        _confirmedTrackUri = std::move(*optUri);
-        _confirmedTrackOrdinal = trackOrdinalFor(reader, currentTrackId);
-      }
-    }
+    std::ignore = tryConfirmTrack(_library.snapshot(), currentTrackId);
 
     auto currentTrackUri = _confirmedTrackId == currentTrackId ? _confirmedTrackUri : transportSession.trackUri;
     auto const currentTrackOrdinal =
@@ -406,7 +390,7 @@ namespace ao::rt
                                        std::move(currentTrackUri),
                                        currentTrackOrdinal,
                                        anchorIndex,
-                                       elapsed,
+                                       transportSession.positionMs,
                                        snapshot);
 
     return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
@@ -519,30 +503,18 @@ namespace ao::rt
         .muted = loaded.muted,
       };
 
-      auto restoredRes = [&] -> Result<>
+      auto const restoring = RestoreScope{_restoring};
+      auto const restoredElapsedRes = _playbackTransport.restorePlaybackTransport(transport);
+
+      if (!restoredElapsedRes)
       {
-        auto const restoring = RestoreScope{_restoring};
-        auto restoredElapsedRes = _playbackTransport.restorePlaybackTransport(transport);
-
-        if (!restoredElapsedRes)
-        {
-          return std::unexpected{restoredElapsedRes.error()};
-        }
-
-        _restorePublicationPending = true;
-        _succession.commitPlaybackSessionRestore(
-          std::move(*candidateRes), loaded.shuffleMode, loaded.repeatMode, *restoredElapsedRes);
-
-        _sessionDiscarded = false;
-
-        return {};
-      }();
-
-      if (!restoredRes)
-      {
-        return std::unexpected{restoredRes.error()};
+        return std::unexpected{restoredElapsedRes.error()};
       }
 
+      _restorePublicationPending = true;
+      _succession.commitPlaybackSessionRestore(
+        std::move(*candidateRes), loaded.shuffleMode, loaded.repeatMode, *restoredElapsedRes);
+      _sessionDiscarded = false;
       return result;
     }
   }

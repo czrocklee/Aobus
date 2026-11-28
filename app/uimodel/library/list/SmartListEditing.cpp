@@ -122,53 +122,43 @@ namespace ao::uimodel
                                                std::string_view artist,
                                                std::string_view album)
   {
-    if (!title.empty())
+    if (title.empty() && artist.empty())
     {
-      auto formatted = std::string{title};
-
-      if (!artist.empty())
-      {
-        formatted = std::format("{} - {}", formatted, artist);
-      }
-
-      if (!album.empty())
-      {
-        formatted = std::format("{} ({})", formatted, album);
-      }
-
-      return formatted;
+      return std::string{i18n::requiredText(textCatalog, i18n::MessageId::SmartListUntitledTrack)};
     }
 
-    if (!artist.empty())
+    auto const primary = title.empty() ? artist : title;
+    auto const includeArtist = !title.empty() && !artist.empty();
+    // Each suffix adds three delimiter bytes.
+    auto const size = primary.size() + (includeArtist ? artist.size() + 3 : 0) + (album.empty() ? 0 : album.size() + 3);
+    auto formatted = std::string{};
+    formatted.reserve(size);
+    formatted.append(primary);
+
+    if (includeArtist)
     {
-      auto formatted = std::string{artist};
-
-      if (!album.empty())
-      {
-        formatted = std::format("{} ({})", formatted, album);
-      }
-
-      return formatted;
+      formatted.append(" - ").append(artist);
     }
 
-    return std::string{i18n::requiredText(textCatalog, i18n::MessageId::SmartListUntitledTrack)};
+    if (!album.empty())
+    {
+      formatted.append(" (").append(album).append(")");
+    }
+
+    return formatted;
   }
 
-  // The draft owns its strings, so they are taken by value and moved in: a
-  // caller holding a temporary pays no copy at all.
   rt::ListDraft makeSmartListDraft(ListId parentListId,
                                    ListId editListId,
                                    std::string name,
                                    std::string description,
                                    std::string expression)
   {
-    auto draft = rt::ListDraft{};
-    draft.parentId = parentListId;
-    draft.listId = editListId;
-    draft.name = std::move(name);
-    draft.description = std::move(description);
-    draft.expression = std::move(expression);
-    return draft;
+    return {.parentId = parentListId,
+            .listId = editListId,
+            .name = std::move(name),
+            .description = std::move(description),
+            .expression = std::move(expression)};
   }
 
   std::size_t resolveSmartListTrackPresentationIndex(std::optional<std::string> const& optPresentationId,

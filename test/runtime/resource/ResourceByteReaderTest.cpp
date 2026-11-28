@@ -16,6 +16,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/async/TaskFuture.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Sha256.h>
 
@@ -25,6 +26,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -38,6 +40,14 @@ namespace ao::rt::test
 {
   namespace
   {
+    template<typename Library>
+    concept CanBorrowForRead =
+      std::constructible_from<ResourceByteReader, async::Runtime&, Library, std::filesystem::path const&>;
+
+    static_assert(CanBorrowForRead<library::MusicLibrary&>);
+    static_assert(!CanBorrowForRead<library::MusicLibrary&&>);
+    static_assert(!CanBorrowForRead<library::MusicLibrary const&&>);
+
     constexpr auto kLargeResourceCompletionTimeout = std::chrono::seconds{10};
 
     auto guardReaderWork(async::Runtime& runtime, QueuedExecutor& executor)

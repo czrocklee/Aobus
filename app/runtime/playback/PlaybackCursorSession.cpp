@@ -35,16 +35,14 @@ namespace ao::rt
 {
   namespace
   {
-    Result<std::unique_ptr<PlaybackCursorSession>> buildSession(
-      PlaybackLaunchSpec launchSpec,
-      TrackId const currentTrackId,
-      std::optional<std::size_t> const optRequiredCurrentIndex,
-      std::size_t const fallbackAnchorIndex,
-      TrackSourceCache& sources,
-      ViewService& views,
-      RepeatMode const repeatMode,
-      ShuffleMode const shuffleMode,
-      ShuffleHistory::CandidateChooser candidateChooser)
+    Result<std::unique_ptr<PlaybackCursorSession>> buildSession(PlaybackLaunchSpec launchSpec,
+                                                                TrackId const currentTrackId,
+                                                                std::optional<std::size_t> const optGapFallback,
+                                                                TrackSourceCache& sources,
+                                                                ViewService& views,
+                                                                RepeatMode const repeatMode,
+                                                                ShuffleMode const shuffleMode,
+                                                                ShuffleHistory::CandidateChooser candidateChooser)
     {
       if (launchSpec.sourceListId == kInvalidListId || currentTrackId == kInvalidTrackId)
       {
@@ -87,16 +85,14 @@ namespace ao::rt
       auto projectionPtr = views.createTransientTrackListProjection(std::move(projectionSourceLease), launchSpec.order);
       auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
 
-      if (optRequiredCurrentIndex && !optCurrentIndex)
+      if (!optCurrentIndex && !optGapFallback)
       {
         return makeError(Error::Code::NotFound, "Start track is not present in the captured playback projection");
       }
 
-      auto currentAnchor =
-        optCurrentIndex
-          ? ProjectionAnchor::bound(currentTrackId, *optCurrentIndex, projectionPtr->size())
-          : ProjectionAnchor::gap(
-              currentTrackId, std::min(fallbackAnchorIndex, projectionPtr->size()), projectionPtr->size());
+      auto currentAnchor = optCurrentIndex
+                             ? ProjectionAnchor::bound(currentTrackId, *optCurrentIndex, projectionPtr->size())
+                             : ProjectionAnchor::gap(currentTrackId, *optGapFallback, projectionPtr->size());
       return std::make_unique<PlaybackCursorSession>(std::move(launchSpec),
                                                      std::move(baseSourceLease),
                                                      std::move(projectionPtr),
@@ -124,8 +120,7 @@ namespace ao::rt
   {
     return buildSession(std::move(launchSpec),
                         startTrackId,
-                        std::size_t{0},
-                        0,
+                        std::nullopt,
                         sources,
                         views,
                         repeatMode,
@@ -145,7 +140,6 @@ namespace ao::rt
   {
     return buildSession(std::move(launchSpec),
                         currentTrackId,
-                        std::nullopt,
                         anchorIndex,
                         sources,
                         views,
@@ -202,7 +196,7 @@ namespace ao::rt
       return ProjectionAnchor::bound(trackId, *optIndex, projectionSize());
     }
 
-    return ProjectionAnchor::gap(trackId, std::min(fallbackGap, projectionSize()), projectionSize());
+    return ProjectionAnchor::gap(trackId, fallbackGap, projectionSize());
   }
 
   PlaybackCursor::Changes PlaybackCursorSession::refreshSemanticState()

@@ -16,14 +16,6 @@
 
 namespace ao::uimodel
 {
-  namespace
-  {
-    bool containsChord(std::vector<KeyChord> const& chords, KeyChord const& chord)
-    {
-      return std::ranges::contains(chords, chord);
-    }
-  }
-
   KeymapModel::KeymapModel(KeymapBindings defaults)
     : _defaults{std::move(defaults)}, _effective{_defaults}
   {
@@ -42,7 +34,7 @@ namespace ao::uimodel
       {
         if (auto optChord = KeyChord::parse(text); optChord && optChord->isValid())
         {
-          if (!containsChord(chords, *optChord))
+          if (!std::ranges::contains(chords, *optChord))
           {
             chords.push_back(std::move(*optChord));
           }
@@ -76,7 +68,7 @@ namespace ao::uimodel
   {
     for (auto const& [actionId, chords] : _effective)
     {
-      if (containsChord(chords, chord))
+      if (std::ranges::contains(chords, chord))
       {
         return actionId;
       }
@@ -122,7 +114,7 @@ namespace ao::uimodel
 
     auto& chords = _effective[actionId];
 
-    if (containsChord(chords, chord))
+    if (std::ranges::contains(chords, chord))
     {
       return false;
     }

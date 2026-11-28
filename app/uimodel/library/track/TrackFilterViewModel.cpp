@@ -73,8 +73,7 @@ namespace ao::uimodel
     }
 
     _draftPending = true;
-    auto const resolved = resolveTrackFilter(rawText);
-    _resolvedExpression = resolved.expression;
+    _resolvedExpression = resolveTrackFilter(rawText).expression;
 
     auto const res = _viewService.setFilter(_viewId, _resolvedExpression);
 
@@ -93,37 +92,26 @@ namespace ao::uimodel
 
   void TrackFilterViewModel::handleFocusedViewChanged(rt::ViewId viewId)
   {
-    _viewId = viewId;
     _draftPending = false;
 
-    if (_viewId == rt::kInvalidViewId)
+    if (viewId != rt::kInvalidViewId)
     {
-      _entryText.clear();
-      _resolvedExpression.clear();
-      _optFilterError.reset();
-      refresh();
-      return;
+      // The workspace observer can name a view that has already been destroyed.
+      if (auto const foundRes = _viewService.findTrackListState(viewId); foundRes)
+      {
+        _viewId = viewId;
+        _entryText = foundRes->filterExpression;
+        _resolvedExpression = foundRes->filterExpression;
+        _optFilterError = foundRes->optFilterError;
+        refresh();
+        return;
+      }
     }
 
-    // Reached from the workspace observer, whose snapshot can name a view that
-    // has already been destroyed.
-    auto const foundRes = _viewService.findTrackListState(_viewId);
-
-    if (!foundRes)
-    {
-      _viewId = rt::kInvalidViewId;
-      _entryText.clear();
-      _resolvedExpression.clear();
-      _optFilterError.reset();
-      refresh();
-      return;
-    }
-
-    _entryText = foundRes->filterExpression;
-
-    _resolvedExpression = foundRes->filterExpression;
-    _optFilterError = foundRes->optFilterError;
-
+    _viewId = rt::kInvalidViewId;
+    _entryText.clear();
+    _resolvedExpression.clear();
+    _optFilterError.reset();
     refresh();
   }
 
@@ -165,14 +153,10 @@ namespace ao::uimodel
   void TrackFilterViewModel::refresh()
   {
     auto view = TrackFilterViewState{};
+    view.enabled = _viewId != rt::kInvalidViewId;
 
-    if (_viewId == rt::kInvalidViewId)
+    if (view.enabled)
     {
-      view.enabled = false;
-    }
-    else
-    {
-      view.enabled = true;
       view.entryText = _entryText;
       view.resolvedExpression = _resolvedExpression;
 

@@ -270,13 +270,6 @@ namespace ao::uimodel
 
     schema.actionSlots |= extension.actionSlots;
     mergeDefaultActions(schema, std::move(extension.defaultActions));
-
-    if (std::ranges::any_of(schema.defaultActions,
-                            [&schema](DefaultActionBinding const& binding) { return !schema.accepts(binding.slot); }))
-    {
-      return false;
-    }
-
     return tryAddComponent(std::move(schema));
   }
 

@@ -266,11 +266,6 @@ namespace ao::rt
         }
       }
 
-      if (sortBy.empty() && !needsCold)
-      {
-        return library::TrackStore::Reader::LoadMode::Hot;
-      }
-
       if (needsHot && needsCold)
       {
         return library::TrackStore::Reader::LoadMode::Both;
@@ -804,14 +799,6 @@ namespace ao::rt
       }
     }
 
-    void publishDelta(TrackListProjectionDeltaBatch const& batch)
-    {
-      if (!sourceInvalidated)
-      {
-        changedSignal.emit(batch);
-      }
-    }
-
     void buildGroupSections()
     {
       sections.clear();
@@ -821,26 +808,17 @@ namespace ao::rt
         return;
       }
 
-      sections.push_back(GroupSection{
-        .rows = {.start = 0, .count = 1},
-        .identity = orderIndex[0].groupIdentity,
-        .primary = orderIndex[0].primary,
-        .secondary = orderIndex[0].secondary,
-        .tertiary = orderIndex[0].tertiary,
-        .imageId = orderIndex[0].imageId,
-      });
-
-      for (std::size_t index = 1; index < orderIndex.size(); ++index)
+      for (std::size_t index = 0; index < orderIndex.size(); ++index)
       {
-        if (orderIndex[index].groupIdentity != orderIndex[index - 1].groupIdentity)
+        if (auto const& entry = orderIndex[index]; sections.empty() || sections.back().identity != entry.groupIdentity)
         {
           sections.push_back(GroupSection{
             .rows = {.start = index, .count = 1},
-            .identity = orderIndex[index].groupIdentity,
-            .primary = orderIndex[index].primary,
-            .secondary = orderIndex[index].secondary,
-            .tertiary = orderIndex[index].tertiary,
-            .imageId = orderIndex[index].imageId,
+            .identity = entry.groupIdentity,
+            .primary = entry.primary,
+            .secondary = entry.secondary,
+            .tertiary = entry.tertiary,
+            .imageId = entry.imageId,
           });
         }
         else
@@ -849,9 +827,12 @@ namespace ao::rt
         }
       }
 
-      for (auto& section : sections)
+      if (presentation.groupBy == TrackGroupKey::Album)
       {
-        resolveTrackArtist(section, std::span{orderIndex}.subspan(section.rows.start, section.rows.count));
+        for (auto& section : sections)
+        {
+          resolveTrackArtist(section, std::span{orderIndex}.subspan(section.rows.start, section.rows.count));
+        }
       }
     }
 
@@ -982,16 +963,6 @@ namespace ao::rt
       {
         rowIndexByTrackId[entry.trackId] = static_cast<std::size_t>(index);
       }
-    }
-
-    std::optional<std::size_t> findRowIndex(TrackId trackId) const
-    {
-      if (auto it = rowIndexByTrackId.find(trackId); it != rowIndexByTrackId.end())
-      {
-        return it->second;
-      }
-
-      return std::nullopt;
     }
 
     std::optional<std::size_t> findSectionIndexAt(std::size_t row) const
@@ -1486,11 +1457,6 @@ namespace ao::rt
       return res && *res == finalTrackIds;
     }
 
-    static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(delta::RegularTrackEditScript const& script)
-    {
-      return eraseTrackIds(script);
-    }
-
     void publishSortedSourceBatch(std::vector<TrackId> const& previousTrackIds,
                                   delta::RegularTrackEditScript const& sourceScript,
                                   std::size_t previousSize)
@@ -1507,15 +1473,14 @@ namespace ao::rt
       }
 
       auto const previousIndex = makeTrackIndex(previousTrackIds);
-      auto const finalIndex = makeTrackIndex(finalTrackIds);
       auto preferredMovedIds = std::vector<TrackId>{};
 
       for (auto const trackId : updatedTrackIds)
       {
         auto const previous = previousIndex.find(trackId);
 
-        if (auto const final = finalIndex.find(trackId);
-            previous != previousIndex.end() && final != finalIndex.end() && previous->second != final->second)
+        if (auto const final = rowIndexByTrackId.find(trackId);
+            previous != previousIndex.end() && final != rowIndexByTrackId.end() && previous->second != final->second)
         {
           preferredMovedIds.push_back(trackId);
         }
@@ -1555,8 +1520,6 @@ namespace ao::rt
       }
 
       auto const previousSize = orderIndex.size();
-      auto const previousTrackIds = projectionTrackIds();
-      auto const previousSections = sectionFingerprint();
 
       if (std::holds_alternative<SourceReset>(sourceBatch))
       {
@@ -1565,8 +1528,9 @@ namespace ao::rt
         return;
       }
 
+      auto const previousTrackIds = projectionTrackIds();
+      auto const previousSections = sectionFingerprint();
       auto const& script = std::get<delta::RegularTrackEditScript>(sourceBatch);
-
       auto const incrementalApplied = tryApplyIncrementalBatch(script);
       AO_INVARIANT(incrementalApplied, "Projection incremental batch is inconsistent with its source or stored tracks");
 
@@ -1586,7 +1550,7 @@ namespace ao::rt
       auto const sourceOrderMatches = matchesSourceOrderBatch(previousTrackIds, script, finalTrackIds);
       AO_INVARIANT(sourceOrderMatches, "Projection source-order script does not reproduce its final order");
 
-      auto batch = sourceOrderProjectionBatch(script);
+      auto batch = eraseTrackIds(script);
       auto const validBatch = isValidTrackListProjectionDeltaBatch(batch, previousSize) &&
                               finalSizeOf(batch, previousSize) == orderIndex.size();
       AO_INVARIANT(validBatch, "Projection source-order ranges do not match its final size");

@@ -34,6 +34,7 @@
 namespace ao::library
 {
   class LibraryWrite;
+  class TrackBuilder;
 } // namespace ao::library
 
 namespace ao::rt
@@ -57,6 +58,11 @@ namespace ao::rt
 
     delta::RegularTrackEditScript removalScriptFor(std::span<TrackId const> storedTrackIds,
                                                    std::unordered_set<TrackId> const& selectedTrackIds);
+
+    TrackTagsChange applyNormalizedTagPatch(library::TrackBuilder& builder,
+                                            TrackId trackId,
+                                            std::span<std::string const> normalizedAdd,
+                                            std::span<std::string const> normalizedRemove);
 
     Result<EditTrackTagsReply> applyTagPatchInTransaction(library::LibraryWrite& transaction,
                                                           std::span<TrackId const> trackIds,

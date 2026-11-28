@@ -15,10 +15,8 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <optional>
-#include <ranges>
 #include <span>
 #include <utility>
-#include <vector>
 
 namespace ao::uimodel
 {
@@ -33,35 +31,9 @@ namespace ao::uimodel
     _changesSubscription = changes.onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
-        auto removedListIds = std::vector<ListId>{};
+        auto const removedListIds = pruneChangedLists(_presentations, changeSet);
 
-        if (changeSet.libraryReset)
-        {
-          removedListIds.reserve(_presentations.size());
-
-          for (auto const listId : _presentations | std::views::keys)
-          {
-            removedListIds.push_back(listId);
-          }
-
-          _presentations.clear();
-        }
-        else
-        {
-          removedListIds.reserve(changeSet.listsDeleted.size());
-
-          for (auto const listId : changeSet.listsDeleted)
-          {
-            if (_presentations.erase(listId) > 0)
-            {
-              removedListIds.push_back(listId);
-            }
-          }
-        }
-
-        // No owner state is touched after notification starts: an observer may
-        // synchronously destroy this owner. The shared signal state stays alive
-        // long enough to deliver the snapshotted ids.
+        // An observer may destroy this owner; retain the signal for the whole batch.
         auto const changedPtr = _changedPtr;
 
         for (auto const listId : removedListIds)

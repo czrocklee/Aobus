@@ -6,6 +6,7 @@
 #include <ao/utility/String.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,20 +17,22 @@ namespace ao::uimodel::detail
 {
   namespace
   {
+    enum class TermByte : std::uint8_t
+    {
+      Literal,
+      Escaped,
+      Syntax,
+    };
+
     struct QuoteState final
     {
       char quote = '\0';
       bool escaped = false;
     };
 
-    bool isSpace(char ch)
-    {
-      return utility::isAsciiWhitespace(ch);
-    }
-
     void skipSpaces(std::string_view text, std::size_t& position)
     {
-      while (position < text.size() && isSpace(text[position]))
+      while (position < text.size() && utility::isAsciiWhitespace(text[position]))
       {
         ++position;
       }
@@ -47,7 +50,7 @@ namespace ao::uimodel::detail
       }
 
       auto const end = position + 3;
-      return end == text.size() || isSpace(text[end]) || text[end] == '(' || text[end] == '!';
+      return end == text.size() || utility::isAsciiWhitespace(text[end]) || text[end] == '(' || text[end] == '!';
     }
 
     bool isExpressionVariablePrefix(char ch)
@@ -55,30 +58,38 @@ namespace ao::uimodel::detail
       return ch == '$' || ch == '@' || ch == '#' || ch == '%';
     }
 
-    void advanceQuoteState(QuoteState& state, char ch)
+    TermByte advanceQuoteState(QuoteState& state, char ch)
     {
       if (state.quote == '\0')
       {
         if (ch == '\'' || ch == '"')
         {
           state.quote = ch;
+          return TermByte::Syntax;
         }
 
-        return;
+        return TermByte::Literal;
       }
 
       if (state.escaped)
       {
         state.escaped = false;
+        return TermByte::Escaped;
       }
-      else if (ch == '\\')
+
+      if (ch == '\\')
       {
         state.escaped = true;
+        return TermByte::Syntax;
       }
-      else if (ch == state.quote)
+
+      if (ch == state.quote)
       {
         state.quote = '\0';
+        return TermByte::Syntax;
       }
+
+      return TermByte::Literal;
     }
 
     void appendEscaped(std::string& output, char ch)
@@ -102,45 +113,19 @@ namespace ao::uimodel::detail
     {
       auto result = std::string{};
       result.reserve(text.size());
-      char quote = '\0';
-      bool escaped = false;
+      auto state = QuoteState{};
 
       for (auto const ch : text)
       {
-        if (quote == '\0')
+        switch (advanceQuoteState(state, ch))
         {
-          if (ch == '\'' || ch == '"')
-          {
-            quote = ch;
-          }
-          else
-          {
-            result.push_back(ch);
-          }
-
-          continue;
-        }
-
-        if (escaped)
-        {
-          appendEscaped(result, ch);
-          escaped = false;
-        }
-        else if (ch == '\\')
-        {
-          escaped = true;
-        }
-        else if (ch == quote)
-        {
-          quote = '\0';
-        }
-        else
-        {
-          result.push_back(ch);
+          case TermByte::Literal: result.push_back(ch); break;
+          case TermByte::Escaped: appendEscaped(result, ch); break;
+          case TermByte::Syntax: break;
         }
       }
 
-      if (escaped)
+      if (state.escaped)
       {
         result.push_back('\\');
       }
@@ -186,7 +171,7 @@ namespace ao::uimodel::detail
     {
       auto const ch = text[index];
 
-      if (state.quote == '\0' && isSpace(ch))
+      if (state.quote == '\0' && utility::isAsciiWhitespace(ch))
       {
         if (optTermBegin)
         {
@@ -234,7 +219,7 @@ namespace ao::uimodel::detail
     {
       auto const ch = text[index];
 
-      if (state.quote == '\0' && isSpace(ch))
+      if (state.quote == '\0' && utility::isAsciiWhitespace(ch))
       {
         tokenBegin = index + 1;
         continue;
@@ -249,7 +234,7 @@ namespace ao::uimodel::detail
     {
       auto const ch = text[tokenEnd];
 
-      if (state.quote == '\0' && isSpace(ch))
+      if (state.quote == '\0' && utility::isAsciiWhitespace(ch))
       {
         break;
       }

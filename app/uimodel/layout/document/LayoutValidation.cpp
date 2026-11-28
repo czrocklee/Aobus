@@ -195,7 +195,7 @@ namespace ao::uimodel
     {
       if (isGlobalActionProp(name))
       {
-        // Action slots carry their own policy and schema rules.
+        // validateActions checks these open enums against the action schema.
         return std::nullopt;
       }
 
@@ -217,8 +217,6 @@ namespace ao::uimodel
                       std::format("Property '{}' has the wrong value type", name));
       }
 
-      // Action properties are injected with an open enum kind; their allowed
-      // values are the action schema rather than a fixed value list.
       if (it->kind == PropertyKind::Enum && !it->enumValues.empty() &&
           !std::ranges::contains(it->enumValues, value.asString()))
       {

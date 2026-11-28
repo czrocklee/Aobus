@@ -234,37 +234,37 @@ namespace ao::rt
 
     void clearSequence() override
     {
-      submitVoid([this] { succession.clear(); }, true, false);
+      submitVoid([this] { succession.clear(); }, true);
     }
 
     void setPlaybackMode(ShuffleMode const shuffle, RepeatMode const repeat) override
     {
-      submitVoid([this, shuffle, repeat] { succession.setPlaybackMode(shuffle, repeat); }, false, false);
+      submitVoid([this, shuffle, repeat] { succession.setPlaybackMode(shuffle, repeat); }, false);
     }
 
     void setShuffleMode(ShuffleMode const mode) override
     {
-      submitVoid([this, mode] { succession.setShuffleMode(mode); }, false, false);
+      submitVoid([this, mode] { succession.setShuffleMode(mode); }, false);
     }
 
     void setRepeatMode(RepeatMode const mode) override
     {
-      submitVoid([this, mode] { succession.setRepeatMode(mode); }, false, false);
+      submitVoid([this, mode] { succession.setRepeatMode(mode); }, false);
     }
 
     void pause() override
     {
-      submitVoid([this] { transport.pause(); }, false, false);
+      submitVoid([this] { transport.pause(); }, false);
     }
 
     void resume() override
     {
-      submitVoid([this] { transport.resume(); }, false, false);
+      submitVoid([this] { transport.resume(); }, false);
     }
 
     void stop() override
     {
-      submitVoid([this] { std::ignore = transport.stop(); }, true, false);
+      submitVoid([this] { std::ignore = transport.stop(); }, true);
     }
 
     void seek(std::chrono::milliseconds const elapsed, PlaybackSeekMode const mode) override
@@ -276,7 +276,6 @@ namespace ao::rt
                          mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
                                                            : PlaybackTransport::SeekMode::Final);
         },
-        false,
         false);
     }
 
@@ -304,7 +303,7 @@ namespace ao::rt
 
     void cancelPointerSeek(PlaybackPointerSeek const gesture) override
     {
-      submitVoid([this, gesture] { endOwnedPreview(gesture); }, false, false);
+      submitVoid([this, gesture] { endOwnedPreview(gesture); }, false);
     }
 
     void seekPointer(PlaybackPointerSeek const gesture,
@@ -402,29 +401,28 @@ namespace ao::rt
 
     void setOutputDevice(audio::OutputDeviceSelection const& selection) override
     {
-      submitVoid([this, selection] { transport.setOutputDevice(selection); }, true, false);
+      submitVoid([this, selection] { transport.setOutputDevice(selection); }, true);
     }
 
     void setVolume(float const volume) override
     {
-      submitVoid([this, volume] { transport.setVolume(volume); }, false, false);
+      submitVoid([this, volume] { transport.setVolume(volume); }, false);
     }
 
     void setMuted(bool const muted) override
     {
-      submitVoid([this, muted] { transport.setMuted(muted); }, false, false);
+      submitVoid([this, muted] { transport.setMuted(muted); }, false);
     }
 
     void revealPlayingTrack() override
     {
-      submitVoid([this] { transport.revealPlayingTrack(); }, false, false);
+      submitVoid([this] { transport.revealPlayingTrack(); }, false);
     }
 
     void revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId) override
     {
       submitVoid([this, trackId, preferredViewId, preferredListId]
                  { transport.revealTrack(trackId, preferredViewId, preferredListId); },
-                 false,
                  false);
     }
 
@@ -478,7 +476,6 @@ namespace ao::rt
 
     void submitVoid(compat::MoveOnlyFunction<void()> operation,
                     bool const invalidatesOlderCommand,
-                    bool const staleWhenSuperseded,
                     std::source_location location = std::source_location::current())
     {
       std::ignore = submitResult(
@@ -488,7 +485,7 @@ namespace ao::rt
           return false;
         },
         invalidatesOlderCommand,
-        staleWhenSuperseded,
+        false,
         location);
     }
 
@@ -533,26 +530,11 @@ namespace ao::rt
       beginCommit();
       auto const closeCommitOnExit = gsl_lite::finally([this] { closeCommit(); });
       auto res = Result<bool>{};
-      bool forcesPositionAnchor = false;
 
       try
       {
         res = command.operation();
-
-        if (res)
-        {
-          forcesPositionAnchor = *res;
-        }
-      }
-      catch (...)
-      {
-        closeService();
-        throw;
-      }
-
-      try
-      {
-        settleCommit(forcesPositionAnchor);
+        settleCommit(res && *res);
       }
       catch (...)
       {

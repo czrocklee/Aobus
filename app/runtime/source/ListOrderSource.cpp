@@ -93,7 +93,7 @@ namespace ao::rt
   void ListOrderSource::rebuildEffectiveTrackIds()
   {
     auto effective = std::vector<TrackId>{};
-    effective.reserve(_orderTrackIds.size() + _filteredParentLease->size());
+    effective.reserve(_filteredParentLease->size());
 
     for (auto const trackId : _orderTrackIds.ids())
     {
@@ -111,7 +111,7 @@ namespace ao::rt
       }
     }
 
-    _effectiveTrackIds.assign(effective);
+    _effectiveTrackIds.assign(std::move(effective));
   }
 
   void ListOrderSource::publishVisibilityDelta(std::vector<TrackId> const& previousEffective,
@@ -144,9 +144,9 @@ namespace ao::rt
 
     if (std::holds_alternative<SourceReset>(batch))
     {
-      auto const previousEffective = _effectiveTrackIds.vector();
+      auto const previousSize = _effectiveTrackIds.size();
       rebuildEffectiveTrackIds();
-      std::ignore = tryPublishDelta(SourceReset{}, previousEffective.size());
+      std::ignore = tryPublishDelta(SourceReset{}, previousSize);
       return;
     }
 

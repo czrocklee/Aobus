@@ -10,6 +10,7 @@
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileManifestView.h>
 #include <ao/library/FileStatus.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
@@ -52,12 +53,18 @@ namespace ao::rt
     struct FileStatSnapshot final
     {
       std::uint64_t fileSize = 0;
-      std::optional<FileTimestamp> optMtime;
+      FileTimestamp mtime{};
     };
 
     bool matchesSnapshot(FileStatSnapshot const& stat, PendingIdentityRow const& row) noexcept
     {
-      return stat.fileSize == row.fileSize && stat.optMtime == row.optMtime;
+      return stat.fileSize == row.fileSize && row.optMtime == stat.mtime;
+    }
+
+    bool isPending(library::FileManifestView const& view) noexcept
+    {
+      return view.status() == library::FileStatus::Available &&
+             !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature());
     }
 
     Result<FileStatSnapshot> readCurrentStat(std::filesystem::path const& path)
@@ -77,7 +84,7 @@ namespace ao::rt
         return std::unexpected{timestampRes.error()};
       }
 
-      return FileStatSnapshot{.fileSize = static_cast<std::uint64_t>(fileSize), .optMtime = *timestampRes};
+      return FileStatSnapshot{.fileSize = static_cast<std::uint64_t>(fileSize), .mtime = *timestampRes};
     }
 
     std::vector<PendingIdentityRow> collectPendingRows(library::MusicLibrary& ml,
@@ -100,16 +107,15 @@ namespace ao::rt
           continue;
         }
 
-        if (view.status() != library::FileStatus::Available ||
-            library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
+        if (!isPending(view))
         {
           continue;
         }
 
-        auto uri = std::string{uriView};
-        auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .optMtime = view.mtime()};
+        auto row =
+          PendingIdentityRow{.uri = std::string{uriView}, .fileSize = view.fileSize(), .optMtime = view.mtime()};
 
-        if (auto parsedRes = library::LibraryUri::parse(uri); !parsedRes)
+        if (auto parsedRes = library::LibraryUri::parse(row.uri); !parsedRes)
         {
           row.pathError = parsedRes.error().message;
         }
@@ -143,8 +149,7 @@ namespace ao::rt
       {
         std::ignore = uriView;
 
-        if (view.status() == library::FileStatus::Available &&
-            !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
+        if (isPending(view))
         {
           ++count;
         }

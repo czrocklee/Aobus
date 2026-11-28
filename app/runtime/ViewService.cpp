@@ -56,7 +56,6 @@ namespace ao::rt
 
     struct PreparedViewResources final
     {
-      TrackSourceLease baseSourceLease;
       TrackSourceLease activeSourceLease;
       std::optional<Error> optFilterError;
       std::shared_ptr<TrackListProjection> projectionPtr;
@@ -65,7 +64,7 @@ namespace ao::rt
     Result<PreparedViewResources> prepareViewResources(
       ViewId const viewId,
       ListId const baseListId,
-      TrackSourceLease baseSourceLease,
+      TrackSourceLease const& baseSourceLease,
       std::string const& filterExpression,
       TrackPresentationSpec const& presentation,
       library::MusicLibrary const& library,
@@ -104,19 +103,10 @@ namespace ao::rt
       projectionPtr->setPresentation(presentation);
 
       return PreparedViewResources{
-        .baseSourceLease = std::move(baseSourceLease),
         .activeSourceLease = std::move(activeSourceLease),
         .optFilterError = std::move(optFilterError),
         .projectionPtr = std::move(projectionPtr),
       };
-    }
-
-    void installResources(ViewEntry& entry, PreparedViewResources resources)
-    {
-      entry.projectionPtr = std::move(resources.projectionPtr);
-      entry.activeSourceLease = std::move(resources.activeSourceLease);
-      entry.state.optFilterError = std::move(resources.optFilterError);
-      entry.baseSourceLease = std::move(resources.baseSourceLease);
     }
 
     std::unexpected<Error> missingViewError(ViewId const viewId)
@@ -132,19 +122,6 @@ namespace ao::rt
       }
 
       return {};
-    }
-
-    void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
-    {
-      auto const normalized = normalizeTrackPresentationSpec(spec);
-      entry.state.presentation = normalized;
-      entry.state.groupBy = normalized.groupBy;
-      entry.state.sortBy = normalized.effectiveSortBy();
-
-      if (entry.projectionPtr)
-      {
-        entry.projectionPtr->setPresentation(normalized);
-      }
     }
 
     bool isSameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
@@ -282,7 +259,7 @@ namespace ao::rt
 
     auto resourcesRes = prepareViewResources(id,
                                              initial.listId,
-                                             std::move(*baseSourceRes),
+                                             *baseSourceRes,
                                              initial.filterExpression,
                                              presentation,
                                              _implPtr->library,
@@ -306,7 +283,7 @@ namespace ao::rt
     auto resources = std::move(*resourcesRes);
     auto entry = ViewEntry{
       .state = std::move(state),
-      .baseSourceLease = std::move(resources.baseSourceLease),
+      .baseSourceLease = std::move(*baseSourceRes),
       .activeSourceLease = std::move(resources.activeSourceLease),
       .projectionPtr = std::move(resources.projectionPtr),
     };
@@ -358,7 +335,9 @@ namespace ao::rt
       return std::unexpected{resourcesRes.error()};
     }
 
-    installResources(entry, std::move(*resourcesRes));
+    entry.projectionPtr = std::move(resourcesRes->projectionPtr);
+    entry.activeSourceLease = std::move(resourcesRes->activeSourceLease);
+    entry.state.optFilterError = std::move(resourcesRes->optFilterError);
     entry.state.filterExpression = std::move(filterExpression);
 
     try
@@ -405,18 +384,22 @@ namespace ao::rt
     }
 
     auto spec = normalizeTrackPresentationSpec(presentation);
+    auto& entry = it->second;
 
-    if (it->second.state.presentation == spec)
+    if (entry.state.presentation == spec)
     {
       return {};
     }
 
-    applyPresentation(it->second, spec);
+    entry.state.presentation = spec;
+    entry.state.groupBy = spec.groupBy;
+    entry.state.sortBy = spec.effectiveSortBy();
+    entry.projectionPtr->setPresentation(spec);
 
     try
     {
       _implPtr->presentationChangedSignal.post(
-        _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
+        _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = std::move(spec)});
     }
     catch (...)
     {

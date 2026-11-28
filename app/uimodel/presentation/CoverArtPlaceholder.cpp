@@ -3,6 +3,8 @@
 
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
+#include <ao/utility/String.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -44,11 +46,6 @@ namespace ao::uimodel
     constexpr unsigned char kUtf8FourByteMaximum = 0xF4U;
     constexpr unsigned char kUtf8FourByteSecondMinimum = 0x90U;
     constexpr unsigned char kUtf8FourByteSecondMaximum = 0x8FU;
-
-    bool isAsciiWhitespace(unsigned char const value) noexcept
-    {
-      return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\f' || value == '\v';
-    }
 
     std::size_t utf8ScalarLength(std::string_view const text, std::size_t const offset) noexcept
     {
@@ -105,7 +102,7 @@ namespace ao::uimodel
     {
       std::size_t offset = 0;
 
-      while (offset < text.size() && isAsciiWhitespace(static_cast<unsigned char>(text[offset])))
+      while (offset < text.size() && utility::isAsciiWhitespace(text[offset]))
       {
         ++offset;
       }
@@ -113,13 +110,8 @@ namespace ao::uimodel
       auto result = std::string{};
       std::size_t scalarCount = 0;
 
-      while (offset < text.size())
+      while (offset < text.size() && !utility::isAsciiWhitespace(text[offset]))
       {
-        if (isAsciiWhitespace(static_cast<unsigned char>(text[offset])))
-        {
-          break;
-        }
-
         auto const length = utf8ScalarLength(text, offset);
 
         if (length == 0)
@@ -129,14 +121,15 @@ namespace ao::uimodel
 
         if (scalarCount < maxScalars)
         {
-          auto scalar = std::string{text.substr(offset, length)};
-
-          if (length == 1 && scalar.front() >= 'a' && scalar.front() <= 'z')
+          if (length == 1)
           {
-            scalar.front() = static_cast<char>(scalar.front() - ('a' - 'A'));
+            result.push_back(utility::toAsciiUpper(text[offset]));
+          }
+          else
+          {
+            result.append(text.substr(offset, length));
           }
 
-          result.append(scalar);
           ++scalarCount;
         }
 

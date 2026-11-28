@@ -99,6 +99,14 @@ namespace ao::rt
       return resolvedRes ? std::optional<std::filesystem::path>{std::move(*resolvedRes)} : std::nullopt;
     }
 
+    ResourceId primaryCoverArtId(library::TrackView const& view)
+    {
+      return view.coverArt()
+        .primary()
+        .transform([](library::CoverArt cover) { return cover.resourceId; })
+        .value_or(kInvalidResourceId);
+    }
+
     TrackRow rowDataFromView(TrackId id,
                              library::MusicLibrary const& library,
                              library::TrackView const& view,
@@ -137,10 +145,7 @@ namespace ao::rt
 
       return TrackRow{
         .id = id,
-        .coverArtId = view.coverArt()
-                        .primary()
-                        .transform([](library::CoverArt cover) { return cover.resourceId; })
-                        .value_or(kInvalidResourceId),
+        .coverArtId = primaryCoverArtId(view),
         .optUriPath = resolvePath ? resolveLibraryPath(library.rootPath(), uri) : std::nullopt,
         .title = std::string{title},
         .artist = resolveDictionaryId(dictionary, metadata.artistId()),
@@ -406,10 +411,7 @@ namespace ao::rt
       return kInvalidResourceId;
     }
 
-    return optView->coverArt()
-      .primary()
-      .transform([](library::CoverArt cover) { return cover.resourceId; })
-      .value_or(kInvalidResourceId);
+    return primaryCoverArtId(*optView);
   }
 
   TrackFieldRawValue LibrarySnapshot::trackField(TrackId id, TrackField field) const

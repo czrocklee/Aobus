@@ -13,7 +13,6 @@
 #include <cstddef>
 #include <expected>
 #include <functional>
-#include <iterator>
 #include <limits>
 #include <span>
 #include <utility>
@@ -66,14 +65,23 @@ namespace ao::rt::delta
       edits.push_back(std::move(range));
     }
 
-    std::vector<TrackId> longestCommonSubsequence(std::span<TrackId const> from, std::span<TrackId const> to)
+    using TrackIdSet = boost::unordered_flat_set<TrackId, std::hash<TrackId>>;
+
+    TrackIdSet retainedTrackIds(std::span<TrackId const> from,
+                                std::span<TrackId const> to,
+                                std::span<TrackId const> preferredMovedIds)
     {
+      auto const preferredMoved = TrackIdSet{preferredMovedIds.begin(), preferredMovedIds.end()};
       auto toIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
-      toIndex.reserve(to.size());
+      // Preferred moves may be absent from a filtered destination; grow for any extra candidates.
+      toIndex.reserve(to.size() - std::min(to.size(), preferredMoved.size()));
 
       for (std::size_t index = 0; index < to.size(); ++index)
       {
-        toIndex.emplace(to[index], index);
+        if (!preferredMoved.contains(to[index]))
+        {
+          toIndex.emplace(to[index], index);
+        }
       }
 
       struct Candidate final
@@ -82,7 +90,7 @@ namespace ao::rt::delta
         std::size_t toIndex = 0;
       };
       auto candidates = std::vector<Candidate>{};
-      candidates.reserve(std::min(from.size(), to.size()));
+      candidates.reserve(std::min(from.size(), toIndex.size()));
 
       for (auto const trackId : from)
       {
@@ -121,20 +129,19 @@ namespace ao::rt::delta
         }
       }
 
-      auto result = std::vector<TrackId>{};
-      result.reserve(tails.size());
+      // The diff needs membership in the longest common subsequence, not a copy of its order.
+      auto retained = TrackIdSet{};
+      retained.reserve(tails.size());
 
       if (!tails.empty())
       {
         for (auto index = tails.back(); index != candidates.size(); index = predecessors[index])
         {
-          result.push_back(candidates[index].trackId);
+          retained.insert(candidates[index].trackId);
         }
-
-        std::ranges::reverse(result);
       }
 
-      return result;
+      return retained;
     }
   } // namespace
 
@@ -163,7 +170,6 @@ namespace ao::rt::delta
 
         _previousRemoveStart = start;
         _size -= count;
-        _previousUpdateEnd = 0;
         return true;
       }
 
@@ -176,7 +182,6 @@ namespace ao::rt::delta
 
         _stage = RangeEditKind::Insert;
         _previousInsertEnd = start + count;
-        _previousUpdateEnd = 0;
         return true;
       }
 
@@ -247,18 +252,18 @@ namespace ao::rt::delta
       }
     }
 
-    auto retained = std::vector<TrackId>{};
-    retained.reserve(initial.size());
+    std::size_t retainedSize = 0;
 
     for (std::size_t index = 0; index < initial.size(); ++index)
     {
       if (!removed[index])
       {
-        retained.push_back(initial[index]);
+        initial[retainedSize++] = initial[index];
       }
     }
 
-    auto finalSize = retained.size();
+    initial.resize(retainedSize);
+    auto finalSize = retainedSize;
 
     for (auto const& edit : script.edits)
     {
@@ -283,13 +288,13 @@ namespace ao::rt::delta
 
       while (result.size() < insertion->start)
       {
-        result.push_back(retained[retainedIndex++]);
+        result.push_back(initial[retainedIndex++]);
       }
 
       result.append_range(insertion->trackIds);
     }
 
-    result.insert(result.end(), retained.begin() + static_cast<std::ptrdiff_t>(retainedIndex), retained.end());
+    result.append_range(std::span{initial}.subspan(retainedIndex));
 
     for (auto const& edit : script.edits)
     {
@@ -314,18 +319,7 @@ namespace ao::rt::delta
                               std::span<TrackId const> updatedIds,
                               std::span<TrackId const> preferredMovedIds)
   {
-    auto preferredMoved =
-      boost::unordered_flat_set<TrackId, std::hash<TrackId>>{preferredMovedIds.begin(), preferredMovedIds.end()};
-    auto eligibleFrom = std::vector<TrackId>{};
-    auto eligibleTo = std::vector<TrackId>{};
-    std::ranges::copy_if(from,
-                         std::back_inserter(eligibleFrom),
-                         [&preferredMoved](TrackId trackId) { return !preferredMoved.contains(trackId); });
-    std::ranges::copy_if(to,
-                         std::back_inserter(eligibleTo),
-                         [&preferredMoved](TrackId trackId) { return !preferredMoved.contains(trackId); });
-    auto const retainedIds = longestCommonSubsequence(eligibleFrom, eligibleTo);
-    auto retained = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{retainedIds.begin(), retainedIds.end()};
+    auto const retained = retainedTrackIds(from, to, preferredMovedIds);
     auto coalescer = Coalescer{};
 
     auto removalStart = from.size();
@@ -368,7 +362,7 @@ namespace ao::rt::delta
       coalescer.appendInsert(start, to.subspan(start, index - start));
     }
 
-    auto updated = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{updatedIds.begin(), updatedIds.end()};
+    auto const updated = TrackIdSet{updatedIds.begin(), updatedIds.end()};
 
     for (std::size_t index = 0; index < to.size();)
     {

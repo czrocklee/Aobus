@@ -30,8 +30,7 @@ namespace ao::uimodel
                                                                          kHeightRequestProp,
                                                                          kVisibleProp});
 
-    /// A size request keeps the version 1 meaning where a negative value asks for no minimum.
-    std::optional<double> minimumSize(LayoutValueMap const& layout, std::string_view const name)
+    std::optional<double> authoredSize(LayoutValueMap const& layout, std::string_view const name)
     {
       auto const it = layout.find(name);
 
@@ -40,14 +39,13 @@ namespace ao::uimodel
         return std::nullopt;
       }
 
-      auto const value = it->second.asDouble();
-      return value < 0.0 ? std::nullopt : std::optional<double>{value};
+      return it->second.asDouble();
     }
 
-    bool hasNumber(LayoutValueMap const& layout, std::string_view const name)
+    // A negative request is authored but explicitly asks for no minimum.
+    std::optional<double> minimumSize(std::optional<double> const optSize)
     {
-      auto const it = layout.find(name);
-      return it != layout.end() && it->second.isNumber();
+      return optSize && *optSize < 0.0 ? std::nullopt : optSize;
     }
 
     /// A boolean field, absent when the document never wrote it down.
@@ -109,16 +107,18 @@ namespace ao::uimodel
   LayoutPlacement planLayoutPlacement(LayoutNode const& node)
   {
     auto const& layout = node.layout;
+    auto const optWidth = authoredSize(layout, kWidthRequestProp);
+    auto const optHeight = authoredSize(layout, kHeightRequestProp);
 
     return LayoutPlacement{
       .optHorizontalExpand = flag(layout, kHorizontalExpandProp),
       .optVerticalExpand = flag(layout, kVerticalExpandProp),
       .optHorizontalAlignment = alignment(layout, kHorizontalAlignProp),
       .optVerticalAlignment = alignment(layout, kVerticalAlignProp),
-      .optMinWidth = minimumSize(layout, kWidthRequestProp),
-      .optMinHeight = minimumSize(layout, kHeightRequestProp),
-      .widthRequestAuthored = hasNumber(layout, kWidthRequestProp),
-      .heightRequestAuthored = hasNumber(layout, kHeightRequestProp),
+      .optMinWidth = minimumSize(optWidth),
+      .optMinHeight = minimumSize(optHeight),
+      .widthRequestAuthored = optWidth.has_value(),
+      .heightRequestAuthored = optHeight.has_value(),
       .optAuthoredVisible = flag(layout, kVisibleProp),
     };
   }

@@ -1146,21 +1146,16 @@ namespace ao::rt
     }
   }
 
-  Result<detail::ScanSpellingDirectory> ScanSpellingInspection::readNames(Path const& directory) const
-  {
-    return readScanNames(directory, _stopToken);
-  }
-
   Result<detail::ScanSpellingDirectory> ScanSpellingInspection::readStableNames(Path const& directory) const
   {
-    auto firstRes = readNames(directory);
+    auto firstRes = readScanNames(directory, _stopToken);
 
     if (!firstRes)
     {
       return firstRes;
     }
 
-    auto const secondRes = readNames(directory);
+    auto const secondRes = readScanNames(directory, _stopToken);
 
     if (!secondRes)
     {
@@ -1185,7 +1180,7 @@ namespace ao::rt
                                                                  Path const& oldName,
                                                                  Path const& newName) const
   {
-    auto const freshRes = readNames(parent);
+    auto const freshRes = readScanNames(parent, _stopToken);
 
     if (!freshRes)
     {

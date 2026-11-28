@@ -68,14 +68,9 @@ namespace ao::uimodel
       return std::max(normalizedMinimumWidth(spec), preferred);
     }
 
-    std::int32_t fallbackWidth(TrackColumnSolveSpec const& spec)
+    bool hasFixedWidth(TrackColumnSolveSpec const& spec)
     {
-      if (trackColumnDefaults(spec.field).sizing == TrackColumnSizing::Fixed || spec.fixedWidth > 0)
-      {
-        return effectiveFixedWidth(spec);
-      }
-
-      return normalizedDefaultWidth(spec);
+      return trackColumnDefaults(spec.field).sizing == TrackColumnSizing::Fixed || spec.fixedWidth > 0;
     }
 
     std::vector<std::int32_t> allocateByWeight(std::span<std::size_t const> indices,
@@ -212,35 +207,20 @@ namespace ao::uimodel
       return remaining;
     }
 
-    std::vector<std::size_t> flexibleIndicesOnSide(std::span<TrackColumnSolveSpec const> specs,
-                                                   std::size_t resizedIndex,
-                                                   bool rightSide)
+    std::vector<std::size_t> flexibleFieldIndices(std::span<TrackColumnSolveSpec const> specs,
+                                                  std::size_t const begin,
+                                                  std::size_t const end)
     {
       auto indices = std::vector<std::size_t>{};
 
-      if (rightSide)
+      for (auto index = begin; index < end; ++index)
       {
-        for (std::size_t index = resizedIndex + 1; index < specs.size(); ++index)
-        {
-          if (trackColumnDefaults(specs[index].field).sizing == TrackColumnSizing::Flexible)
-          {
-            indices.push_back(index);
-          }
-        }
-
-        return indices;
-      }
-
-      for (std::size_t offset = 0; offset < resizedIndex; ++offset)
-      {
-        if (auto const index = resizedIndex - offset - 1;
-            trackColumnDefaults(specs[index].field).sizing == TrackColumnSizing::Flexible)
+        if (trackColumnDefaults(specs[index].field).sizing == TrackColumnSizing::Flexible)
         {
           indices.push_back(index);
         }
       }
 
-      std::ranges::reverse(indices);
       return indices;
     }
 
@@ -282,12 +262,13 @@ namespace ao::uimodel
 
     for (auto const field : fields)
     {
-      auto const minWidth = trackColumnDefaults(field).minimumWidth;
-      auto const defaultWidth = std::max(minWidth, trackColumnDefaults(field).width);
-      auto spec = TrackColumnSolveSpec{.field = field, .defaultWidth = defaultWidth, .minimumWidth = minWidth};
+      auto const defaults = trackColumnDefaults(field);
+      auto const defaultWidth = std::max(defaults.minimumWidth, defaults.width);
+      auto spec =
+        TrackColumnSolveSpec{.field = field, .defaultWidth = defaultWidth, .minimumWidth = defaults.minimumWidth};
       auto const stateIt = std::ranges::find(storedLayout, field, &TrackColumnState::field);
 
-      if (trackColumnDefaults(field).sizing == TrackColumnSizing::Fixed)
+      if (defaults.sizing == TrackColumnSizing::Fixed)
       {
         spec.fixedWidth = stateIt != storedLayout.end() && stateIt->width > 0 ? stateIt->width : -1;
       }
@@ -312,7 +293,7 @@ namespace ao::uimodel
     {
       for (auto const& spec : specs)
       {
-        widths.push_back(fallbackWidth(spec));
+        widths.push_back(hasFixedWidth(spec) ? effectiveFixedWidth(spec) : normalizedDefaultWidth(spec));
       }
 
       return widths;
@@ -325,8 +306,7 @@ namespace ao::uimodel
 
     for (std::size_t index = 0; index < specs.size(); ++index)
     {
-      if (auto const& spec = specs[index];
-          trackColumnDefaults(spec.field).sizing == TrackColumnSizing::Fixed || spec.fixedWidth > 0)
+      if (auto const& spec = specs[index]; hasFixedWidth(spec))
       {
         widths[index] = effectiveFixedWidth(spec);
         fixedWidth += widths[index];
@@ -415,7 +395,7 @@ namespace ao::uimodel
     {
       auto const clampedWidth = std::max(widths[index], normalizedMinimumWidth(specs[index]));
 
-      if (trackColumnDefaults(specs[index].field).sizing == TrackColumnSizing::Fixed || specs[index].fixedWidth > 0)
+      if (hasFixedWidth(specs[index]))
       {
         specs[index].fixedWidth = clampedWidth;
         specs[index].weight = -1.0;
@@ -428,7 +408,7 @@ namespace ao::uimodel
       }
     }
 
-    if (flexibleWidth <= 0 || flexibleIndices.empty())
+    if (flexibleWidth <= 0)
     {
       return specs;
     }
@@ -459,12 +439,6 @@ namespace ao::uimodel
 
     auto const resizedIndex = static_cast<std::size_t>(std::distance(specs.begin(), resizedIt));
     auto widths = solveTrackColumnWidths(specs, viewportWidth);
-
-    if (widths.size() != specs.size())
-    {
-      return {specs.begin(), specs.end()};
-    }
-
     auto const resizedIsFlexible = trackColumnDefaults(specs[resizedIndex].field).sizing == TrackColumnSizing::Flexible;
     auto const minTarget = normalizedMinimumWidth(specs[resizedIndex]);
     auto clampedTarget = std::max(targetWidth, minTarget);
@@ -482,7 +456,7 @@ namespace ao::uimodel
           continue;
         }
 
-        if (trackColumnDefaults(specs[index].field).sizing == TrackColumnSizing::Fixed || specs[index].fixedWidth > 0)
+        if (hasFixedWidth(specs[index]))
         {
           otherFixedWidth += widths[index];
         }
@@ -502,8 +476,8 @@ namespace ao::uimodel
     auto const delta = clampedTarget - widths[resizedIndex];
     widths[resizedIndex] = clampedTarget;
 
-    auto const rightFlex = flexibleIndicesOnSide(specs, resizedIndex, true);
-    auto const leftFlex = flexibleIndicesOnSide(specs, resizedIndex, false);
+    auto const rightFlex = flexibleFieldIndices(specs, resizedIndex + 1, specs.size());
+    auto const leftFlex = flexibleFieldIndices(specs, 0, resizedIndex);
 
     if (delta > 0)
     {
@@ -527,7 +501,7 @@ namespace ao::uimodel
 
   TrackColumnState canonicalTrackColumnState(TrackColumnSolveSpec const& spec)
   {
-    if (trackColumnDefaults(spec.field).sizing == TrackColumnSizing::Fixed || spec.fixedWidth > 0)
+    if (hasFixedWidth(spec))
     {
       return TrackColumnState{.field = spec.field, .width = effectiveFixedWidth(spec), .weight = -1.0};
     }

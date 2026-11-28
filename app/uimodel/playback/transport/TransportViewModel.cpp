@@ -50,50 +50,26 @@ namespace ao::uimodel
                                                bool showLabel)
     {
       auto view = TransportViewState{};
-      bool const isPlaying = isPresentedAsPlaying(transport.transport);
-
-      view.icon = iconForCommand(command);
-      view.tooltip = transportControlLabel(textCatalog, command);
+      view.playing = command == PlaybackCommand::PlayPause && isPresentedAsPlaying(transport.transport);
+      auto const presentedCommand = view.playing ? PlaybackCommand::Pause : command;
+      view.icon = iconForCommand(presentedCommand);
+      view.tooltip = transportControlLabel(textCatalog, presentedCommand);
       view.enabled = enabled;
 
       if (showLabel)
       {
-        view.label = transportControlLabel(textCatalog, command);
+        view.label = view.tooltip;
       }
 
-      if (command == PlaybackCommand::PlayPause)
+      if (command == PlaybackCommand::ToggleShuffle)
       {
-        view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
-        auto const presentedCommand = isPlaying ? PlaybackCommand::Pause : PlaybackCommand::Play;
-        view.tooltip = transportControlLabel(textCatalog, presentedCommand);
-        view.playing = isPlaying;
-
-        if (showLabel)
-        {
-          view.label = transportControlLabel(textCatalog, presentedCommand);
-        }
-      }
-      else if (command == PlaybackCommand::ToggleShuffle)
-      {
-        view.engaged = (succession.shuffle == rt::ShuffleMode::On);
+        view.engaged = succession.shuffle == rt::ShuffleMode::On;
       }
       else if (command == PlaybackCommand::CycleRepeat)
       {
-        if (succession.repeat == rt::RepeatMode::All)
-        {
-          view.icon = TransportIcon::Repeat;
-          view.engaged = true;
-        }
-        else if (succession.repeat == rt::RepeatMode::One)
-        {
-          view.icon = TransportIcon::RepeatOne;
-          view.engaged = true;
-        }
-        else
-        {
-          view.icon = TransportIcon::Repeat;
-          view.engaged = false;
-        }
+        auto const repeatOne = succession.repeat == rt::RepeatMode::One;
+        view.icon = repeatOne ? TransportIcon::RepeatOne : TransportIcon::Repeat;
+        view.engaged = repeatOne || succession.repeat == rt::RepeatMode::All;
       }
 
       return view;

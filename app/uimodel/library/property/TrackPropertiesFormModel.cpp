@@ -120,8 +120,7 @@ namespace ao::uimodel
     {
       using EditIntent = TrackPropertiesFormFieldState::EditIntent;
 
-      if (!state.editable || !canWriteTrackFieldPatch(state.field) ||
-          (state.mixed && state.editIntent == EditIntent::Ordinary))
+      if (!state.editable || (state.mixed && state.editIntent == EditIntent::Ordinary))
       {
         return false;
       }
@@ -460,28 +459,14 @@ namespace ao::uimodel
 
   TrackPropertiesFormFieldState* TrackPropertiesFormModel::findField(rt::TrackField field)
   {
-    auto const iter = std::ranges::find_if(
-      _fields, [field](TrackPropertiesFormFieldState const& state) { return state.field == field; });
-
-    if (iter == _fields.end())
-    {
-      return nullptr;
-    }
-
-    return &*iter;
+    auto const iter = std::ranges::find(_fields, field, &TrackPropertiesFormFieldState::field);
+    return iter == _fields.end() ? nullptr : &*iter;
   }
 
   TrackPropertiesFormFieldState const* TrackPropertiesFormModel::findField(rt::TrackField field) const
   {
-    auto const iter = std::ranges::find_if(
-      _fields, [field](TrackPropertiesFormFieldState const& state) { return state.field == field; });
-
-    if (iter == _fields.end())
-    {
-      return nullptr;
-    }
-
-    return &*iter;
+    auto const iter = std::ranges::find(_fields, field, &TrackPropertiesFormFieldState::field);
+    return iter == _fields.end() ? nullptr : &*iter;
   }
 
   Result<> loadTrackPropertiesFormBaseline(rt::LibrarySnapshot const& snapshot,
@@ -534,18 +519,20 @@ namespace ao::uimodel
     {
       for (auto const& row : rows)
       {
-        if (auto const* const state = baseline.findField(row.field); !first && state != nullptr && state->mixed)
+        auto* const state = baseline.findField(row.field);
+
+        if (state == nullptr || (!first && state->mixed))
         {
           continue;
         }
 
         if (auto rawValue = snapshot.trackField(trackId, row.field); first)
         {
-          baseline.loadFirstTrackField(row.field, std::move(rawValue));
+          *state = makeTrackPropertiesFormFieldState(row.field, std::move(rawValue), state->editable);
         }
         else
         {
-          std::ignore = baseline.tryMergeTrackField(row.field, rawValue);
+          std::ignore = tryMergeTrackPropertiesFormFieldState(*state, rawValue);
         }
       }
     };

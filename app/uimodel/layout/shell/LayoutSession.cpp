@@ -48,7 +48,7 @@ namespace ao::uimodel
     , _generation{snapshot.generation()}
     , _persistable{!snapshot.isEditMode() && surface == LayoutSurface::Main && !node.id.empty() &&
                    !snapshot.presetId().empty() && session._componentStateStore != nullptr}
-    , _optRestored{resolveComponentState(snapshot.componentState(), node)}
+    , _optRestored{resolveComponentState(snapshot.componentState(), node.id, node.type, _baselineHash)}
   {
   }
 
@@ -84,9 +84,7 @@ namespace ao::uimodel
                                                     std::string_view const fallbackPresetId)
   {
     auto const requestedSupported =
-      !requestedPresetId.empty() &&
-      std::ranges::any_of(
-        supportedPresetIds, [requestedPresetId](std::string_view presetId) { return presetId == requestedPresetId; });
+      !requestedPresetId.empty() && std::ranges::contains(supportedPresetIds, requestedPresetId);
 
     if (requestedSupported)
     {

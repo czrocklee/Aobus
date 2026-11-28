@@ -168,9 +168,6 @@ namespace ao::uimodel
 
   void TrackPresentationPickerViewModel::completeSelection(TrackPresentationSelection const& selection)
   {
-    if (selection.targetListId != kInvalidListId)
-    {
-      _listPresentations.setPresentationIdForList(selection.targetListId, selection.spec.presetId);
-    }
+    _listPresentations.setPresentationIdForList(selection.targetListId, selection.spec.presetId);
   }
 } // namespace ao::uimodel

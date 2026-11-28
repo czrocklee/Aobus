@@ -431,7 +431,7 @@ namespace ao::uimodel
       return !_entries.empty() || _explicitClear;
     }
 
-    return _entries != _baseline.optValue.value_or(std::vector<library::Credit>{});
+    return _baseline.optValue ? _entries != *_baseline.optValue : !_entries.empty();
   }
 
   bool TrackCreditsEditorModel::isMixedReplacement() const noexcept

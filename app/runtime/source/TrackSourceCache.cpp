@@ -73,7 +73,6 @@ namespace ao::rt
 
     Result<TrackSourceLease> acquire(ListId listId);
     Result<TrackSourceLease> acquire(SourceSpec const& spec);
-    std::optional<Error> sourceError(TrackSourceLease const& lease) const;
     void reloadAllTracks();
 
   private:
@@ -91,7 +90,7 @@ namespace ao::rt
     std::unique_ptr<ListOrderSource> buildImplementation(library::ListView const& view,
                                                          TrackSourceLease const& parentLease);
     void linkGraph(ListId listId, ListId parentId);
-    void unlinkGraph(ListId listId);
+    void removeFromParentChildren(ListId listId);
     void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;
 
     library::MusicLibrary const& _library;
@@ -131,7 +130,7 @@ namespace ao::rt
 
   std::optional<Error> TrackSourceCache::sourceError(TrackSourceLease const& lease) const
   {
-    return _implPtr->sourceError(lease);
+    return trackSourceError(lease.source());
   }
 
   Result<std::vector<TrackId>> TrackSourceCache::orderableTrackIds(TrackSourceLease const& lease) const
@@ -143,7 +142,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Track source is unavailable");
     }
 
-    if (auto const optError = _implPtr->sourceError(lease); optError)
+    if (auto const optError = sourceError(lease); optError)
     {
       return makeError(
         Error::Code::InvalidState, std::format("{}; fix the filter before editing the saved order", optError->message));
@@ -291,9 +290,6 @@ namespace ao::rt
       {
         return TrackSourceLease{std::move(sourcePtr)};
       }
-
-      _adHocSources.erase(cached);
-      ++_expiredAdHocSourcePruneCount;
     }
 
     for (auto it = _adHocSources.begin(); it != _adHocSources.end();)
@@ -321,14 +317,8 @@ namespace ao::rt
     auto sourcePtr = std::make_shared<SmartListSource>(*baseRes, _smartEvaluator);
     sourcePtr->setExpression(spec.filterExpression);
     sourcePtr->reload();
-    auto basePtr = std::static_pointer_cast<TrackSource>(std::move(sourcePtr));
-    _adHocSources.insert_or_assign(spec, basePtr);
-    return TrackSourceLease{std::move(basePtr)};
-  }
-
-  std::optional<Error> TrackSourceCache::Impl::sourceError(TrackSourceLease const& lease) const
-  {
-    return trackSourceError(lease.source());
+    _adHocSources.insert_or_assign(spec, sourcePtr);
+    return TrackSourceLease{std::move(sourcePtr)};
   }
 
   void TrackSourceCache::Impl::reloadAllTracks()
@@ -439,7 +429,9 @@ namespace ao::rt
       }
 
       _sources.erase(id);
-      unlinkGraph(id);
+      removeFromParentChildren(id);
+      _parentIds.erase(id);
+      _childIds.erase(id);
     }
   }
 
@@ -497,7 +489,7 @@ namespace ao::rt
     auto sourcePtr = std::make_shared<CachedListSource>(std::move(definition), std::move(implementationPtr));
     _sources.insert_or_assign(listId, sourcePtr);
     linkGraph(listId, parentId);
-    return TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(sourcePtr))};
+    return TrackSourceLease{std::move(sourcePtr)};
   }
 
   std::shared_ptr<CachedListSource> TrackSourceCache::Impl::findSource(ListId const listId)
@@ -516,7 +508,7 @@ namespace ao::rt
     auto filterSourcePtr = std::make_shared<SmartListSource>(parentLease, _smartEvaluator);
     filterSourcePtr->setExpression(std::string{view.filter()});
     filterSourcePtr->reload();
-    auto filterLease = TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(filterSourcePtr))};
+    auto filterLease = TrackSourceLease{std::move(filterSourcePtr)};
     auto const order = view.orderTrackIds();
     return std::make_unique<ListOrderSource>(
       std::span<TrackId const>{order.begin(), order.size()}, std::move(filterLease));
@@ -524,19 +516,7 @@ namespace ao::rt
 
   void TrackSourceCache::Impl::linkGraph(ListId const listId, ListId const parentId)
   {
-    if (auto const oldParent = _parentIds.find(listId); oldParent != _parentIds.end())
-    {
-      if (auto children = _childIds.find(oldParent->second); children != _childIds.end())
-      {
-        std::erase(children->second, listId);
-
-        if (children->second.empty())
-        {
-          _childIds.erase(children);
-        }
-      }
-    }
-
+    removeFromParentChildren(listId);
     _parentIds.insert_or_assign(listId, parentId);
 
     if (parentId != kInvalidListId)
@@ -548,7 +528,7 @@ namespace ao::rt
     }
   }
 
-  void TrackSourceCache::Impl::unlinkGraph(ListId const listId)
+  void TrackSourceCache::Impl::removeFromParentChildren(ListId const listId)
   {
     if (auto const parent = _parentIds.find(listId); parent != _parentIds.end())
     {
@@ -561,20 +541,14 @@ namespace ao::rt
           _childIds.erase(children);
         }
       }
-
-      _parentIds.erase(parent);
     }
-
-    _childIds.erase(listId);
   }
 
   void TrackSourceCache::Impl::collectDescendantsPostorder(ListId const listId, std::vector<ListId>& listIds) const
   {
     if (auto const children = _childIds.find(listId); children != _childIds.end())
     {
-      auto const childIds = children->second;
-
-      for (auto const childId : childIds)
+      for (auto const childId : children->second)
       {
         collectDescendantsPostorder(childId, listIds);
       }

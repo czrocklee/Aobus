@@ -161,7 +161,6 @@ namespace ao::rt
                                                      ScanDirectoryProbe probe = ScanDirectoryProbe::SpellingCandidate);
 
   private:
-    Result<detail::ScanSpellingDirectory> readNames(std::filesystem::path const& directory) const;
     Result<detail::ScanSpellingDirectory> readStableNames(std::filesystem::path const& directory) const;
     Result<detail::ScanSpellingDirectory> const& stableNames(std::filesystem::path const& directory);
     Result<> corroborateDirectorySingleton(std::filesystem::path const& parent,

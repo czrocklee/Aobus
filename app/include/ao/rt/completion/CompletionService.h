@@ -103,10 +103,14 @@ namespace ao::rt
     std::span<VocabularyEntry const> vocabularyEntries(Vocabulary vocabulary);
     std::span<DictionaryFrequency const> fieldFrequencies(TrackField field);
 
-    struct AliasRecord final
+    class AliasRecord final
     {
-      bool resolved = false;
-      std::vector<std::string> values;
+    public:
+      std::span<std::string const> resolve(CompletionAliasPolicy const& policy, std::string_view text);
+
+    private:
+      bool _resolved = false;
+      std::vector<std::string> _values;
     };
 
     enum class AliasSource : std::uint8_t
@@ -135,7 +139,6 @@ namespace ao::rt
     std::span<std::string const> aliasesForDictionary(std::size_t aliasIndex, std::string_view text);
     std::span<std::string const> aliasesForTitle(std::size_t titleIndex, std::string_view text);
     std::span<std::string const> aliasesFor(AliasHandle handle, std::string_view text);
-    std::span<std::string const> resolveAliases(AliasRecord& record, std::string_view text);
 
     library::MusicLibrary const& _library;
     TextOrderingPolicy const* _textOrderingPolicy = nullptr;

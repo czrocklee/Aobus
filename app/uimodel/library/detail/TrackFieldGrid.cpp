@@ -5,7 +5,7 @@
 
 #include <ao/rt/TrackField.h>
 
-#include <optional>
+#include <array>
 #include <string>
 #include <string_view>
 
@@ -13,21 +13,29 @@ namespace ao::uimodel
 {
   namespace
   {
-    bool isSecondaryCompositeField(rt::TrackField const field)
-    {
-      return field == rt::TrackField::DiscTotal || field == rt::TrackField::TrackTotal ||
-             field == rt::TrackField::MovementTotal;
-    }
+    constexpr auto kCompositeMetadataFields = std::to_array<TrackFieldGridCompositeFields>({
+      {.primaryField = rt::TrackField::DiscNumber, .secondaryField = rt::TrackField::DiscTotal},
+      {.primaryField = rt::TrackField::TrackNumber, .secondaryField = rt::TrackField::TrackTotal},
+      {.primaryField = rt::TrackField::MovementNumber, .secondaryField = rt::TrackField::MovementTotal},
+    });
 
-    std::optional<rt::TrackField> secondaryCompositeField(rt::TrackField const field)
+    void appendMetadataField(TrackFieldGridSchema& schema, rt::TrackField field)
     {
-      switch (field)
+      for (auto const& composite : kCompositeMetadataFields)
       {
-        case rt::TrackField::DiscNumber: return rt::TrackField::DiscTotal;
-        case rt::TrackField::TrackNumber: return rt::TrackField::TrackTotal;
-        case rt::TrackField::MovementNumber: return rt::TrackField::MovementTotal;
-        default: return std::nullopt;
+        if (field == composite.primaryField)
+        {
+          schema.compositeMetadataFields.push_back(composite);
+          return;
+        }
+
+        if (field == composite.secondaryField)
+        {
+          return;
+        }
       }
+
+      schema.metadataFields.push_back(field);
     }
 
     void appendHeaderPart(std::string& summary, std::string_view const text)
@@ -57,22 +65,9 @@ namespace ao::uimodel
         continue;
       }
 
-      if (def.category == rt::TrackFieldCategory::Metadata)
+      if (def.category == rt::TrackFieldCategory::Metadata && options.includeMetadata)
       {
-        if (!options.includeMetadata || isSecondaryCompositeField(def.field))
-        {
-          continue;
-        }
-
-        if (auto const optSecondary = secondaryCompositeField(def.field); optSecondary)
-        {
-          projection.compositeMetadataFields.push_back(
-            TrackFieldGridCompositeFields{.primaryField = def.field, .secondaryField = *optSecondary});
-        }
-        else
-        {
-          projection.metadataFields.push_back(def.field);
-        }
+        appendMetadataField(projection, def.field);
       }
       else if (def.category == rt::TrackFieldCategory::Technical && options.includeTechnical)
       {

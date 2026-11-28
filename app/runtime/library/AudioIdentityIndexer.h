@@ -61,15 +61,14 @@ namespace ao::rt
     /// and default requests are capped at the Runtime worker count minus one
     /// (minimum one) to leave capacity for unrelated work where possible.
     std::size_t maxConcurrency = 0;
-    /// Test seam; defaults to library::readAudioIdentity.
+    /// Tests can replace the default file-open, payload-read, and fingerprint
+    /// operation to control worker timing or force per-file failures.
     AudioIdentityFingerprintFunction fingerprint{};
   };
 
   class AudioIdentityIndexer final
   {
   public:
-    /// Progress and failure callbacks are serialized by the indexer but may be
-    /// invoked from any worker-pool thread, never concurrently.
     using CommitBatchCallback = compat::MoveOnlyFunction<async::Task<Result<AudioIdentityBatchCommitResult>>(
       std::vector<AudioIdentityWriteCandidate> candidates)>;
     using FingerprintFunction = AudioIdentityFingerprintFunction;
@@ -86,6 +85,8 @@ namespace ao::rt
     /// candidates in the current batch are submitted for revalidation while
     /// the runtime and write lane remain live. A write error takes precedence
     /// over OperationCancelled. Terminal shutdown need not flush uncommitted work.
+    /// Progress and failure callbacks may run on any worker-pool thread, but
+    /// the indexer never invokes them concurrently.
     async::Task<Result<AudioIdentityIndexResult>> indexPendingAsync(
       CommitBatchCallback commitBatchCallback,
       Options options = {},

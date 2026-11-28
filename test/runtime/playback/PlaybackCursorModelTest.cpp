@@ -429,6 +429,12 @@ namespace ao::rt::test
     effect = cursor.adoptInvalidatedCurrent(kFourthTrack);
     CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = true}));
     CHECK(cursor.currentTrackId() == kFourthTrack);
+    auto const expectedTuple = PlaybackCursor::SemanticTuple{
+      .sourceState = PlaybackCursor::SourceState::Invalidated,
+      .currentTrackId = kFourthTrack,
+      .hasPrevious = true,
+    };
+    CHECK(cursor.semanticTuple() == expectedTuple);
     CHECK(cursor.anchor() == frozenAnchor);
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kFourthTrack));
   }

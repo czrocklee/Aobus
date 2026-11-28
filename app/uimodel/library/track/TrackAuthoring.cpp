@@ -8,8 +8,10 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/utility/String.h>
 
 #include <charconv>
+#include <concepts>
 #include <cstdint>
 #include <expected>
 #include <limits>
@@ -24,36 +26,47 @@ namespace ao::uimodel
 {
   namespace
   {
-    std::string_view trimAsciiWhitespace(std::string_view value)
+    template<typename Visitor>
+    bool tryVisitScalarPatchMember(rt::TrackField field, Visitor visit)
     {
-      auto const first = value.find_first_not_of(" \t\n\r\f\v");
+      using F = rt::TrackField;
+      using Patch = rt::MetadataPatch;
 
-      if (first == std::string_view::npos)
+      switch (field)
       {
-        return {};
-      }
+        case F::Title: return visit(&Patch::optTitle);
+        case F::Artist: return visit(&Patch::optArtist);
+        case F::Album: return visit(&Patch::optAlbum);
+        case F::AlbumArtist: return visit(&Patch::optAlbumArtist);
+        case F::Genre: return visit(&Patch::optGenre);
+        case F::Composer: return visit(&Patch::optComposer);
+        case F::Work: return visit(&Patch::optWork);
+        case F::Movement: return visit(&Patch::optMovement);
+        case F::Year: return visit(&Patch::optYear);
+        case F::DiscNumber: return visit(&Patch::optDiscNumber);
+        case F::DiscTotal: return visit(&Patch::optDiscTotal);
+        case F::TrackNumber: return visit(&Patch::optTrackNumber);
+        case F::TrackTotal: return visit(&Patch::optTrackTotal);
+        case F::MovementNumber: return visit(&Patch::optMovementNumber);
+        case F::MovementTotal: return visit(&Patch::optMovementTotal);
+        case F::RecordingDate: return visit(&Patch::optRecordingDate);
 
-      auto const last = value.find_last_not_of(" \t\n\r\f\v");
-      return value.substr(first, last - first + 1);
-    }
-
-    bool tryWriteStringPatch(TrackFieldEditValue const& value, std::optional<std::string>& optTarget)
-    {
-      if (auto const* str = std::get_if<std::string>(&value); str != nullptr)
-      {
-        optTarget = *str;
-        return true;
-      }
-
-      return false;
-    }
-
-    bool tryWriteUint16Patch(TrackFieldEditValue const& value, std::optional<std::uint16_t>& optTarget)
-    {
-      if (auto const* val = std::get_if<std::uint16_t>(&value); val != nullptr)
-      {
-        optTarget = *val;
-        return true;
+        case F::Conductor:
+        case F::Ensemble:
+        case F::Soloist:
+        case F::Duration:
+        case F::Tags:
+        case F::FilePath:
+        case F::Codec:
+        case F::SampleRate:
+        case F::Channels:
+        case F::BitDepth:
+        case F::Bitrate:
+        case F::FileSize:
+        case F::ModifiedTime:
+        case F::DisplayTrackNumber:
+        case F::TechnicalSummary:
+        case F::Quality: return false;
       }
 
       return false;
@@ -72,11 +85,11 @@ namespace ao::uimodel
 
   Result<TrackFieldEditValue> parseUint16EditValue(std::string_view value)
   {
-    auto const trimmed = trimAsciiWhitespace(value);
+    auto const trimmed = utility::trim(value);
 
     if (trimmed.empty())
     {
-      return TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(0)};
+      return TrackFieldEditValue{std::in_place_type<std::uint16_t>, std::uint16_t{0}};
     }
 
     std::uint32_t parsed = 0;
@@ -94,7 +107,7 @@ namespace ao::uimodel
 
   Result<TrackFieldEditValue> parseRecordingDateEditValue(std::string_view value)
   {
-    auto const trimmed = trimAsciiWhitespace(value);
+    auto const trimmed = utility::trim(value);
 
     if (trimmed.empty())
     {
@@ -133,98 +146,32 @@ namespace ao::uimodel
 
   bool canWriteTrackFieldPatch(rt::TrackField field) noexcept
   {
-    using F = rt::TrackField;
-
-    switch (field)
-    {
-      case F::Title:
-      case F::Artist:
-      case F::Album:
-      case F::AlbumArtist:
-      case F::Genre:
-      case F::Composer:
-      case F::Work:
-      case F::Movement:
-      case F::Year:
-      case F::DiscNumber:
-      case F::DiscTotal:
-      case F::TrackNumber:
-      case F::TrackTotal:
-      case F::MovementNumber:
-      case F::MovementTotal:
-      case F::RecordingDate: return true;
-
-      case F::Conductor:
-      case F::Ensemble:
-      case F::Soloist:
-      case F::Duration:
-      case F::Tags:
-      case F::FilePath:
-      case F::Codec:
-      case F::SampleRate:
-      case F::Channels:
-      case F::BitDepth:
-      case F::Bitrate:
-      case F::FileSize:
-      case F::ModifiedTime:
-      case F::DisplayTrackNumber:
-      case F::TechnicalSummary:
-      case F::Quality: return false;
-    }
-
-    return false;
+    return tryVisitScalarPatchMember(field, [](auto) { return true; });
   }
 
   bool tryWriteTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value)
   {
-    using F = rt::TrackField;
-
-    switch (field)
+    auto const tryWrite = [&patch, &value]<typename Value>(std::optional<Value> rt::MetadataPatch::* member)
     {
-      case F::Title: return tryWriteStringPatch(value, patch.optTitle);
-      case F::Artist: return tryWriteStringPatch(value, patch.optArtist);
-      case F::Album: return tryWriteStringPatch(value, patch.optAlbum);
-      case F::AlbumArtist: return tryWriteStringPatch(value, patch.optAlbumArtist);
-      case F::Genre: return tryWriteStringPatch(value, patch.optGenre);
-      case F::Composer: return tryWriteStringPatch(value, patch.optComposer);
-      case F::Work: return tryWriteStringPatch(value, patch.optWork);
-      case F::Movement: return tryWriteStringPatch(value, patch.optMovement);
-      case F::RecordingDate:
-        if (auto const* date = std::get_if<library::RecordingDate>(&value); date != nullptr && date->isValid())
-        {
-          patch.optRecordingDate = *date;
-          return true;
-        }
+      auto const* edit = std::get_if<Value>(&value);
 
+      if (edit == nullptr)
+      {
         return false;
+      }
 
-      case F::Year: return tryWriteUint16Patch(value, patch.optYear);
-      case F::DiscNumber: return tryWriteUint16Patch(value, patch.optDiscNumber);
-      case F::DiscTotal: return tryWriteUint16Patch(value, patch.optDiscTotal);
-      case F::TrackNumber: return tryWriteUint16Patch(value, patch.optTrackNumber);
-      case F::TrackTotal: return tryWriteUint16Patch(value, patch.optTrackTotal);
-      case F::MovementNumber: return tryWriteUint16Patch(value, patch.optMovementNumber);
-      case F::MovementTotal: return tryWriteUint16Patch(value, patch.optMovementTotal);
+      if constexpr (std::same_as<Value, library::RecordingDate>)
+      {
+        if (!edit->isValid())
+        {
+          return false;
+        }
+      }
 
-      case F::Conductor:
-      case F::Ensemble:
-      case F::Soloist:
-      case F::Duration:
-      case F::Tags:
-      case F::FilePath:
-      case F::Codec:
-      case F::SampleRate:
-      case F::Channels:
-      case F::BitDepth:
-      case F::Bitrate:
-      case F::FileSize:
-      case F::ModifiedTime:
-      case F::DisplayTrackNumber:
-      case F::TechnicalSummary:
-      case F::Quality: return false;
-    }
-
-    return false;
+      patch.*member = *edit;
+      return true;
+    };
+    return tryVisitScalarPatchMember(field, tryWrite);
   }
 
   bool isProtectedInlineEditText(rt::TrackField const field,

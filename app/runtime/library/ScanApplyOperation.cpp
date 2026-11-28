@@ -95,6 +95,11 @@ namespace ao::rt
       };
     }
 
+    bool isUnchangedOrNotice(ScanItem const& item) noexcept
+    {
+      return item.classification == ScanClassification::Unchanged || item.classification == ScanClassification::Notice;
+    }
+
     bool isRelink(ScanItem const& item) noexcept
     {
       return item.classification == ScanClassification::Moved ||
@@ -345,12 +350,6 @@ namespace ao::rt
 
     if (auto commitRes = transaction.commit(); !commitRes)
     {
-      res->libraryRevision = 0;
-      res->insertedIds.clear();
-      res->mutatedIds.clear();
-      res->relinkedIds.clear();
-      res->relinkedFileCount = 0;
-      res->missingCount = 0;
       return std::unexpected{commitRes.error()};
     }
 
@@ -426,8 +425,7 @@ namespace ao::rt
       return {};
     }
 
-    if (item.classification == ScanClassification::Missing || item.classification == ScanClassification::Unchanged ||
-        item.classification == ScanClassification::Notice)
+    if (item.classification == ScanClassification::Missing || isUnchangedOrNotice(item))
     {
       return {};
     }
@@ -445,7 +443,7 @@ namespace ao::rt
       return {};
     }
 
-    if (item.optManifestEvidence && item.optManifestEvidence->members.empty() && isPlainSpelling(item))
+    if (isPlainSpelling(item) && item.optManifestEvidence && item.optManifestEvidence->members.empty())
     {
       revalidatePreparedCueSheets(itemIndex, *fullPathRes, phase);
 
@@ -489,8 +487,9 @@ namespace ao::rt
     }
 
     auto optIdentity = cachedAudioIdentity(item);
+    auto const fingerprintRequired = needsFingerprint(item);
 
-    if (!optIdentity && shouldFingerprintDuringPreparation(item))
+    if (!optIdentity && fingerprintRequired)
     {
       optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), itemIndex, true, phase.stopToken);
     }
@@ -501,7 +500,7 @@ namespace ao::rt
       return {};
     }
 
-    if (!optIdentity && isFingerprintRequiredForApply(item))
+    if (!optIdentity && fingerprintRequired)
     {
       return {};
     }
@@ -781,8 +780,7 @@ namespace ao::rt
       return;
     }
 
-    if (item.classification == ScanClassification::Unchanged || item.classification == ScanClassification::Error ||
-        item.classification == ScanClassification::Notice)
+    if (isUnchangedOrNotice(item) || isScanFailure(item))
     {
       return;
     }
@@ -1436,12 +1434,7 @@ namespace ao::rt
   {
     auto const& item = _plan.items()[itemIndex];
 
-    if (_skippedItems[itemIndex])
-    {
-      return {};
-    }
-
-    if (trySkipNonActionableItem(item))
+    if (_skippedItems[itemIndex] || isUnchangedOrNotice(item) || isScanFailure(item))
     {
       return {};
     }
@@ -1498,21 +1491,6 @@ namespace ao::rt
     return applyNewItem(item, trackWriter, builder, optIdentity);
   }
 
-  /**
-   * @brief Replaces @p merged's cover references with the ones @p parsed found.
-   *
-   * An embedded cover is a scan fact, not curated metadata. A
-   * reference names content by digest, so leaving the previous set in place after
-   * a file's art changed would leave the library naming content that file no
-   * longer holds, and every read for it would fall through to another carrier or
-   * to no image. Curated metadata around it is still preserved: this replaces the
-   * cover set and nothing else.
-   *
-   * `Moved` needs this as much as `Changed` and is easier to overlook, because a
-   * move is matched by audio payload while tags and pictures are free to differ.
-   * It is also self-concealing: once the move commits, the manifest matches the
-   * file, so the next scan classifies it `Unchanged` and never looks again.
-   */
   void ScanApplyOperation::applyFileCoverArt(library::TrackBuilder& merged, library::TrackBuilder const& parsed)
   {
     merged.coverArt().clear();
@@ -1523,16 +1501,18 @@ namespace ao::rt
     }
   }
 
-  bool ScanApplyOperation::trySkipNonActionableItem(ScanItem const& item)
+  void ScanApplyOperation::refreshWholeFileProperties(library::TrackBuilder& merged,
+                                                      library::TrackBuilder const& parsed)
   {
-    if (item.classification == ScanClassification::Unchanged)
-    {
-      // Benign: the file is already imported and has not changed.
-      return true;
-    }
-
-    // Preparation reported failures; standalone notices have no write to apply.
-    return item.classification == ScanClassification::Error || item.classification == ScanClassification::Notice;
+    auto const& properties = parsed.property();
+    merged.property()
+      .duration(properties.duration())
+      .bitrate(properties.bitrate())
+      .sampleRate(properties.sampleRate())
+      .channels(properties.channels())
+      .codec(properties.codec())
+      .bitDepth(properties.bitDepth());
+    applyFileCoverArt(merged, parsed);
   }
 
   void ScanApplyOperation::reportProgress(ScanItem const& item,
@@ -1568,10 +1548,13 @@ namespace ao::rt
     auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
-    if (tryWriteManifest(trackWriter, item.uri, builder))
+    if (auto res = trackWriter.updateManifest(item.uri, builder); !res)
     {
-      _manifestMutated = true;
+      reportFailure(item.uri, "update manifest for", res.error().message);
+      return;
     }
+
+    _manifestMutated = true;
   }
 
   std::optional<MediaTrack> ScanApplyOperation::loadTrackBuilder(ScanItem const& item,
@@ -1602,7 +1585,7 @@ namespace ao::rt
     return library::AudioIdentity{.signature = item.audioSignature, .payloadLength = item.audioPayloadLength};
   }
 
-  bool ScanApplyOperation::shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept
+  bool ScanApplyOperation::needsFingerprint(ScanItem const& item) const noexcept
   {
     switch (item.classification)
     {
@@ -1618,11 +1601,6 @@ namespace ao::rt
     }
 
     return false;
-  }
-
-  bool ScanApplyOperation::isFingerprintRequiredForApply(ScanItem const& item) const noexcept
-  {
-    return shouldFingerprintDuringPreparation(item);
   }
 
   std::optional<library::AudioIdentity> ScanApplyOperation::fingerprintAudioPayload(ScanItem const& item,
@@ -1670,14 +1648,7 @@ namespace ao::rt
                  item.trackId.raw());
 
     auto& merged = *optMerged;
-    merged.property()
-      .duration(builder.property().duration())
-      .bitrate(builder.property().bitrate())
-      .sampleRate(builder.property().sampleRate())
-      .channels(builder.property().channels())
-      .codec(builder.property().codec())
-      .bitDepth(builder.property().bitDepth());
-    applyFileCoverArt(merged, builder);
+    refreshWholeFileProperties(merged, builder);
 
     if (!tryValidateTrack(merged, trackWriter, item.uri))
     {
@@ -1777,15 +1748,8 @@ namespace ao::rt
       return false;
     }
 
-    merged.property()
-      .uri(item.uri)
-      .duration(builder.property().duration())
-      .bitrate(builder.property().bitrate())
-      .sampleRate(builder.property().sampleRate())
-      .channels(builder.property().channels())
-      .codec(builder.property().codec())
-      .bitDepth(builder.property().bitDepth());
-    applyFileCoverArt(merged, builder);
+    merged.property().uri(item.uri);
+    refreshWholeFileProperties(merged, builder);
 
     if (!tryValidateTrack(merged, trackWriter, item.uri))
     {
@@ -1984,18 +1948,5 @@ namespace ao::rt
     }
 
     return builder;
-  }
-
-  bool ScanApplyOperation::tryWriteManifest(library::TrackWriter& writer,
-                                            std::string const& uri,
-                                            library::FileManifestBuilder& builder)
-  {
-    if (auto putRes = writer.updateManifest(uri, builder); !putRes)
-    {
-      reportFailure(uri, "update manifest for", putRes.error().message);
-      return false;
-    }
-
-    return true;
   }
 } // namespace ao::rt

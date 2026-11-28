@@ -650,37 +650,6 @@ namespace ao::rt
       return {};
     }
 
-    bool tryApplyTrackTagChanges(library::TrackBuilder& builder,
-                                 std::span<std::string const> const normalizedAdd,
-                                 std::span<std::string const> const normalizedRemove,
-                                 std::vector<std::string>& addedTags,
-                                 std::vector<std::string>& removedTags)
-    {
-      bool tagsChanged = false;
-
-      for (auto const& tag : normalizedAdd)
-      {
-        if (!std::ranges::contains(builder.tags().names(), tag))
-        {
-          builder.tags().add(tag);
-          addedTags.push_back(tag);
-          tagsChanged = true;
-        }
-      }
-
-      for (auto const& tag : normalizedRemove)
-      {
-        if (std::ranges::contains(builder.tags().names(), tag))
-        {
-          builder.tags().remove(tag);
-          removedTags.push_back(tag);
-          tagsChanged = true;
-        }
-      }
-
-      return tagsChanged;
-    }
-
     Result<UpdateTrackPropertiesReply> applyNormalizedTrackPatch(library::LibraryWrite& transaction,
                                                                  std::span<TrackId const> trackIds,
                                                                  MetadataPatch const& normalizedPatch,
@@ -724,10 +693,8 @@ namespace ao::rt
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
 
-        auto addedTags = std::vector<std::string>{};
-        auto removedTags = std::vector<std::string>{};
-        bool const tagsChanged =
-          tryApplyTrackTagChanges(builder, normalizedAdd, normalizedRemove, addedTags, removedTags);
+        auto tagChange = detail::applyNormalizedTagPatch(builder, trackId, normalizedAdd, normalizedRemove);
+        bool const tagsChanged = !tagChange.addedTags.empty() || !tagChange.removedTags.empty();
 
         if (tagsChanged)
         {
@@ -753,11 +720,7 @@ namespace ao::rt
 
         if (tagsChanged)
         {
-          tagChanges.push_back(TrackTagsChange{
-            .trackId = trackId,
-            .addedTags = std::move(addedTags),
-            .removedTags = std::move(removedTags),
-          });
+          tagChanges.push_back(std::move(tagChange));
         }
       }
 

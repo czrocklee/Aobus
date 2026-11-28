@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestView.h>
 #include <ao/library/FileStatus.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackWriter.h>
@@ -35,15 +36,9 @@ namespace ao::rt
 
     for (auto const& candidate : candidates)
     {
-      auto optCurrent = writer.manifest(candidate.uri);
+      auto const optCurrent = writer.manifest(candidate.uri);
 
-      if (!optCurrent)
-      {
-        ++result.skippedCount;
-        continue;
-      }
-
-      if (!matchesCandidate(*optCurrent, candidate))
+      if (!optCurrent || !matchesCandidate(*optCurrent, candidate))
       {
         ++result.skippedCount;
         continue;

@@ -32,6 +32,32 @@ namespace ao::rt
                                              { return item.classification == classification && item.uri == uri; });
       return iter == items.end() ? nullptr : &*iter;
     }
+
+    bool isRelinkSource(ScanItem const& item) noexcept
+    {
+      return item.classification == ScanClassification::Missing && !item.uri.empty() &&
+             (item.trackId != kInvalidTrackId ||
+              (item.optManifestEvidence && !item.optManifestEvidence->members.empty()));
+    }
+
+    bool matchesRelinkAudioIdentity(ScanItem const& source, ScanItem const& destination) noexcept
+    {
+      return hasAudioIdentity(source) && hasAudioIdentity(destination) &&
+             source.audioPayloadLength == destination.audioPayloadLength &&
+             source.audioSignature == destination.audioSignature;
+    }
+
+    bool matchesRelinkCarrierFacts(ScanItem const& source, ScanItem const& destination) noexcept
+    {
+      if (source.optManifestEvidence && !source.optManifestEvidence->members.empty())
+      {
+        auto const& stored = *source.optManifestEvidence;
+        return destination.hasExactMediaFacts && destination.totalFrames == stored.totalFrames &&
+               destination.sampleRate == stored.sampleRate;
+      }
+
+      return true;
+    }
   } // namespace
 
   bool isRelinkDestination(ScanItem const& item) noexcept
@@ -60,24 +86,8 @@ namespace ao::rt
 
   bool canRelinkItems(ScanItem const& source, ScanItem const& destination) noexcept
   {
-    if (source.classification != ScanClassification::Missing || source.uri.empty() ||
-        (source.trackId == kInvalidTrackId &&
-         (!source.optManifestEvidence || source.optManifestEvidence->members.empty())) ||
-        !isRelinkDestination(destination) || !hasAudioIdentity(source) || !hasAudioIdentity(destination) ||
-        source.audioPayloadLength != destination.audioPayloadLength ||
-        source.audioSignature != destination.audioSignature)
-    {
-      return false;
-    }
-
-    if (source.optManifestEvidence && !source.optManifestEvidence->members.empty())
-    {
-      auto const& stored = *source.optManifestEvidence;
-      return destination.hasExactMediaFacts && destination.totalFrames == stored.totalFrames &&
-             destination.sampleRate == stored.sampleRate;
-    }
-
-    return true;
+    return isRelinkSource(source) && isRelinkDestination(destination) &&
+           matchesRelinkAudioIdentity(source, destination) && matchesRelinkCarrierFacts(source, destination);
   }
 
   ScanPlan::ScanPlan(std::array<std::byte, 16> libraryId,
@@ -145,9 +155,7 @@ namespace ao::rt
 
     auto const* const missingItem = findItem(_items, ScanClassification::Missing, oldUri);
 
-    if (missingItem == nullptr || missingItem->uri.empty() ||
-        (missingItem->trackId == kInvalidTrackId &&
-         (!missingItem->optManifestEvidence || missingItem->optManifestEvidence->members.empty())))
+    if (missingItem == nullptr || !isRelinkSource(*missingItem))
     {
       return makeError(Error::Code::InvalidInput, "Relink source is not an unresolved missing item");
     }
@@ -156,12 +164,7 @@ namespace ao::rt
 
     if (newItem == nullptr)
     {
-      auto const* const candidate = findItem(_items, ScanClassification::Error, newUri);
-
-      if (candidate != nullptr && isRelinkDestination(*candidate))
-      {
-        newItem = candidate;
-      }
+      newItem = findItem(_items, ScanClassification::Error, newUri);
     }
 
     if (newItem == nullptr || !isRelinkDestination(*newItem))
@@ -169,14 +172,12 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Relink destination is not an unresolved new item");
     }
 
-    if (!hasAudioIdentity(*missingItem) || !hasAudioIdentity(*newItem) ||
-        missingItem->audioPayloadLength != newItem->audioPayloadLength ||
-        missingItem->audioSignature != newItem->audioSignature)
+    if (!matchesRelinkAudioIdentity(*missingItem, *newItem))
     {
       return makeError(Error::Code::InvalidInput, "Relink source and destination audio identities do not match");
     }
 
-    if (!canRelinkItems(*missingItem, *newItem))
+    if (!matchesRelinkCarrierFacts(*missingItem, *newItem))
     {
       return makeError(Error::Code::InvalidInput, "Relink destination carrier extent or sample rate does not match");
     }

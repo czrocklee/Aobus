@@ -149,21 +149,8 @@ namespace ao::rt
     }
 
     _currentTrackId = currentTrackId;
-    auto const nextTuple = SemanticTuple{
-      .sourceState = SourceState::Invalidated,
-      .currentTrackId = _currentTrackId,
-      .hasNext = false,
-      .hasPrevious = _previousRestartAvailable,
-      .optResolvedSuccessor = std::nullopt,
-    };
-    auto const semanticChanged = nextTuple != _semanticTuple;
-
-    if (semanticChanged)
-    {
-      _semanticTuple = nextTuple;
-    }
-
-    return Changes{.semanticChanged = semanticChanged, .restorableStateChanged = true};
+    _semanticTuple.currentTrackId = currentTrackId;
+    return Changes{.semanticChanged = true, .restorableStateChanged = true};
   }
 
   PlaybackCursor::Changes PlaybackCursor::refreshSemanticState(PlaybackCursorPolicy& policy)

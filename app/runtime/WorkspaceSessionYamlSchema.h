@@ -69,7 +69,7 @@ namespace ao::rt::detail
     std::vector<StoredCustomTrackPresentationPreset> customPresets{};
   };
 
-  Result<WorkspaceSessionDocument> toWorkspaceSessionDocument(WorkspaceSessionState const& state);
+  WorkspaceSessionDocument toWorkspaceSessionDocument(WorkspaceSessionState const& state);
   Result<WorkspaceSessionState> workspaceSessionStateFromDocument(WorkspaceSessionDocument const& document);
 
   struct WorkspaceSessionYamlSchema final

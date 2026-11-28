@@ -305,40 +305,23 @@ namespace ao::rt
       }
     }
 
-    void commitCandidateMutation(std::shared_ptr<NotificationFeedState> candidatePtr,
-                                 NotificationId const id,
-                                 NotificationFeedMutationKind const mutationKind)
+    void updateReport(std::size_t const index, NotificationEntry&& replacement)
     {
-      auto candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
-      AO_INVARIANT(candidateEntryIter != candidatePtr->entries.end());
+      auto candidatePtr = mutableFeedCopy();
+      auto& entry = candidatePtr->entries[index];
+      entry = std::move(replacement);
 
-      if (!isEntryWithinLimits(*candidateEntryIter, limits))
-      {
-        rejectMutation(mutationKind, id, "candidate violates request limits");
-        return;
-      }
-
+      // The caller has validated the replacement; updating in place does not change the feed size.
+      auto const id = entry.id;
       auto const registrationIter = expiryRegistrations.find(id);
       AO_INVARIANT(registrationIter != expiryRegistrations.end());
-
-      auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
-
-      if (!optEvictedIds)
-      {
-        rejectMutation(mutationKind, id, "feed capacity is exhausted by non-evictable entries");
-        return;
-      }
-
-      candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
-      AO_INVARIANT(candidateEntryIter != candidatePtr->entries.end());
-      auto candidateRegistrationPtr = prepareExpiry(*candidateEntryIter);
+      auto const candidateRegistrationPtr = prepareExpiry(entry);
 
       // Install the candidate identity before synchronous publication so a
       // reentrant update supersedes this exact registration.
       registrationIter->second = candidateRegistrationPtr;
 
-      commit(std::move(candidatePtr), mutationKind, id, nextId);
-      eraseExpiryRegistrations(*optEvictedIds);
+      commit(std::move(candidatePtr), NotificationFeedMutationKind::ReportUpdated, id, nextId);
     }
 
     void post(std::optional<NotificationReportKey> optReportKey, NotificationRequest request)
@@ -460,8 +443,6 @@ namespace ao::rt
       return;
     }
 
-    auto candidatePtr = _implPtr->mutableFeedCopy();
-    candidatePtr->entries[static_cast<std::size_t>(entryIter - entries.begin())] = std::move(replacement);
-    _implPtr->commitCandidateMutation(std::move(candidatePtr), id, NotificationFeedMutationKind::ReportUpdated);
+    _implPtr->updateReport(static_cast<std::size_t>(entryIter - entries.begin()), std::move(replacement));
   }
 } // namespace ao::rt

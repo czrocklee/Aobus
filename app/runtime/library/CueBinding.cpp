@@ -48,8 +48,9 @@ namespace ao::rt
       }
 
       std::uint16_t value = 0;
-      auto const [end, error] = std::from_chars(optText->data(), optText->data() + optText->size(), value);
-      return error == std::errc{} && end != optText->data() ? value : fallback;
+      // CUE REM numbers use the leading integer; trailing text is allowed.
+      auto const result = std::from_chars(optText->data(), optText->data() + optText->size(), value);
+      return result.ec == std::errc{} ? value : fallback;
     }
 
     // An empty sheet value usually means unknown, so it keeps the fallback.

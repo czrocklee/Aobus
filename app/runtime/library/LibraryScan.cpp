@@ -10,7 +10,6 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
@@ -58,14 +57,7 @@ namespace ao::rt
     {
       std::string uri;
       TrackId trackId = kInvalidTrackId;
-      std::uint64_t fileSize = 0;
-      std::optional<FileTimestamp> optMtime;
-      std::uint64_t audioPayloadLength = 0;
-      utility::Hash128 audioSignature = {};
-      library::FileStatus status = library::FileStatus::Available;
-      std::uint64_t totalFrames = 0;
-      std::uint32_t sampleRate = 0;
-      std::vector<ScanCarrierMember> members{};
+      ScanManifestEvidence evidence{};
     };
 
     class ManifestSnapshot final
@@ -109,14 +101,12 @@ namespace ao::rt
       for (auto const& [uri, view] : manifestReader)
       {
         async::throwIfStopRequested(stopToken);
-        entries.push_back(ManifestSnapshotEntry{.uri = std::string{uri},
-                                                .trackId = view.trackId(),
-                                                .fileSize = view.fileSize(),
-                                                .optMtime = view.mtime(),
-                                                .audioPayloadLength = view.audioPayloadLength(),
-                                                .audioSignature = view.audioSignature(),
-                                                .status = view.status(),
-                                                .totalFrames = view.totalFrames()});
+        auto evidence = ScanManifestEvidence{.fileSize = view.fileSize(),
+                                             .optMtime = view.mtime(),
+                                             .audioPayloadLength = view.audioPayloadLength(),
+                                             .audioSignature = view.audioSignature(),
+                                             .status = view.status(),
+                                             .totalFrames = view.totalFrames()};
 
         for (auto const id : view.segmentTrackIds())
         {
@@ -124,9 +114,11 @@ namespace ao::rt
           AO_INVARIANT(optTrack, "Carrier member lost its Track");
           auto const optSegment = optTrack->property().segment();
           AO_INVARIANT(optSegment, "Carrier member lost its segment");
-          entries.back().sampleRate = optTrack->property().sampleRate().raw();
-          entries.back().members.push_back({.trackId = id, .segment = *optSegment});
+          evidence.sampleRate = optTrack->property().sampleRate().raw();
+          evidence.members.push_back({.trackId = id, .segment = *optSegment});
         }
+
+        entries.push_back({.uri = std::string{uri}, .trackId = view.trackId(), .evidence = std::move(evidence)});
       }
 
       return PlanSnapshot{
@@ -163,16 +155,14 @@ namespace ao::rt
       }
     };
 
-    Result<> scanEntry(std::filesystem::path const& path,
-                       std::string const& uri,
-                       ManifestSnapshot const& manifest,
-                       std::unordered_set<std::string>& seenUris,
-                       std::vector<ScanItem>& items)
+    void scanEntry(std::filesystem::path const& path,
+                   std::string const& uri,
+                   ManifestSnapshot const& manifest,
+                   std::unordered_set<std::string>& seenUris,
+                   std::vector<ScanItem>& items)
     {
       auto entryEc = std::error_code{};
-      bool isFile = false;
-
-      isFile = std::filesystem::is_regular_file(path, entryEc);
+      auto const isFile = std::filesystem::is_regular_file(path, entryEc);
 
       if (entryEc)
       {
@@ -182,25 +172,13 @@ namespace ao::rt
                              .classification = ScanClassification::Error,
                              .errorMessage = entryEc.message()};
         items.push_back(std::move(item));
-        return {};
+        return;
       }
 
-      if (!isFile)
+      // Unsupported files are outside the scan plan, not scan errors.
+      if (!isFile || !media::file::File::isSupported(utility::pathFromUtf8(uri)) || !seenUris.insert(uri).second)
       {
-        return {};
-      }
-
-      // Only files we can actually decode belong in the plan. Everything else -
-      // cover art, playlists, logs, or formats we have no reader for (.ogg,
-      // a literal .alac) - is not music we support and is ignored here.
-      if (!media::file::File::isSupported(utility::pathFromUtf8(uri)))
-      {
-        return {};
-      }
-
-      if (!seenUris.insert(uri).second)
-      {
-        return {};
+        return;
       }
 
       auto item =
@@ -212,7 +190,7 @@ namespace ao::rt
       {
         item.errorMessage = entryEc.message();
         items.push_back(std::move(item));
-        return {};
+        return;
       }
 
       auto const timestampRes = library::lastWriteTimestamp(path);
@@ -221,7 +199,7 @@ namespace ao::rt
       {
         item.errorMessage = timestampRes.error().message;
         items.push_back(std::move(item));
-        return {};
+        return;
       }
 
       item.optMtime = *timestampRes;
@@ -232,22 +210,14 @@ namespace ao::rt
       }
       else
       {
+        auto const& evidence = manifestEntry->evidence;
         item.trackId = manifestEntry->trackId;
-        item.audioPayloadLength = manifestEntry->audioPayloadLength;
-        item.audioSignature = manifestEntry->audioSignature;
-        item.optManifestEvidence = ScanManifestEvidence{
-          .fileSize = manifestEntry->fileSize,
-          .optMtime = manifestEntry->optMtime,
-          .audioPayloadLength = manifestEntry->audioPayloadLength,
-          .audioSignature = manifestEntry->audioSignature,
-          .status = manifestEntry->status,
-          .totalFrames = manifestEntry->totalFrames,
-          .sampleRate = manifestEntry->sampleRate,
-          .members = manifestEntry->members,
-        };
+        item.audioPayloadLength = evidence.audioPayloadLength;
+        item.audioSignature = evidence.audioSignature;
+        item.optManifestEvidence = evidence;
 
-        if (manifestEntry->status != library::FileStatus::Missing && manifestEntry->fileSize == item.fileSize &&
-            manifestEntry->optMtime == item.optMtime)
+        if (evidence.status != library::FileStatus::Missing && evidence.fileSize == item.fileSize &&
+            evidence.optMtime == item.optMtime)
         {
           item.classification = ScanClassification::Unchanged;
         }
@@ -258,7 +228,6 @@ namespace ao::rt
       }
 
       items.push_back(std::move(item));
-      return {};
     }
 
     // Classifies one entry visited by the filesystem walk against the manifest
@@ -271,14 +240,14 @@ namespace ao::rt
     // Error-classified item whose URI prefix is blocked from Missing
     // classification. A false result skips descent, including through a
     // successfully resolved directory alias; a true result allows descent.
-    Result<bool> classifyWalkEntry(std::filesystem::directory_entry const& entry,
-                                   std::filesystem::path const& root,
-                                   std::filesystem::path const& resolvedRoot,
-                                   ManifestSnapshot const& manifest,
-                                   std::unordered_set<std::string>& seenUris,
-                                   std::unordered_set<std::string>& blockedUriPrefixes,
-                                   std::vector<std::string>& unrepresentedNames,
-                                   std::vector<ScanItem>& items)
+    bool canDescendAfterClassifyingEntry(std::filesystem::directory_entry const& entry,
+                                         std::filesystem::path const& root,
+                                         std::filesystem::path const& resolvedRoot,
+                                         ManifestSnapshot const& manifest,
+                                         std::unordered_set<std::string>& seenUris,
+                                         std::unordered_set<std::string>& blockedUriPrefixes,
+                                         std::vector<std::string>& unrepresentedNames,
+                                         std::vector<ScanItem>& items)
     {
       auto const entryPath = utility::ordinaryFilePath(entry.path());
       auto const relativePath = utility::pathToGenericUtf8(entryPath.lexically_relative(root));
@@ -361,11 +330,7 @@ namespace ao::rt
         }
       }
 
-      if (auto res = scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, manifest, seenUris, items);
-          !res)
-      {
-        return std::unexpected{res.error()};
-      }
+      scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, manifest, seenUris, items);
 
       // Canonical imports use the target URI. A redirect or non-file still occupies
       // its raw name and must not leave an aliasing manifest eligible for an audio move.
@@ -434,23 +399,15 @@ namespace ao::rt
 
         if (!hasBlockedUriPrefix(entry.uri, blockedUriPrefixes) && !seenUris.contains(entry.uri))
         {
+          auto const& evidence = entry.evidence;
           auto item = ScanItem{.uri = entry.uri,
                                .classification = ScanClassification::Missing,
-                               .fileSize = entry.fileSize,
-                               .optMtime = entry.optMtime,
-                               .audioPayloadLength = entry.audioPayloadLength,
-                               .audioSignature = entry.audioSignature,
+                               .fileSize = evidence.fileSize,
+                               .optMtime = evidence.optMtime,
+                               .audioPayloadLength = evidence.audioPayloadLength,
+                               .audioSignature = evidence.audioSignature,
                                .trackId = entry.trackId,
-                               .optManifestEvidence = ScanManifestEvidence{
-                                 .fileSize = entry.fileSize,
-                                 .optMtime = entry.optMtime,
-                                 .audioPayloadLength = entry.audioPayloadLength,
-                                 .audioSignature = entry.audioSignature,
-                                 .status = entry.status,
-                                 .totalFrames = entry.totalFrames,
-                                 .sampleRate = entry.sampleRate,
-                                 .members = entry.members,
-                               }};
+                               .optManifestEvidence = evidence};
           items.push_back(std::move(item));
         }
       }
@@ -896,7 +853,7 @@ namespace ao::rt
                                           std::unordered_set<std::string_view> const& reservedDestinations,
                                           std::stop_token const stopToken)
     {
-      auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
+      auto missingLengths = std::unordered_set<std::uint64_t>{};
       auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
 
       for (std::size_t index = 0; index < items.size(); ++index)
@@ -910,11 +867,11 @@ namespace ao::rt
         }
 
         auto const key = AudioIdentityKey{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
-        missingByLength[item.audioPayloadLength].push_back(index);
+        missingLengths.insert(key.payloadLength);
         missingByIdentity[key].push_back(index);
       }
 
-      if (missingByLength.empty())
+      if (missingLengths.empty())
       {
         return {};
       }
@@ -947,7 +904,7 @@ namespace ao::rt
 
         item.audioPayloadLength = static_cast<std::uint64_t>(payloadRes->bytes.size());
 
-        if (!missingByLength.contains(item.audioPayloadLength))
+        if (!missingLengths.contains(item.audioPayloadLength))
         {
           continue;
         }
@@ -1314,11 +1271,6 @@ namespace ao::rt
 
   Result<ScanPlan> LibraryScan::buildPlan(BuildProgressCallback progress, std::stop_token const stopToken)
   {
-    return buildPlanUnchecked(std::move(progress), stopToken);
-  }
-
-  Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress, std::stop_token const stopToken)
-  {
     async::throwIfStopRequested(stopToken);
     auto rootRes = utility::fileAccessPath(_library.rootPath());
 
@@ -1395,16 +1347,8 @@ namespace ao::rt
         async::throwIfStopRequested(stopToken);
       }
 
-      // A false result skips descent; it need not represent an error.
-      auto const canDescendRes = classifyWalkEntry(
-        entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, unrepresentedNames, items);
-
-      if (!canDescendRes)
-      {
-        return std::unexpected{canDescendRes.error()};
-      }
-
-      if (!*canDescendRes)
+      if (!canDescendAfterClassifyingEntry(
+            entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, unrepresentedNames, items))
       {
         it.disable_recursion_pending();
       }

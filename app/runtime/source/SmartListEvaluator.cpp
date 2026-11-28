@@ -102,14 +102,21 @@ namespace ao::rt
     {
       auto result = RegularBatchTrackChanges{};
       auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-      auto insertedTrackIds = std::vector<TrackId>{};
 
       for (auto const& edit : script.edits)
       {
         if (auto const* insertion = std::get_if<delta::InsertRange>(&edit); insertion != nullptr)
         {
-          insertedTrackIds.append_range(insertion->trackIds);
           result.touchedTrackIds.append_range(insertion->trackIds);
+
+          // A regular script orders every removal before its insertions.
+          for (auto const trackId : insertion->trackIds)
+          {
+            if (removedTrackIds.contains(trackId))
+            {
+              result.preferredMovedIds.push_back(trackId);
+            }
+          }
         }
         else if (auto const* removal = std::get_if<delta::RemoveRange>(&edit); removal != nullptr)
         {
@@ -124,14 +131,6 @@ namespace ao::rt
 
       std::ranges::sort(result.touchedTrackIds);
       result.touchedTrackIds.erase(std::ranges::unique(result.touchedTrackIds).begin(), result.touchedTrackIds.end());
-
-      for (auto const trackId : insertedTrackIds)
-      {
-        if (removedTrackIds.contains(trackId))
-        {
-          result.preferredMovedIds.push_back(trackId);
-        }
-      }
 
       return result;
     }
@@ -333,26 +332,6 @@ namespace ao::rt
            list._current.planPtr != nullptr;
   }
 
-  std::vector<SmartListEvaluator::DerivedWork> SmartListEvaluator::buildDerivedWorks(SourceBucket const& bucket) const
-  {
-    auto works = std::vector<DerivedWork>{};
-    works.reserve(bucket.lists.size());
-
-    for (auto* const list : bucket.lists)
-    {
-      auto work = DerivedWork{
-        .list = list,
-        .oldMembers = list->_members.vector(),
-        .members = list->_members.vector(),
-        .active = isEvaluatable(*list),
-      };
-
-      works.push_back(std::move(work));
-    }
-
-    return works;
-  }
-
   SmartListEvaluator::TrackMatches SmartListEvaluator::evaluateTouchedTracks(
     std::span<SmartListSource* const> const lists,
     std::span<TrackId const> const touchedTrackIds) const
@@ -511,9 +490,12 @@ namespace ao::rt
     AO_INVARIANT(delta::isValid(script, bucket.upstreamTracks.size()));
     AO_INVARIANT(bucket.source->size() == bucket.upstreamTracks.size());
 
+    auto updatedTrackIds = std::vector<TrackId>{};
+
     for (auto const& edit : script.edits)
     {
       auto const& update = std::get<delta::UpdateRange>(edit);
+      updatedTrackIds.append_range(update.trackIds);
       auto const mirrored = bucket.upstreamTracks.ids().subspan(update.start, update.trackIds.size());
       AO_INVARIANT(std::ranges::equal(mirrored, update.trackIds));
 
@@ -524,8 +506,7 @@ namespace ao::rt
     }
 
     bucket.upstreamTracks.applyScript(script);
-    auto const changes = summarizeTrackChanges(script);
-    auto const matchesByTrackId = evaluateTouchedTracks(bucket.lists, changes.updatedTrackIds);
+    auto const matchesByTrackId = evaluateTouchedTracks(bucket.lists, updatedTrackIds);
 
     struct IncrementalWork final
     {
@@ -548,7 +529,7 @@ namespace ao::rt
       }
 
       auto derivedScript =
-        buildUpdateScript(*list, listIndex, changes.updatedTrackIds, matchesByTrackId, bucket.upstreamTracks);
+        buildUpdateScript(*list, listIndex, updatedTrackIds, matchesByTrackId, bucket.upstreamTracks);
 
       if (!derivedScript.edits.empty())
       {
@@ -577,29 +558,33 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::updateDerivedWorks(std::span<DerivedWork> const works,
-                                              IndexedTrackSequence const& upstreamTracks,
-                                              TrackMatches const& matchesByTrackId,
-                                              std::span<TrackId const> const updatedTrackIds,
-                                              std::span<TrackId const> const preferredMovedIds)
+  std::vector<SmartListEvaluator::DerivedWork> SmartListEvaluator::buildDerivedWorks(
+    SourceBucket const& bucket,
+    IndexedTrackSequence const& upstreamTracks,
+    TrackMatches const& matchesByTrackId,
+    std::span<TrackId const> const updatedTrackIds,
+    std::span<TrackId const> const preferredMovedIds)
   {
-    for (std::size_t workIndex = 0; workIndex < works.size(); ++workIndex)
-    {
-      auto& work = works[workIndex];
+    auto works = std::vector<DerivedWork>{};
+    works.reserve(bucket.lists.size());
 
-      if (!work.active)
+    for (std::size_t listIndex = 0; listIndex < bucket.lists.size(); ++listIndex)
+    {
+      auto* const list = bucket.lists[listIndex];
+
+      if (!isEvaluatable(*list))
       {
         continue;
       }
 
-      work.members.clear();
-      work.members.reserve(upstreamTracks.size());
+      auto const& oldMembers = list->_members;
+      auto work = DerivedWork{.list = list, .previousSize = oldMembers.size()};
 
       for (auto const trackId : upstreamTracks.ids())
       {
         auto const touched = matchesByTrackId.find(trackId);
         auto const include =
-          touched == matchesByTrackId.end() ? work.list->_members.contains(trackId) : touched->second[workIndex];
+          touched == matchesByTrackId.end() ? oldMembers.contains(trackId) : touched->second[listIndex];
 
         if (include)
         {
@@ -607,15 +592,17 @@ namespace ao::rt
         }
       }
 
-      auto const script = delta::diff(work.oldMembers, work.members, updatedTrackIds, preferredMovedIds);
+      work.script = delta::diff(oldMembers.ids(), work.members, updatedTrackIds, preferredMovedIds);
       AO_INVARIANT((
-        [&work, &script]
+        [&work, &oldMembers]
         {
-          auto const applied = delta::apply(work.oldMembers, script);
+          auto const applied = delta::apply(oldMembers.vector(), work.script);
           return applied && *applied == work.members;
         }()));
-      work.script = std::move(script);
+      works.push_back(std::move(work));
     }
+
+    return works;
   }
 
   void SmartListEvaluator::commitDerivedWorks(SourceBucket& bucket,
@@ -626,18 +613,15 @@ namespace ao::rt
 
     for (auto& work : works)
     {
-      if (work.active)
-      {
-        work.list->replaceMembers(std::move(work.members));
-        work.installToken = ++_nextInstallToken;
-        work.list->_installToken = work.installToken;
-        ++_membershipIndexRebuildCount;
-      }
+      work.list->_members.assign(std::move(work.members));
+      work.installToken = ++_nextInstallToken;
+      work.list->_installToken = work.installToken;
+      ++_membershipIndexRebuildCount;
     }
 
     for (auto& work : works)
     {
-      if (!work.active || work.script.edits.empty())
+      if (work.script.edits.empty())
       {
         continue;
       }
@@ -649,7 +633,7 @@ namespace ao::rt
         continue;
       }
 
-      std::ignore = work.list->tryPublishDelta(std::move(work.script), work.oldMembers.size());
+      std::ignore = work.list->tryPublishDelta(std::move(work.script), work.previousSize);
     }
   }
 
@@ -668,10 +652,10 @@ namespace ao::rt
     ++_upstreamIndexRebuildCount;
     AO_INVARIANT(upstreamTracks.vector() == snapshotSource(*bucket.source));
 
-    auto works = buildDerivedWorks(bucket);
-    auto changes = summarizeTrackChanges(script);
+    auto const changes = summarizeTrackChanges(script);
     auto const matchesByTrackId = evaluateTouchedTracks(bucket.lists, changes.touchedTrackIds);
-    updateDerivedWorks(works, upstreamTracks, matchesByTrackId, changes.updatedTrackIds, changes.preferredMovedIds);
+    auto works =
+      buildDerivedWorks(bucket, upstreamTracks, matchesByTrackId, changes.updatedTrackIds, changes.preferredMovedIds);
     commitDerivedWorks(bucket, std::move(upstreamTracks), works);
   }
 
@@ -768,7 +752,7 @@ namespace ao::rt
     for (std::size_t index = 0; index < lists.size(); ++index)
     {
       previousSizes.push_back(lists[index]->_members.size());
-      lists[index]->replaceMembers(std::move(nextMembers[index]));
+      lists[index]->_members.assign(std::move(nextMembers[index]));
       installTokens.push_back(++_nextInstallToken);
       lists[index]->_installToken = installTokens.back();
       ++_membershipIndexRebuildCount;

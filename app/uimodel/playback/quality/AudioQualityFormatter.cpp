@@ -220,43 +220,27 @@ namespace ao::uimodel
       return requiredMessage(catalog, MessageId::AudioFindingChannelMapping, arguments);
     }
 
-    std::vector<audio::QualityFinding const*> visibleFindings(rt::QualityState const& state)
+    bool hasVisibleFinding(rt::QualityState const& state)
     {
-      auto findings = std::vector<audio::QualityFinding const*>{};
-
-      for (auto const& assessment : state.assessments)
-      {
-        for (auto const& finding : assessment.findings)
-        {
-          if (finding.kind != audio::QualityFindingKind::BitPerfect &&
-              finding.kind != audio::QualityFindingKind::HardwareVolumeModification)
-          {
-            findings.push_back(&finding);
-          }
-        }
-      }
-
-      return findings;
-    }
-
-    audio::QualityFinding const* firstFinding(rt::QualityState const& state, audio::QualityFindingKind const kind)
-    {
-      for (auto const& assessment : state.assessments)
-      {
-        auto const it = std::ranges::find(assessment.findings, kind, &audio::QualityFinding::kind);
-
-        if (it != assessment.findings.end())
-        {
-          return &(*it);
-        }
-      }
-
-      return nullptr;
+      return std::ranges::any_of(state.assessments,
+                                 [](auto const& assessment)
+                                 {
+                                   return std::ranges::any_of(
+                                     assessment.findings,
+                                     [](audio::QualityFinding const& finding)
+                                     {
+                                       return finding.kind != audio::QualityFindingKind::BitPerfect &&
+                                              finding.kind != audio::QualityFindingKind::HardwareVolumeModification;
+                                     });
+                                 });
     }
 
     bool hasFinding(rt::QualityState const& state, audio::QualityFindingKind const kind)
     {
-      return firstFinding(state, kind) != nullptr;
+      return std::ranges::any_of(
+        state.assessments,
+        [kind](auto const& assessment)
+        { return std::ranges::contains(assessment.findings, kind, &audio::QualityFinding::kind); });
     }
 
     std::string gainDecibelLabel(float const gain)
@@ -482,19 +466,19 @@ namespace ao::uimodel
                                         .category = AudioQualityCategory::Unknown};
       }
 
-      if (firstFinding(state, audio::QualityFindingKind::SoftwareAmplification) != nullptr)
+      if (hasFinding(state, audio::QualityFindingKind::SoftwareAmplification))
       {
         return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityClippingRisk),
                                         .category = AudioQualityCategory::Warning};
       }
 
-      if (firstFinding(state, audio::QualityFindingKind::Muted) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::Truncation) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::Resampling) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::SoftwareVolumeModification) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::UnclassifiedVolumeModification) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::MixedSources) != nullptr ||
-          firstFinding(state, audio::QualityFindingKind::ChannelMapping) != nullptr)
+      if (hasFinding(state, audio::QualityFindingKind::Muted) ||
+          hasFinding(state, audio::QualityFindingKind::Truncation) ||
+          hasFinding(state, audio::QualityFindingKind::Resampling) ||
+          hasFinding(state, audio::QualityFindingKind::SoftwareVolumeModification) ||
+          hasFinding(state, audio::QualityFindingKind::UnclassifiedVolumeModification) ||
+          hasFinding(state, audio::QualityFindingKind::MixedSources) ||
+          hasFinding(state, audio::QualityFindingKind::ChannelMapping))
       {
         return AudioQualityPresentation{.headline = qualityConclusion(audio::Quality::LinearIntervention),
                                         .category = AudioQualityCategory::Diagnostic};
@@ -507,19 +491,9 @@ namespace ao::uimodel
           .category = AudioQualityCategory::Informational};
       }
 
-      if (firstFinding(state, audio::QualityFindingKind::LosslessPadding) != nullptr)
-      {
-        return AudioQualityPresentation{
-          .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
-      }
-
-      if (hasFinding(state, audio::QualityFindingKind::LosslessRoundTrip))
-      {
-        return AudioQualityPresentation{
-          .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
-      }
-
-      if (hasFinding(state, audio::QualityFindingKind::LosslessFloat))
+      if (hasFinding(state, audio::QualityFindingKind::LosslessPadding) ||
+          hasFinding(state, audio::QualityFindingKind::LosslessRoundTrip) ||
+          hasFinding(state, audio::QualityFindingKind::LosslessFloat))
       {
         return AudioQualityPresentation{
           .headline = qualityConclusion(audio::Quality::LosslessFloat), .category = AudioQualityCategory::Positive};
@@ -534,7 +508,7 @@ namespace ao::uimodel
 
       // The medal describes numerical PCM evidence at the observed software
       // boundary, not proof of speaker routing.
-      if (visibleFindings(state).empty() && state.sourceQuality == audio::Quality::BitwisePerfect)
+      if (state.sourceQuality == audio::Quality::BitwisePerfect && !hasVisibleFinding(state))
       {
         return AudioQualityPresentation{
           .headline = qualityConclusion(audio::Quality::BitwisePerfect), .category = AudioQualityCategory::Medal};
