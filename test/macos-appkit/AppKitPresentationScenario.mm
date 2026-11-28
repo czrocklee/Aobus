@@ -7,6 +7,7 @@
 #include "app/macos-appkit/AppKitText.h"
 #include "app/macos-appkit/DesktopControls.h"
 #include "app/macos-appkit/LibraryBrowser.h"
+#include "app/macos-appkit/LibraryBrowserModel.h"
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/TrackInspector.h"
 #include <ao/Contract.h>
@@ -46,6 +47,7 @@
 #include <format>
 #include <fstream>
 #include <ios>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <sstream>
@@ -1018,6 +1020,7 @@ namespace
     AO_INVARIANT(listId != ao::kInvalidListId, "The drop target must have a durable List identity");
     model.cancel();
     [browser refresh];
+    AO_INVARIANT(browser.activeListId != listId, "A drop must target a different List from the current browse context");
 
     auto const writer = [browser tableView:browser.tracks pasteboardWriterForRow:browser.tracks.selectedRow];
     AO_INVARIANT(writer != nil, "The selected track must expose its native drag payload");
@@ -1091,6 +1094,8 @@ namespace
     AO_INVARIANT(renderedRes && [browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"#"] != 0,
                  "The departing view must be rendered with its number-column sort");
 
+    NSIndexSet* const highlightedRows = [browser.tracks.selectedRowIndexes copy];
+    AO_INVARIANT(highlightedRows.count > 0, "The departing table must have a visible selection");
     auto const renderedRevision = session.state().tableRevision;
     auto const navigationRes = workspace.navigate({.target = nextListId, .recordHistory = false});
     AO_INVARIANT(
@@ -1112,19 +1117,30 @@ namespace
 
     AO_INVARIANT(session.state().tableRevision == renderedRevision,
                  "The first stale click must arrive before the workspace observation rebinds the table projection");
+    AO_INVARIANT(browser.activeListId == nextListId && !renderedRes->selection.empty() &&
+                   activeRes->selection.empty() && browser.selectedTrackIds == renderedRes->selection,
+                 "The List context must follow live focus while track actions still use the bound selection");
     auto* const titleSort = [[NSSortDescriptor alloc] initWithKey:@"Title" ascending:YES];
     browser.tracks.sortDescriptors = @[titleSort];
     requireUnchanged("A header click before projection rebinding must not sort either view");
     [browser refresh];
+    AO_INVARIANT([browser.tracks.selectedRowIndexes isEqualToIndexSet:highlightedRows] != NO,
+                 "Refreshing before rebinding must preserve the departing table's highlighted rows");
+    AO_INVARIANT(browser.lists.selectedRow >= 0 &&
+                   [[browser.lists itemAtRow:browser.lists.selectedRow] isEqual:@(nextListId.raw())] != NO,
+                 "The sidebar must already highlight the newly focused List");
     AO_INVARIANT([browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"#"] != 0,
                  "Refreshing before projection rebinding must still show the rendered view's sort");
 
     ao::appkit::test::requireWaitUntil([&] { return session.state().tableRevision != renderedRevision; },
                                        "The session must bind the incoming projection before the next native refresh");
+    AO_INVARIANT(browser.selectedTrackIds == activeRes->selection,
+                 "Track action selection must follow projection rebinding without waiting for native repaint");
     browser.tracks.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Artist" ascending:YES]];
     requireUnchanged("A header click after rebinding but before rendering must not sort either view");
 
     [browser refresh];
+    AO_INVARIANT(browser.tracks.numberOfSelectedRows == 0, "The incoming table must render its own empty selection");
     AO_INVARIANT(browser.tracks.sortDescriptors.count == 0, "The incoming view must render without a header sort");
     browser.tracks.sortDescriptors = @[titleSort];
     auto expected = activeRes->presentation;
@@ -1135,6 +1151,9 @@ namespace
     auto const restoredRes = workspace.focusView(renderedViewId);
     AO_INVARIANT(restoredRes);
     ao::appkit::test::settleNativeCallbacks();
+    AO_INVARIANT([browser.tracks.sortDescriptors.firstObject.key isEqualToString:@"Title"] != NO &&
+                   browser.selectedTrackIds == renderedRes->selection,
+                 "Track actions must recover the original nonempty selection before its table is repainted");
     [browser refresh];
   }
 
@@ -1285,7 +1304,7 @@ namespace
         songsRes && readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{rt::BuiltinPreset::Songs},
         "An accepted normal choice must durably pin only the base List");
       auto const plainViewId = runtime.workspace().snapshot().activeViewId;
-      auto const sortRes = session.toggleSort(plainViewId, rt::TrackField::Title);
+      auto const sortRes = session.browser().toggleColumnSort(plainViewId, rt::TrackField::Title);
       AO_INVARIANT(
         sortRes && readPreferences(musicRoot, runtime).at(firstId) == rt::TrackPresetId{rt::BuiltinPreset::Songs},
         "A native column sort must not overwrite the pinned presentation");
@@ -1360,7 +1379,7 @@ namespace
       auto const unavailableManualRes = session.setPresentation(rt::BuiltinPreset::ListOrder);
       AO_INVARIANT(!unavailableManualRes, "All Tracks must reject the shared unavailable Manual Order choice");
       auto const allViewId = runtime.workspace().snapshot().activeViewId;
-      auto const allSortRes = session.toggleSort(allViewId, rt::TrackField::DisplayTrackNumber);
+      auto const allSortRes = session.browser().toggleColumnSort(allViewId, rt::TrackField::DisplayTrackNumber);
       AO_INVARIANT(allSortRes);
       auto const* presentation = runtime.views().findTrackListPresentation(allViewId);
       AO_INVARIANT(presentation != nullptr && presentation->optColumnSort &&
@@ -1496,6 +1515,7 @@ namespace ao::appkit::test
     id<NSDraggingInfo> const info = static_cast<id>(draggingInfo);
     auto dropListId = kInvalidListId;
     AobusLibraryBrowser* browser = nil;
+    auto const refreshDeliveredPtr = std::make_shared<bool>(false);
 
     [window center];
     [window makeKeyAndOrderFront:nil];
@@ -1507,7 +1527,7 @@ namespace ao::appkit::test
     {
       auto fixture = SessionFixture{musicRoot, stateRoot, SessionFixture::AudioOutput::Silent};
       auto& session = fixture.session();
-      browser = [[AobusLibraryBrowser alloc] initWithSession:session delegate:browserDelegate];
+      browser = [[AobusLibraryBrowser alloc] initWithModel:session.browser() delegate:browserDelegate];
       browser.listScroll.frame = NSMakeRect(20, 100, 190, 540);
       browser.trackScroll.frame = NSMakeRect(220, 100, 740, 540);
       [root addSubview:browser.listScroll];
@@ -1519,10 +1539,18 @@ namespace ao::appkit::test
       exerciseInspector(session, fixture.libraryCommands(), window, selectedId, stateRoot);
       exercisePlaybackPresentation(session, window, root, stateRoot);
       exerciseSelectedArtwork(session, window, selectedId);
+      requireWaitUntil([&] { return session.canClose(); }, "The presentation session must be ready to close");
+      [NSRunLoop.mainRunLoop performBlock:^{
+        [browser refresh];
+        *refreshDeliveredPtr = true;
+      }];
       [browser detach];
+      fixture.close();
+      AO_INVARIANT(!*refreshDeliveredPtr, "The pending native refresh must outlive the session");
     }
 
     auto const selectionChangeCount = browserDelegate.selectionChangeCount;
+    requireWaitUntil([&] { return *refreshDeliveredPtr; }, "A queued refresh must safely return after session release");
     exerciseDetachedBrowser(browser, browserDelegate, selectionChangeCount, info, dropListId);
     exercisePresentationPreferences(musicRoot, stateRoot);
     [draggingInfo.draggingPasteboard releaseGlobally];

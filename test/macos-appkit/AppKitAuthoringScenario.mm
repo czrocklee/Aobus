@@ -4,6 +4,7 @@
 #include "app/macos-appkit/AppKitText.h"
 #include "app/macos-appkit/EntryCompletionAdapter.h"
 #include "app/macos-appkit/LibraryBrowser.h"
+#include "app/macos-appkit/LibraryBrowserModel.h"
 #include "app/macos-appkit/LibraryEditor.h"
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/TrackInspector.h"
@@ -2286,7 +2287,7 @@ namespace ao::appkit::test
     {
       auto& session = fixture.session();
       auto* const delegate = [[AobusAuthoringBrowserDelegate alloc] init];
-      auto* const browser = [[AobusLibraryBrowser alloc] initWithSession:session delegate:delegate];
+      auto* const browser = [[AobusLibraryBrowser alloc] initWithModel:session.browser() delegate:delegate];
       auto* const outline = browser.lists;
       browser.listScroll.frame = NSMakeRect(0, 0, 240, 600);
       [fixture.window().contentView addSubview:browser.listScroll];
@@ -2310,7 +2311,7 @@ namespace ao::appkit::test
       auto const listRevision = session.state().listRevision;
       auto const tableRevision = session.state().tableRevision;
       auto const viewId = session.runtime().workspace().snapshot().activeViewId;
-      auto const sortBeganRes = session.toggleSort(viewId, rt::TrackField::Title);
+      auto const sortBeganRes = session.browser().toggleColumnSort(viewId, rt::TrackField::Title);
       AO_INVARIANT(sortBeganRes, "The List-cache regression sort must begin");
       requireWaitUntil(
         [&] { return session.state().tableRevision != tableRevision; }, "Sorting tracks must publish a table revision");

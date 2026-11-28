@@ -11,7 +11,7 @@
 
 namespace ao::appkit
 {
-  class LibrarySession;
+  class LibraryBrowserModel;
 }
 
 @class AobusLibraryBrowser;
@@ -29,13 +29,13 @@ namespace ao::appkit
   : NSObject<NSTableViewDataSource, NSTableViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate>
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
-- (instancetype)initWithSession:(ao::appkit::LibrarySession&)session
-                       delegate:(id<AobusLibraryBrowserDelegate>)delegate NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithModel:(ao::appkit::LibraryBrowserModel&)model
+                     delegate:(id<AobusLibraryBrowserDelegate>)delegate NS_DESIGNATED_INITIALIZER;
 - (NSTableView*)tracks;
 - (NSOutlineView*)lists;
 - (NSScrollView*)trackScroll;
 - (NSScrollView*)listScroll;
-// Detach while the borrowed session is alive; later native callbacks return neutral results.
+// Detach while the borrowed model is alive; later native callbacks return neutral results.
 - (void)detach;
 - (void)invalidateProjection;
 - (void)refresh;

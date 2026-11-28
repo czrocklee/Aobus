@@ -50,6 +50,7 @@ namespace ao::rt
 
 namespace ao::appkit
 {
+  class LibraryBrowserModel;
   class MediaPlayerAdapter;
   struct PlaybackSeekTarget;
 
@@ -111,16 +112,14 @@ namespace ao::appkit
     LibraryEditorModel& editor() const noexcept;
     i18n::MessageCatalog const& catalog() const noexcept;
     MediaPlayerAdapter& mediaPlayer() const noexcept;
-    rt::ViewId tableViewId() const noexcept;
+    LibraryBrowserModel& browser() noexcept;
     uimodel::TrackDisplayIndex const& displayIndex() const noexcept;
     rt::TrackRow const* rowAt(std::size_t displayIndex);
-    uimodel::TrackGroupHeadingPresentation groupHeading(std::size_t groupIndex) const;
     std::vector<TrackId> selection() const;
     std::optional<std::size_t> displayIndexOf(TrackId trackId) const;
     void select(std::vector<TrackId> ids);
     void navigate(ListId listId) const;
     Result<> setPresentation(std::optional<rt::TrackPresetId> const& optPresetId) const;
-    Result<> toggleSort(rt::ViewId renderedViewId, rt::TrackField column) const;
     void filter(std::string const& text);
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);
@@ -138,6 +137,8 @@ namespace ao::appkit
     void close() noexcept;
 
   private:
+    friend class LibraryBrowserModel;
+
     LibrarySession(i18n::MessageCatalog catalog, std::function<void(DesktopInvalidation)> onInvalidated);
     Result<> initialize(std::filesystem::path const& root,
                         std::filesystem::path const& stateRoot,

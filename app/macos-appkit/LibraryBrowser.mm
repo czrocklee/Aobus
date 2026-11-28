@@ -4,22 +4,19 @@
 #include "LibraryBrowser.h"
 
 #include "AppKitText.h"
-#include "LibrarySession.h"
+#include "LibraryBrowserModel.h"
 #include "NativeCallback.h"
-#include <ao/rt/Log.h>
+#include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/field/TrackRowField.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
-#include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -33,7 +30,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace
@@ -207,16 +204,15 @@ namespace
 @end
 
 @implementation AobusLibraryBrowser {
-  // The composition root revokes this borrow with detach before destroying the session.
-  ao::appkit::LibrarySession* _session;
+  // The composition root revokes this borrow with detach before closing the session.
+  ao::appkit::LibraryBrowserModel* _model;
   __weak id<AobusLibraryBrowserDelegate> _delegate;
   NSScrollView* _trackScroll;
   AobusTrackTable* _tracks;
   NSScrollView* _listScroll;
   NSOutlineView* _lists;
   NSMutableDictionary<NSNumber*, NSNumber*>* _listItems;
-  ao::uimodel::ListTreeProjection _listTree;
-  std::unordered_set<ao::ListId> _writableListIds;
+  ao::appkit::LibraryBrowserModel::Sidebar _sidebar;
   std::vector<ao::TrackId> _displayedSelection;
   ao::rt::ViewId _renderedViewId;
   std::uint64_t _tableRevision;
@@ -232,18 +228,18 @@ namespace
   NSString* _activeListTitle;
 }
 
-- (instancetype)initWithSession:(ao::appkit::LibrarySession&)session delegate:(id<AobusLibraryBrowserDelegate>)delegate
+- (instancetype)initWithModel:(ao::appkit::LibraryBrowserModel&)model delegate:(id<AobusLibraryBrowserDelegate>)delegate
 {
   self = [super init];
 
   if (self != nil)
   {
-    _session = &session;
+    _model = &model;
     _delegate = delegate;
     _renderedViewId = ao::rt::kInvalidViewId;
     _tableRevision = UINT64_MAX;
     _listRevision = UINT64_MAX;
-    _activeListTitle = ao::appkit::catalogText(session.catalog(), MessageId::LibraryAllTracks);
+    _activeListTitle = ao::appkit::catalogText(model.catalog(), MessageId::LibraryAllTracks);
     _listItems = [NSMutableDictionary dictionary];
     _listItems[@(ao::rt::kAllTracksListId.raw())] = @(ao::rt::kAllTracksListId.raw());
     _lists = [[NSOutlineView alloc] initWithFrame:NSZeroRect];
@@ -283,19 +279,19 @@ namespace
 
       if ([identifier isEqual:@"Title"] != NO)
       {
-        column.title = ao::appkit::catalogText(session.catalog(), MessageId::TrackFieldTitle);
+        column.title = ao::appkit::catalogText(model.catalog(), MessageId::TrackFieldTitle);
       }
       else if ([identifier isEqual:@"Artist"] != NO)
       {
-        column.title = ao::appkit::catalogText(session.catalog(), MessageId::TrackFieldArtist);
+        column.title = ao::appkit::catalogText(model.catalog(), MessageId::TrackFieldArtist);
       }
       else if ([identifier isEqual:@"Album"] != NO)
       {
-        column.title = ao::appkit::catalogText(session.catalog(), MessageId::TrackFieldAlbum);
+        column.title = ao::appkit::catalogText(model.catalog(), MessageId::TrackFieldAlbum);
       }
       else if ([identifier isEqual:@"Duration"] != NO)
       {
-        column.title = ao::appkit::catalogText(session.catalog(), MessageId::TrackFieldDuration);
+        column.title = ao::appkit::catalogText(model.catalog(), MessageId::TrackFieldDuration);
       }
 
       column.width = kAlbumColumnWidth;
@@ -362,7 +358,7 @@ namespace
 
 - (void)detach
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     return;
   }
@@ -377,7 +373,7 @@ namespace
   [_tracks unregisterDraggedTypes];
   [_lists unregisterDraggedTypes];
   _delegate = nil;
-  _session = nullptr;
+  _model = nullptr;
 }
 
 - (void)invalidateProjection
@@ -388,7 +384,7 @@ namespace
 - (BOOL)isClosing
 {
   auto const delegate = _delegate;
-  return static_cast<BOOL>(_session == nullptr || delegate == nil || [delegate isLibraryBrowserClosing:self] != NO);
+  return static_cast<BOOL>(_model == nullptr || delegate == nil || [delegate isLibraryBrowserClosing:self] != NO);
 }
 
 - (BOOL)isSheetBlocked
@@ -399,7 +395,7 @@ namespace
 
 - (NSString*)text:(MessageId)message
 {
-  return _session != nullptr ? ao::appkit::catalogText(_session->catalog(), message) : @"";
+  return _model != nullptr ? ao::appkit::catalogText(_model->catalog(), message) : @"";
 }
 
 - (void)layoutForModern:(BOOL)modern browserWidth:(CGFloat)browserWidth
@@ -448,7 +444,7 @@ namespace
 
 - (void)refresh
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     return;
   }
@@ -456,18 +452,16 @@ namespace
   nativeCallback(
     [&]
     {
-      auto const workspace = _session->runtime().workspace().snapshot();
-      auto viewRes = _session->runtime().views().findTrackListState(workspace.activeViewId);
-      auto const emptySelection = std::vector<ao::TrackId>{};
-      auto const& selection = viewRes ? viewRes->selection : emptySelection;
-      auto const& state = _session->state();
+      auto const activeListId = _model->activeListId();
+      auto const table = _model->boundTable();
+      auto const selection = _model->boundSelection();
 
-      if (_tableRevision != state.tableRevision)
+      if (_tableRevision != table.revision)
       {
         auto const origin = _trackScroll.contentView.bounds.origin;
         _refreshing = YES;
-        _renderedViewId = _session->tableViewId();
-        _tableRevision = state.tableRevision;
+        _renderedViewId = table.viewId;
+        _tableRevision = table.revision;
         [_tracks reloadData];
         [self selectTracks:selection];
         [_trackScroll.contentView scrollToPoint:origin];
@@ -476,21 +470,13 @@ namespace
         _displayedSelection = selection;
       }
 
-      if (_listRevision != state.listRevision)
+      if (auto const revision = _model->listRevision(); _listRevision != revision)
       {
-        auto const lists = _session->runtime().library().snapshot().lists();
-        _listRevision = state.listRevision;
-        _listTree = ao::uimodel::buildListTreeProjection(_session->catalog(), lists);
-        _writableListIds.clear();
-
-        for (auto const& target : ao::uimodel::writableTagListTargets(lists, _session->runtime().textOrderingPolicy()))
-        {
-          _writableListIds.insert(target.listId);
-        }
-
+        _sidebar = _model->projectSidebar();
+        _listRevision = revision;
         auto* const currentItems = [NSMutableDictionary<NSNumber*, NSNumber*> dictionary];
 
-        for (auto const& [id, row] : _listTree.rowsById)
+        for (auto const& [id, row] : _sidebar.tree.rowsById)
         {
           auto* const key = @(id.raw());
           currentItems[key] = _listItems[key] != nil ? _listItems[key] : key;
@@ -518,18 +504,17 @@ namespace
         _displayedSelection = selection;
       }
 
-      auto const* tablePresentation = _session->runtime().views().findTrackListPresentation(_renderedViewId);
-      [self refreshSortDescriptors:tablePresentation != nullptr ? tablePresentation->optColumnSort : std::nullopt];
+      [self refreshSortDescriptors:_model->renderedSort(_renderedViewId)];
       _activeListTitle = [self text:MessageId::LibraryAllTracks];
 
-      if (!viewRes)
+      if (activeListId == ao::kInvalidListId)
       {
         return;
       }
 
       NSNumber* selectedItem = _listItems[@(ao::rt::kAllTracksListId.raw())];
 
-      if (auto const row = _listTree.rowsById.find(viewRes->listId); row != _listTree.rowsById.end())
+      if (auto const row = _sidebar.tree.rowsById.find(activeListId); row != _sidebar.tree.rowsById.end())
       {
         selectedItem = _listItems[@(row->first.raw())];
         _activeListTitle = nativeText(row->second.name);
@@ -538,7 +523,7 @@ namespace
       _refreshing = YES;
       auto* const ancestors = [NSMutableArray<NSNumber*> array];
 
-      for (auto const parentId : ao::uimodel::listTreeAncestorIds(_listTree, viewRes->listId))
+      for (auto const parentId : ao::uimodel::listTreeAncestorIds(_sidebar.tree, activeListId))
       {
         auto* const parent = _listItems[@(parentId.raw())];
 
@@ -553,7 +538,7 @@ namespace
       if (selectedItem != nil &&
           (selectedItem != _revealedListItem || [ancestors isEqualToArray:_revealedListAncestors] == 0))
       {
-        [_lists expandItem:viewRes->listId == ao::rt::kAllTracksListId ? @"Library" : @"Saved Lists"];
+        [_lists expandItem:activeListId == ao::rt::kAllTracksListId ? @"Library" : @"Saved Lists"];
 
         // Objective-C fast enumeration assigns parent before each iteration.
         // NOLINTNEXTLINE(aobus-modernize-local-initialization-style,cppcoreguidelines-init-variables)
@@ -582,7 +567,7 @@ namespace
 
   for (auto id : selection)
   {
-    if (auto const optIndex = _session->displayIndexOf(id); optIndex)
+    if (auto const optIndex = _model->displayIndexOf(id); optIndex)
     {
       [indexes addIndex:*optIndex];
     }
@@ -627,19 +612,12 @@ namespace
 
 - (ao::ListId)activeListId
 {
-  if (_session == nullptr)
-  {
-    return ao::kInvalidListId;
-  }
-
-  auto const workspace = _session->runtime().workspace().snapshot();
-  auto const viewRes = _session->runtime().views().findTrackListState(workspace.activeViewId);
-  return viewRes ? viewRes->listId : ao::kInvalidListId;
+  return _model != nullptr ? _model->activeListId() : ao::kInvalidListId;
 }
 
 - (ao::ListId)clickedListId
 {
-  if ([self isClosing] != NO || _listRevision != _session->state().listRevision)
+  if ([self isClosing] != NO || _listRevision != _model->listRevision())
   {
     return ao::kInvalidListId;
   }
@@ -657,7 +635,7 @@ namespace
 
 - (std::vector<ao::TrackId>)selectedTrackIds
 {
-  return _session != nullptr ? _session->selection() : std::vector<ao::TrackId>{};
+  return _model != nullptr ? _model->boundSelection() : std::vector<ao::TrackId>{};
 }
 
 - (BOOL)prepareContextMenu:(NSMenu*)menu
@@ -669,7 +647,7 @@ namespace
 
   if (menu == _lists.menu)
   {
-    if (_listRevision != _session->state().listRevision)
+    if (_listRevision != _model->listRevision())
     {
       return NO;
     }
@@ -683,7 +661,7 @@ namespace
     return YES;
   }
 
-  if (menu != _tracks.menu || _tableRevision != _session->state().tableRevision)
+  if (menu != _tracks.menu || _tableRevision != _model->boundTable().revision)
   {
     return NO;
   }
@@ -707,7 +685,7 @@ namespace
 
 - (NSInteger)outlineView:(NSOutlineView*) [[maybe_unused]] outline numberOfChildrenOfItem:(id)item
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     return 0;
   }
@@ -724,14 +702,14 @@ namespace
 
   if ([item isEqual:@"Saved Lists"] != NO)
   {
-    return _listTree.rootIds.empty() ? 0 : static_cast<NSInteger>(_listTree.rootIds.size() - 1);
+    return _sidebar.tree.rootIds.empty() ? 0 : static_cast<NSInteger>(_sidebar.tree.rootIds.size() - 1);
   }
 
   if ([item isKindOfClass:NSNumber.class] != NO)
   {
     auto const id = ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]};
-    auto const row = _listTree.rowsById.find(id);
-    return row != _listTree.rowsById.end() ? static_cast<NSInteger>(row->second.childIds.size()) : 0;
+    auto const row = _sidebar.tree.rowsById.find(id);
+    return row != _sidebar.tree.rowsById.end() ? static_cast<NSInteger>(row->second.childIds.size()) : 0;
   }
 
   return 0;
@@ -739,7 +717,7 @@ namespace
 
 - (id)outlineView:(NSOutlineView*) [[maybe_unused]] outline child:(NSInteger)index ofItem:(id)item
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     // AppKit requires a nonnull child; detached data sources advertise no rows.
     return NSNull.null;
@@ -757,17 +735,17 @@ namespace
 
   if ([item isEqual:@"Saved Lists"] != NO)
   {
-    return _listItems[@(_listTree.rootIds.at(static_cast<std::size_t>(index) + 1).raw())];
+    return _listItems[@(_sidebar.tree.rootIds.at(static_cast<std::size_t>(index) + 1).raw())];
   }
 
   auto const id = ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]};
-  auto const childId = _listTree.rowsById.at(id).childIds.at(static_cast<std::size_t>(index));
+  auto const childId = _sidebar.tree.rowsById.at(id).childIds.at(static_cast<std::size_t>(index));
   return _listItems[@(childId.raw())];
 }
 
 - (BOOL)outlineView:(NSOutlineView*)outline isItemExpandable:(id)item
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     return NO;
   }
@@ -782,7 +760,7 @@ namespace
 
 - (BOOL)outlineView:(NSOutlineView*) [[maybe_unused]] outline isGroupItem:(id)item
 {
-  return static_cast<BOOL>(_session != nullptr && [item isKindOfClass:NSString.class] != NO);
+  return static_cast<BOOL>(_model != nullptr && [item isKindOfClass:NSString.class] != NO);
 }
 
 - (CGFloat)outlineView:(NSOutlineView*) [[maybe_unused]] outline heightOfRowByItem:(id)item
@@ -792,12 +770,12 @@ namespace
 
 - (BOOL)outlineView:(NSOutlineView*) [[maybe_unused]] outline shouldSelectItem:(id)item
 {
-  return static_cast<BOOL>(_session != nullptr && [item isKindOfClass:NSNumber.class] != NO);
+  return static_cast<BOOL>(_model != nullptr && [item isKindOfClass:NSNumber.class] != NO);
 }
 
 - (NSView*)outlineView:(NSOutlineView*)outline viewForTableColumn:(NSTableColumn*) [[maybe_unused]] column item:(id)item
 {
-  if (_session == nullptr)
+  if (_model == nullptr)
   {
     return nil;
   }
@@ -857,8 +835,8 @@ namespace
   }
 
   auto const listId = ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]};
-  auto const row = _listTree.rowsById.find(listId);
-  cell.textField.stringValue = row != _listTree.rowsById.end() ? nativeText(row->second.name) : @"";
+  auto const row = _sidebar.tree.rowsById.find(listId);
+  cell.textField.stringValue = row != _sidebar.tree.rowsById.end() ? nativeText(row->second.name) : @"";
   cell.imageView.image =
     [NSImage imageWithSystemSymbolName:listId == ao::rt::kAllTracksListId ? @"music.note.house" : @"music.note.list"
               accessibilityDescription:nil];
@@ -876,7 +854,7 @@ namespace
   {
     if (id const item = [_lists itemAtRow:row]; [item isKindOfClass:NSNumber.class] != NO)
     {
-      nativeCallback([&] { _session->navigate(ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]}); });
+      nativeCallback([&] { _model->navigateToList(ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]}); });
     }
   }
 }
@@ -890,13 +868,13 @@ namespace
     return NO;
   }
 
-  if (_listRevision != _session->state().listRevision)
+  if (_listRevision != _model->listRevision())
   {
     return NO;
   }
 
   auto const listId = ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]};
-  return static_cast<BOOL>(_writableListIds.contains(listId));
+  return static_cast<BOOL>(_sidebar.writableListIds.contains(listId));
 }
 
 - (NSDragOperation)outlineView:(NSOutlineView*)outline
@@ -974,7 +952,7 @@ namespace
     return 0;
   }
 
-  return static_cast<NSInteger>(_session->displayIndex().displayCount());
+  return static_cast<NSInteger>(_model->boundTable().index.displayCount());
 }
 
 - (CGFloat)tableView:(NSTableView*)table heightOfRow:(NSInteger)row
@@ -984,7 +962,7 @@ namespace
     return _modern != NO ? 32 : kClassicRowHeight;
   }
 
-  auto const optItem = _session->displayIndex().itemAt(static_cast<std::size_t>(row));
+  auto const optItem = _model->boundTable().index.itemAt(static_cast<std::size_t>(row));
 
   if (optItem && optItem->kind == ao::uimodel::TrackDisplayItemKind::GroupHeader)
   {
@@ -1001,13 +979,13 @@ namespace
     return NO;
   }
 
-  auto const optItem = _session->displayIndex().itemAt(static_cast<std::size_t>(row));
+  auto const optItem = _model->boundTable().index.itemAt(static_cast<std::size_t>(row));
   return static_cast<BOOL>(optItem && optItem->kind == ao::uimodel::TrackDisplayItemKind::GroupHeader);
 }
 
 - (BOOL)tableView:(NSTableView*)table shouldSelectRow:(NSInteger)row
 {
-  if (table != _tracks || [self isClosing] != NO || _tableRevision != _session->state().tableRevision)
+  if (table != _tracks || [self isClosing] != NO || _tableRevision != _model->boundTable().revision)
   {
     return NO;
   }
@@ -1044,7 +1022,7 @@ namespace
   nativeCallback(
     [&]
     {
-      auto const optItem = _session->displayIndex().itemAt(static_cast<std::size_t>(row));
+      auto const optItem = _model->boundTable().index.itemAt(static_cast<std::size_t>(row));
 
       if (!optItem)
       {
@@ -1053,7 +1031,7 @@ namespace
 
       if (optItem->kind == ao::uimodel::TrackDisplayItemKind::GroupHeader)
       {
-        auto const heading = _session->groupHeading(optItem->groupIndex);
+        auto const heading = _model->groupHeading(optItem->groupIndex);
         auto const height = [self tableView:table heightOfRow:row];
         auto const width = table.bounds.size.width;
         auto* const group =
@@ -1093,7 +1071,7 @@ namespace
         return;
       }
 
-      auto const* track = _session->rowAt(static_cast<std::size_t>(row));
+      auto const* track = _model->rowAt(static_cast<std::size_t>(row));
 
       if (track == nullptr)
       {
@@ -1121,7 +1099,7 @@ namespace
       }
 
       auto const text = ao::uimodel::formatTrackRowField(
-        _session->catalog(), *track, columnField, ao::uimodel::TrackRowPathFormat::Native);
+        _model->catalog(), *track, columnField, ao::uimodel::TrackRowPathFormat::Native);
       auto const height = [self tableView:table heightOfRow:row];
       auto* const trackCell = cell(identifier, height, column.width);
       auto* const field = trackCell.textField;
@@ -1146,7 +1124,7 @@ namespace
 - (void)tableViewSelectionDidChange:(NSNotification*)notification
 {
   if (notification.object != _tracks || _refreshing != NO || [self isClosing] != NO ||
-      _tableRevision != _session->state().tableRevision)
+      _tableRevision != _model->boundTable().revision)
   {
     return;
   }
@@ -1159,14 +1137,14 @@ namespace
 
       for (auto index = indexes.firstIndex; index != NSNotFound; index = [indexes indexGreaterThanIndex:index])
       {
-        if (auto const* row = _session->rowAt(index); row != nullptr)
+        if (auto const* row = _model->rowAt(index); row != nullptr)
         {
           trackIds.push_back(row->id);
         }
       }
 
-      _session->select(trackIds);
-      _displayedSelection = trackIds;
+      _model->selectTracks(trackIds);
+      _displayedSelection = std::move(trackIds);
 
       if (auto const delegate = _delegate; delegate != nil && [delegate isLibraryBrowserClosing:self] == 0)
       {
@@ -1177,12 +1155,12 @@ namespace
 
 - (id<NSPasteboardWriting>)tableView:(NSTableView*)table pasteboardWriterForRow:(NSInteger)row
 {
-  if (table != _tracks || [self isClosing] != NO || _tableRevision != _session->state().tableRevision || row < 0)
+  if (table != _tracks || [self isClosing] != NO || _tableRevision != _model->boundTable().revision || row < 0)
   {
     return nil;
   }
 
-  auto const* track = _session->rowAt(static_cast<std::size_t>(row));
+  auto const* track = _model->rowAt(static_cast<std::size_t>(row));
 
   if (track == nullptr)
   {
@@ -1198,7 +1176,7 @@ namespace
   sortDescriptorsDidChange:(NSArray<NSSortDescriptor*>*) [[maybe_unused]] oldDescriptors
 {
   if (table != _tracks || _refreshing != NO || [self isClosing] != NO ||
-      _tableRevision != _session->state().tableRevision || table.sortDescriptors.count == 0)
+      _tableRevision != _model->boundTable().revision || table.sortDescriptors.count == 0)
   {
     return;
   }
@@ -1232,7 +1210,7 @@ namespace
 
       if (optColumn)
       {
-        if (auto const res = _session->toggleSort(_renderedViewId, *optColumn); !res)
+        if (auto const res = _model->toggleColumnSort(_renderedViewId, *optColumn); !res)
         {
           showError(_tracks.window, [self text:MessageId::AppKitOperationFailed], nativeText(res.error().message));
         }
@@ -1242,7 +1220,7 @@ namespace
 
 - (void)playTrack:(id) [[maybe_unused]] sender
 {
-  if ([self isClosing] != NO || _tracks.clickedRow < 0 || _tableRevision != _session->state().tableRevision)
+  if ([self isClosing] != NO || _tracks.clickedRow < 0 || _tableRevision != _model->boundTable().revision)
   {
     return;
   }
@@ -1250,28 +1228,21 @@ namespace
   nativeCallback(
     [&]
     {
-      if (auto const* row = _session->rowAt(static_cast<std::size_t>(_tracks.clickedRow)); row != nullptr)
+      if (auto const* row = _model->rowAt(static_cast<std::size_t>(_tracks.clickedRow)); row != nullptr)
       {
-        _session->play(row->id);
+        _model->playTrack(row->id);
       }
     });
 }
 
 - (void)playSelectedTrack
 {
-  if ([self isClosing] != NO || _tableRevision != _session->state().tableRevision)
+  if ([self isClosing] != NO || _tableRevision != _model->boundTable().revision)
   {
     return;
   }
 
-  nativeCallback(
-    [&]
-    {
-      if (auto const trackIds = _session->selection(); !trackIds.empty())
-      {
-        _session->play(trackIds.front());
-      }
-    });
+  nativeCallback([&] { _model->playSelection(); });
 }
 
 - (void)playSelection:(id) [[maybe_unused]] sender
@@ -1283,7 +1254,7 @@ namespace
 {
   if ([self isClosing] == NO)
   {
-    nativeCallback([&] { _session->execute(ao::uimodel::PlaybackCommand::PlayPause); });
+    nativeCallback([&] { _model->togglePlayback(); });
   }
 }
 @end

@@ -12,6 +12,10 @@ The File menu checks the session's scanning flag when it validates **Rescan Libr
 
 On completion, the session clears the flag and calls the library invalidation callback before posting the result to the notification feed. The callback schedules a later redraw; it is not a signal that the result has already been delivered.
 
+## Library browser
+
+The browser borrows the session's [browser model](../../../app/macos-appkit/LibraryBrowserModel.h), not the session or editor. During navigation, the sidebar follows workspace focus immediately. The table keeps its bound view's row selection until it renders the incoming view. A header click names the view whose rows the table last rendered. If workspace focus has already changed, the click must not sort either view. Dropping tracks on a writable List asks the desktop delegate to open the membership editor; the browser cannot submit the write itself. The delegate detaches the browser while the model is still alive, so late table and outline callbacks no longer consult it.
+
 ## Playback slider
 
 [`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) uses the [shared seek interaction](../playback/README.md#position-and-keyboard-seeking). Pointer value changes preview against the starting occurrence and duration. Releasing a still-current gesture submits one final seek only if there was a value change. If playback is replaced, becomes unseekable, or another seek changes the position revision during the drag, the thumb follows the new position even while paused. The native cell may keep tracking, but its remaining actions cannot seek or move the thumb off that position. The session also checks the revision at dispatch, in case the change has not been presented yet.

@@ -254,7 +254,7 @@ namespace
   _libraryLabel = label([[self text:MessageId::AppKitLibrarySection] uppercaseString], kCaptionFontSize, YES);
   _libraryLabel.font = [NSFont systemFontOfSize:kCaptionFontSize weight:NSFontWeightSemibold];
   [_sidebar addSubview:_libraryLabel];
-  _libraryBrowser = [[AobusLibraryBrowser alloc] initWithSession:*_sessionPtr delegate:self];
+  _libraryBrowser = [[AobusLibraryBrowser alloc] initWithModel:_sessionPtr->browser() delegate:self];
   _listMenu = [[NSMenu alloc] initWithTitle:[self text:MessageId::AppKitLists]];
   _listMenu.delegate = self;
   _libraryBrowser.lists.menu = _listMenu;

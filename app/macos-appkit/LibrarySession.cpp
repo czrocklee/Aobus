@@ -3,6 +3,7 @@
 
 #include "LibrarySession.h"
 
+#include "LibraryBrowserModel.h"
 #include "LibraryEditorModel.h"
 #include "MainRunLoopExecutor.h"
 #include "MediaPlayerAdapter.h"
@@ -41,6 +42,7 @@
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/library/LibraryEditing.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -48,6 +50,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/library/track/TrackFilterView.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
@@ -67,6 +70,7 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
@@ -91,10 +95,13 @@ namespace ao::appkit
 
   struct LibrarySession::Storage final
   {
-    Storage(i18n::MessageCatalog catalogValue, std::function<void(DesktopInvalidation)> onInvalidatedValue)
-      : catalog{std::move(catalogValue)}, onInvalidated{std::move(onInvalidatedValue)}
+    Storage(LibrarySession& session,
+            i18n::MessageCatalog catalogValue,
+            std::function<void(DesktopInvalidation)> onInvalidatedValue)
+      : browser{session}, catalog{std::move(catalogValue)}, onInvalidated{std::move(onInvalidatedValue)}
     {
     }
+    LibraryBrowserModel browser;
     DesktopViewState state{};
     i18n::MessageCatalog catalog;
     std::function<void(DesktopInvalidation)> onInvalidated;
@@ -222,6 +229,122 @@ namespace ao::appkit
     }
   };
 
+  i18n::MessageCatalog const& LibraryBrowserModel::catalog() const noexcept
+  {
+    return _session.catalog();
+  }
+
+  ListId LibraryBrowserModel::activeListId() const
+  {
+    auto& runtime = _session.runtime();
+    auto const viewId = runtime.workspace().snapshot().activeViewId;
+    auto const viewRes = runtime.views().findTrackListState(viewId);
+    return viewRes ? viewRes->listId : kInvalidListId;
+  }
+
+  LibraryBrowserModel::Table LibraryBrowserModel::boundTable() const noexcept
+  {
+    auto const& storage = *_session._storagePtr;
+    return {.viewId = storage.viewId, .revision = storage.state.tableRevision, .index = storage.displayIndex};
+  }
+
+  std::uint64_t LibraryBrowserModel::listRevision() const noexcept
+  {
+    return _session.state().listRevision;
+  }
+
+  LibraryBrowserModel::Sidebar LibraryBrowserModel::projectSidebar() const
+  {
+    auto const& runtime = _session.runtime();
+    auto const lists = runtime.library().snapshot().lists();
+    auto sidebar = Sidebar{.tree = uimodel::buildListTreeProjection(catalog(), lists)};
+
+    for (auto const& target : uimodel::writableTagListTargets(lists, runtime.textOrderingPolicy()))
+    {
+      sidebar.writableListIds.insert(target.listId);
+    }
+
+    return sidebar;
+  }
+
+  std::optional<rt::TrackColumnSort> LibraryBrowserModel::renderedSort(rt::ViewId renderedViewId) const noexcept
+  {
+    auto const* presentation = _session.runtime().views().findTrackListPresentation(renderedViewId);
+    return presentation != nullptr ? presentation->optColumnSort : std::nullopt;
+  }
+
+  rt::TrackRow const* LibraryBrowserModel::rowAt(std::size_t displayIndex)
+  {
+    return _session.rowAt(displayIndex);
+  }
+
+  uimodel::TrackGroupHeadingPresentation LibraryBrowserModel::groupHeading(std::size_t groupIndex) const
+  {
+    auto const group = _session._storagePtr->projectionPtr->groupAt(groupIndex);
+    return uimodel::formatTrackGroupHeading(catalog(), group.heading);
+  }
+
+  std::optional<std::size_t> LibraryBrowserModel::displayIndexOf(TrackId trackId) const
+  {
+    return _session.displayIndexOf(trackId);
+  }
+
+  std::vector<TrackId> LibraryBrowserModel::boundSelection() const
+  {
+    return _session.selection();
+  }
+
+  void LibraryBrowserModel::navigateToList(ListId listId) const
+  {
+    _session.navigate(listId);
+  }
+
+  void LibraryBrowserModel::selectTracks(std::vector<TrackId> trackIds)
+  {
+    _session.select(std::move(trackIds));
+  }
+
+  Result<> LibraryBrowserModel::toggleColumnSort(rt::ViewId renderedViewId, rt::TrackField column) const
+  {
+    auto& runtime = _session.runtime();
+
+    // Focus changes commit before the session observes them and refreshes the native table.
+    if (renderedViewId == rt::kInvalidViewId || renderedViewId != runtime.workspace().snapshot().activeViewId)
+    {
+      return {};
+    }
+
+    auto& views = runtime.views();
+    auto const stateRes = views.findTrackListState(renderedViewId);
+
+    if (!stateRes)
+    {
+      return std::unexpected{stateRes.error()};
+    }
+
+    return views.setColumnSort(renderedViewId, stateRes->presentation.nextColumnSort(column));
+  }
+
+  void LibraryBrowserModel::playTrack(TrackId trackId)
+  {
+    _session.play(trackId);
+  }
+
+  void LibraryBrowserModel::playSelection()
+  {
+    auto const& selectedTrackIds = _session._storagePtr->selectedTrackIds;
+
+    if (!selectedTrackIds.empty())
+    {
+      playTrack(selectedTrackIds.front());
+    }
+  }
+
+  void LibraryBrowserModel::togglePlayback()
+  {
+    _session.execute(uimodel::PlaybackCommand::PlayPause);
+  }
+
   Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
     std::filesystem::path const& root,
     std::filesystem::path const& stateRoot,
@@ -247,7 +370,7 @@ namespace ao::appkit
   }
 
   LibrarySession::LibrarySession(i18n::MessageCatalog catalog, std::function<void(DesktopInvalidation)> onInvalidated)
-    : _storagePtr{std::make_unique<Storage>(std::move(catalog), std::move(onInvalidated))}
+    : _storagePtr{std::make_unique<Storage>(*this, std::move(catalog), std::move(onInvalidated))}
   {
   }
 
@@ -529,9 +652,9 @@ namespace ao::appkit
     return *_storagePtr->mediaPlayerPtr;
   }
 
-  rt::ViewId LibrarySession::tableViewId() const noexcept
+  LibraryBrowserModel& LibrarySession::browser() noexcept
   {
-    return _storagePtr->viewId;
+    return _storagePtr->browser;
   }
 
   uimodel::TrackDisplayIndex const& LibrarySession::displayIndex() const noexcept
@@ -600,12 +723,6 @@ namespace ao::appkit
     return optItem && optItem->kind == uimodel::TrackDisplayItemKind::TrackRow
              ? _storagePtr->rows.rowAt(optItem->sourceIndex)
              : nullptr;
-  }
-
-  uimodel::TrackGroupHeadingPresentation LibrarySession::groupHeading(std::size_t index) const
-  {
-    auto const group = _storagePtr->projectionPtr->groupAt(index);
-    return uimodel::formatTrackGroupHeading(catalog(), group.heading);
   }
 
   std::vector<TrackId> LibrarySession::selection() const
@@ -735,25 +852,6 @@ namespace ao::appkit
     auto const listId = viewRes->listId;
     storage.listPresentationsPtr->clearPresentationForList(listId);
     return runtime().workspace().setActivePresentation(storage.presentationForList(listId));
-  }
-
-  Result<> LibrarySession::toggleSort(rt::ViewId const renderedViewId, rt::TrackField const column) const
-  {
-    // Focus changes commit before the session observes them and refreshes the native table.
-    if (renderedViewId == rt::kInvalidViewId || renderedViewId != runtime().workspace().snapshot().activeViewId)
-    {
-      return {};
-    }
-
-    auto& views = runtime().views();
-    auto const stateRes = views.findTrackListState(renderedViewId);
-
-    if (!stateRes)
-    {
-      return std::unexpected{stateRes.error()};
-    }
-
-    return views.setColumnSort(renderedViewId, stateRes->presentation.nextColumnSort(column));
   }
 
   void LibrarySession::filter(std::string const& text)
