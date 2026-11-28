@@ -13,6 +13,7 @@ from unittest.mock import patch
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
 from ao.graph.bazel_lint_reports import Uncovered, gate_analyzer_reports, gate_reports, lint_aspect_id, read_reports
+from ao.graph.bazel_lint_schema import Identity
 
 
 class ReportsTestCase(unittest.TestCase):
@@ -881,7 +882,7 @@ class AnalyzerGateTest(unittest.TestCase):
         self.sequence = 0
 
     def report(self, main, *, outcome="clean", log="", source=None):
-        identity = bazel_lint_reports.Identity(
+        identity = Identity(
             self.owner,
             self.configuration,
             source or main,

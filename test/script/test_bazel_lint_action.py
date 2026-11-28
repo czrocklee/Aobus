@@ -211,6 +211,14 @@ class LintActionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         imported = set(result.stdout.split()) - {"script/ao/graph/bazel_lint_action.py"}
         self.assertEqual(imported, declared)
+        self.assertFalse(
+            imported
+            & {
+                "script/ao/graph/bazel_lint_reports.py",
+                "script/ao/policy/dedup.py",
+                "script/ao/policy/lint_ownership.py",
+            }
+        )
 
     def test_policy_preparation_imports_only_the_watched_module_closure(self):
         sources = (PROJECT_ROOT / "bazel/lint/action_sources.bzl").read_text(encoding="utf-8")

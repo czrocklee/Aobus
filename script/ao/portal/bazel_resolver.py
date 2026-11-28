@@ -80,7 +80,6 @@ def main() -> int:
         # Isolated Python deliberately does not add the checkout to sys.path.
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from ao.core import bazel_native as native
-        from ao.portal import bazel_dependencies as dependencies
 
         with native.capture_probes(lambda path: files.add(str(path.absolute()))):
             request = json.loads(args.request.read_text(encoding="utf-8"))
@@ -109,7 +108,9 @@ def main() -> int:
             tree.mkdir(exist_ok=True)
 
             def imports(config: str, group: str) -> None:
-                projection = dependencies.resolve_dependencies(
+                from ao.portal.bazel_dependencies import resolve_dependencies
+
+                projection = resolve_dependencies(
                     tree / config, config, prefix=str(prefix) if prefix else None, group=group
                 )
                 files.update(projection["watch_files"])

@@ -21,6 +21,8 @@ _BATCH_SUFFIXES = frozenset({".bat", ".cmd"})
 
 
 def _require_uia() -> None:
+    if sys.platform != "win32":
+        raise RuntimeError("UI Automation requires Windows")
     # The declared py_library owns the admission modules in runfiles; Windows
     # can copy runfiles. These are the real Windows App Runtime and session
     # checks. Do not replace them with SESSIONNAME/USERNAME guesses; the

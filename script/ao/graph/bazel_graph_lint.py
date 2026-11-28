@@ -5,10 +5,9 @@ This module runs inside the graph actions, never as a Bazel or ao client:
 baseline include evidence. ``replay`` re-runs the existing analyze helper
 with only that consumer's native inputs and environment. The gate
 entrypoint lives in ``bazel_graph_lint_gate.py`` so gate-only changes never
-invalidate cached replay actions. The consumer ranking and platform policy
-are the shared ownership policy in ``tidy_policy.py``, so the replay action
-and the portal's scoped second pass cannot disagree; replay identities follow
-the shared report contracts (``bazel_lint_reports.py``) and
+invalidate cached replay actions. The selector and the scoped portal share
+consumer ranking in ``lint_ownership.py``. Replay identities follow
+the shared report contracts (``bazel_lint_schema.py``) and
 ``_identity_mode``/``_component`` in ``bazel/lint/lint.bzl``.
 """
 
@@ -30,8 +29,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).absolute().parents[2]))
 
 from ao.graph import bazel_lint_action
-from ao.graph.bazel_lint_reports import Identity, canonical_owner, exec_path, load_json
-from ao.policy.tidy_policy import consumer_rank
+from ao.graph.bazel_lint_schema import Identity, canonical_owner, exec_path, load_json
 
 SCHEMA = 1
 REPLAY_STATUSES = ("analyzed", "no_consumer")
@@ -140,6 +138,9 @@ def select_consumer(
     directory prefix; owner and source labels break remaining ties. Only the
     baseline main==source reports carry include evidence.
     """
+    # Only the selector declares the routing policy. Replay consumes its marker.
+    from ao.policy.lint_ownership import consumer_rank
+
     options = []
     for candidate in candidates:
         report = reports[candidate["report"]]

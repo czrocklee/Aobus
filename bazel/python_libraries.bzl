@@ -18,6 +18,10 @@ Declared role edges follow the import graph and stay acyclic:
     foundations <- policy <- graph <- portal <- commands
                                       portal <- check_entries
 
+The completion library sits between portal and commands; ordinary portal
+consumers do not need the completion driver. The standalone AppKit smoke
+supervisor shares the real graph package initializer, not its tooling role.
+
 The graph role carries the official runfiles library because the live-checkout
 companion and the lint-result reader resolve their declared runfiles through
 it. Portal modules still reach the command package: ``build_env`` imports the
@@ -33,19 +37,14 @@ lint fixture metadata arrives as declared action inputs from
 library plus the official runfiles library) that the validation label and the
 Bazel entry points depend on.
 
-The roles are coarse import buckets, not an import firewall: Python imports
-stay unrestricted, and static closure checks report drift. Besides the roles,
-the macro defines narrow labels with an exact minimal closure for one consumer
-each (``ao_native_test_support``, ``ao_winui_admission``,
-``ao_lint_result_support``, ``ao_python_validation``,
-``ao_python_unittest_entry``, ``ao_python_live_checkout``); native test
-targets must depend on those, not on the umbrella.
+Most tooling tests depend on coarse package roles. Native test launchers,
+lint readers, and live-checkout entry points use narrower libraries so their
+runfiles follow the imports of the corresponding consumer.
 """
 
 load("@rules_python//python:defs.bzl", "py_library")
 
 _FOUNDATIONS = [
-    "script/ao/__init__.py",
     "script/ao/core/__init__.py",
     "script/ao/core/bazel_native.py",
     "script/ao/core/build_lock.py",
@@ -54,7 +53,6 @@ _FOUNDATIONS = [
     "script/ao/core/paths.py",
     "script/ao/core/phases.py",
     "script/ao/core/proc.py",
-    "script/ao/generate_python_requirements.py",
 ]
 
 _POLICY = [
@@ -66,6 +64,7 @@ _POLICY = [
     "script/ao/policy/dependency_policy.py",
     "script/ao/policy/lint_toolchain.py",
     "script/ao/policy/lint_fixtures.py",
+    "script/ao/policy/lint_ownership.py",
     "script/ao/policy/tidy_config.py",
     "script/ao/policy/tidy_diagnostics.py",
     "script/ao/policy/tidy_policy.py",
@@ -73,14 +72,13 @@ _POLICY = [
 ]
 
 _GRAPH = [
-    "script/ao/graph/__init__.py",
-    "script/ao/graph/appkit_process.py",
     "script/ao/graph/bazel_graph_lint.py",
     "script/ao/graph/bazel_graph_lint_gate.py",
     "script/ao/graph/bazel_lint_action.py",
     "script/ao/graph/bazel_lint_fixture.py",
     "script/ao/graph/bazel_lint_reports.py",
     "script/ao/graph/bazel_lint_result.py",
+    "script/ao/graph/bazel_lint_schema.py",
     "script/ao/graph/bazel_live_checkout.py",
     "script/ao/graph/bazel_test_context.py",
     "script/ao/graph/bazel_test_runner.py",
@@ -123,7 +121,6 @@ _PORTAL = [
     "script/ao/portal/build_env.py",
     "script/ao/portal/buildifier.py",
     "script/ao/portal/compiler_rc.py",
-    "script/ao/portal/completion.py",
     "script/ao/portal/concept_report.py",
     "script/ao/portal/contract_checks.py",
     "script/ao/portal/dependency_checks.py",
@@ -200,19 +197,30 @@ _PORTAL_DATA = [
 
 # name -> (source files, library deps)
 _ROLES = {
-    "ao_python_foundations": (_FOUNDATIONS, []),
+    "ao_python_package": (["script/ao/__init__.py"], []),
+    "ao_python_wheel_lock": (["script/ao/generate_python_requirements.py"], [":ao_python_package"]),
+    "ao_python_foundations": (_FOUNDATIONS, [":ao_python_package"]),
     "ao_python_policy": (_POLICY, [":ao_python_foundations"]),
+    "ao_python_graph_package": (["script/ao/graph/__init__.py"], [":ao_python_package"]),
+    "ao_appkit_process": (["script/ao/graph/appkit_process.py"], [":ao_python_graph_package"]),
     "ao_python_graph": (
         _GRAPH,
-        [":ao_python_foundations", ":ao_python_policy", "@rules_python//python/runfiles"],
+        [":ao_python_foundations", ":ao_python_policy", ":ao_python_graph_package", "@rules_python//python/runfiles"],
     ),
     "ao_python_portal": (
         _PORTAL,
         [":ao_python_foundations", ":ao_python_policy", ":ao_python_graph"],
     ),
+    "ao_python_completion": (["script/ao/portal/completion.py"], [":ao_python_portal"]),
     "ao_python_commands": (
         _COMMANDS,
-        [":ao_python_foundations", ":ao_python_policy", ":ao_python_graph", ":ao_python_portal"],
+        [
+            ":ao_python_foundations",
+            ":ao_python_policy",
+            ":ao_python_graph",
+            ":ao_python_portal",
+            ":ao_python_completion",
+        ],
     ),
     "ao_python_check_entries": (
         _CHECK_ENTRIES,
@@ -232,9 +240,9 @@ _ROLE_DATA = {
 # roles stay the coarse import buckets while these labels are the real narrow
 # dependencies for their consumers.
 _NATIVE_TEST_SUPPORT = [
+    "script/ao/core/__init__.py",
     "script/ao/core/bazel_native.py",
-    "script/ao/graph/__init__.py",
-    "script/ao/graph/bazel_test_context.py",
+    "script/ao/core/paths.py",
     "script/ao/graph/bazel_test_runner.py",
     "script/ao/graph/bazel_test_services.py",
 ]
@@ -243,6 +251,7 @@ _NATIVE_TEST_SUPPORT = [
 # so Windows test targets do not drag the portal or command layers in. The
 # package initializers are real sources, not Bazel's implicit empty package.
 _WINUI_ADMISSION = [
+    "script/ao/core/__init__.py",
     "script/ao/core/paths.py",
     "script/ao/policy/__init__.py",
     "script/ao/policy/dependency_policy.py",
@@ -251,14 +260,13 @@ _WINUI_ADMISSION = [
     "script/ao/portal/winui.py",
 ]
 
-# The lint-result verdict closure: the result shapers plus their standard-
-# library-only dependencies, the package initializers, and the official
-# runfiles library.
-_LINT_RESULT_SUPPORT = [
+# Reading the portal's BEP and diagnostic logs needs the report schema and deduplication.
+_LINT_REPORT_READER = [
+    "script/ao/core/__init__.py",
     "script/ao/core/paths.py",
     "script/ao/graph/__init__.py",
     "script/ao/graph/bazel_lint_reports.py",
-    "script/ao/graph/bazel_lint_result.py",
+    "script/ao/graph/bazel_lint_schema.py",
     "script/ao/policy/__init__.py",
     "script/ao/policy/dedup.py",
     "script/ao/policy/tidy_diagnostics.py",
@@ -312,18 +320,23 @@ def aobus_python_libraries():
             deps = deps,
         )
 
-    # Native test execution support: the workspace adapter plus the
-    # private-fixture runner, context parser, and services. The smoke entry
-    # lives in the portal package because it performs host-runtime and session
-    # checks; its own py_test declares that source and depends on
-    # ``ao_winui_admission`` explicitly, so native C++ fixture targets keep
-    # this closure free of the portal and WinUI stacks.
+    # Process smoke tests and the private fixture runner share only the context parser.
+    py_library(
+        name = "ao_native_test_context",
+        srcs = [
+            "script/ao/graph/__init__.py",
+            "script/ao/graph/bazel_test_context.py",
+        ],
+        imports = ["script"],
+        deps = [":ao_python_package"],
+    )
+
     py_library(
         name = "ao_native_test_support",
         srcs = _NATIVE_TEST_SUPPORT,
         imports = ["script"],
         deps = [
-            ":ao_python_foundations",
+            ":ao_native_test_context",
             "@rules_python//python/runfiles",
         ],
     )
@@ -336,15 +349,25 @@ def aobus_python_libraries():
         # stays undeclared here.
         data = [":config/dependency-contract.json"],
         imports = ["script"],
-        deps = [":ao_python_foundations"],
+        deps = [":ao_python_package"],
+    )
+
+    py_library(
+        name = "ao_lint_report_reader",
+        srcs = _LINT_REPORT_READER,
+        imports = ["script"],
+        deps = [":ao_python_package"],
     )
 
     py_library(
         name = "ao_lint_result_support",
-        srcs = _LINT_RESULT_SUPPORT,
+        srcs = [
+            "script/ao/graph/__init__.py",
+            "script/ao/graph/bazel_lint_result.py",
+        ],
         imports = ["script"],
         deps = [
-            ":ao_python_foundations",
+            ":ao_python_package",
             "@rules_python//python/runfiles",
         ],
     )
@@ -405,6 +428,23 @@ portal_initializer_runfiles_test = rule(
     analysis_test = True,
     attrs = {
         "initializer": attr.label(allow_single_file = True, mandatory = True),
+        "subject": attr.label(mandatory = True),
+    },
+)
+
+def _isolated_python_runfiles_impl(ctx):
+    runfiles = ctx.attr.subject[DefaultInfo].default_runfiles.files.to_list()
+    unexpected = sorted([file.short_path for file in runfiles if file.short_path in ctx.attr.excluded_paths])
+    return [AnalysisTestResultInfo(
+        success = not unexpected,
+        message = "%s should not ship unrelated Python sources: %s" % (ctx.attr.subject.label, ", ".join(unexpected)),
+    )]
+
+isolated_python_runfiles_test = rule(
+    implementation = _isolated_python_runfiles_impl,
+    analysis_test = True,
+    attrs = {
+        "excluded_paths": attr.string_list(mandatory = True),
         "subject": attr.label(mandatory = True),
     },
 )

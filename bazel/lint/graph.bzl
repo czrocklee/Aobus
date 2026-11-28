@@ -115,6 +115,7 @@ def _lint_graph_gate_impl(ctx):
             entry["owners"].append(record["owner"])
 
     modules = depset([ctx.file._helper], transitive = [ctx.attr._modules[DefaultInfo].files])
+    routing_modules = depset([ctx.file._ownership], transitive = [modules])
     python = ctx.attr._python_tools[DefaultInfo].files
     environment = native_environment(ctx)
     replay_entries = []
@@ -184,7 +185,7 @@ def _lint_graph_gate_impl(ctx):
         ctx.actions.run(
             executable = PYTHON_ACTION_TOOLS["python"],
             arguments = [args],
-            inputs = depset([candidates_file, ctx.file._driver] + candidate_reports, transitive = [modules, python]),
+            inputs = depset([candidates_file, ctx.file._driver] + candidate_reports, transitive = [routing_modules, python]),
             outputs = [route],
             env = environment,
             mnemonic = "AobusLintSelect",
@@ -224,9 +225,9 @@ def _lint_graph_gate_impl(ctx):
     args.add(ctx.file._gate)
     args.add_all(["gate", "--inventory", inventory, "--result", result, "--log", gate_log, "--coverage", coverage])
     gate_inputs = depset(
-        [inventory, ctx.file._gate, ctx.file._driver, ctx.file._helper],
+        [inventory, ctx.file._gate, ctx.file._dedup, ctx.file._driver],
         transitive = [
-            modules,
+            routing_modules,
             python,
             depset(list(indices.values()) + list(reports.values()) + list(logs.values()) + replay_files),
         ],
@@ -263,7 +264,9 @@ lint_graph_gate = rule(
         ),
         "_driver": attr.label(default = Label("//:script/ao/graph/bazel_graph_lint.py"), allow_single_file = True),
         "_replay_tool": attr.label(default = Label("//tool/lint:replay_launcher"), executable = True, cfg = "exec"),
+        "_dedup": attr.label(default = Label("//:script/ao/policy/dedup.py"), allow_single_file = True),
         "_gate": attr.label(default = Label("//:script/ao/graph/bazel_graph_lint_gate.py"), allow_single_file = True),
+        "_ownership": attr.label(default = Label("//:script/ao/policy/lint_ownership.py"), allow_single_file = True),
         "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_modules": attr.label(default = Label("//:ao_lint_action_sources")),
         "_python_tools": attr.label(default = Label("@aobus_native_tools//:python_action_tools"), cfg = "exec"),

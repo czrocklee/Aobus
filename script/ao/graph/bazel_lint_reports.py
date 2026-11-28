@@ -6,121 +6,25 @@ import json
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 from ao.core.paths import PROJECT_ROOT
+from ao.graph.bazel_lint_schema import (
+    Identity,
+    canonical_owner,
+    completed_outcome,
+    exec_path,
+    exec_paths,
+    json_object,
+    load_json,
+    nonempty_text,
+    unique_object,
+)
 from ao.policy import dedup
-from ao.policy.tidy_diagnostics import has_fatal_compiler_error, log_has_compile_command_error, parse_diagnostic_header
-
-
-def _object(value: object, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label}: expected an object")
-    return value
-
-
-def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    value: dict[str, Any] = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError(f"duplicate JSON key: {key}")
-        value[key] = item
-    return value
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    """Read a versioned object, rejecting ambiguous keys and unknown schemas."""
-    value = _object(json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object), str(path))
-    if type(value.get("schema")) is not int or value["schema"] != 1:
-        raise ValueError(f"{path}: unsupported schema")
-    return value
-
-
-def _text(value: object, label: str) -> str:
-    if not isinstance(value, str) or not value or "\x00" in value:
-        raise ValueError(f"{label}: expected a nonempty string")
-    return value
-
-
-def exec_path(value: object) -> str:
-    """Validate the exact portable exec-relative spelling emitted by native Files."""
-    path = _text(value, "exec path")
-    if "\\" in path or ":" in path or path.startswith("/") or any(p in ("", ".", "..") for p in path.split("/")):
-        raise ValueError(f"invalid exec-relative path: {path}")
-    return path
-
-
-def _strings(value: object, label: str) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        raise ValueError(f"{label}: expected an array")
-    result = tuple(exec_path(item) for item in value)
-    if len(set(result)) != len(result):
-        raise ValueError(f"{label}: duplicate paths")
-    return result
-
-
-def canonical_owner(value: object) -> str:
-    owner = _text(value, "owner")
-    if owner.startswith("//"):
-        owner = "@@" + owner
-    elif owner.startswith("@//"):
-        owner = "@" + owner
-    if re.fullmatch(r"@@[^/]*//[^:]*:[^:]+", owner) is None:
-        raise ValueError(f"invalid configured owner: {owner}")
-    package, name = owner.split("//", 1)[1].split(":")
-    if package:
-        exec_path(package)
-    exec_path(name)
-    return owner
-
-
-@dataclass(frozen=True)
-class Identity:
-    owner: str
-    configuration: str
-    source: str
-    main: str
-    outputs: tuple[str, ...]
-    mode: str
-    platform: str
-
-    @classmethod
-    def from_json(cls, value: object) -> Identity:
-        data = _object(value, "identity")
-        keys = {"owner", "configuration", "source", "main", "outputs", "mode", "platform"}
-        if set(data) != keys:
-            raise ValueError("identity must contain exactly the context identity fields")
-        owner = canonical_owner(data["owner"])
-        if data["owner"] != owner:
-            raise ValueError("identity owner must be canonical")
-        configuration = exec_path(data["configuration"])
-        if re.fullmatch(r"bazel-out/[^/]+/bin", configuration) is None:
-            raise ValueError("invalid native bin directory")
-        outputs = _strings(data["outputs"], "native outputs")
-        if not outputs or any(not path.startswith(configuration + "/") for path in outputs):
-            raise ValueError("native outputs do not belong to the context configuration")
-        if data["mode"] not in ("STRICT", "RELAXED", "ANALYZER") or data["platform"] not in (
-            "linux",
-            "macos",
-            "windows",
-        ):
-            raise ValueError("unsupported context mode/platform")
-        return cls(
-            owner,
-            configuration,
-            exec_path(data["source"]),
-            exec_path(data["main"]),
-            outputs,
-            data["mode"],
-            data["platform"],
-        )
-
-    def as_json(self) -> dict[str, Any]:
-        return {**asdict(self), "outputs": list(self.outputs)}
 
 
 @dataclass(frozen=True)
@@ -160,47 +64,8 @@ class OwnerInventory:
         return self._omitted_native_tu or any(r.identity.main == r.identity.source for r in self.reports)
 
 
-# These are infrastructure failures even when clang-tidy exits zero or prints a
-# compiler diagnostic before failing. Ordinary source errors remain cacheable.
-_INCOMPLETE = re.compile(
-    r"^(?:Skipping\b|Skipped\b|No (?:input files|checks enabled|compile commands)|"
-    r"Unable to (?:handle compilation|load)|Unable to find compiler|"
-    r"LLVM ERROR:|PLEASE submit a bug report|Stack dump:|"
-    r"(?:clang-tidy(?:\.exe)?:\s*)?(?:error:\s*)?(?:"
-    r"unknown (?:command line )?argument|unknown (?:command line )?option|no checks enabled|"
-    r"invalid configuration|error parsing (?:-config|configuration)|could not process))",
-    re.IGNORECASE | re.MULTILINE,
-)
-
-
-def completed_outcome(log: Path, tool_exit: object) -> str:
-    """Classify a completed attempt; never convert an incomplete attempt to clean."""
-    text = log.read_text(encoding="utf-8")
-    # clang-tidy prints this summary for ordinary source errors too.
-    without_summary = re.sub(r"^Error while processing .+\.\s*$", "", text, flags=re.MULTILINE)
-    if (
-        log_has_compile_command_error(log)
-        or _INCOMPLETE.search(without_summary)
-        or re.search(r"^.*: error: clang frontend command failed", without_summary, re.MULTILINE)
-    ):
-        raise ValueError(f"incomplete analyzer attempt: {log}")
-    compiler_error = has_fatal_compiler_error(text)
-    if without_summary != text and not compiler_error:
-        raise ValueError("processing failed without an ordinary compiler diagnostic")
-    if type(tool_exit) is not int or tool_exit not in (0, 1) or (tool_exit == 1 and not compiler_error):
-        raise ValueError(f"unexpected analyzer exit: {tool_exit}")
-    if compiler_error:
-        # Tool/config/driver failures must not masquerade as source compilation.
-        if not has_fatal_compiler_error(text, tag="[clang-diagnostic-error]"):
-            raise ValueError("error without an ordinary clang compiler diagnostic")
-        return "compiler_error"
-    if any((header := parse_diagnostic_header(line)) and header.severity == "warning" for line in text.splitlines()):
-        return "warning"
-    return "clean"
-
-
 def _event_key(value: object) -> str:
-    data = _object(value, "BEP event id")
+    data = json_object(value, "BEP event id")
     if len(data) != 1 or not isinstance(next(iter(data.values())), dict):
         raise ValueError("invalid BEP event identity")
     return json.dumps(data, sort_keys=True)
@@ -214,7 +79,7 @@ def _array(value: object, label: str) -> list[Any]:
 
 def _events(bep: Path) -> list[dict[str, Any]]:
     events = [
-        _object(json.loads(line, object_pairs_hook=_unique_object), "BEP event")
+        json_object(json.loads(line, object_pairs_hook=unique_object), "BEP event")
         for line in bep.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
@@ -236,12 +101,12 @@ def _events(bep: Path) -> list[dict[str, Any]]:
         if "finished" in event:
             if event["id"] != {"buildFinished": {}}:
                 raise ValueError("wrong buildFinished identity")
-            finished.append(_object(event["finished"], "finished"))
+            finished.append(json_object(event["finished"], "finished"))
     if children - identities:
         raise ValueError("missing announced BEP events")
     if len(finished) != 1:
         raise ValueError("missing/duplicate build completion")
-    exit_code = _object(finished[0].get("exitCode"), "build exit code")
+    exit_code = json_object(finished[0].get("exitCode"), "build exit code")
     if exit_code.get("name") != "SUCCESS" or type(exit_code.get("code", 0)) is not int or exit_code.get("code", 0) != 0:
         raise ValueError("BEP does not establish a successful report build")
     if finished[0].get("overallSuccess", True) is not True:
@@ -250,10 +115,12 @@ def _events(bep: Path) -> list[dict[str, Any]]:
 
 
 def _local_file(value: object) -> tuple[str, Path]:
-    data = _object(value, "output file")
+    data = json_object(value, "output file")
     prefix = _array(data.get("pathPrefix", []), "file pathPrefix")
-    name = exec_path("/".join([*(_text(p, "path prefix") for p in prefix), _text(data.get("name"), "file name")]))
-    parsed = urlparse(_text(data.get("uri"), "local output URI"))
+    name = exec_path(
+        "/".join([*(nonempty_text(p, "path prefix") for p in prefix), nonempty_text(data.get("name"), "file name")])
+    )
+    parsed = urlparse(nonempty_text(data.get("uri"), "local output URI"))
     if parsed.scheme != "file" or parsed.netloc not in ("", "localhost") or parsed.query or parsed.fragment:
         raise ValueError("lint outputs require locally materialized file URIs")
     path = Path(url2pathname(parsed.path))
@@ -290,8 +157,8 @@ def _checker_binding(
     data = load_json(receipt)
     if data.get("verified") is not True:
         raise ValueError("checker verification did not verify the native tool")
-    sdk = _object(data.get("sdk"), "checker verification SDK")
-    platform = _text(sdk.get("platform"), "checker SDK platform")
+    sdk = json_object(data.get("sdk"), "checker verification SDK")
+    platform = nonempty_text(sdk.get("platform"), "checker SDK platform")
     if platform not in ("linux", "macos", "windows"):
         raise ValueError("unsupported checker SDK platform")
     target = re.fullmatch(r"@@//tool/lint:([^/]+)", owner)
@@ -301,7 +168,7 @@ def _checker_binding(
         if sdk.get("host_kind") != "standalone" or "plugin" not in data or data["plugin"] is not None:
             raise ValueError("Windows checker verification must use the standalone host")
         # The verifier records str(Path), which uses backslashes on Windows.
-        artifact = exec_path(_text(data.get("tidy"), "standalone checker path").replace("\\", "/"))
+        artifact = exec_path(nonempty_text(data.get("tidy"), "standalone checker path").replace("\\", "/"))
     else:
         if sdk.get("host_kind") != "plugin":
             raise ValueError("Unix checker verification must use the native plugin")
@@ -330,7 +197,7 @@ def _candidate_inputs(value: object) -> frozenset[str] | None:
     if value is None:
         return None
     try:
-        paths = _strings(value, "candidate inputs")
+        paths = exec_paths(value, "candidate inputs")
     except ValueError:
         return None
     if any(path.split("/", 1)[0] in ("bazel-out", "external") for path in paths):
@@ -359,11 +226,11 @@ def _inventory(
     data = load_json(index_files[index_name])
     if data.get("owner") != owner or data.get("configuration") != configuration:
         raise ValueError("index owner/configuration mismatch")
-    sources = _strings(data.get("sources"), "eligible owner sources")
+    sources = exec_paths(data.get("sources"), "eligible owner sources")
     uncovered: list[Uncovered] = []
     for item in _array(data.get("uncovered"), "uncovered"):
-        item = _object(item, "uncovered entry")
-        uncovered.append(Uncovered(exec_path(item.get("path")), _text(item.get("reason"), "coverage reason")))
+        item = json_object(item, "uncovered entry")
+        uncovered.append(Uncovered(exec_path(item.get("path")), nonempty_text(item.get("reason"), "coverage reason")))
     uncovered_paths = {u.path for u in uncovered}
     if len(uncovered_paths) != len(uncovered) or not uncovered_paths.issubset(sources):
         raise ValueError("duplicate or foreign uncovered source")
@@ -374,7 +241,7 @@ def _inventory(
     accounted[index_group].add(index_name)
     omitted_native_tu = False
     for entry in _array(data.get("reports"), "indexed reports"):
-        entry = _object(entry, "report index entry")
+        entry = json_object(entry, "report index entry")
         identity = Identity.from_json(entry.get("identity"))
         if identity.mode not in allowed_modes:
             raise ValueError(f"report context mode is foreign to the requested analysis kind: {identity.mode}")
@@ -422,7 +289,7 @@ def _inventory(
         outcome = completed_outcome(log, report.get("tool_exit"))
         if report.get("outcome") != outcome:
             raise ValueError("report outcome differs from its completed log")
-        includes = _strings(report.get("includes"), "report includes")
+        includes = exec_paths(report.get("includes"), "report includes")
         reports.append(Report(identity, outcome, report["tool_exit"], report_path, log, includes))
     if set(sources) != {identity.main for identity in identities} | uncovered_paths:
         raise ValueError("eligible owner inventory has unaccounted sources")
@@ -465,12 +332,15 @@ def _group_files(group: dict[str, Any], sets: dict[str, dict[str, Any]]) -> tupl
         value = sets[identifier]
         add(value.get("files", []))
         for child in _array(value.get("fileSets", []), "child named sets"):
-            visit(_text(_object(child, "named set reference").get("id"), "named set id"), active | {identifier})
+            visit(
+                nonempty_text(json_object(child, "named set reference").get("id"), "named set id"),
+                active | {identifier},
+            )
         visited.add(identifier)
 
     add(group.get("inlineFiles", []))
     for reference in _array(group.get("fileSets", []), "group named sets"):
-        visit(_text(_object(reference, "named set reference").get("id"), "named set id"), frozenset())
+        visit(nonempty_text(json_object(reference, "named set reference").get("id"), "named set id"), frozenset())
     return files, next(iter(roots), None)
 
 
@@ -554,25 +424,29 @@ def read_reports(
     for event in events:
         identity = event["id"]
         if "configuration" in identity and "configuration" in event:
-            config_id = _text(_object(identity["configuration"], "configuration id").get("id"), "configuration id")
+            config_id = nonempty_text(
+                json_object(identity["configuration"], "configuration id").get("id"), "configuration id"
+            )
             if config_id in configurations:
                 raise ValueError("duplicate full configuration id")
-            configurations[config_id] = _object(event["configuration"], "configuration")
+            configurations[config_id] = json_object(event["configuration"], "configuration")
         if "namedSetOfFiles" in event:
-            set_id = _text(_object(identity.get("namedSet"), "named set id").get("id"), "named set id")
+            set_id = nonempty_text(json_object(identity.get("namedSet"), "named set id").get("id"), "named set id")
             if set_id in sets:
                 raise ValueError("duplicate named file set id")
-            sets[set_id] = _object(event["namedSetOfFiles"], "named set")
-        target = _object(identity.get("targetCompleted", {}), "targetCompleted id")
+            sets[set_id] = json_object(event["namedSetOfFiles"], "named set")
+        target = json_object(identity.get("targetCompleted", {}), "targetCompleted id")
         if target.get("aspect") != expected_aspect:
             continue
         root_owner = canonical_owner(target.get("label"))
         if root_owner not in roots or root_owner in completions:
             raise ValueError("unexpected/duplicate configured lint owner completion")
-        complete = _object(event.get("completed"), "target completion")
+        complete = json_object(event.get("completed"), "target completion")
         if complete.get("success") is not True:
             raise ValueError("owning lint aspect did not complete")
-        config_id = _text(_object(target.get("configuration"), "target configuration").get("id"), "configuration id")
+        config_id = nonempty_text(
+            json_object(target.get("configuration"), "target configuration").get("id"), "configuration id"
+        )
         completions[root_owner] = config_id, complete
     if set(completions) != roots:
         raise ValueError("missing requested lint owner completion")
@@ -588,13 +462,13 @@ def read_reports(
         if "/" in mnemonic:
             raise ValueError("invalid configuration mnemonic")
         configuration = f"bazel-out/{mnemonic}/bin"
-        variables = _object(config.get("makeVariable", {}), "configuration variables")
+        variables = json_object(config.get("makeVariable", {}), "configuration variables")
         if variables.get("BINDIR", configuration) != configuration:
             raise ValueError("BEP configuration bin directory mismatch")
         groups: dict[str, dict[str, Path]] = {}
         for item in _array(complete.get("outputGroup"), "output groups"):
-            group = _object(item, "output group")
-            name = _text(group.get("name"), "output group name")
+            group = json_object(item, "output group")
+            name = nonempty_text(group.get("name"), "output group name")
             if name not in requested:
                 if (is_checker or _FULL not in requested) and name.startswith(_FULL):
                     raise ValueError(f"unexpected lint output group: {name}")

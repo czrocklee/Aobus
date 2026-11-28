@@ -62,7 +62,7 @@ while IFS= read -r -d '' status && IFS= read -r -d '' path; do
         bazel/lint/lint.bzl|bazel/compile_context.bzl|bazel/compiler_policy.bzl|bazel/msvc_policy.bzl|\
         tool/lint/BUILD.bazel|tool/lint/build.bzl|\
         tool/lint/check/LocalInitializationStyleCheck.*|lib/utility/BUILD.bazel|lib/utility/Base64.cpp|\
-        script/ao/graph/bazel_lint_action.py|script/ao/graph/bazel_lint_reports.py|\
+        script/ao/graph/bazel_lint_action.py|script/ao/graph/bazel_lint_schema.py|script/ao/graph/bazel_lint_reports.py|\
         script/ao/portal/bazel_lint.py|test/lint/check_checker_reports.py)
           checker_reports=true
           ;;

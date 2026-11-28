@@ -366,6 +366,7 @@ class BazelNativeSmokeTests(unittest.TestCase):
         for gate in ("require_runtime", "require_interactive_session"):
             with (
                 self.subTest(gate=gate),
+                mock.patch.object(smoke.sys, "platform", "win32"),
                 mock.patch.object(winui, "require_runtime"),
                 mock.patch.object(winui, "require_interactive_session"),
                 mock.patch.object(winui, gate, side_effect=RuntimeError("UIA precondition failed")),
@@ -375,6 +376,13 @@ class BazelNativeSmokeTests(unittest.TestCase):
             ):
                 self.assertEqual(smoke.main(["pkg/probe"]), 1)
                 self.assertIn("UIA precondition failed", stderr.getvalue())
+
+    def test_uia_requires_windows(self):
+        with (
+            mock.patch.object(smoke.sys, "platform", "linux"),
+            self.assertRaisesRegex(RuntimeError, "requires Windows"),
+        ):
+            smoke.run(["pkg/probe"], {"AOBUS_TEST_CONTEXT": "uia"})
 
 
 if __name__ == "__main__":

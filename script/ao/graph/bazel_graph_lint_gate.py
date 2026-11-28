@@ -23,9 +23,9 @@ if __package__ in (None, ""):
 
 from ao.core.paths import PROJECT_ROOT
 from ao.graph.bazel_graph_lint import SCHEMA, _array, _object, _paths, _text, _write_json, replay_mode
-from ao.graph.bazel_lint_reports import Identity, canonical_owner, completed_outcome, exec_path, load_json
+from ao.graph.bazel_lint_schema import Identity, canonical_owner, completed_outcome, exec_path, load_json
 from ao.policy import dedup
-from ao.policy.tidy_policy import platform_incompatible
+from ao.policy.lint_ownership import platform_incompatible
 
 REPLAY_STATUSES = ("analyzed", "no_consumer")
 ITEM_STATUSES = ("covered", "deferred", "uncovered")

@@ -9,7 +9,7 @@ import unittest
 from pathlib import PurePosixPath, PureWindowsPath
 
 from ao.graph import bazel_lint_action as action
-from ao.graph.bazel_lint_reports import Identity
+from ao.graph.bazel_lint_schema import Identity
 
 
 class TidyPathLineFilterTest(unittest.TestCase):

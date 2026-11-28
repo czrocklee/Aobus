@@ -28,14 +28,13 @@ from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
+from ao.graph.bazel_lint_schema import canonical_owner
+from ao.policy.lint_ownership import common_prefix, component_parts, consumer_rank
 from ao.policy.tidy_policy import (
     FRAGMENT_SUFFIXES,
     HEADER_SUFFIXES,
     LINT_SUFFIXES,
     TRANSLATION_UNIT_SUFFIXES,
-    common_prefix,
-    component_parts,
-    consumer_rank,
     find_stale_nolint_suppressions,
 )
 from ao.portal import bazel_workflows, bazel_workspace, build_dir, tidy_engine
@@ -306,7 +305,7 @@ def _target_path(label: str) -> str:
 
 
 def _canonical_owner(query_label: str) -> str:
-    return bazel_lint_reports.canonical_owner(query_label)
+    return canonical_owner(query_label)
 
 
 def _is_source(path: str) -> bool:

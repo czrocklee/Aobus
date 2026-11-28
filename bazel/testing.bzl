@@ -29,7 +29,7 @@ load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_python//python:defs.bzl", "py_test")
 
 _SMOKE = "//:script/ao/portal/bazel_native_smoke.py"
-_SUPPORT = "//:ao_native_test_support"
+_CONTEXT = "//:ao_native_test_context"
 _ADMISSION = "//:ao_winui_admission"
 _RUNFILES = "@rules_python//python/runfiles"
 _RUNNER = "//:native_test_runner"
@@ -237,14 +237,13 @@ def native_test(
         **kwargs: Other py_test attributes.
     """
     environment = context_environment(env, context) or {}
-    deps = [
-        _SUPPORT,
-        _ADMISSION,
-        _RUNFILES,
-    ] + list(kwargs.pop("deps", []))
+    deps = [_CONTEXT, _RUNFILES] + select({
+        "@platforms//os:windows": [_ADMISSION],
+        "//conditions:default": [],
+    }) + list(kwargs.pop("deps", []))
     py_test(
         name = name,
-        srcs = [_SMOKE],
+        srcs = [_SMOKE, "//:script/ao/portal/__init__.py"],
         main = _SMOKE,
         args = ["$(rlocationpath %s)" % exe] + list(args),
         data = [exe] + list(data),

@@ -20,7 +20,8 @@ from ao.command import check as check_command
 from ao.core import bazel_native as native
 from ao.core.paths import absolute_path
 from ao.graph import bazel_lint_reports
-from ao.policy.tidy_policy import consumer_rank
+from ao.graph.bazel_lint_schema import Identity
+from ao.policy.lint_ownership import consumer_rank
 from ao.portal import bazel_lint, build_dir, git_files, source_analyzer, source_lint, source_scope, tidy_engine
 from ao.portal.source_scope import SourceScope
 
@@ -284,9 +285,7 @@ class ConsumerSelectionTest(unittest.TestCase):
         configuration = "bazel-out/k8-dbg/bin"
         reports = tuple(
             bazel_lint_reports.Report(
-                bazel_lint_reports.Identity(
-                    owner, configuration, source, main, (configuration + "/x.o",), "STRICT", "linux"
-                ),
+                Identity(owner, configuration, source, main, (configuration + "/x.o",), "STRICT", "linux"),
                 "clean",
                 0,
                 Path("report.json"),
@@ -586,7 +585,7 @@ class _OrchestrationHarness:
     def report(self, owner, source, *, header=None, outcome="clean", log="", includes=()):
         configuration = "bazel-out/k8-dbg/bin"
         main = header or source
-        identity = bazel_lint_reports.Identity(
+        identity = Identity(
             owner,
             configuration,
             source,

@@ -171,8 +171,10 @@ usable alone — and the AST-based package-boundary test
 verifies it over every declared source file. Lint fixture inputs are declared
 through the `//:ao_lint_fixture_sources` filegroup (`LINT_FIXTURE_SOURCES`),
 not the broad `ao_python_sources` closure. Cacheable fixture and replay actions
-use their declared dependencies. Shared native and live-checkout test helpers
-use official runfiles resolution for declared files, not a checkout-marker
+use their declared dependencies. Native process smokes and private fixture tests
+share the context parser. The fixture runner owns service lifecycle helpers, and
+Windows process smokes include the WinUI admission checks. Shared native and
+live-checkout test helpers use official runfiles resolution for declared files, not a checkout-marker
 search. On Windows, the Python unit and repository-check entry points try to
 replace Bazel's deep `TEST_TMPDIR` with a short, private temporary directory.
 
@@ -709,6 +711,9 @@ consume source-tree bytecode caches. Source/directory and actual dynamic-input
 watches remain; explicit sourceless bytecode is not disabled or silently ignored.
 Portal Python inputs are the resolver and the modules and package directories
 its imports actually read, not every module beside it.
+The compiler projection does not import the dependency catalog. The native,
+test, and host-tool projections use it directly; the WinUI probe still uses its
+COFF archive classifier.
 
 Executable selection uses the single actual `shutil.which` result. Watches keep
 negative candidates before the winner and all candidates in its directory;
@@ -1525,7 +1530,11 @@ actual Bazel `CppCompile`/`ObjcCompile` contexts, not a separate compilation
 database. The [aspect](../../bazel/lint/lint.bzl),
 [launcher](../../script/ao/graph/bazel_lint_action.py) and
 [current-report gate](../../script/ao/graph/bazel_lint_reports.py) implement the
-contracts below. [Decision 0023](../decision/0023-full-input-native-lint-reports.md)
+contracts below. The launcher and readers share the
+[report schema and diagnostic outcome rules](../../script/ao/graph/bazel_lint_schema.py).
+The scoped reader selects reports from the BEP. Both that reader and the final
+graph gate deduplicate diagnostics. The gate's test reads its result and log from runfiles.
+[Decision 0023](../decision/0023-full-input-native-lint-reports.md)
 explains why a report's include list does not narrow its cache dependencies.
 
 ```bash
@@ -1642,7 +1651,10 @@ for that path, even when another owner lists it as uncovered. All declared direc
 reports are still validated. Only a header or include fragment with no direct main
 gets a replay, deduplicated by path. `AobusLintSelect` reads the candidate TUs'
 include reports, not their source bytes. Its output selects one native compile
-context or records that no consumer included the path. The item and selected
+context or records that no consumer included the path. The selector and the scoped
+portal share the [consumer ranking policy](../../script/ao/policy/lint_ownership.py).
+Direct reports do not depend on that policy. A change to ranking that selects the
+same context does not by itself invalidate the header replay. The item and selected
 context have collision-checked, path-derived names: an unrelated insertion in
 either inventory does not renumber the surviving replay. Bazel then expands an
 `AobusLintGraphReplay` action with that context's actual compiler inputs and

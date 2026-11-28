@@ -1131,6 +1131,7 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
             ("bazel/lint/lint.bzl", "false", "true"),
             ("tool/lint/build.bzl", "false", "true"),
             ("bazel/msvc_policy.bzl", "false", "true"),
+            ("script/ao/graph/bazel_lint_schema.py", "false", "true"),
             ("script/ao/graph/bazel_lint_reports.py", "false", "true"),
             ("script/ao/portal/bazel_lint.py", "false", "true"),
             (".bazelrc", "false", "true"),

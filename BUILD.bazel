@@ -28,6 +28,8 @@ exports_files([
     "script/ao/portal/bazel_lint_sdk.py",
     "script/ao/policy/__init__.py",
     "script/ao/policy/compiler_policy.py",
+    "script/ao/policy/dedup.py",
+    "script/ao/policy/lint_ownership.py",
     "script/ao/core/paths.py",
     "script/ao/policy/windows_llvm_sdk.py",
     "script/ao/graph/__init__.py",
