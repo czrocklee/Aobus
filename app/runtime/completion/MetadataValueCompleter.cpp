@@ -21,6 +21,15 @@ namespace ao::rt
 {
   namespace
   {
+    CompletionItem makePlainValueItem(VocabularyEntry const& entry)
+    {
+      return CompletionItem{
+        .displayText = entry.value,
+        .insertText = entry.value,
+        .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
+      };
+    }
+
     std::vector<CompletionItem> completeMetadataValuePrefix(CompletionService& vocabulary,
                                                             TrackField field,
                                                             std::string_view prefix,
@@ -35,18 +44,7 @@ namespace ao::rt
 
       items.reserve(std::min(limit, kCompletionResultLimit));
 
-      appendVocabularyCompletionItems(items,
-                                      vocabulary.valuesFor(field),
-                                      prefix,
-                                      limit,
-                                      [](VocabularyEntry const& entry)
-                                      {
-                                        return CompletionItem{
-                                          .displayText = entry.value,
-                                          .insertText = entry.value,
-                                          .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
-                                        };
-                                      });
+      appendVocabularyCompletionItems(items, vocabulary.valuesFor(field), prefix, limit, makePlainValueItem);
 
       return items;
     }
@@ -84,14 +82,7 @@ namespace ao::rt
                                         optKind ? vocabulary->creditNames(*optKind) : vocabulary->creditRoles(),
                                         prefix,
                                         limit,
-                                        [](VocabularyEntry const& entry)
-                                        {
-                                          return CompletionItem{
-                                            .displayText = entry.value,
-                                            .insertText = entry.value,
-                                            .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
-                                          };
-                                        });
+                                        makePlainValueItem);
 
         if (items.empty())
         {

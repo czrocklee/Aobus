@@ -44,7 +44,7 @@ namespace ao::rt
     using OwnedValueFrequencies =
       boost::unordered_flat_map<std::string, std::uint32_t, utility::TransparentStringHash, std::equal_to<>>;
 
-    void addValue(OwnedValueFrequencies& counts, std::string_view value, std::uint32_t frequency = 1)
+    void countValue(OwnedValueFrequencies& counts, std::string_view value)
     {
       if (value.empty())
       {
@@ -53,11 +53,11 @@ namespace ao::rt
 
       if (auto const iter = counts.find(value); iter != counts.end())
       {
-        iter->second += frequency;
+        ++iter->second;
       }
       else
       {
-        counts.emplace(std::string{value}, frequency);
+        counts.emplace(std::string{value}, 1U);
       }
     }
 
@@ -211,12 +211,9 @@ namespace ao::rt
   {
     requireOwnerThread();
 
-    auto const* const definition = trackFieldDefinition(field);
-
-    if (definition == nullptr || !supportsTrackFieldValueCompletion(field))
+    if (!supportsTrackFieldValueCompletion(field))
     {
-      static auto const kEmpty = std::vector<VocabularyEntry>{};
-      return kEmpty;
+      return {};
     }
 
     if (auto const optVocabulary = categoryVocabulary(field); optVocabulary)
@@ -228,7 +225,7 @@ namespace ao::rt
 
     if (!trackFieldArrayAt(_valuesReady, field))
     {
-      materializeValues(definition->field);
+      materializeValues(field);
     }
 
     return trackFieldArrayAt(_values, field);
@@ -386,7 +383,7 @@ namespace ao::rt
         continue;
       }
 
-      addValue(titleCounts, view.metadata().title());
+      countValue(titleCounts, view.metadata().title());
 
       for (auto const source : fieldSources)
       {
@@ -535,7 +532,7 @@ namespace ao::rt
                  "Dictionary alias index {} exceeds record count {}",
                  aliasIndex,
                  _dictionaryAliases.size());
-    return resolveAliases(_dictionaryAliases[aliasIndex], text);
+    return _dictionaryAliases[aliasIndex].resolve(*_completionAliasPolicy, text);
   }
 
   std::span<std::string const> CompletionService::aliasesForTitle(std::size_t const titleIndex,
@@ -550,7 +547,7 @@ namespace ao::rt
                  "Title alias index {} exceeds record count {}",
                  titleIndex,
                  _titleAliases.size());
-    return resolveAliases(_titleAliases[titleIndex], text);
+    return _titleAliases[titleIndex].resolve(*_completionAliasPolicy, text);
   }
 
   std::span<std::string const> CompletionService::aliasesFor(AliasHandle const handle, std::string_view const text)
@@ -564,21 +561,17 @@ namespace ao::rt
     AO_FATAL("Unhandled completion alias source");
   }
 
-  std::span<std::string const> CompletionService::resolveAliases(AliasRecord& record, std::string_view const text)
+  std::span<std::string const> CompletionService::AliasRecord::resolve(CompletionAliasPolicy const& policy,
+                                                                       std::string_view const text)
   {
-    if (_completionAliasPolicy == nullptr)
+    if (!_resolved)
     {
-      return {};
-    }
-
-    if (!record.resolved)
-    {
-      auto const res = _completionAliasPolicy->makeAliasesInto(record.values, text);
+      auto const res = policy.makeAliasesInto(_values, text);
       AO_INVARIANT(res.has_value(), "Admitted completion text failed alias derivation: {}", res.error().message);
-      record.resolved = true;
+      _resolved = true;
     }
 
-    return record.values;
+    return _values;
   }
 
   void CompletionService::materializeAggregateValues()

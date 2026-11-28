@@ -60,13 +60,7 @@ namespace ao::uimodel
                                         std::size_t const count,
                                         std::optional<std::chrono::milliseconds> const optTotalDuration)
   {
-    auto duration = std::string{};
-
-    if (optTotalDuration && *optTotalDuration > std::chrono::milliseconds{0})
-    {
-      duration = formatDuration(*optTotalDuration);
-    }
-
+    auto const duration = optTotalDuration ? formatDuration(*optTotalDuration) : std::string{};
     return trackSelectionSummary(textCatalog, count, duration);
   }
 } // namespace ao::uimodel

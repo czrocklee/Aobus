@@ -293,7 +293,6 @@ namespace ao::rt
       auto listName = std::string{};
       auto tag = std::string{};
       auto oldOrder = std::vector<TrackId>{};
-      auto nextOrder = std::vector<TrackId>{};
       auto forgotten = std::vector<TrackId>{};
       auto optList = std::optional<library::ListBuilder>{};
 
@@ -316,7 +315,8 @@ namespace ao::rt
         listName = std::string{viewRes->name()};
         tag = std::move(*tagRes);
         oldOrder = detail::orderTrackIdsFrom(*viewRes);
-        nextOrder = oldOrder;
+        auto nextOrder = std::vector<TrackId>{};
+        nextOrder.reserve(oldOrder.size());
 
         for (auto const trackId : oldOrder)
         {
@@ -324,11 +324,13 @@ namespace ao::rt
           {
             forgotten.push_back(trackId);
           }
+          else
+          {
+            nextOrder.push_back(trackId);
+          }
         }
 
-        std::erase_if(nextOrder, [&selected](TrackId const trackId) { return selected.contains(trackId); });
-
-        if (nextOrder != oldOrder)
+        if (!forgotten.empty())
         {
           optList.emplace(detail::listWithOrder(*viewRes, nextOrder));
         }
@@ -354,7 +356,7 @@ namespace ao::rt
           },
       };
 
-      if (nextOrder == oldOrder)
+      if (work.reply.forgottenPositionTrackIds.empty())
       {
         return work;
       }
@@ -425,17 +427,10 @@ namespace ao::rt
     ListId const listId,
     std::vector<TrackId> trackIds)
   {
-    auto workRes = co_await detail::applyInteractivePreviewAsync(
+    return detail::previewChangedWorkAsync<RemoveTracksFromListReply>(
       std::move(submission),
       [this, listId, trackIds = std::move(trackIds)](library::LibraryWrite& transaction)
       { return applyRemoveTracksFromListInTransaction(library, transaction, listId, trackIds); });
-
-    if (!workRes)
-    {
-      co_return std::unexpected{workRes.error()};
-    }
-
-    co_return std::move(workRes->reply);
   }
 
   async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>
@@ -461,7 +456,7 @@ namespace ao::rt
         auto mutatedIds = work.reply.tagEdit.changes | std::views::transform(&TrackTagsChange::trackId) |
                           std::ranges::to<std::vector>();
 
-        if (auto const orderChanged = work.optOrderChange.has_value(); mutatedIds.empty() && !orderChanged)
+        if (mutatedIds.empty() && !work.optOrderChange)
         {
           return Unchanged<RemoveTracksFromListReply>{.value = std::move(work.reply)};
         }

@@ -104,11 +104,10 @@ namespace ao::uimodel
       return result;
     }
 
-    std::string makeUniqueFromReserved(ReservedLayoutNodeIds& reservedIds, std::string const& stem)
+    std::string makeUniqueFromReserved(ReservedLayoutNodeIds const& reservedIds, std::string stem)
     {
       if (!reservedIds.contains(stem))
       {
-        reservedIds.insert(stem);
         return stem;
       }
 
@@ -116,7 +115,6 @@ namespace ao::uimodel
       {
         if (auto candidate = stem + "-" + std::to_string(index); !reservedIds.contains(candidate))
         {
-          reservedIds.insert(candidate);
           return candidate;
         }
       }

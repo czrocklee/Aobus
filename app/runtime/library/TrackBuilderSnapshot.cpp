@@ -171,19 +171,8 @@ namespace ao::rt
 
     for (auto const& cover : _covers)
     {
-      if (auto const* const resourceId = std::get_if<ResourceId>(&cover.source); resourceId != nullptr)
-      {
-        result.coverArt().add(cover.type, *resourceId);
-      }
-      else if (auto const* const observed = std::get_if<library::ObservedResourceDescriptor>(&cover.source);
-               observed != nullptr)
-      {
-        result.coverArt().add(cover.type, *observed);
-      }
-      else
-      {
-        result.coverArt().add(cover.type, std::get<library::ResourceDescriptor>(cover.source));
-      }
+      std::visit(
+        [&result, type = cover.type](auto const& source) { result.coverArt().add(type, source); }, cover.source);
     }
 
     for (auto const& [key, value] : _customMetadata)

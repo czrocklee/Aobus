@@ -316,9 +316,7 @@ namespace ao::uimodel
       }
     };
 
-    // Map each snapshot field back to the commands whose availability or presented
-    // state depends on it, mirroring the granular notifications the dual-service
-    // surface used to raise.
+    // Notify each command whose availability or presented state may have changed.
     if (after.transport != before.transport)
     {
       mark({PlaybackCommand::Play, PlaybackCommand::Pause, PlaybackCommand::PlayPause, PlaybackCommand::Stop});

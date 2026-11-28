@@ -90,6 +90,7 @@ namespace ao::rt
   class ResourceByteReader final
   {
   public:
+    // The library must outlive the reader. The non-const lvalue parameter rejects temporaries.
     ResourceByteReader(async::Runtime& asyncRuntime,
                        library::MusicLibrary& library,
                        std::filesystem::path const& cacheDirectory);
@@ -112,7 +113,7 @@ namespace ao::rt
                                                                          std::stop_token stopToken);
 
     async::Runtime& _asyncRuntime;
-    library::MusicLibrary& _library;
+    library::MusicLibrary const& _library;
     ResourceByteDiskCache _diskCache;
     compat::AtomicSharedPtr<ResourceCarrierIndex const> _carrierIndexSlot{};
     std::mutex _carrierIndexMutex;

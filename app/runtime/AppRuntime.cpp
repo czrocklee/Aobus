@@ -260,11 +260,6 @@ namespace ao::rt
         Error::Code::InvalidState, "Cannot restore playback while another playback command is active or pending");
     }
 
-    if (!restoredRes)
-    {
-      return std::unexpected{restoredRes.error()};
-    }
-
     return restoredRes;
   }
 

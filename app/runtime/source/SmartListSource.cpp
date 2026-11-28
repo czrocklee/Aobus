@@ -16,7 +16,6 @@
 #include <memory>
 #include <optional>
 #include <utility>
-#include <vector>
 
 namespace ao::rt
 {
@@ -45,7 +44,6 @@ namespace ao::rt
       APP_LOG_ERROR("Smart list expression error for '{}': {}", _optPending->expression, error.message);
 
       _optPending->optError = std::move(error);
-      _optPending->planPtr.reset();
     };
 
     auto parsedRes = query::parse(_optPending->expression.empty() ? "true" : _optPending->expression);
@@ -65,7 +63,6 @@ namespace ao::rt
     }
 
     _optPending->planPtr = std::make_unique<query::ExecutionPlan>(*std::move(planRes));
-    _optPending->optError.reset();
   }
 
   void SmartListSource::reload()
@@ -92,11 +89,6 @@ namespace ao::rt
 
     _current = std::move(*_optPending);
     _optPending.reset();
-  }
-
-  void SmartListSource::replaceMembers(std::vector<TrackId> members)
-  {
-    _members.assign(members);
   }
 
   void SmartListSource::discardSnapshot() noexcept

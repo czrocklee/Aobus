@@ -175,6 +175,35 @@ namespace ao::rt
       return script;
     }
 
+    TrackTagsChange applyNormalizedTagPatch(library::TrackBuilder& builder,
+                                            TrackId const trackId,
+                                            std::span<std::string const> const normalizedAdd,
+                                            std::span<std::string const> const normalizedRemove)
+    {
+      auto& tags = builder.tags();
+      auto change = TrackTagsChange{.trackId = trackId, .addedTags = {}, .removedTags = {}};
+
+      for (auto const& tag : normalizedAdd)
+      {
+        if (!std::ranges::contains(tags.names(), tag))
+        {
+          tags.add(tag);
+          change.addedTags.push_back(tag);
+        }
+      }
+
+      for (auto const& tag : normalizedRemove)
+      {
+        if (std::ranges::contains(tags.names(), tag))
+        {
+          tags.remove(tag);
+          change.removedTags.push_back(tag);
+        }
+      }
+
+      return change;
+    }
+
     Result<EditTrackTagsReply> applyTagPatchInTransaction(library::LibraryWrite& transaction,
                                                           std::span<TrackId const> trackIds,
                                                           std::span<std::string const> tagsToAdd,
@@ -223,32 +252,9 @@ namespace ao::rt
           continue;
         }
 
-        auto& tags = optBuilder->tags();
-        bool changed = false;
-        auto addedTags = std::vector<std::string>{};
-        auto removedTags = std::vector<std::string>{};
+        auto change = applyNormalizedTagPatch(*optBuilder, trackId, *normalizedAddRes, *normalizedRemoveRes);
 
-        for (auto const& tag : *normalizedAddRes)
-        {
-          if (!std::ranges::contains(tags.names(), tag))
-          {
-            tags.add(tag);
-            addedTags.push_back(tag);
-            changed = true;
-          }
-        }
-
-        for (auto const& tag : *normalizedRemoveRes)
-        {
-          if (std::ranges::contains(tags.names(), tag))
-          {
-            tags.remove(tag);
-            removedTags.push_back(tag);
-            changed = true;
-          }
-        }
-
-        if (!changed)
+        if (change.addedTags.empty() && change.removedTags.empty())
         {
           continue;
         }
@@ -258,8 +264,7 @@ namespace ao::rt
           return storageError("Failed to update hot track data", res.error());
         }
 
-        changes.push_back(TrackTagsChange{
-          .trackId = trackId, .addedTags = std::move(addedTags), .removedTags = std::move(removedTags)});
+        changes.push_back(std::move(change));
       }
 
       return EditTrackTagsReply{.changes = std::move(changes)};

@@ -30,7 +30,7 @@ namespace ao::rt
     using AvailabilityChangedHandler = compat::MoveOnlyFunction<void(bool)>;
 
     static constexpr Elapsed kRestartThreshold{3000};
-    static constexpr Elapsed kFirstRestartAvailableElapsed{3001};
+    static constexpr Elapsed kFirstRestartAvailableElapsed = kRestartThreshold + Elapsed{1};
 
     PlaybackRestartDeadline(async::Runtime& asyncRuntime,
                             LiveElapsedReader liveElapsedReader,

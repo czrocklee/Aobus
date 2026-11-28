@@ -36,44 +36,22 @@ namespace ao::rt::detail
     constexpr std::string_view kAscending = "ascending";
     constexpr std::string_view kDescending = "descending";
 
-    Result<> validateActiveViewIndex(std::size_t const activeViewIndex,
-                                     std::size_t const openViewCount,
-                                     Error::Code const errorCode)
+    bool isValidActiveViewIndex(std::size_t const index, std::size_t const viewCount) noexcept
     {
-      if ((openViewCount == 0 && activeViewIndex != 0) || (openViewCount != 0 && activeViewIndex >= openViewCount))
-      {
-        return makeError(errorCode, "Workspace active view index is out of bounds");
-      }
-
-      return {};
+      return viewCount == 0 ? index == 0 : index < viewCount;
     }
 
-    template<typename Enum, typename IdFunction>
-    Result<std::string> storedIdFor(Enum value, IdFunction idFunction, [[maybe_unused]] std::string_view context)
-    {
-      auto const id = idFunction(value);
-
-      AO_EXPECTS(!id.empty(), "Cannot serialize invalid id");
-      return std::string{id};
-    }
-
-    Result<std::vector<std::string>> toStoredFields(std::vector<TrackField> const& fields,
-                                                    [[maybe_unused]] std::string_view context)
+    std::vector<std::string> toStoredFields(std::vector<TrackField> const& fields)
     {
       auto stored = std::vector<std::string>{};
       stored.reserve(fields.size());
 
       for (auto const field : fields)
       {
-        auto storedIdRes = storedIdFor(field, trackFieldId, context);
-
-        if (!storedIdRes)
-        {
-          return std::unexpected{storedIdRes.error()};
-        }
-
-        AO_EXPECTS(!std::ranges::contains(stored, *storedIdRes), "Cannot serialize duplicate field");
-        stored.push_back(std::move(*storedIdRes));
+        auto const id = trackFieldId(field);
+        AO_EXPECTS(!id.empty(), "Cannot serialize invalid id");
+        AO_EXPECTS(!std::ranges::contains(stored, id), "Cannot serialize duplicate field");
+        stored.emplace_back(id);
       }
 
       return stored;
@@ -87,17 +65,12 @@ namespace ao::rt::detail
         .field = std::string{field}, .direction = std::string{term.ascending ? kAscending : kDescending}};
     }
 
-    Result<StoredTrackPresentationSpec> toStoredPresentation(TrackPresentationSpec const& spec)
+    StoredTrackPresentationSpec toStoredPresentation(TrackPresentationSpec const& spec)
     {
       auto const normalized = normalizeTrackPresentationSpec(spec);
-      auto groupRes = storedIdFor(normalized.groupBy, trackGroupKeyId, "track group key");
-
-      if (!groupRes)
-      {
-        return std::unexpected{groupRes.error()};
-      }
-
-      auto stored = StoredTrackPresentationSpec{.presetId = normalized.presetId, .group = std::move(*groupRes)};
+      auto const group = trackGroupKeyId(normalized.groupBy);
+      AO_EXPECTS(!group.empty(), "Cannot serialize invalid id");
+      auto stored = StoredTrackPresentationSpec{.presetId = normalized.presetId, .group = std::string{group}};
       stored.sort.reserve(normalized.sortBy.size());
 
       for (auto const& term : normalized.sortBy)
@@ -117,22 +90,8 @@ namespace ao::rt::detail
                                 .direction = std::string{sort.ascending ? kAscending : kDescending}};
       }
 
-      auto visibleFieldsRes = toStoredFields(normalized.visibleFields, "visible field");
-
-      if (!visibleFieldsRes)
-      {
-        return std::unexpected{visibleFieldsRes.error()};
-      }
-
-      auto redundantFieldsRes = toStoredFields(normalized.redundantFields, "redundant field");
-
-      if (!redundantFieldsRes)
-      {
-        return std::unexpected{redundantFieldsRes.error()};
-      }
-
-      stored.visibleFields = std::move(*visibleFieldsRes);
-      stored.redundantFields = std::move(*redundantFieldsRes);
+      stored.visibleFields = toStoredFields(normalized.visibleFields);
+      stored.redundantFields = toStoredFields(normalized.redundantFields);
       return stored;
     }
 
@@ -442,13 +401,12 @@ namespace ao::rt::detail
     }
   } // namespace
 
-  Result<WorkspaceSessionDocument> toWorkspaceSessionDocument(WorkspaceSessionState const& state)
+  WorkspaceSessionDocument toWorkspaceSessionDocument(WorkspaceSessionState const& state)
   {
     AO_EXPECTS(state.activeViewIndex <= std::numeric_limits<std::uint32_t>::max(),
                "Workspace active view index is not representable");
 
-    AO_EXPECTS((!state.openViews.empty() || state.activeViewIndex == 0) &&
-                 (state.openViews.empty() || state.activeViewIndex < state.openViews.size()),
+    AO_EXPECTS(isValidActiveViewIndex(state.activeViewIndex, state.openViews.size()),
                "Workspace active view index is out of bounds");
 
     auto document = WorkspaceSessionDocument{
@@ -463,17 +421,10 @@ namespace ao::rt::detail
       AO_EXPECTS(view.listId != kInvalidListId, "Workspace view uses the invalid list id");
       AO_EXPECTS(view.optPresentation, "Workspace view has no exact presentation to persist");
 
-      auto presentationRes = toStoredPresentation(*view.optPresentation);
-
-      if (!presentationRes)
-      {
-        return std::unexpected{presentationRes.error()};
-      }
-
       document.openViews.push_back(StoredTrackListViewConfig{
         .listId = view.listId.raw(),
         .filterExpression = view.filterExpression,
-        .presentation = std::move(*presentationRes),
+        .presentation = toStoredPresentation(*view.optPresentation),
       });
     }
 
@@ -483,17 +434,12 @@ namespace ao::rt::detail
     {
       AO_EXPECTS(std::holds_alternative<CustomPresetId>(preset.spec.presetId), "A custom preset requires a custom id");
       AO_EXPECTS(!preset.spec.optColumnSort, "A custom preset definition cannot include a column sort");
-      auto specRes = toStoredPresentation(preset.spec);
-
-      if (!specRes)
-      {
-        return std::unexpected{specRes.error()};
-      }
+      auto spec = toStoredPresentation(preset.spec);
 
       document.customPresets.push_back(StoredCustomTrackPresentationPreset{
         .label = preset.label,
         .basePresetId = preset.optBasePresetId ? trackPresetKey(*preset.optBasePresetId) : std::string{},
-        .spec = std::move(*specRes),
+        .spec = std::move(spec),
       });
     }
 
@@ -508,11 +454,9 @@ namespace ao::rt::detail
                        std::format("Unsupported workspace presentation version {}", document.presentationVersion));
     }
 
-    if (auto const res =
-          validateActiveViewIndex(document.activeViewIndex, document.openViews.size(), Error::Code::FormatRejected);
-        !res)
+    if (!isValidActiveViewIndex(document.activeViewIndex, document.openViews.size()))
     {
-      return std::unexpected{res.error()};
+      return makeError(Error::Code::FormatRejected, "Workspace active view index is out of bounds");
     }
 
     auto state = WorkspaceSessionState{.libraryId = document.libraryId, .activeViewIndex = document.activeViewIndex};
@@ -579,14 +523,7 @@ namespace ao::rt::detail
 
   Result<> WorkspaceSessionYamlSchema::serialize(ryml::NodeRef node, WorkspaceSessionState const& state) const
   {
-    auto documentRes = toWorkspaceSessionDocument(state);
-
-    if (!documentRes)
-    {
-      return std::unexpected{documentRes.error()};
-    }
-
-    return writeDocument(node, *documentRes);
+    return writeDocument(node, toWorkspaceSessionDocument(state));
   }
 
   Result<WorkspaceSessionState> WorkspaceSessionYamlSchema::deserialize(ryml::ConstNodeRef node,

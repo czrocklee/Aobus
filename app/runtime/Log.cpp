@@ -83,7 +83,6 @@ namespace ao::rt
       sinks.push_back(consoleSinkPtr);
     }
 
-    // Initialize async registry
     spdlog::init_thread_pool(kAsyncQueueSize, kAsyncThreadCount);
 
     // Drop existing loggers to replace them with async versions
@@ -91,7 +90,6 @@ namespace ao::rt
     spdlog::drop("audio");
     spdlog::drop("fatal");
 
-    // Create loggers
     auto appLoggerPtr = std::make_shared<spdlog::async_logger>(
       "app", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
     appLoggerPtr->set_level(spdlog::level::trace);
@@ -118,7 +116,7 @@ namespace ao::rt
     AO_INVARIANT(fatalSinkRegistered, "Application fatal sink is already registered");
 
     APP_LOG_INFO("========================================================");
-    APP_LOG_INFO("Logging initialized. Log file: {}", utility::pathToUtf8(logPath));
+    APP_LOG_INFO("Logging initialized. Log file: {}", logFileName);
   }
 
   void Log::shutdown()

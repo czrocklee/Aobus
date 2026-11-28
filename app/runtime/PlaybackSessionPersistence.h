@@ -21,6 +21,7 @@ namespace ao::rt
 {
   class ConfigStore;
   class Library;
+  class LibrarySnapshot;
   class PlaybackSuccession;
   class PlaybackTransport;
   class PlaybackService;
@@ -69,8 +70,7 @@ namespace ao::rt
     void checkpointBestEffort();
     void handleSnapshot(PlaybackSnapshot const& snapshot);
     void requestDebouncedSave();
-    bool hasActiveSession() const;
-    bool hasRestorableSession() const;
+    bool tryConfirmTrack(LibrarySnapshot const& reader, TrackId trackId);
     void scheduleSave(Delay delay);
     void handleScheduledSave();
     void cancelScheduledSave() noexcept;

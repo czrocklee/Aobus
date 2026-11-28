@@ -74,7 +74,7 @@ namespace ao::rt
       return std::unexpected{loadedRes.error()};
     }
 
-    return _root.is_map(0) && _root.rootref()[yaml::toCsubstr(group)].readable();
+    return _root.rootref()[yaml::toCsubstr(group)].readable();
   }
 
   Result<> ConfigStore::removeGroup(std::string_view const group)

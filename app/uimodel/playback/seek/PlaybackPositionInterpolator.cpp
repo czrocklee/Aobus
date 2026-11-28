@@ -20,17 +20,13 @@ namespace ao::uimodel
 
   void PlaybackPositionInterpolator::reset() noexcept
   {
-    _lastElapsed = std::chrono::milliseconds{0};
-    _lastDuration = std::chrono::milliseconds{0};
-    _isPlaying = false;
-    _optFirstFrameTime.reset();
+    updateState({}, {}, false);
   }
 
   std::chrono::milliseconds PlaybackPositionInterpolator::interpolateElapsed(FrameClock::TimePoint frameTime) noexcept
   {
     if (!_isPlaying)
     {
-      _optFirstFrameTime.reset();
       return _lastElapsed;
     }
 

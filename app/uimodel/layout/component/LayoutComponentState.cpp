@@ -201,10 +201,11 @@ namespace ao::uimodel
       return canonical;
     }
 
-    std::map<std::string, LayoutNode, std::less<>> statefulNodeIndex(PreparedLayout const& layout,
-                                                                     LayoutSchema const& schema)
+    using StatefulNodesById = std::map<std::string_view, LayoutNode const*, std::less<>>;
+
+    StatefulNodesById statefulNodeIndex(PreparedLayout const& layout, LayoutSchema const& schema)
     {
-      auto result = std::map<std::string, LayoutNode, std::less<>>{};
+      auto result = StatefulNodesById{};
 
       visitExpandedLayoutNodes(layout,
                                [&result, &schema](LayoutNode const& node)
@@ -212,7 +213,7 @@ namespace ao::uimodel
                                  if (auto const optSchema = schema.component(node.type);
                                      !node.id.empty() && optSchema && optSchema->persistentState)
                                  {
-                                   result.emplace(node.id, node);
+                                   result.emplace(node.id, &node);
                                  }
                                });
 
@@ -268,6 +269,7 @@ namespace ao::uimodel
       return;
     }
 
+    // Pruning only borrows the nodes for this call; the prepared layout owns them.
     auto const nodesById = statefulNodeIndex(layout, schema);
 
     std::erase_if(stateDoc.components,
@@ -281,7 +283,7 @@ namespace ao::uimodel
                       return true;
                     }
 
-                    auto const& node = nodeIt->second;
+                    auto const& node = *nodeIt->second;
                     return entry.type != node.type || entry.stateVersion != kStateEntryVersion ||
                            entry.baselineHash != componentBaselineHash(node);
                   });

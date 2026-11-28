@@ -5,13 +5,42 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
 #include <map>
+#include <ranges>
 #include <span>
+#include <vector>
 
 namespace ao::uimodel
 {
+  // Finish pruning before observers can persist the remaining state or destroy its owner.
+  template<typename Value>
+  std::vector<ListId> pruneChangedLists(std::map<ListId, Value>& entries, rt::LibraryChangeSet const& changeSet)
+  {
+    auto removedListIds = std::vector<ListId>{};
+
+    if (changeSet.libraryReset)
+    {
+      removedListIds.append_range(entries | std::views::keys);
+      entries.clear();
+      return removedListIds;
+    }
+
+    removedListIds.reserve(changeSet.listsDeleted.size());
+
+    for (auto const listId : changeSet.listsDeleted)
+    {
+      if (entries.erase(listId) > 0)
+      {
+        removedListIds.push_back(listId);
+      }
+    }
+
+    return removedListIds;
+  }
+
   /**
    * Drops every entry keyed by a list the library no longer has.
    *

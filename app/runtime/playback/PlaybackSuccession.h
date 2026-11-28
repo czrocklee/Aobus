@@ -124,6 +124,7 @@ namespace ao::rt
     bool isAutomaticTransitionActive() const noexcept;
     async::Subscription onAutomaticTransitionSettled(compat::MoveOnlyFunction<void()> handler);
     bool hasActivePlaybackSession() const;
+    bool hasRestorablePlaybackSession() const;
     bool tryCapturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
                                            TrackId& currentTrackId,
                                            std::size_t& anchorIndex) const;

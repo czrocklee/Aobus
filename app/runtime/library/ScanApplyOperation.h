@@ -120,11 +120,10 @@ namespace ao::rt
                            PreparedScanItem const* preparedItem,
                            library::TrackWriter& trackWriter);
 
-    bool trySkipNonActionableItem(ScanItem const& item);
-
-    /// Embedded covers are a scan fact: a refreshed item takes the cover set its
-    /// file now carries, in place of the references it held.
+    // An audio match does not imply a cover match. Replace the covers during the move:
+    // once its manifest is current, an Unchanged scan will not revisit them. Curated metadata stays intact.
     static void applyFileCoverArt(library::TrackBuilder& merged, library::TrackBuilder const& parsed);
+    static void refreshWholeFileProperties(library::TrackBuilder& merged, library::TrackBuilder const& parsed);
 
     void reportProgress(ScanItem const& item, std::size_t itemIndex, ScanApplyProgressStage stage, double itemFraction);
 
@@ -161,9 +160,7 @@ namespace ao::rt
 
     std::optional<library::AudioIdentity> cachedAudioIdentity(ScanItem const& item) const noexcept;
 
-    bool shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept;
-
-    bool isFingerprintRequiredForApply(ScanItem const& item) const noexcept;
+    bool needsFingerprint(ScanItem const& item) const noexcept;
 
     std::optional<library::AudioIdentity> fingerprintAudioPayload(ScanItem const& item,
                                                                   media::file::File const& file,
@@ -177,11 +174,6 @@ namespace ao::rt
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,
                                                               std::optional<library::AudioIdentity> const& optIdentity);
-
-    // Reports a rejection as an item failure and returns false. Use it only
-    // where a false return is item-neutral, or where the caller has already
-    // armed _abortTransaction for the complete item, as the Moved path does.
-    bool tryWriteManifest(library::TrackWriter& writer, std::string const& uri, library::FileManifestBuilder& builder);
 
     library::MusicLibrary& _ml;
     ScanPlan _plan;

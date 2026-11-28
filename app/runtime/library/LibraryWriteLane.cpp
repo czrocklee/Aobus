@@ -396,12 +396,11 @@ namespace ao::rt
       {
         AO_INVARIANT(_granted);
         _granted = false;
-        auto admission = CommandAdmission{
+        return CommandAdmission{
           .owner = _ownerPermit.releaseOwner(),
           .requestPtr = std::move(_requestPtr),
           .lifetimeStatePtr = _ownerPermit.releaseState(),
         };
-        return admission;
       }
 
     private:
@@ -680,7 +679,6 @@ namespace ao::rt
     }
 
     auto const revision = snapshot.revision();
-    std::uint64_t runtimeInstanceId = 0;
 
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
@@ -689,8 +687,6 @@ namespace ao::rt
       {
         return makeError(Error::Code::InvalidState, "Library authoring is unavailable");
       }
-
-      runtimeInstanceId = _runtimeInstanceId;
     }
 
     for (auto const trackId : trackIds)
@@ -701,7 +697,7 @@ namespace ao::rt
       }
     }
 
-    return BoundTrackTargets{runtimeInstanceId, revision, std::vector<TrackId>{trackIds.begin(), trackIds.end()}};
+    return BoundTrackTargets{_runtimeInstanceId, revision, std::vector<TrackId>{trackIds.begin(), trackIds.end()}};
   }
 
   Result<BoundListOrder> LibraryWriteLane::bindListOrder(ListId const listId,
@@ -715,7 +711,6 @@ namespace ao::rt
   {
     auto transaction = _library.readTransaction();
     auto const revision = _library.libraryRevision(transaction);
-    std::uint64_t runtimeInstanceId = 0;
 
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
@@ -724,8 +719,6 @@ namespace ao::rt
       {
         return makeError(Error::Code::InvalidState, "Library authoring is unavailable");
       }
-
-      runtimeInstanceId = _runtimeInstanceId;
     }
 
     if (isVirtualListId(listId))
@@ -788,7 +781,7 @@ namespace ao::rt
         Error::Code::InvalidInput, std::format("Invalid effective List order track: {}", missingTrackId));
     }
 
-    return BoundListOrder{runtimeInstanceId, revision, listId, std::move(effectiveTrackIds)};
+    return BoundListOrder{_runtimeInstanceId, revision, listId, std::move(effectiveTrackIds)};
   }
 
   BoundTrackTargets LibraryWriteLane::advanceBoundTargets(BoundTrackTargets const& targets,

@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <map>
-#include <ranges>
 #include <span>
 #include <utility>
 #include <vector>
@@ -43,34 +42,9 @@ namespace ao::uimodel
     _changesSubscription = changes.onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
-        auto removedListIds = std::vector<ListId>{};
+        auto const removedListIds = pruneChangedLists(_listLayouts, changeSet);
 
-        if (changeSet.libraryReset)
-        {
-          removedListIds.reserve(_listLayouts.size());
-
-          for (auto const listId : _listLayouts | std::views::keys)
-          {
-            removedListIds.push_back(listId);
-          }
-
-          _listLayouts.clear();
-        }
-        else
-        {
-          removedListIds.reserve(changeSet.listsDeleted.size());
-
-          for (auto const listId : changeSet.listsDeleted)
-          {
-            if (_listLayouts.erase(listId) > 0)
-            {
-              removedListIds.push_back(listId);
-            }
-          }
-        }
-
-        // No owner state is touched after notification starts: an observer may
-        // synchronously destroy this owner while the shared signal stays alive.
+        // An observer may destroy this owner; retain the signal for the whole batch.
         auto const changedPtr = _changedPtr;
 
         for (auto const listId : removedListIds)

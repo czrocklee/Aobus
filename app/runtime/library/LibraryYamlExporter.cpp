@@ -248,21 +248,17 @@ namespace ao::rt
                                TrackId id,
                                library::TrackView const& view,
                                library::DictionaryStore const& dictionary,
-                               std::optional<library::TrackBuilder> const& optBaseline,
+                               library::TrackBuilder::MetadataBuilder const* baseline,
                                ExportMode mode)
     {
-      auto const optBaselineMetadata = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
-      auto const hasBaseline = optBaselineMetadata.has_value();
-
-      emitTrackTitle(node, view.metadata(), hasBaseline ? optBaselineMetadata->title() : std::string_view{});
+      emitTrackTitle(node, view.metadata(), baseline != nullptr ? baseline->title() : std::string_view{});
 
       for (auto const& map : kMetadataDispatch)
       {
         if (auto const key = trackFieldId(map.field); map.stringGetter != nullptr)
         {
           auto const current = map.stringGetter(view, dictionary);
-          bool const shouldEmit =
-            hasBaseline ? (current != map.baseStringGetter(*optBaselineMetadata)) : !current.empty();
+          bool const shouldEmit = baseline != nullptr ? current != map.baseStringGetter(*baseline) : !current.empty();
 
           if (shouldEmit)
           {
@@ -272,8 +268,7 @@ namespace ao::rt
         else if (map.numberGetter != nullptr)
         {
           auto const current = map.numberGetter(view);
-          bool const shouldEmit =
-            hasBaseline ? (current != map.baseNumberGetter(*optBaselineMetadata)) : (current != 0);
+          bool const shouldEmit = baseline != nullptr ? current != map.baseNumberGetter(*baseline) : current != 0;
 
           if (shouldEmit)
           {
@@ -292,14 +287,14 @@ namespace ao::rt
       auto const performance = view.performance();
 
       if (auto const date = performance.recordingDate();
-          hasBaseline ? (date != optBaselineMetadata->recordingDate()) : date.isPresent())
+          baseline != nullptr ? date != baseline->recordingDate() : date.isPresent())
       {
         appendString(node, "recording-date", library::formatRecordingDate(date));
       }
 
       bool const emitCredits =
         mode != ExportMode::Delta ||
-        (hasBaseline ? !hasSameCredits(performance, dictionary, *optBaselineMetadata) : !performance.credits().empty());
+        (baseline != nullptr ? !hasSameCredits(performance, dictionary, *baseline) : !performance.credits().empty());
 
       if (emitCredits)
       {
@@ -337,18 +332,14 @@ namespace ao::rt
       return {};
     }
 
-    using PropertyU64Getter = std::uint64_t (*)(library::TrackView::PropertyProxy const&);
     using PropertyU32Getter = std::uint32_t (*)(library::TrackView::PropertyProxy const&);
-    using PropertyU16Getter = std::uint16_t (*)(library::TrackView::PropertyProxy const&);
     using PropertyU8Getter = std::uint8_t (*)(library::TrackView::PropertyProxy const&);
     using PropertyStringGetter = std::string_view (*)(library::TrackView::PropertyProxy const&);
 
     struct PropertyDispatch final
     {
       TrackField field;
-      PropertyU64Getter u64Get = nullptr;
       PropertyU32Getter u32Get = nullptr;
-      PropertyU16Getter u16Get = nullptr;
       PropertyU8Getter u8Get = nullptr;
       PropertyStringGetter stringGet = nullptr;
     };
@@ -391,23 +382,15 @@ namespace ao::rt
       yaml::setValue(mtimeNode, "null");
     }
 
-    Result<> emitTrackProperties(ryml::NodeRef& node,
-                                 library::TrackView::PropertyProxy const& property,
-                                 library::FileManifestStore::Reader const& manifestReader)
+    void emitTrackProperties(ryml::NodeRef& node,
+                             library::TrackView::PropertyProxy const& property,
+                             library::FileManifestStore::Reader const& manifestReader)
     {
       for (auto const& map : kPropertyDispatch)
       {
-        if (auto const key = trackFieldId(map.field); map.u64Get != nullptr)
-        {
-          appendKeyValue(node, key, map.u64Get(property));
-        }
-        else if (map.u32Get != nullptr)
+        if (auto const key = trackFieldId(map.field); map.u32Get != nullptr)
         {
           appendKeyValue(node, key, map.u32Get(property));
-        }
-        else if (map.u16Get != nullptr)
-        {
-          appendKeyValue(node, key, map.u16Get(property));
         }
         else if (map.u8Get != nullptr)
         {
@@ -430,7 +413,6 @@ namespace ao::rt
 
       appendKeyValue(node, "file-size", fileSize);
       emitTrackMtime(node, optMtime);
-      return {};
     }
 
     /**
@@ -571,11 +553,11 @@ namespace ao::rt
       }
     }
 
-    Result<> emitList(ryml::NodeRef& listsNode,
-                      ListId const listId,
-                      library::ListView const& listView,
-                      ExportMode const mode,
-                      library::TrackStore::Reader const& trackReader)
+    void emitList(ryml::NodeRef& listsNode,
+                  ListId const listId,
+                  library::ListView const& listView,
+                  ExportMode const mode,
+                  library::TrackStore::Reader const& trackReader)
     {
       auto listNode = listsNode.append_child();
       listNode.set_map();
@@ -598,7 +580,7 @@ namespace ao::rt
 
       if (orderTrackIds.empty())
       {
-        return {};
+        return;
       }
 
       auto orderNode = listNode.append_child();
@@ -634,8 +616,6 @@ namespace ao::rt
           appendKeyValue(refNode, "ordinal", optSegment->ordinal);
         }
       }
-
-      return {};
     }
   } // namespace
 
@@ -658,10 +638,10 @@ namespace ao::rt
                          CoverDigestTextMap const& digestText,
                          library::DictionaryStore const& dictionary,
                          library::FileManifestStore::Reader const& manifestReader) const;
-    Result<> exportLists(ryml::NodeRef& node,
-                         library::ReadTransaction const& transaction,
-                         ExportMode mode,
-                         std::stop_token const& stopToken) const;
+    void exportLists(ryml::NodeRef& node,
+                     library::ReadTransaction const& transaction,
+                     ExportMode mode,
+                     std::stop_token const& stopToken) const;
 
     library::MusicLibrary const& ml;
   };
@@ -709,10 +689,7 @@ namespace ao::rt
       }
     }
 
-    if (auto res = exportLists(library, transaction, mode, stopToken); !res)
-    {
-      return res;
-    }
+    exportLists(library, transaction, mode, stopToken);
 
     // The destination directory is the user's to name, not this exporter's to
     // create: a path below a directory that does not exist is a mistyped
@@ -820,7 +797,6 @@ namespace ao::rt
     }
 
     auto optMediaTrack = std::optional<MediaTrack>{};
-    auto optBaseline = std::optional<library::TrackBuilder>{};
 
     if (mode == ExportMode::Delta)
     {
@@ -840,7 +816,6 @@ namespace ao::rt
           if (auto mediaTrackRes = readMediaTrack(fullPath); mediaTrackRes)
           {
             optMediaTrack.emplace(std::move(*mediaTrackRes));
-            optBaseline = optMediaTrack->builder();
           }
         }
         else if (fileEc)
@@ -853,20 +828,16 @@ namespace ao::rt
       }
     }
 
-    if (mode != ExportMode::ListOnly)
+    auto const* baseline = optMediaTrack ? &optMediaTrack->builder().metadata() : nullptr;
+
+    if (auto res = emitTrackMetadata(trackNode, id, view, dictionary, baseline, mode); !res)
     {
-      if (auto res = emitTrackMetadata(trackNode, id, view, dictionary, optBaseline, mode); !res)
-      {
-        return res;
-      }
+      return res;
     }
 
     if (mode == ExportMode::Full)
     {
-      if (auto res = emitTrackProperties(trackNode, property, manifestReader); !res)
-      {
-        return res;
-      }
+      emitTrackProperties(trackNode, property, manifestReader);
     }
 
     emitTrackCover(trackNode, view, mode, digestText);
@@ -874,10 +845,10 @@ namespace ao::rt
     return {};
   }
 
-  Result<> LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
-                                                  library::ReadTransaction const& transaction,
-                                                  ExportMode mode,
-                                                  std::stop_token const& stopToken) const
+  void LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
+                                              library::ReadTransaction const& transaction,
+                                              ExportMode mode,
+                                              std::stop_token const& stopToken) const
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");
@@ -890,12 +861,7 @@ namespace ao::rt
     {
       async::throwIfStopRequested(stopToken);
 
-      if (auto res = emitList(listsNode, listId, listView, mode, trackReader); !res)
-      {
-        return res;
-      }
+      emitList(listsNode, listId, listView, mode, trackReader);
     }
-
-    return {};
   }
 } // namespace ao::rt

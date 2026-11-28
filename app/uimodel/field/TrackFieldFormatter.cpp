@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 // NOLINTNEXTLINE(misc-include-cleaner) -- each standard library defines the macro in a different header.
@@ -49,29 +50,10 @@ namespace ao::uimodel
       return {};
     }
 
-    std::string readRawUint16(rt::TrackFieldRawValue const& rawValue)
+    template<typename Value, typename Formatter>
+    std::string formatRawValueAs(rt::TrackFieldRawValue const& rawValue, Formatter formatter)
     {
-      if (auto const* value = std::get_if<std::uint16_t>(&rawValue); value != nullptr)
-      {
-        return formatUint16(*value);
-      }
-
-      return {};
-    }
-
-    std::string readRawUint32(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint32_t))
-    {
-      if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
-      {
-        return formatter(*value);
-      }
-
-      return {};
-    }
-
-    std::string readRawUint64(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint64_t))
-    {
-      if (auto const* value = std::get_if<std::uint64_t>(&rawValue); value != nullptr)
+      if (auto const* value = std::get_if<Value>(&rawValue); value != nullptr)
       {
         return formatter(*value);
       }
@@ -326,48 +308,22 @@ namespace ao::uimodel
       case F::TrackNumber:
       case F::TrackTotal:
       case F::MovementNumber:
-      case F::MovementTotal: return readRawUint16(rawValue);
+      case F::MovementTotal: return formatRawValueAs<std::uint16_t>(rawValue, formatUint16);
 
-      case F::Duration:
-        if (auto const* duration = std::get_if<rt::TrackFieldDuration>(&rawValue); duration != nullptr)
-        {
-          return formatDuration(*duration);
-        }
-
-        return {};
-
-      case F::SampleRate: return readRawUint32(rawValue, formatSampleRate);
+      case F::Duration: return formatRawValueAs<rt::TrackFieldDuration>(rawValue, formatDuration);
+      case F::SampleRate: return formatRawValueAs<std::uint32_t>(rawValue, formatSampleRate);
       case F::Channels:
-        if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
-        {
-          return formatChannels(textCatalog, static_cast<std::uint8_t>(*value));
-        }
-
-        return {};
+        return formatRawValueAs<std::uint32_t>(
+          rawValue,
+          [&textCatalog](std::uint32_t value)
+          { return formatChannels(textCatalog, static_cast<std::uint8_t>(value)); });
       case F::BitDepth:
-        if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
-        {
-          return formatBitDepth(static_cast<std::uint8_t>(*value));
-        }
-
-        return {};
-      case F::Bitrate: return readRawUint32(rawValue, formatBitrate);
-      case F::FileSize: return readRawUint64(rawValue, formatFileSize);
-      case F::ModifiedTime:
-        if (auto const* mtime = std::get_if<FileTimestamp>(&rawValue); mtime != nullptr)
-        {
-          return formatTime(*mtime);
-        }
-
-        return {};
-
-      case F::RecordingDate:
-        if (auto const* date = std::get_if<library::RecordingDate>(&rawValue); date != nullptr)
-        {
-          return library::formatRecordingDate(*date);
-        }
-
-        return {};
+        return formatRawValueAs<std::uint32_t>(
+          rawValue, [](std::uint32_t value) { return formatBitDepth(static_cast<std::uint8_t>(value)); });
+      case F::Bitrate: return formatRawValueAs<std::uint32_t>(rawValue, formatBitrate);
+      case F::FileSize: return formatRawValueAs<std::uint64_t>(rawValue, formatFileSize);
+      case F::ModifiedTime: return formatRawValueAs<FileTimestamp>(rawValue, formatTime);
+      case F::RecordingDate: return formatRawValueAs<library::RecordingDate>(rawValue, library::formatRecordingDate);
       case F::Quality: return {};
     }
 

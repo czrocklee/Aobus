@@ -78,9 +78,8 @@ namespace ao::uimodel
         return {};
       }
 
-      auto const suffix = trimmed.substr(kPrefixSize);
       auto const suffixLower = lower.substr(kPrefixSize);
-      auto canonicalSuffix = std::string{suffix};
+      auto canonicalSuffix = trimmed.substr(kPrefixSize);
 
       if (suffixLower == "play")
       {
@@ -103,7 +102,9 @@ namespace ao::uimodel
         canonicalSuffix = "Prev";
       }
 
-      return std::string{kMediaKeyPrefix} + canonicalSuffix;
+      auto result = std::string{kMediaKeyPrefix};
+      result.append(canonicalSuffix);
+      return result;
     }
 
     std::string canonicalizeKey(std::string_view const token)

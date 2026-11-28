@@ -238,11 +238,9 @@ namespace ao::rt
 
   struct TrackDetailProjection::Impl final
   {
-    DetailTarget target;
     ViewService& views;
     library::MusicLibrary const& library;
     WorkspaceService& workspace;
-    LibraryChanges const& changes;
 
     TrackDetailSnapshot cachedSnapshot;
     async::Signal<TrackDetailSnapshot const&> changedSignal;
@@ -252,12 +250,8 @@ namespace ao::rt
     async::Subscription tracksMutatedSub;
     ViewId trackedViewId = rt::kInvalidViewId;
 
-    Impl(DetailTarget target,
-         ViewService& views,
-         library::MusicLibrary const& library,
-         WorkspaceService& workspace,
-         LibraryChanges const& changes)
-      : target{std::move(target)}, views{views}, library{library}, workspace{workspace}, changes{changes}
+    Impl(ViewService& views, library::MusicLibrary const& library, WorkspaceService& workspace)
+      : views{views}, library{library}, workspace{workspace}
     {
     }
   };
@@ -267,9 +261,9 @@ namespace ao::rt
                                                library::MusicLibrary const& library,
                                                WorkspaceService& workspace,
                                                LibraryChanges const& changes)
-    : _implPtr{std::make_unique<Impl>(std::move(target), views, library, workspace, changes)}
+    : _implPtr{std::make_unique<Impl>(views, library, workspace)}
   {
-    std::visit([this](auto const& selectedTarget) { initializeTarget(selectedTarget); }, _implPtr->target);
+    std::visit([this](auto const& selectedTarget) { initializeTarget(selectedTarget); }, target);
 
     _implPtr->viewDestroyedSub = _implPtr->views.onViewDestroyed([this](ViewService::ViewDestroyed const& event)
                                                                  { handleViewDestroyed(event.viewId); });
@@ -279,7 +273,7 @@ namespace ao::rt
       [this](ViewService::SelectionChanged const& event) { handleSelectionChanged(event.viewId, event.selection); });
 
     _implPtr->tracksMutatedSub =
-      _implPtr->changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChanged(changeSet); });
+      changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChanged(changeSet); });
   }
 
   TrackDetailProjection::~TrackDetailProjection() = default;
@@ -376,21 +370,11 @@ namespace ao::rt
       return;
     }
 
-    auto trackIds = changeSet.tracksInserted;
-    trackIds.append_range(changeSet.tracksDeleted);
-    trackIds.append_range(changeSet.tracksMutated);
-    bool intersect = changeSet.libraryReset;
+    auto const isSelected = [this](TrackId id) { return std::ranges::contains(_implPtr->cachedSnapshot.trackIds, id); };
 
-    for (auto const id : trackIds)
-    {
-      if (std::ranges::contains(_implPtr->cachedSnapshot.trackIds, id))
-      {
-        intersect = true;
-        break;
-      }
-    }
-
-    if (intersect)
+    if (changeSet.libraryReset || std::ranges::any_of(changeSet.tracksInserted, isSelected) ||
+        std::ranges::any_of(changeSet.tracksDeleted, isSelected) ||
+        std::ranges::any_of(changeSet.tracksMutated, isSelected))
     {
       refreshSnapshot(_implPtr->cachedSnapshot.trackIds);
     }
@@ -473,11 +457,6 @@ namespace ao::rt
       {
         section.optValue = resolveCreditSection(state.common, static_cast<library::CreditKind>(kindIndex), dictionary);
       }
-    }
-
-    if (loadedCount == 0)
-    {
-      return snap;
     }
 
     for (auto const& [key, state] : customAggregates)

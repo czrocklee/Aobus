@@ -117,22 +117,16 @@ namespace ao::rt
 
   void ProjectionAnchor::applyRemove(std::size_t const start, std::size_t const count)
   {
-    auto const end = checkedRangeEnd(start, count);
-
-    if (end <= _anchorIndex)
+    if (auto const end = checkedRangeEnd(start, count); end <= _anchorIndex)
     {
       _anchorIndex -= count;
       return;
     }
 
-    if (start <= _anchorIndex && _anchorIndex < end)
+    if (start <= _anchorIndex)
     {
       _anchorIndex = start;
-
-      if (_state == State::Bound)
-      {
-        _state = State::Gap;
-      }
+      _state = State::Gap;
     }
   }
 

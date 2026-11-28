@@ -79,7 +79,7 @@ namespace ao::rt
     {
       PlaybackLaunchSpec launchSpec;
       TrackId currentTrackId = kInvalidTrackId;
-      ProjectionAnchor anchor;
+      std::size_t anchorIndex = 0;
     };
 
     struct PendingViewStart final
@@ -221,7 +221,7 @@ namespace ao::rt
       optLastRestorableSnapshot = RestorableCursorSnapshot{
         .launchSpec = cursor.launchSpec(),
         .currentTrackId = cursor.currentTrackId(),
-        .anchor = cursor.anchor(),
+        .anchorIndex = cursor.anchor().anchorIndex(),
       };
     }
 
@@ -1553,6 +1553,12 @@ namespace ao::rt
     return impl->sessionPtr != nullptr;
   }
 
+  bool PlaybackSuccession::hasRestorablePlaybackSession() const
+  {
+    auto const* const impl = checkedImpl();
+    return impl->sessionPtr || impl->optLastRestorableSnapshot;
+  }
+
   bool PlaybackSuccession::tryCapturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
                                                              TrackId& currentTrackId,
                                                              std::size_t& anchorIndex) const
@@ -1575,7 +1581,7 @@ namespace ao::rt
 
     launchSpec = impl->optLastRestorableSnapshot->launchSpec;
     currentTrackId = impl->optLastRestorableSnapshot->currentTrackId;
-    anchorIndex = impl->optLastRestorableSnapshot->anchor.anchorIndex();
+    anchorIndex = impl->optLastRestorableSnapshot->anchorIndex;
     return true;
   }
 

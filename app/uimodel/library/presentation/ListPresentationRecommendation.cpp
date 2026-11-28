@@ -23,30 +23,22 @@ namespace ao::uimodel
     public:
       void visit(query::Expression const& expr)
       {
-        if (std::holds_alternative<query::VariableExpression>(expr))
+        if (auto const* var = std::get_if<query::VariableExpression>(&expr); var != nullptr)
         {
-          auto const& var = std::get<query::VariableExpression>(expr);
-          visitVariable(var);
-          return;
+          visitVariable(*var);
         }
-
-        if (std::holds_alternative<std::unique_ptr<query::BinaryExpression>>(expr))
+        else if (auto const* binary = std::get_if<std::unique_ptr<query::BinaryExpression>>(&expr); binary != nullptr)
         {
-          auto const& binaryPtr = std::get<std::unique_ptr<query::BinaryExpression>>(expr);
-          visit(binaryPtr->operand);
+          visit((*binary)->operand);
 
-          if (binaryPtr->optOperation)
+          if ((*binary)->optOperation)
           {
-            visit(binaryPtr->optOperation->operand);
+            visit((*binary)->optOperation->operand);
           }
-
-          return;
         }
-
-        if (std::holds_alternative<std::unique_ptr<query::UnaryExpression>>(expr))
+        else if (auto const* unary = std::get_if<std::unique_ptr<query::UnaryExpression>>(&expr); unary != nullptr)
         {
-          auto const& unaryPtr = std::get<std::unique_ptr<query::UnaryExpression>>(expr);
-          visit(unaryPtr->operand);
+          visit((*unary)->operand);
         }
       }
 
@@ -97,7 +89,7 @@ namespace ao::uimodel
       bool _hasTechnical = false;
     };
 
-    rt::TrackPresentationSpec fallbackSpec(std::span<rt::TrackPresentationPreset const> builtinPresets)
+    rt::TrackPresentationSpec firstBuiltinSpec(std::span<rt::TrackPresentationPreset const> builtinPresets)
     {
       if (builtinPresets.empty())
       {
@@ -114,7 +106,7 @@ namespace ao::uimodel
     auto findPreset = [builtinPresets](rt::BuiltinPreset id) -> rt::TrackPresentationSpec
     {
       auto const iter = std::ranges::find(builtinPresets, id, &rt::TrackPresentationPreset::presetId);
-      return iter != builtinPresets.end() ? iter->spec : fallbackSpec(builtinPresets);
+      return iter != builtinPresets.end() ? iter->spec : firstBuiltinSpec(builtinPresets);
     };
 
     auto fallbackSpec = findPreset(rt::BuiltinPreset::Albums);

@@ -33,8 +33,6 @@ namespace ao::rt
     Result<ScanPlan> buildPlan(BuildProgressCallback progress = {}, std::stop_token stopToken = {});
 
   private:
-    Result<ScanPlan> buildPlanUnchecked(BuildProgressCallback progress, std::stop_token stopToken);
-
     library::MusicLibrary const& _library;
   };
 } // namespace ao::rt

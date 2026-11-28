@@ -67,11 +67,6 @@ namespace ao::uimodel
       return isDetailEligible(entry) && entry.lifetime.kind() != rt::NotificationLifetimeKind::Pinned;
     }
 
-    std::string primaryText(i18n::MessageCatalog const& textCatalog, rt::NotificationEntry const& entry)
-    {
-      return notificationMessage(textCatalog, entry.message);
-    }
-
     std::string groupedText(i18n::MessageCatalog const& textCatalog,
                             rt::NotificationSeverity const severity,
                             std::size_t const count)
@@ -148,14 +143,6 @@ namespace ao::uimodel
       return;
     }
 
-    if (auto const persistentKind = isPersistentCompact(_state.compact.kind);
-        persistentKind && hasPresentedCompactSource(_compactSourceNotificationIds, feed) &&
-        !hasOnlyHiddenCompactSources(_compactSourceNotificationIds))
-    {
-      projectPersistentCompact(feed);
-      return;
-    }
-
     if (isPersistentCompact(_state.compact.kind) || _state.compact.kind == ActivityStatusKind::Idle)
     {
       projectPersistentCompact(feed);
@@ -194,15 +181,9 @@ namespace ao::uimodel
       return;
     }
 
-    if (isPersistentSeverity(iter->severity))
-    {
-      projectPersistentCompact(feed);
-      return;
-    }
-
     projectPersistentCompact(feed);
 
-    if (_state.compact.kind == ActivityStatusKind::Idle)
+    if (!isPersistentSeverity(iter->severity) && _state.compact.kind == ActivityStatusKind::Idle)
     {
       projectNotificationCompact(*iter);
     }
@@ -369,7 +350,6 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::projectPersistentCompact(rt::NotificationFeedState const& feed)
   {
-    auto optSeverity = std::optional<rt::NotificationSeverity>{};
     auto ids = std::vector<rt::NotificationId>{};
     rt::NotificationEntry const* latestEntry = nullptr;
 
@@ -385,44 +365,42 @@ namespace ao::uimodel
         continue;
       }
 
-      if (!optSeverity || severityRank(entry.severity) > severityRank(*optSeverity))
+      if (latestEntry == nullptr || severityRank(entry.severity) > severityRank(latestEntry->severity))
       {
-        optSeverity = entry.severity;
         ids.clear();
         latestEntry = &entry;
       }
 
-      if (optSeverity == entry.severity)
+      if (entry.severity == latestEntry->severity)
       {
         ids.push_back(entry.id);
 
-        if (latestEntry == nullptr || entry.id > latestEntry->id)
+        if (entry.id > latestEntry->id)
         {
           latestEntry = &entry;
         }
       }
     }
 
-    if (!optSeverity || latestEntry == nullptr)
+    if (latestEntry == nullptr)
     {
       setCompact({});
       return;
     }
 
-    auto text = groupedText(_textCatalog, *optSeverity, ids.size());
+    auto text = groupedText(_textCatalog, latestEntry->severity, ids.size());
 
     if (text.empty())
     {
-      text = primaryText(_textCatalog, *latestEntry);
+      text = notificationMessage(_textCatalog, latestEntry->message);
     }
 
-    auto const hasDetails = !ids.empty();
     setCompact(
       ActivityCompactState{
-        .kind = kindForSeverity(*optSeverity),
+        .kind = kindForSeverity(latestEntry->severity),
         .text = std::move(text),
         .dismissible = true,
-        .hasDetails = hasDetails,
+        .hasDetails = true,
       },
       std::move(ids));
   }
@@ -432,7 +410,7 @@ namespace ao::uimodel
     setCompact(
       ActivityCompactState{
         .kind = kindForSeverity(entry.severity),
-        .text = primaryText(_textCatalog, entry),
+        .text = notificationMessage(_textCatalog, entry.message),
         .dismissible = true,
         .hasDetails = isDetailEligible(entry),
         .optAutoDismissTimeout =
@@ -454,10 +432,7 @@ namespace ao::uimodel
   {
     return std::ranges::any_of(sourceIds,
                                [&feed](auto const id)
-                               {
-                                 auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
-                                 return iter != feed.entries.end();
-                               });
+                               { return std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); });
   }
 
   bool ActivityStatusFeedProjection::hasOnlyHiddenCompactSources(std::vector<rt::NotificationId> const& sourceIds) const
@@ -484,14 +459,11 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::pruneHiddenSources(rt::NotificationFeedState const& feed)
   {
-    auto const existsInFeed = [&feed](auto const id)
-    { return std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); };
+    auto const isAbsent = [&feed](auto const id)
+    { return !std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); };
 
-    auto prune = [&](auto& ids)
-    { ids.erase(std::ranges::remove_if(ids, [&](auto const id) { return !existsInFeed(id); }).begin(), ids.end()); };
-
-    prune(_hiddenCompactIds);
-    prune(_hiddenDetailIds);
+    std::erase_if(_hiddenCompactIds, isAbsent);
+    std::erase_if(_hiddenDetailIds, isAbsent);
   }
 
   void ActivityStatusFeedProjection::setTextCatalog(i18n::MessageCatalog textCatalog,

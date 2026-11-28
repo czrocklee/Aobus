@@ -127,11 +127,6 @@ namespace ao::rt
       return builder;
     }
 
-    Result<> validateListDraft(ListDraft const& draft)
-    {
-      return validateListExpression(draft.expression);
-    }
-
     void appendListFieldChange(std::vector<ListFieldChange>& changes,
                                std::string_view field,
                                std::string_view oldValue,
@@ -173,7 +168,7 @@ namespace ao::rt
       auto listWriter = transaction.lists();
       auto list = listForDraft(normalizedDraft);
 
-      if (auto res = validateListDraft(normalizedDraft); !res)
+      if (auto res = validateListExpression(normalizedDraft.expression); !res)
       {
         return std::unexpected{res.error()};
       }
@@ -208,7 +203,7 @@ namespace ao::rt
 
       auto list = listForDraft(normalizedDraft, optExisting);
 
-      if (auto res = validateListDraft(normalizedDraft); !res)
+      if (auto res = validateListExpression(normalizedDraft.expression); !res)
       {
         return std::unexpected{res.error()};
       }
@@ -236,17 +231,16 @@ namespace ao::rt
       std::vector<TrackId> taggedTrackIds{};
     };
 
-    Result<std::optional<DeleteListTagImpactWork>> analyzeDeleteListTagImpact(
-      library::MusicLibrary& library,
-      library::LibraryWrite& transaction,
-      library::ListView const& targetView,
-      std::span<ListId const> const deletedListIds)
+    std::optional<DeleteListTagImpactWork> analyzeDeleteListTagImpact(library::MusicLibrary& library,
+                                                                      library::LibraryWrite& transaction,
+                                                                      library::ListView const& targetView,
+                                                                      std::span<ListId const> const deletedListIds)
     {
       auto const optTag = writableTagForListExpression(targetView.filter());
 
       if (!optTag)
       {
-        return std::optional<DeleteListTagImpactWork>{};
+        return std::nullopt;
       }
 
       auto work = DeleteListTagImpactWork{};
@@ -284,7 +278,29 @@ namespace ao::rt
       }
 
       work.impact.taggedTrackCount = work.taggedTrackIds.size();
-      return std::optional<DeleteListTagImpactWork>{std::move(work)};
+      return work;
+    }
+
+    Result<std::vector<TrackId>> removeDeletedListTagFromTracks(library::LibraryWrite& transaction,
+                                                                ListId listId,
+                                                                std::optional<DeleteListTagImpactWork>& optWork)
+    {
+      if (!optWork)
+      {
+        return makeError(
+          Error::Code::InvalidInput, std::format("List {} does not have directly editable tag membership", listId));
+      }
+
+      auto const tags = std::array{optWork->impact.tag};
+      auto tagEditRes = detail::applyTagPatchInTransaction(transaction, optWork->taggedTrackIds, {}, tags);
+
+      if (!tagEditRes)
+      {
+        return std::unexpected{tagEditRes.error()};
+      }
+
+      optWork->impact.removedFromTrackCount = tagEditRes->changes.size();
+      return tagEditRes->changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
     }
 
     Result<std::vector<DeleteListReply>> collectDeleteListSubtree(library::MusicLibrary& library,
@@ -474,14 +490,7 @@ namespace ao::rt
           },
       };
       auto const deletedListIds = std::array{listId};
-      auto tagImpactWorkRes = analyzeDeleteListTagImpact(library, transaction, *optView, deletedListIds);
-
-      if (!tagImpactWorkRes)
-      {
-        return std::unexpected{tagImpactWorkRes.error()};
-      }
-
-      auto optTagImpactWork = std::move(*tagImpactWorkRes);
+      auto optTagImpactWork = analyzeDeleteListTagImpact(library, transaction, *optView, deletedListIds);
 
       if (auto removeRes = listWriter.remove(listId); !removeRes)
       {
@@ -492,29 +501,19 @@ namespace ao::rt
 
       if (options.removeWritableTagFromTracks)
       {
-        if (!optTagImpactWork)
+        auto removedRes = removeDeletedListTagFromTracks(transaction, listId, optTagImpactWork);
+
+        if (!removedRes)
         {
-          return makeError(
-            Error::Code::InvalidInput, std::format("List {} does not have directly editable tag membership", listId));
+          return std::unexpected{removedRes.error()};
         }
 
-        auto& tagImpactWork = *optTagImpactWork;
-        auto const tags = std::array{tagImpactWork.impact.tag};
-        auto tagEditRes = detail::applyTagPatchInTransaction(transaction, tagImpactWork.taggedTrackIds, {}, tags);
-
-        if (!tagEditRes)
-        {
-          return std::unexpected{tagEditRes.error()};
-        }
-
-        tagImpactWork.impact.removedFromTrackCount = tagEditRes->changes.size();
-        mutatedTrackIds =
-          tagEditRes->changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+        mutatedTrackIds = std::move(*removedRes);
       }
 
       if (optTagImpactWork)
       {
-        work.reply.optTagImpact = optTagImpactWork->impact;
+        work.reply.optTagImpact = std::move(optTagImpactWork->impact);
       }
 
       work.changeSet = LibraryChangeSet{.tracksMutated = std::move(mutatedTrackIds), .listsDeleted = {listId}};
@@ -546,14 +545,7 @@ namespace ao::rt
         return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
       }
 
-      auto tagImpactWorkRes = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
-
-      if (!tagImpactWorkRes)
-      {
-        return std::unexpected{tagImpactWorkRes.error()};
-      }
-
-      auto optTagImpactWork = std::move(*tagImpactWorkRes);
+      auto optTagImpactWork = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
       auto listWriter = transaction.lists();
       auto removedIdsRes = listWriter.removeSubtree(listId);
 
@@ -569,29 +561,19 @@ namespace ao::rt
 
       if (options.removeWritableTagFromTracks)
       {
-        if (!optTagImpactWork)
+        auto removedRes = removeDeletedListTagFromTracks(transaction, listId, optTagImpactWork);
+
+        if (!removedRes)
         {
-          return makeError(
-            Error::Code::InvalidInput, std::format("List {} does not have directly editable tag membership", listId));
+          return std::unexpected{removedRes.error()};
         }
 
-        auto& tagImpactWork = *optTagImpactWork;
-        auto const tags = std::array{tagImpactWork.impact.tag};
-        auto tagEditRes = detail::applyTagPatchInTransaction(transaction, tagImpactWork.taggedTrackIds, {}, tags);
-
-        if (!tagEditRes)
-        {
-          return std::unexpected{tagEditRes.error()};
-        }
-
-        tagImpactWork.impact.removedFromTrackCount = tagEditRes->changes.size();
-        mutatedTrackIds =
-          tagEditRes->changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+        mutatedTrackIds = std::move(*removedRes);
       }
 
       if (optTagImpactWork)
       {
-        work.reply.deletedLists.front().optTagImpact = optTagImpactWork->impact;
+        work.reply.deletedLists.front().optTagImpact = std::move(optTagImpactWork->impact);
       }
 
       work.changeSet =
@@ -822,10 +804,9 @@ namespace ao::rt
           return std::unexpected{viewRes.error()};
         }
 
-        auto const oldOrderTrackIds = detail::orderTrackIdsFrom(*viewRes);
-        auto reply = ResetListOrderReply{.forgottenPositionCount = oldOrderTrackIds.size()};
+        auto reply = ResetListOrderReply{.forgottenPositionCount = viewRes->orderTrackIds().size()};
 
-        if (oldOrderTrackIds.empty())
+        if (reply.forgottenPositionCount == 0)
         {
           return Unchanged<ResetListOrderReply>{.value = std::move(reply)};
         }

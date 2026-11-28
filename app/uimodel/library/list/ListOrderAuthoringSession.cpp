@@ -91,18 +91,16 @@ namespace ao::uimodel
             invalidate();
           }
         });
+      // subscribe() delivers its initial snapshot before it returns the subscription.
       projectionSubscription = projectionPtr->subscribe(
         [this](rt::TrackListProjectionDeltaBatch const&)
         {
-          if (projectionEventsArmed)
+          if (projectionSubscription)
           {
             invalidate();
           }
         });
-      armProjectionEvents();
     }
-
-    void armProjectionEvents() noexcept { projectionEventsArmed = true; }
 
     void invalidate()
     {
@@ -321,7 +319,6 @@ namespace ao::uimodel
     bool current = true;
     bool submitting = false;
     bool invalidationPending = false;
-    bool projectionEventsArmed = false;
     async::Subscription availabilitySubscription;
     async::Subscription presentationSubscription;
     async::Subscription projectionReplacementSubscription;

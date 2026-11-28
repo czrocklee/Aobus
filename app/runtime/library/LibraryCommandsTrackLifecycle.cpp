@@ -204,7 +204,6 @@ namespace ao::rt
 
     struct PendingListOrderRemoval final
     {
-      ListId listId = kInvalidListId;
       library::ListBuilder list;
       ListOrderChange orderChange{};
     };
@@ -231,7 +230,6 @@ namespace ao::rt
           builder.orderTrackIds().remove(trackId);
 
           updates.push_back(PendingListOrderRemoval{
-            .listId = listId,
             .list = std::move(builder),
             .orderChange =
               ListOrderChange{
@@ -249,12 +247,14 @@ namespace ao::rt
 
       for (auto& update : updates)
       {
-        if (auto updateRes = listWriter.update(update.listId, update.list); !updateRes)
+        auto const listId = update.orderChange.listId;
+
+        if (auto updateRes = listWriter.update(listId, update.list); !updateRes)
         {
           return detail::storageError("Failed to remove deleted track from List order", updateRes.error());
         }
 
-        result.changedListIds.push_back(update.listId);
+        result.changedListIds.push_back(listId);
         result.orderChanges.push_back(std::move(update.orderChange));
       }
 

@@ -242,11 +242,6 @@ namespace ao::uimodel
       return ExpandedNode{.node = std::move(node), .resolvedRootDepth = depth};
     }
 
-    Result<> consumeOverride(LayoutValueMap const& values, TreeBudgetMeter& meter)
-    {
-      return meter.consumeValueMap(values);
-    }
-
     // Template and concrete nodes share one recursive traversal so every produced value uses the same budget meter.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     Result<ExpandedNode> expandNode(LayoutNode const& node,
@@ -259,6 +254,35 @@ namespace ao::uimodel
       {
         return std::unexpected{res.error()};
       }
+
+      auto const expandDescendants = [&](LayoutNode& target, std::size_t const childDepth) -> Result<>
+      {
+        for (auto const& child : node.children)
+        {
+          auto expandedChildRes = expandNode(child, templates, visited, meter, childDepth);
+
+          if (!expandedChildRes)
+          {
+            return std::unexpected{std::move(expandedChildRes).error()};
+          }
+
+          target.children.push_back(std::move(expandedChildRes->node));
+        }
+
+        if (node.optTooltip && node.optTooltip->nodePtr)
+        {
+          auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, childDepth);
+
+          if (!expandedTooltipRes)
+          {
+            return std::unexpected{std::move(expandedTooltipRes).error()};
+          }
+
+          target.optTooltip = BoxedLayoutNode{std::move(expandedTooltipRes->node)};
+        }
+
+        return {};
+      };
 
       if (node.type == "template")
       {
@@ -310,7 +334,7 @@ namespace ao::uimodel
           expandedRes->node.id = node.id;
         }
 
-        if (auto res = consumeOverride(node.layout, meter); !res)
+        if (auto res = meter.consumeValueMap(node.layout); !res)
         {
           return std::unexpected{res.error()};
         }
@@ -345,30 +369,9 @@ namespace ao::uimodel
           expandedRes->node.props[key] = value;
         }
 
-        auto const useSiteChildDepth = expandedRes->resolvedRootDepth + 1;
-
-        for (auto const& child : node.children)
+        if (auto res = expandDescendants(expandedRes->node, expandedRes->resolvedRootDepth + 1); !res)
         {
-          auto expandedChildRes = expandNode(child, templates, visited, meter, useSiteChildDepth);
-
-          if (!expandedChildRes)
-          {
-            return std::unexpected{expandedChildRes.error()};
-          }
-
-          expandedRes->node.children.push_back(std::move(expandedChildRes->node));
-        }
-
-        if (node.optTooltip && node.optTooltip->nodePtr)
-        {
-          auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, useSiteChildDepth);
-
-          if (!expandedTooltipRes)
-          {
-            return std::unexpected{expandedTooltipRes.error()};
-          }
-
-          expandedRes->node.optTooltip = BoxedLayoutNode{std::move(expandedTooltipRes->node)};
+          return std::unexpected{std::move(res).error()};
         }
 
         return expandedRes;
@@ -382,28 +385,9 @@ namespace ao::uimodel
       auto result = LayoutNode{.id = node.id, .type = node.type, .props = node.props, .layout = node.layout};
       result.children.reserve(node.children.size());
 
-      for (auto const& child : node.children)
+      if (auto res = expandDescendants(result, depth + 1); !res)
       {
-        auto expandedChildRes = expandNode(child, templates, visited, meter, depth + 1);
-
-        if (!expandedChildRes)
-        {
-          return std::unexpected{expandedChildRes.error()};
-        }
-
-        result.children.push_back(std::move(expandedChildRes->node));
-      }
-
-      if (node.optTooltip && node.optTooltip->nodePtr)
-      {
-        auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
-
-        if (!expandedTooltipRes)
-        {
-          return std::unexpected{expandedTooltipRes.error()};
-        }
-
-        result.optTooltip = BoxedLayoutNode{std::move(expandedTooltipRes->node)};
+        return std::unexpected{std::move(res).error()};
       }
 
       return ExpandedNode{.node = std::move(result), .resolvedRootDepth = depth};

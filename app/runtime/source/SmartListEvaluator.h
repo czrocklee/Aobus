@@ -80,10 +80,9 @@ namespace ao::rt
     struct DerivedWork final
     {
       SmartListSource* list = nullptr;
-      std::vector<TrackId> oldMembers{};
+      std::size_t previousSize = 0;
       std::vector<TrackId> members{};
       delta::RegularTrackEditScript script{};
-      bool active = false;
       std::uint64_t installToken = 0;
     };
 
@@ -111,7 +110,6 @@ namespace ao::rt
     void handleUpdateBatch(SourceBucket& bucket, delta::RegularTrackEditScript const& script);
     void handleSourceInvalidated(SourceBucket& bucket);
 
-    std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket) const;
     TrackMatches evaluateTouchedTracks(std::span<SmartListSource* const> lists,
                                        std::span<TrackId const> touchedTrackIds) const;
     delta::RegularTrackEditScript buildUpdateScript(SmartListSource const& list,
@@ -119,11 +117,11 @@ namespace ao::rt
                                                     std::span<TrackId const> updatedTrackIds,
                                                     TrackMatches const& matchesByTrackId,
                                                     IndexedTrackSequence const& upstreamTracks) const;
-    static void updateDerivedWorks(std::span<DerivedWork> works,
-                                   IndexedTrackSequence const& upstreamTracks,
-                                   TrackMatches const& matchesByTrackId,
-                                   std::span<TrackId const> updatedTrackIds,
-                                   std::span<TrackId const> preferredMovedIds);
+    static std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket,
+                                                      IndexedTrackSequence const& upstreamTracks,
+                                                      TrackMatches const& matchesByTrackId,
+                                                      std::span<TrackId const> updatedTrackIds,
+                                                      std::span<TrackId const> preferredMovedIds);
     void commitDerivedWorks(SourceBucket& bucket, IndexedTrackSequence upstreamTracks, std::vector<DerivedWork>& works);
 
     void evaluatePendingLists(SourceBucket& bucket);

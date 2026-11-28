@@ -237,7 +237,6 @@ namespace ao::rt
                                         compat::MoveOnlyFunction<void(Result<PreparedNextToken>)> completion);
     void cancelSuccessionStartPreparation();
     void cancelSuccessionLookaheadPreparation();
-    Result<PreparedNextToken> prepareNextRequest(PlaybackRequest const& request, ListId sourceListId);
     PlaybackTransportSessionState playbackTransportSessionState();
     Result<std::chrono::milliseconds> restorePlaybackTransport(PlaybackTransportSessionState const& session);
     void discardPlaybackTransportSnapshot();

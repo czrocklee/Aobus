@@ -17,7 +17,6 @@
 
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -83,13 +82,12 @@ namespace ao::rt::test
         },
     };
 
-    auto const documentRes = detail::toWorkspaceSessionDocument(state);
+    auto const document = detail::toWorkspaceSessionDocument(state);
 
-    REQUIRE(documentRes);
-    CHECK(documentRes->presentationVersion == 3);
-    REQUIRE(documentRes->openViews.size() == 2);
-    CHECK(documentRes->activeViewIndex == 1);
-    auto const& firstStoredView = documentRes->openViews[0];
+    CHECK(document.presentationVersion == 3);
+    REQUIRE(document.openViews.size() == 2);
+    CHECK(document.activeViewIndex == 1);
+    auto const& firstStoredView = document.openViews[0];
     CHECK(firstStoredView.listId == 10);
     CHECK(firstStoredView.filterExpression == "$genre = \"Jazz\"");
     auto const& firstStored = firstStoredView.presentation;
@@ -102,7 +100,7 @@ namespace ao::rt::test
     CHECK(firstStored.sort[1].direction == "descending");
     CHECK(firstStored.visibleFields == std::vector<std::string>{"title", "duration"});
     CHECK(firstStored.redundantFields == std::vector<std::string>{"album"});
-    auto const& secondStoredView = documentRes->openViews[1];
+    auto const& secondStoredView = document.openViews[1];
     CHECK(secondStoredView.listId == 11);
     CHECK(secondStoredView.filterExpression == "$genre = \"Classical\"");
     auto const& secondStored = secondStoredView.presentation;
@@ -119,7 +117,7 @@ namespace ao::rt::test
     CHECK(secondStored.visibleFields == std::vector<std::string>{"artist", "title"});
     CHECK(secondStored.redundantFields == std::vector<std::string>{"album-artist"});
 
-    auto const decodedRes = detail::workspaceSessionStateFromDocument(*documentRes);
+    auto const decodedRes = detail::workspaceSessionStateFromDocument(document);
 
     REQUIRE(decodedRes);
     REQUIRE(decodedRes->openViews.size() == 2);
@@ -138,13 +136,12 @@ namespace ao::rt::test
 
   TEST_CASE("WorkspaceSessionYamlSchema - empty workspace uses active view index zero")
   {
-    auto const documentRes = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
+    auto const document = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
 
-    REQUIRE(documentRes);
-    CHECK(documentRes->openViews.empty());
-    CHECK(documentRes->activeViewIndex == 0);
+    CHECK(document.openViews.empty());
+    CHECK(document.activeViewIndex == 0);
 
-    auto const decodedRes = detail::workspaceSessionStateFromDocument(*documentRes);
+    auto const decodedRes = detail::workspaceSessionStateFromDocument(document);
     REQUIRE(decodedRes);
     CHECK(decodedRes->openViews.empty());
     CHECK(decodedRes->activeViewIndex == 0);
@@ -170,15 +167,14 @@ namespace ao::rt::test
         },
     };
 
-    auto const documentRes = detail::toWorkspaceSessionDocument(state);
+    auto const document = detail::toWorkspaceSessionDocument(state);
 
-    REQUIRE(documentRes);
-    REQUIRE(documentRes->openViews.size() == 2);
-    CHECK(documentRes->openViews[0].presentation.visibleFields == std::vector<std::string>{"title"});
-    CHECK(documentRes->openViews[1].presentation.visibleFields == std::vector<std::string>{"title"});
-    CHECK(documentRes->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
+    REQUIRE(document.openViews.size() == 2);
+    CHECK(document.openViews[0].presentation.visibleFields == std::vector<std::string>{"title"});
+    CHECK(document.openViews[1].presentation.visibleFields == std::vector<std::string>{"title"});
+    CHECK(document.openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
 
-    auto const decodedRes = detail::workspaceSessionStateFromDocument(*documentRes);
+    auto const decodedRes = detail::workspaceSessionStateFromDocument(document);
     REQUIRE(decodedRes);
     REQUIRE(decodedRes->openViews.size() == 2);
     REQUIRE(decodedRes->openViews[0].optPresentation);
@@ -195,9 +191,7 @@ namespace ao::rt::test
           TrackListViewConfig{.listId = ListId{10}, .optPresentation = makePresentation()},
         },
     };
-    auto documentRes = detail::toWorkspaceSessionDocument(validState);
-    REQUIRE(documentRes);
-    auto document = std::move(*documentRes);
+    auto document = detail::toWorkspaceSessionDocument(validState);
     auto& presentation = document.openViews[0].presentation;
     auto expectedCode = Error::Code::FormatRejected;
 

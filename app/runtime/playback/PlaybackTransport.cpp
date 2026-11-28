@@ -161,11 +161,6 @@ namespace ao::rt
       return !outputDevice.backendId.empty();
     }
 
-    bool isSameOutputDevice(audio::OutputDeviceSelection const& lhs, audio::OutputDeviceSelection const& rhs)
-    {
-      return lhs == rhs;
-    }
-
     std::optional<audio::OutputDeviceSelection> defaultOutputDeviceSelection(
       std::vector<OutputBackendSnapshot> const& backends)
     {
@@ -806,7 +801,7 @@ namespace ao::rt
         state.duration = currentRequest.input.duration;
       }
 
-      if (!isSameOutputDevice(previousState.output.selectedDevice, state.output.selectedDevice))
+      if (previousState.output.selectedDevice != state.output.selectedDevice)
       {
         logOutputDeviceTransition(previousState.output.selectedDevice, state.output.selectedDevice);
       }
@@ -879,8 +874,6 @@ namespace ao::rt
       return PreparedNextToken{.value = nextPreparedTokenValue++, .issuedGeneration = issuedGeneration};
     }
 
-    void rememberPreparedRequest(PreparedPlaybackRequest request) { preparedRequests.push_back(std::move(request)); }
-
     Result<PreparedNextToken> installPreparedNext(PlaybackRequest request,
                                                   ListId const sourceListId,
                                                   audio::Engine::PreparedNextResult const& prepared)
@@ -893,7 +886,7 @@ namespace ao::rt
         return std::unexpected{tokenRes.error()};
       }
 
-      rememberPreparedRequest(PreparedPlaybackRequest{
+      preparedRequests.push_back(PreparedPlaybackRequest{
         .request = std::move(request),
         .sourceListId = sourceListId,
         .itemId = prepared.itemId,
@@ -2184,8 +2177,7 @@ namespace ao::rt
     return commitStagedPlayback(std::move(*preparedRes), announce);
   }
 
-  Result<PreparedNextToken> PlaybackTransport::prepareNextRequest(PlaybackRequest const& request,
-                                                                  ListId const sourceListId)
+  Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
   {
     auto* const impl = checkedImpl();
 
@@ -2208,11 +2200,6 @@ namespace ao::rt
     }
 
     return impl->installPreparedNext(request, sourceListId, *res);
-  }
-
-  Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
-  {
-    return prepareNextRequest(request, sourceListId);
   }
 
   std::optional<PreparedNextToken> PlaybackTransport::clearPreparedNext()

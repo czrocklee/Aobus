@@ -15,7 +15,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace ao::query
 {
@@ -62,7 +61,6 @@ namespace ao::rt
 
     void applyPendingState();
     void invalidateFromEvaluator() noexcept { invalidate(); }
-    void replaceMembers(std::vector<TrackId> members);
     void discardSnapshot() noexcept override;
 
     TrackSourceLease _sourceLease;

@@ -34,6 +34,30 @@ namespace ao::uimodel
 
       return std::nullopt;
     }
+
+    template<typename Number>
+    Number numberOr(LayoutValue::Value const& data, Number const defaultValue)
+    {
+      return std::visit(
+        [defaultValue](auto const& val) -> Number
+        {
+          using T = std::decay_t<decltype(val)>;
+
+          if constexpr (std::is_arithmetic_v<T>)
+          {
+            return static_cast<Number>(val);
+          }
+          else if constexpr (std::is_same_v<T, std::string>)
+          {
+            return parseLayoutNumber<Number>(val).value_or(defaultValue);
+          }
+          else
+          {
+            return defaultValue;
+          }
+        },
+        data);
+    }
   } // namespace
 
   std::string LayoutValue::asString(std::string const& defaultValue) const
@@ -65,30 +89,7 @@ namespace ao::uimodel
 
   std::int64_t LayoutValue::asInt(std::int64_t defaultValue) const
   {
-    return std::visit(
-      [defaultValue](auto const& val) -> std::int64_t
-      {
-        using T = std::decay_t<decltype(val)>;
-
-        if constexpr (std::is_arithmetic_v<T>)
-        {
-          return static_cast<std::int64_t>(val);
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-          if (auto optParsed = parseLayoutNumber<std::int64_t>(val); optParsed)
-          {
-            return *optParsed;
-          }
-
-          return defaultValue;
-        }
-        else
-        {
-          return defaultValue;
-        }
-      },
-      data);
+    return numberOr(data, defaultValue);
   }
 
   bool LayoutValue::asBool(bool defaultValue) const
@@ -135,30 +136,7 @@ namespace ao::uimodel
 
   double LayoutValue::asDouble(double defaultValue) const
   {
-    return std::visit(
-      [defaultValue](auto const& val) -> double
-      {
-        using T = std::decay_t<decltype(val)>;
-
-        if constexpr (std::is_arithmetic_v<T>)
-        {
-          return static_cast<double>(val);
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-          if (auto optParsed = parseLayoutNumber<double>(val); optParsed)
-          {
-            return *optParsed;
-          }
-
-          return defaultValue;
-        }
-        else
-        {
-          return defaultValue;
-        }
-      },
-      data);
+    return numberOr(data, defaultValue);
   }
 
   BoxedLayoutNode::BoxedLayoutNode() = default;

@@ -270,7 +270,7 @@ namespace ao::rt
     {
       auto optPending = std::optional<PendingPublication>{};
       auto pinnedReplicaPtr = std::shared_ptr<ReplicaSlot>{};
-      auto replicaName = std::string{};
+      auto replicaName = std::string_view{};
       {
         auto const lock = std::scoped_lock{mutex};
 
@@ -281,10 +281,9 @@ namespace ao::rt
 
         optPending.emplace(std::move(*optPendingPublication));
         optPendingPublication.reset();
-        // Pinned under the lock, applied outside it, so binding cannot race a
-        // delivery already in flight.
+        // Keep the selected replica and its diagnostic name alive even if it unbinds during delivery.
         pinnedReplicaPtr = replicaSlotPtr;
-        replicaName = std::string{replicaNameOf(pinnedReplicaPtr)};
+        replicaName = replicaNameOf(pinnedReplicaPtr);
         AO_INVARIANT(publicationInProgress,
                      "library publication failure: phase=delivery library='{}' revision={} replica='{}': "
                      "pending delivery lost its publication gate",
@@ -329,7 +328,7 @@ namespace ao::rt
         try
         {
           optPending->completion(
-            detail::LibraryPublicationTerminal::Published, std::string{libraryIdentity}, replicaName);
+            detail::LibraryPublicationTerminal::Published, std::string{libraryIdentity}, std::string{replicaName});
         }
         catch (...)
         {
@@ -346,12 +345,10 @@ namespace ao::rt
     async::Subscription connectObserver(compat::MoveOnlyFunction<void(LibraryChangeSet const&)> handler)
     {
       auto const weakDeliveryStatePtr = std::weak_ptr<DeliveryAdmissionState>{deliveryAdmissionStatePtr};
-      auto const diagnosticLibraryIdentity = std::string{libraryIdentity};
 
       return changedSignal.connect(
-        [weakDeliveryStatePtr,
-         diagnosticLibraryIdentity = std::move(diagnosticLibraryIdentity),
-         handler = std::move(handler)](LibraryChangeSet const& changeSet) mutable noexcept
+        [weakDeliveryStatePtr, diagnosticLibraryIdentity = libraryIdentity, handler = std::move(handler)](
+          LibraryChangeSet const& changeSet) mutable noexcept
         {
           try
           {

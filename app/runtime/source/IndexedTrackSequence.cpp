@@ -20,12 +20,7 @@ namespace ao::rt
 {
   IndexedTrackSequence::IndexedTrackSequence(std::span<TrackId const> const trackIds)
   {
-    assign(trackIds);
-  }
-
-  void IndexedTrackSequence::assign(std::span<TrackId const> const trackIds)
-  {
-    replace(std::vector<TrackId>{trackIds.begin(), trackIds.end()});
+    assign(std::vector<TrackId>{trackIds.begin(), trackIds.end()});
   }
 
   void IndexedTrackSequence::clear() noexcept
@@ -61,7 +56,7 @@ namespace ao::rt
     {
       auto appliedRes = delta::apply(_trackIds, script);
       AO_INVARIANT(appliedRes);
-      replace(std::move(*appliedRes));
+      assign(std::move(*appliedRes));
       return;
     }
 
@@ -149,7 +144,7 @@ namespace ao::rt
     return std::nullopt;
   }
 
-  void IndexedTrackSequence::replace(std::vector<TrackId> trackIds)
+  void IndexedTrackSequence::assign(std::vector<TrackId> trackIds)
   {
     auto indexByTrackId = decltype(_indexByTrackId){};
     indexByTrackId.reserve(trackIds.size());

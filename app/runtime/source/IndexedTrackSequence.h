@@ -27,7 +27,7 @@ namespace ao::rt
     IndexedTrackSequence() = default;
     explicit IndexedTrackSequence(std::span<TrackId const> trackIds);
 
-    void assign(std::span<TrackId const> trackIds);
+    void assign(std::vector<TrackId> trackIds);
     void clear() noexcept;
     void applyScript(delta::RegularTrackEditScript const& script);
 
@@ -40,7 +40,6 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId trackId) const;
 
   private:
-    void replace(std::vector<TrackId> trackIds);
     void updateIndicesFrom(std::size_t start);
 
     std::vector<TrackId> _trackIds;

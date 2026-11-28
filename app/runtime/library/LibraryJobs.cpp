@@ -396,12 +396,12 @@ namespace ao::rt
 
     struct ProgressDeliveryState final
     {
-      ProgressDeliveryState(async::Executor& executor, std::weak_ptr<Signals> weakSignalsPtr)
-        : executorRaw{&executor}, weakSignalsPtr{std::move(weakSignalsPtr)}
+      ProgressDeliveryState(async::Executor& executorRef, std::weak_ptr<Signals> weakSignalsPtr)
+        : executor{executorRef}, weakSignalsPtr{std::move(weakSignalsPtr)}
       {
       }
 
-      async::Executor* executorRaw = nullptr;
+      async::Executor& executor;
       std::weak_ptr<Signals> weakSignalsPtr;
       std::mutex mutex;
       std::vector<LibraryTaskProgressUpdated> pendingEvents;
@@ -454,15 +454,14 @@ namespace ao::rt
 
           try
           {
-            statePtr->executorRaw->dispatch(
+            statePtr->executor.dispatch(
               [statePtr]
               {
                 auto events = std::vector<LibraryTaskProgressUpdated>{};
 
                 {
                   auto const lock = std::scoped_lock{statePtr->mutex};
-                  events = std::move(statePtr->pendingEvents);
-                  statePtr->pendingEvents.clear();
+                  events.swap(statePtr->pendingEvents);
                   statePtr->deliveryPending = false;
                 }
 
@@ -1097,11 +1096,6 @@ namespace ao::rt
     if (deferredFailure)
     {
       async::rethrowException(deferredFailure);
-    }
-
-    if (!backfillRes)
-    {
-      co_return std::unexpected{backfillRes.error()};
     }
 
     co_return backfillRes;
