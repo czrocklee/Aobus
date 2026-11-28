@@ -65,13 +65,20 @@ namespace ao::audio::backend::detail::test
     auto registry = BackendGraphRegistry{};
     auto const released = graphWithNode("released");
     auto releasePtr = std::make_shared<utility::ScopedRegistration>([&] { registry.publish("route-b", released); });
-    bool uniqueTarget = true;
+    auto deliveries = std::vector<std::pair<flow::Graph, long>>{};
     auto sub = registry.subscribe("route-a",
-                                  [releasePtr = std::move(releasePtr), &uniqueTarget](flow::Graph const&)
-                                  { uniqueTarget &= releasePtr.use_count() == 1; });
-    auto pending = registry.preparePublish("route-a", graphWithNode("prepared"));
+                                  [releasePtr = std::move(releasePtr), &deliveries](flow::Graph const& graph)
+                                  { deliveries.emplace_back(graph, releasePtr.use_count()); });
+    // The synchronous initial callback can still share its target with subscribe's argument.
+    deliveries.clear();
+    auto const prepared = graphWithNode("prepared");
+    auto pending = registry.preparePublish("route-a", prepared);
+    CHECK(deliveries.empty());
     std::move(pending).deliver();
-    CHECK(uniqueTarget);
+    REQUIRE(deliveries.size() == 1U);
+    auto const& [graph, ownerCount] = deliveries.front();
+    CHECK(graph == prepared);
+    CHECK(ownerCount == 1);
     sub.reset();
     auto received = flow::Graph{};
     auto lateSub = registry.subscribe("route-b", [&](flow::Graph const& graph) { received = graph; });
