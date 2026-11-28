@@ -45,13 +45,13 @@ from ao.core.bazel_native import BazelWorkspaceError
 from ao.core.paths import absolute_path
 from ao.graph.bazel_live_checkout import project_root
 from ao.policy import bazel_contract
+from ao.policy.lint_ownership import platform_incompatible
 from ao.policy.tidy_policy import (
     LINT_SUFFIXES,
     TRANSLATION_UNIT_SUFFIXES,
     classify_relative,
     find_stale_nolint_suppressions,
     mode_buckets,
-    platform_incompatible,
 )
 from ao.portal import bazel_test_ownership, bazel_verify
 from ao.portal.git_files import git_command

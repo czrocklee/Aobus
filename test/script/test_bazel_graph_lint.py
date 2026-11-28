@@ -14,7 +14,8 @@ from ao.graph import bazel_graph_lint
 from ao.graph.bazel_graph_lint import replay_wrapper, select_consumer
 from ao.graph.bazel_graph_lint_gate import load_replay_result
 from ao.graph.bazel_graph_lint_gate import main as gate_main
-from ao.graph.bazel_lint_reports import Identity
+from ao.graph.bazel_lint_schema import Identity
+from ao.policy import lint_ownership
 
 _OWNER = "@@//lib/sample:sample"
 _CONFIGURATION = "bazel-out/k8-dbg/bin"
@@ -164,6 +165,42 @@ class ReplayDriverTest(GraphWorkspace):
         self.assertEqual(Path(initial).read_bytes(), Path(inserted).read_bytes())
         self.write_report(local["report"], _identity(_SOURCE))
         self.select(other, local, selected=other, routes="rerouted")
+
+    def test_ownership_change_reroutes_replay_between_two_eligible_donors(self):
+        other_identity = _identity(
+            "app/example/Main.cpp", owner="@@//app/example:example", configuration="bazel-out/k8-opt/bin"
+        )
+        other = self.consumer("other", other_identity, route="f0000080")
+        local = self.consumer("local", _identity(_SOURCE))
+        self.select(local, other, selected=local)
+        # Change the preference, not the candidates or their baseline include evidence.
+        with patch.object(
+            lint_ownership,
+            "consumer_rank",
+            side_effect=lambda _item, owner, source: (source != other["source"], 0, owner, source),
+        ):
+            marker = self.select(local, other, selected=other, routes="rerouted")
+
+        def run(command, *, env, **_kwargs):
+            self.assertEqual(env, other["env"])
+            status = bazel_graph_lint.main(command[command.index("replay-analyze") :])
+            return subprocess.CompletedProcess(command, status, "")
+
+        def analyze(command):
+            context = self.read_json(command[command.index("--context") + 1])
+            self.assertEqual(context, {**self.read_json(other["context"]), "main": _HEADER})
+            self.write_report(command[command.index("--report") + 1], {**other_identity, "main": _HEADER})
+            Path(command[command.index("--log") + 1]).touch()
+            return 0
+
+        with (
+            patch.object(lint_ownership, "consumer_rank", side_effect=AssertionError("replay must use the route")),
+            patch.object(bazel_graph_lint.subprocess, "run", side_effect=run),
+            patch.object(bazel_graph_lint.bazel_lint_action, "main", side_effect=analyze) as analysis,
+        ):
+            self.assertEqual(self.replay(marker, other["context"]), 0)
+        analysis.assert_called_once()
+        self.assertEqual(self.read_json("out/replay.json")["consumer"], {k: other[k] for k in ("owner", "source")})
 
     def test_selector_rejects_ambiguous_or_reserved_route_ids_without_writing_a_marker(self):
         local = self.consumer("local", _identity(_SOURCE))
@@ -382,6 +419,7 @@ class GraphGateTest(GraphWorkspace):
         status, log = self.gate(owner, self.replay(_HEADER), foreign)
         self.assertEqual(status, 2)
         self.assertIn(f"{_HEADER}: no matching source", log)
+        self.assertEqual(self.read_json("result.json")["deferred"], [_FOREIGN])
         status, log = self.gate(owner, self.replay(_HEADER, consumer=True), foreign)
         self.assertEqual(status, 0)
         self.assertNotIn(_HEADER, log)

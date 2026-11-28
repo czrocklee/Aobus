@@ -13,6 +13,7 @@ from unittest.mock import patch
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
 from ao.graph.bazel_lint_reports import Uncovered, gate_analyzer_reports, gate_reports, lint_aspect_id, read_reports
+from ao.graph.bazel_lint_schema import Identity
 
 
 class ReportsTestCase(unittest.TestCase):
@@ -83,13 +84,12 @@ class ReportsTestCase(unittest.TestCase):
     def fixture(self):
         # Reduced from 9.2.0 experiment warm BEP. These are native proto JSON
         # spellings (including omitted successful exit code), not an action inventory.
-        # The aspect identity is the parameterized spelling Bazel 9.2 writes for the
-        # default empty consumer mapping; it is an independent literal, not derived.
+        # Bazel 9.2 includes both parameter defaults even when neither is passed.
         target_id = {
             "targetCompleted": {
                 "label": "//lib/sample:sample",
                 "configuration": {"id": self.config_id},
-                "aspect": '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}"]',
+                "aspect": '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="off"]',
             }
         }
         config_id = {"configuration": {"id": self.config_id}}
@@ -142,6 +142,12 @@ class CurrentReportsTest(ReportsTestCase):
             self.assertEqual(first[0].configuration, self.configuration)
             self.assertEqual(self.quiet_gate(first, {self.identity["main"]}), 0)
         self.assertFalse(any("action" in event for event in self.events))
+
+    def test_full_delivery_does_not_use_scoped_candidate_evidence(self):
+        self.index["candidate_inputs"] = ["include/ao/sample/Interface.h"]
+        self.assertIsNone(self.read()[0].candidate_inputs)
+        with self.assertRaisesRegex(ValueError, "requires scoped output groups"):
+            read_reports(self.bep, [self.owner], input_index=True)
 
     def test_supported_inline_local_files_do_not_require_named_sets(self):
         self.events[0]["children"] = [child for child in self.events[0]["children"] if "namedSet" not in child]
@@ -294,23 +300,31 @@ class CurrentReportsTest(ReportsTestCase):
         self.assertEqual(self.quiet_gate(inventories, {header}), 1)
 
     def test_lint_aspect_id_spells_the_fixed_base_and_literal_consumer_payload(self):
-        self.assertEqual(lint_aspect_id(), '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}"]')
+        self.assertEqual(
+            lint_aspect_id(), '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="off"]'
+        )
+        self.assertEqual(
+            lint_aspect_id(input_index=True),
+            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="on"]',
+        )
         consumers = '{"@@//lib/sample:sample":[["lib/sample/Sample.cpp","include/ao/sample/Sample.h"]]}'
         # The escaped mapping spelling matches the native 9.2 parameterized-aspect
         # BEP identity, including the backslash-escaped quotes inside the value.
         self.assertEqual(
             lint_aspect_id(consumers),
             '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{'
-            '\\"@@//lib/sample:sample\\":[[\\"lib/sample/Sample.cpp\\",\\"include/ao/sample/Sample.h\\"]]}"]',
+            '\\"@@//lib/sample:sample\\":[[\\"lib/sample/Sample.cpp\\",\\"include/ao/sample/Sample.h\\"]]}",aobus_lint_inputs="off"]',
         )
         # The payload keeps its actual spelling; it is not re-encoded or validated.
         self.assertEqual(
             lint_aspect_id('{"a": 1}'),
-            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{\\"a\\": 1}"]',
+            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{\\"a\\": 1}",aobus_lint_inputs="off"]',
         )
         for bad in (None, 7, ["{}"]):
             with self.subTest(consumers=bad), self.assertRaises(ValueError):
                 lint_aspect_id(bad)
+        with self.assertRaises(ValueError):
+            lint_aspect_id(input_index="on")
 
     def test_default_and_explicit_empty_consumers_bind_the_same_aspect_completions(self):
         self.assertEqual(lint_aspect_id(), lint_aspect_id("{}"))
@@ -319,10 +333,7 @@ class CurrentReportsTest(ReportsTestCase):
 
     def test_explicit_consumer_mapping_binds_only_its_exact_aspect_identity(self):
         consumers = '{"@@//lib/sample:sample":[["lib/sample/Sample.cpp","include/ao/sample/Sample.h"]]}'
-        self.events[4]["id"]["targetCompleted"]["aspect"] = (
-            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{'
-            '\\"@@//lib/sample:sample\\":[[\\"lib/sample/Sample.cpp\\",\\"include/ao/sample/Sample.h\\"]]}"]'
-        )
+        self.events[4]["id"]["targetCompleted"]["aspect"] = lint_aspect_id(consumers)
         self.save()
         self.assertEqual(read_reports(self.bep, [self.owner], consumers=consumers)[0].owner, self.owner)
         # The default empty parameterization cannot stand in for the mapping.
@@ -330,7 +341,7 @@ class CurrentReportsTest(ReportsTestCase):
             read_reports(self.bep, [self.owner])
         # The mapping parameterization cannot stand in for the default BEP either.
         self.events[4]["id"]["targetCompleted"]["aspect"] = (
-            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}"]'
+            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="off"]'
         )
         self.save()
         with self.assertRaises(ValueError):
@@ -424,9 +435,16 @@ class ScopedReportsTest(ReportsTestCase):
         self.groups.append(delivery)
         return delivery
 
-    def scoped(self, *groups, profile="lint"):
+    def scoped(self, *groups, profile="lint", input_index=False):
         self.save()
-        return read_reports(self.bep, [self.owner], profile=profile, output_groups=(self.INDEX, *groups))[0]
+        return read_reports(
+            self.bep, [self.owner], profile=profile, output_groups=(self.INDEX, *groups), input_index=input_index
+        )[0]
+
+    def enable_input_index(self):
+        self.events[4]["id"]["targetCompleted"]["aspect"] = (
+            '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="on"]'
+        )
 
     def test_main_group_escapes_punctuation_and_folds_ascii_case_only_on_windows(self):
         group = bazel_lint_reports.main_output_group
@@ -515,6 +533,54 @@ class ScopedReportsTest(ReportsTestCase):
                     config["id"] = "another-configuration"
                 with self.assertRaises(ValueError):
                     self.scoped(self.HEADER)
+
+    def test_input_evidence_requires_matching_opt_in_completion(self):
+        self.index["candidate_inputs"] = [self.header]
+        self.assertIsNone(self.scoped().candidate_inputs)
+        with self.assertRaisesRegex(ValueError, "missing requested lint owner completion"):
+            self.scoped(input_index=True)
+        self.enable_input_index()
+        with self.assertRaisesRegex(ValueError, "missing requested lint owner completion"):
+            self.scoped()
+        self.assertEqual(self.scoped(input_index=True).candidate_inputs, frozenset({self.header}))
+
+    def test_index_only_delivery_keeps_candidates_outside_the_owners_mains(self):
+        self.enable_input_index()
+        candidates = [self.identity["source"], self.header, "lib/private/Forced.DEF", "include/ao/dependency"]
+        self.index["candidate_inputs"] = candidates
+        inventory = self.scoped(input_index=True)
+        self.assertEqual(inventory.reports, ())
+        self.assertTrue(inventory.has_native_tu)
+        self.assertEqual(inventory.candidate_inputs, frozenset(candidates))
+        self.assertNotIn(candidates[-1], inventory.sources)
+
+    def test_empty_complete_candidates_differ_from_incomplete_evidence(self):
+        self.enable_input_index()
+        self.assertIsNone(self.scoped(input_index=True).candidate_inputs)
+        self.index["candidate_inputs"] = None
+        self.assertIsNone(self.scoped(input_index=True).candidate_inputs)
+        self.index["candidate_inputs"] = []
+        self.assertEqual(self.scoped(input_index=True).candidate_inputs, frozenset())
+
+    def test_invalid_candidate_metadata_cannot_prove_absence(self):
+        self.enable_input_index()
+        for malformed in (
+            self.header,
+            {self.header: True},
+            [self.header, False],
+            [self.header, self.header],
+            [self.header, "../checkout/Header.h"],
+            [self.header, "C:\\checkout\\Header.h"],
+            [self.header, self.configuration + "/lib/Generated.h"],
+            [self.header, "external/sdk/Header.h"],
+            [self.header, ""],
+            [self.header, "."],
+        ):
+            with self.subTest(malformed=malformed):
+                self.index["candidate_inputs"] = malformed
+                inventory = self.scoped(input_index=True)
+                self.assertTrue(inventory.has_native_tu)
+                self.assertIsNone(inventory.candidate_inputs)
 
     def test_index_only_selection_still_checks_omitted_contexts_and_source_accounting(self):
         original = copy.deepcopy(self.index)
@@ -759,7 +825,7 @@ class AnalyzerProfileTest(ReportsTestCase):
     """The explicit analyzer profile binds only its own aspect and mode set."""
 
     ANALYZER_ASPECT = '//bazel/lint:lint.bzl%analyzer_aspect[aobus_lint_consumers="{}"]'
-    LINT_ASPECT = '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}"]'
+    LINT_ASPECT = '//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers="{}",aobus_lint_inputs="off"]'
 
     def test_analyzer_profile_spells_its_own_fixed_aspect_identity(self):
         self.assertEqual(lint_aspect_id(profile="analyzer"), self.ANALYZER_ASPECT)
@@ -767,6 +833,8 @@ class AnalyzerProfileTest(ReportsTestCase):
         for bad in ("generic", "", "LINT"):
             with self.subTest(profile=bad), self.assertRaises(ValueError):
                 lint_aspect_id(profile=bad)
+        with self.assertRaisesRegex(ValueError, "analyzer does not publish"):
+            lint_aspect_id(profile="analyzer", input_index=True)
 
     def test_analyzer_profile_binds_only_its_exact_aspect_and_mode_set(self):
         for report in self.index["reports"]:
@@ -814,7 +882,7 @@ class AnalyzerGateTest(unittest.TestCase):
         self.sequence = 0
 
     def report(self, main, *, outcome="clean", log="", source=None):
-        identity = bazel_lint_reports.Identity(
+        identity = Identity(
             self.owner,
             self.configuration,
             source or main,

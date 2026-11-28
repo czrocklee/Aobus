@@ -49,6 +49,7 @@ class LintRequest:
     debug: bool = False
     tidy_args: tuple[str, ...] = ()
     owner_targets: tuple[str, ...] = ()
+    prune_lint_inputs: bool = True
     report_only: bool = False
 
     @property

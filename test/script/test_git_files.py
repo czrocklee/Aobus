@@ -981,6 +981,8 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
             cwd=self.root,
             env={
                 **os.environ,
+                # Git Bash's default /tmp need not exist on a Windows test runner.
+                "TMPDIR": self.root.parent.as_posix(),
                 "GITHUB_EVENT_NAME": event,
                 "GITHUB_OUTPUT": output.as_posix(),
                 "GITHUB_STEP_SUMMARY": (self.root.parent / "github-summary").as_posix(),
@@ -1129,6 +1131,7 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
             ("bazel/lint/lint.bzl", "false", "true"),
             ("tool/lint/build.bzl", "false", "true"),
             ("bazel/msvc_policy.bzl", "false", "true"),
+            ("script/ao/graph/bazel_lint_schema.py", "false", "true"),
             ("script/ao/graph/bazel_lint_reports.py", "false", "true"),
             ("script/ao/portal/bazel_lint.py", "false", "true"),
             (".bazelrc", "false", "true"),

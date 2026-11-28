@@ -35,6 +35,11 @@ module = "python.runfiles.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# The YAML emission test runs against Bazel's pinned, untyped PyYAML parser.
+module = "yaml"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Optional dependency of the test-library generator; not part of the dev shell.
 module = "mutagen.*"
 ignore_missing_imports = true

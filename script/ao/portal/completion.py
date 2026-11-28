@@ -29,6 +29,7 @@ from ao.portal.source_scope import SourceScope
 class Request(bazel_workflows.Request):
     extend: bool = False
     lint_base: str | None = None
+    prune_lint_inputs: bool = True
     native_only: bool = False
     desktop_tests: bool = False
     fresh: bool = False

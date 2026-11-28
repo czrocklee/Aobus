@@ -32,7 +32,7 @@
 # runfiles library.
 
 load("@rules_python//python:defs.bzl", "py_test")
-load("//bazel:python_libraries.bzl", "aobus_assert_unit_modules", "portal_initializer_runfiles_test")
+load("//bazel:python_libraries.bzl", "aobus_assert_unit_modules", "isolated_python_runfiles_test", "portal_initializer_runfiles_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -238,8 +238,8 @@ _CHECKOUT_MODULES = [
 _DEPS = {
     "test_analyze": [_PORTAL],
     "test_ao_package_boundaries": [_FOUNDATIONS],
-    "test_appkit_scenarios": [_GRAPH],
-    "test_appkit_process": [_GRAPH],
+    "test_appkit_scenarios": ["//:ao_appkit_process"],
+    "test_appkit_process": ["//:ao_appkit_process"],
     "test_architecture_audit": [_PORTAL],
     "test_audit_root_guards": [_PORTAL],
     "test_bazel": [_PORTAL],
@@ -254,7 +254,7 @@ _DEPS = {
         _LIVE_CHECKOUT,
         "@rules_python//python/runfiles",
     ],
-    "test_bazel_ci_summary": [_PORTAL],
+    "test_bazel_ci_summary": ["//:ao_python_completion"],
     "test_bazel_compile_contract": [_VALIDATION],
     "test_bazel_concepts": [_PORTAL],
     "test_bazel_contract_runner": [_VALIDATION],
@@ -276,7 +276,7 @@ _DEPS = {
     "test_bazel_lint_action": [_GRAPH],
     "test_bazel_lint_fixture": [_PORTAL],
     "test_bazel_lint_parameters": [_PORTAL],
-    "test_bazel_lint_reports": [_LINT_RESULT],
+    "test_bazel_lint_reports": ["//:ao_lint_report_reader"],
     "test_bazel_lint_result": [_LINT_RESULT],
     "test_bazel_lint_sdk": [_PORTAL],
     "test_bazel_live_checkout": [_LIVE_CHECKOUT],
@@ -349,7 +349,7 @@ _DEPS = {
     "test_proc": [],
     "test_python_check": [_PORTAL],
     "test_python_env": [_PORTAL],
-    "test_python_wheel_lock": [_FOUNDATIONS],
+    "test_python_wheel_lock": ["//:ao_python_wheel_lock"],
     "test_r2_credentials": [_PORTAL],
     "test_setup": [_COMMANDS],
     "test_test_audit": [_PORTAL],
@@ -398,6 +398,7 @@ _CONTRACT_DATA = [
 
 _REPO_DATA = {
     "test_ao_package_boundaries": ["//:ao_python_sources"],
+    "test_bazel_appkit": ["//:script/ao/graph/appkit_process.py"],
     "test_bazel_appkit_deps": _CONTRACT_DATA,
     "test_bazel_audio_deps": _CONTRACT_DATA,
     "test_bazel_catalog": ["//tool/catalog:build_catalog.py"],
@@ -711,10 +712,32 @@ portal_initializer_runfiles_test(
     subject = ":test_ao_package_boundaries",
 )
 
+# Check representative consumer runfiles, not the exact library topology.
+isolated_python_runfiles_test(
+    name = "test_portal_runfiles_exclude_optional_drivers",
+    size = "small",
+    excluded_paths = [
+        "script/ao/graph/appkit_process.py",
+        "script/ao/portal/completion.py",
+    ],
+    subject = ":test_bazel_library",
+)
+
+isolated_python_runfiles_test(
+    name = "test_appkit_runfiles_exclude_graph_tooling",
+    size = "small",
+    excluded_paths = ["script/ao/graph/bazel_graph_lint.py"],
+    subject = ":test_appkit_scenarios",
+)
+
 # Suites are convenient focused selections; //... discovers the same tests.
 test_suite(
     name = "tooling_tests",
-    tests = [":" + module for module in _ALL_UNIT_MODULES] + [":test_package_boundary_runfiles"],
+    tests = [":" + module for module in _ALL_UNIT_MODULES] + [
+        ":test_appkit_runfiles_exclude_graph_tooling",
+        ":test_package_boundary_runfiles",
+        ":test_portal_runfiles_exclude_optional_drivers",
+    ],
 )
 
 test_suite(

@@ -246,7 +246,7 @@
     },
     "//bazel/lint:policy.bzl%lint_policy": {
       "general": {
-        "bzlTransitiveDigest": "8Duv4AtTwiyhWvNa6lEVur43rZKrCt1Dz+U1CQJKtGI=",
+        "bzlTransitiveDigest": "1VvjMSVwl7j1FbPN5XjveNwEbqV5wBkvVhnPR8xrH1E=",
         "usagesDigest": "RvowExNtaGUaK4UBSm0aLtioKISo5vgPyeT4Dxpg7io=",
         "recordedInputs": [
           "REPO_MAPPING:,aobus_environment +dependencies+aobus_environment"

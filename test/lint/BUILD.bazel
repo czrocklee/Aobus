@@ -94,6 +94,26 @@ cc_library(
     deps = ["//bazel:compile_contract"],
 )
 
+# Publish the header under a different include spelling two deps edges away
+# from the scoped root, so its index needs the verified transitive origin.
+cc_library(
+    name = "werror_replay_virtual_header",
+    testonly = True,
+    hdrs = ["scoped_main-group/detail/ReplayValue.h"],
+    include_prefix = "aobus-scoped-fixture",
+    strip_include_prefix = "scoped_main-group/detail",
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "werror_replay_inputs",
+    testonly = True,
+    tags = ["manual"],
+    visibility = ["//visibility:private"],
+    deps = [":werror_replay_virtual_header"],
+)
+
 # The owned warning feature keeps the product's warning promotion in this
 # context, so an analysis-only compiler warning exercises the report gate.
 # The scoped report test selects just the header; its path exercises all group escapes.
@@ -103,7 +123,10 @@ cc_library(
     srcs = ["scoped_main-group/WerrorReplay.cpp"],
     hdrs = ["scoped_main-group/WerrorReplay.h"],
     tags = ["manual"],
-    deps = ["//bazel:compile_contract"],
+    deps = [
+        ":werror_replay_inputs",
+        "//bazel:compile_contract",
+    ],
 )
 
 # The actual native action launcher is data: this test starts it, and the

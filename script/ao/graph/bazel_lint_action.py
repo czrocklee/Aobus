@@ -19,7 +19,7 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).absolute().parents[2]))
 
-from ao.graph.bazel_lint_reports import Identity, completed_outcome, exec_path, load_json
+from ao.graph.bazel_lint_schema import Identity, completed_outcome, exec_path, load_json
 from ao.policy import tidy_config, tidy_policy
 from ao.policy.tidy_diagnostics import parse_diagnostic_header
 

@@ -204,6 +204,7 @@ class CheckInvocationTest(unittest.TestCase):
         plan.assert_called_once_with(LINT_BASE)
         request = lint.call_args.args[0]
         lint.assert_called_once_with(request, SourceScope(files), lockfile_readonly=True)
+        self.assertTrue(request.prune_lint_inputs)
         self.assertEqual((request.path, request.jobs), (str(self.tree), 3))
         argv = self.bazel.call_args.args[0]
         targets = argv[argv.index("--") + 1 :]
@@ -220,6 +221,19 @@ class CheckInvocationTest(unittest.TestCase):
             },
             set(targets[1:]),
         )
+
+    def test_completion_opt_out_reaches_the_scoped_lint_gate(self):
+        files = (LINT_FILE,)
+        self.bazel.return_value = 0
+        with (
+            mock.patch.object(lint_scope, "plan", return_value=lint_scope.Plan(files, "scoped")),
+            mock.patch.object(completion, "_verify_required_checks"),
+            mock.patch.object(bazel_lint, "run", return_value=0) as lint,
+        ):
+            self.assertEqual(self.check("--no-prune-lint-inputs"), 0)
+        request = lint.call_args.args[0]
+        lint.assert_called_once_with(request, SourceScope(files), lockfile_readonly=True)
+        self.assertFalse(request.prune_lint_inputs)
 
     def test_no_scoped_lint_runs_with_no_files_or_a_failed_native_gate(self):
         for files, native_status in (((), 0), ((LINT_FILE,), 3)):

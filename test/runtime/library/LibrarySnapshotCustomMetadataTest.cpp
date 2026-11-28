@@ -33,7 +33,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto changes = makeLibraryChanges(executor, storage);
     auto commands = LibraryCommandsFixture{storage, changes, executor};
-    auto& library = commands.library();
+    auto const& library = commands.library();
 
     SECTION("the owning value outlives the snapshot and its read transaction")
     {

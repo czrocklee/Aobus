@@ -12,8 +12,9 @@ from ao.core.jobs import default_workers
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.core.proc import die
 from ao.policy import windows_llvm_sdk
-from ao.policy.tidy_policy import NATIVE_PLATFORMS, mode_buckets, platform_incompatible
-from ao.policy.tidy_policy import component_parts as component_parts
+from ao.policy.lint_ownership import NATIVE_PLATFORMS, platform_incompatible
+from ao.policy.lint_ownership import component_parts as component_parts
+from ao.policy.tidy_policy import mode_buckets
 from ao.policy.tidy_policy import windows_analysis_arguments as windows_analysis_arguments
 from ao.portal import build_dir
 

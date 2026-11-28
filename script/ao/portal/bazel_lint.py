@@ -28,14 +28,13 @@ from ao.core import bazel_native as native
 from ao.core.build_lock import build_tree_lock
 from ao.core.paths import PROJECT_ROOT, absolute_path
 from ao.graph import bazel_lint_reports
+from ao.graph.bazel_lint_schema import canonical_owner
+from ao.policy.lint_ownership import common_prefix, component_parts, consumer_rank
 from ao.policy.tidy_policy import (
     FRAGMENT_SUFFIXES,
     HEADER_SUFFIXES,
     LINT_SUFFIXES,
     TRANSLATION_UNIT_SUFFIXES,
-    common_prefix,
-    component_parts,
-    consumer_rank,
     find_stale_nolint_suppressions,
 )
 from ao.portal import bazel_workflows, bazel_workspace, build_dir, tidy_engine
@@ -306,7 +305,7 @@ def _target_path(label: str) -> str:
 
 
 def _canonical_owner(query_label: str) -> str:
-    return bazel_lint_reports.canonical_owner(query_label)
+    return canonical_owner(query_label)
 
 
 def _is_source(path: str) -> bool:
@@ -707,7 +706,7 @@ def _unreported(selected: Iterable[str], inventories: Sequence[bazel_lint_report
 
 
 def _choose_consumers(
-    paths: Sequence[str], inventories: Sequence[bazel_lint_reports.OwnerInventory]
+    paths: Iterable[str], inventories: Sequence[bazel_lint_reports.OwnerInventory]
 ) -> dict[str, tuple[str, str]]:
     """Select, per path, the nearest source report that included it.
 
@@ -807,6 +806,41 @@ def _scope_key(path: str) -> str:
 
 def _platform_incompatible(path: str) -> bool:
     return tidy_engine._is_platform_incompatible(absolute_path(PROJECT_ROOT / path), PROJECT_ROOT)
+
+
+def _path_prefixes(path: str) -> Iterator[str]:
+    yield path
+    yield from (str(parent) for parent in PurePosixPath(path).parents)
+
+
+def _prune_donors(
+    candidates: dict[str, set[str]], paths: set[str], inventories: Sequence[bazel_lint_reports.OwnerInventory]
+) -> None:
+    """Exclude only the (path, owner) pairs ruled out by a complete configured index."""
+    prefixes = {path: set(_path_prefixes(_scope_key(path))) for path in paths.intersection(candidates)}
+    if not prefixes:
+        return
+    for inventory in inventories:
+        if inventory.candidate_inputs is None:
+            continue
+        # A declared directory can supply a child without listing it as a separate input.
+        possible = {_scope_key(item) for item in inventory.candidate_inputs}
+        observed = {path for report in inventory.reports for path in report.includes}
+        if any(possible.isdisjoint(_path_prefixes(_scope_key(path))) for path in observed):
+            continue  # A contradicted index cannot exclude this owner's other TUs.
+        owner = inventory.owner.removeprefix("@@")  # Loading query uses // labels for checkout owners.
+        for path, parts in prefixes.items():
+            if parts.isdisjoint(possible):
+                candidates[path].discard(owner)
+
+
+def _updated_inventories(
+    previous: Sequence[bazel_lint_reports.OwnerInventory], current: Sequence[bazel_lint_reports.OwnerInventory]
+) -> tuple[bazel_lint_reports.OwnerInventory, ...]:
+    """Keep direct reports from owners the discovery pass did not rebuild."""
+    by_owner = {inventory.owner: inventory for inventory in previous}
+    by_owner.update((inventory.owner, inventory) for inventory in current)
+    return tuple(by_owner.values())
 
 
 def _disabled_feature_paths(
@@ -933,10 +967,11 @@ def _report_pass(
     remote_cache: str | None,
     debug: bool,
     output_groups: tuple[str, ...] = (_OUTPUT_GROUP,),
+    input_index: bool = False,
 ) -> tuple[Path, tuple[bazel_lint_reports.OwnerInventory, ...]]:
     """Build one native report pass and bind its owners' current inventories."""
     parameters = _write_consumer_parameters(prepared, consumers, output_groups=output_groups)
-    aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile)
+    aspect_id = bazel_lint_reports.lint_aspect_id(parameters, profile=profile, input_index=input_index)
     bep = run_dir / f"{name}.bep.json"
     log = run_dir / f"{name}.log"
     roots = [bazel_lint_reports.CHECKER_VERIFICATION if owner == checker_owner else owner for owner in owners]
@@ -944,6 +979,7 @@ def _report_pass(
         *roots,
         f"--aspects={aspect}",
         "--config=aobus_lint_consumers",
+        *(["--aspects_parameters=aobus_lint_inputs=on"] if input_index else []),
         f"--output_groups={_OUTPUT_GROUP}" if output_groups == (_OUTPUT_GROUP,) else "--config=aobus_lint_scope",
         f"--build_event_json_file={bep.absolute()}",
         "--experimental_build_event_upload_strategy=local",
@@ -997,6 +1033,7 @@ def _report_pass(
         checker_owner=checker_owner,
         consumers=parameters,
         profile=profile,
+        input_index=input_index,
         output_groups=output_groups,
     )
 
@@ -1086,9 +1123,9 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
 
     selected_paths: list[Path] = []
     explicit_selected = _relative_selected([absolute_path(PROJECT_ROOT / name) for name in scope.explicit_files])
+    explicit_keys = {_scope_key(path) for path in explicit_selected}
     stale_status = 0
     if not target_only:
-        explicit_keys = {_scope_key(path) for path in explicit_selected}
         resolved = _relative_selected([absolute_path(PROJECT_ROOT / name) for name in scope.files])
         explicit_sources = [name for name in resolved if _scope_key(name) in explicit_keys]
         scanned_sources = [name for name in resolved if _scope_key(name) not in explicit_keys]
@@ -1163,10 +1200,18 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
             else tuple(sorted((*direct_groups, "aobus_lint_sources")))
         )
 
+        report_beps: dict[str, str] = {}
+        searched: set[str] = set()
+
         def report_pass(
-            name: str, owners: Sequence[str], consumers: Mapping[str, tuple[str, str]], groups: tuple[str, ...]
+            name: str,
+            owners: Sequence[str],
+            consumers: Mapping[str, tuple[str, str]],
+            groups: tuple[str, ...],
+            *,
+            input_index: bool = False,
         ) -> tuple[Path, tuple[bazel_lint_reports.OwnerInventory, ...]]:
-            return _report_pass(
+            bep, result = _report_pass(
                 executable,
                 tree,
                 prepared,
@@ -1174,6 +1219,7 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
                 name=name,
                 aspect=_ASPECT,
                 output_groups=groups,
+                input_index=input_index,
                 profile="lint",
                 config=config,
                 owners=owners,
@@ -1183,36 +1229,110 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
                 remote_cache=remote_cache,
                 debug=debug,
             )
+            if groups != ("aobus_lint_index",):
+                report_beps.update(dict.fromkeys(owners, str(bep)))
+            if "aobus_lint_sources" in groups:
+                searched.update(owners)
+            return bep, result
 
         # Fragments never have a direct companion. For ordinary headers let the
         # configured index decide; the loading query alone cannot prove pairing.
-        needs_donor = any(PurePosixPath(path).suffix.lower() in FRAGMENT_SUFFIXES for path in selected)
+        foreign_headers = set()
+        if getattr(args, "prune_lint_inputs", True) and not targets and direct_groups != (_OUTPUT_GROUP,):
+            foreign_headers = {
+                path
+                for path in selected
+                if not _is_source(path) and _scope_key(path) not in explicit_keys and _platform_incompatible(path)
+            }
+        needs_donor = any(
+            PurePosixPath(path).suffix.lower() in FRAGMENT_SUFFIXES and path not in foreign_headers for path in selected
+        )
         initial_groups = discovery_groups if needs_donor else direct_groups
-        bep, inventories = report_pass("build", compatible, {}, initial_groups)
+        bep, inventories = report_pass("build", compatible, {}, initial_groups, input_index=bool(foreign_headers))
         consumers: dict[str, tuple[str, str]] = {}
+        input_pruned: set[str] = set()
         if not target_only:
             selected = sorted(_match_paths(set(selected), inventories))
             missing = _unreported(selected, inventories)
-            if missing and initial_groups != discovery_groups:
-                bep, inventories = report_pass("discovery", compatible, {}, discovery_groups)
+            foreign_keys = {_scope_key(path) for path in foreign_headers}
+            foreign_missing = {path for path in missing if _scope_key(path) in foreign_keys}
+            primary_owners = set(compatible)
+            primary = {path: primary_owners.copy() for path in missing}
+            _prune_donors(primary, foreign_missing, inventories)
+            discover = sorted({owner for owners in primary.values() for owner in owners})
+            if discover and initial_groups != discovery_groups:
+                bep, discovered = report_pass(
+                    "discovery", discover, {}, discovery_groups, input_index=bool(foreign_headers)
+                )
+                inventories = _updated_inventories(inventories, discovered)
+            # An observed include wins even if a candidate index claims absence.
             consumers = _choose_consumers(missing, inventories)
+            held_by_key: dict[str, set[str]] = {}
+            for path, held_for_path in held.items():
+                held_by_key.setdefault(_scope_key(path), set()).update(held_for_path)
             further = {
-                owner
+                path: set(held_by_key.get(_scope_key(path), ())).difference(compatible, incompatible)
                 for path in missing
                 if path not in consumers
-                for owner in held.get(path, ())
-                if owner not in compatible and owner not in incompatible
             }
-            if further:
-                # Only paths still without a consumer widen the build.
-                rows = _query_compatibility(executable, prepared, run_dir, sorted(further), name="cquery-consumers")
-                incompatible.update(owner for owner, value in rows.items() if value)
-                added = [owner for owner in sorted(further) if not rows[owner]]
+            held_owners = sorted({owner for owners in further.values() for owner in owners})
+            if held_owners:
+                index_owners = {owner for path in foreign_missing for owner in further.get(path, ())}
+                rows = _query_compatibility(
+                    executable,
+                    prepared,
+                    run_dir,
+                    held_owners,
+                    name="cquery-platform-inputs" if index_owners else "cquery-consumers",
+                )
+                incompatible.update(owner for owner in held_owners if rows[owner])
+                for owners in further.values():
+                    owners.difference_update(incompatible)
+                index_owners.difference_update(incompatible)
+                needed: set[str] = set()
+                if index_owners:
+                    _, indexes = report_pass(
+                        "platform-inputs", sorted(index_owners), {}, ("aobus_lint_index",), input_index=True
+                    )
+                    # Widening for one path can reveal a better donor or a direct
+                    # main for another. Skip an owner only if it cannot contribute
+                    # anywhere in the batch, even when a weaker donor is known.
+                    batch = {path: index_owners.copy() for path in selected}
+                    _prune_donors(batch, set(selected), indexes)
+                    for path in foreign_missing.intersection(further):
+                        further[path].intersection_update(batch[path])
+                    # A path ruled out everywhere does not widen the search just
+                    # because a held owner might also consume an already-bound path.
+                    widening = {
+                        owner
+                        for path in further
+                        if primary[path] or further[path]
+                        for owner in held_by_key.get(_scope_key(path), ())
+                    }
+                    needed.update(owner for owners in batch.values() for owner in owners if owner in widening)
+                added = sorted(needed.union(owner for owners in further.values() for owner in owners))
                 if added:
                     compatible.extend(added)
-                    bep, inventories = report_pass("consumer-owners", compatible, {}, discovery_groups)
+                    owners_to_build = added if foreign_missing else compatible
+                    bep, discovered = report_pass(
+                        "consumer-owners",
+                        owners_to_build,
+                        {},
+                        discovery_groups,
+                        input_index=index_owners.issuperset(owners_to_build),
+                    )
+                    inventories = _updated_inventories(inventories, discovered)
                     selected = sorted(_match_paths(set(selected), inventories))
                     consumers = _choose_consumers(_unreported(selected, inventories), inventories)
+            # Count an excluded owner even if another one was searched. An owner
+            # searched for a sibling path did not save a discovery pass here.
+            input_pruned = {
+                _scope_key(path)
+                for path in foreign_missing.intersection(further)
+                if (primary_owners | held_by_key.get(_scope_key(path), set())).difference(
+                    primary[path], further[path], incompatible, searched
+                )
+            }
             if consumers:
                 bep, inventories = report_pass("consumers", compatible, consumers, direct_groups)
 
@@ -1246,6 +1366,8 @@ def _run(args: bazel_workflows.NativeRequest, scope: SourceScope, *, lockfile_re
                 "incompatible": sorted(incompatible),
                 "selected": selected,
                 "deferred": sorted(deferred),
+                "input_pruned": sorted(path for path in deferred if _scope_key(path) in input_pruned),
+                "report_beps": report_beps,
                 "consumers": {path: {"owner": owner, "source": source} for path, (owner, source) in consumers.items()},
                 "bep": str(bep),
             },
