@@ -240,7 +240,9 @@ namespace ao::appkit
 
     if (bindLibraryCommands)
     {
-      bindLibraryCommands(sessionPtr->_storagePtr->optRuntimeOwner->libraryCommands());
+      auto& optRuntimeOwner = sessionPtr->_storagePtr->optRuntimeOwner;
+      AO_INVARIANT(optRuntimeOwner, "Successful initialization installs the runtime owner");
+      bindLibraryCommands(optRuntimeOwner->libraryCommands());
     }
 
     return sessionPtr;

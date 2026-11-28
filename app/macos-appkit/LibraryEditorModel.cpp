@@ -17,6 +17,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/LibraryEditing.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/property/TagEdit.h>

@@ -688,7 +688,7 @@ namespace ao::appkit::test
   {
     _libraryCommands = nullptr;
 
-    if (auto sessionPtr = std::exchange(_sessionPtr, nullptr))
+    if (auto const sessionPtr = std::exchange(_sessionPtr, nullptr); sessionPtr)
     {
       sessionPtr->close();
     }
