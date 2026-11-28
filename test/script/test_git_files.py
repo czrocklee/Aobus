@@ -981,6 +981,8 @@ class GitWorkflowFixtureTest(GitCheckoutTestCase):
             cwd=self.root,
             env={
                 **os.environ,
+                # Git Bash's default /tmp need not exist on a Windows test runner.
+                "TMPDIR": self.root.parent.as_posix(),
                 "GITHUB_EVENT_NAME": event,
                 "GITHUB_OUTPUT": output.as_posix(),
                 "GITHUB_STEP_SUMMARY": (self.root.parent / "github-summary").as_posix(),

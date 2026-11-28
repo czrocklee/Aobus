@@ -8,8 +8,11 @@ load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 
 LintVerificationInfo = provider(doc = "Checker registry verification outputs and native inputs reused by lint reports.", fields = ["result", "log", "inputs", "host", "plugin", "policy", "sdk"])
 HeaderOriginInfo = provider(
-    doc = "Checkout headers behind the virtual include symlinks of a compile closure.",
-    fields = {"origins": "depset of newline-joined virtual and original exec paths"},
+    doc = "Verified origins behind the virtual include symlinks of a compile closure.",
+    fields = {
+        "origins": "depset of virtual paths and their source paths for diagnostic rewrites",
+        "candidate_origins": "verified virtual paths with their checkout original (empty for a non-checkout original)",
+    },
 )
 
 # Whole-graph lint artifacts propagated by lint_graph_aspect. One record is a
@@ -240,42 +243,129 @@ def _header_origin_impl(target, ctx):
     """Bind virtual headers to their native symlink action's exact source input.
 
     Include prefixes and Windows shortened directories do not identify the
-    original header. The producing action does; generated originals stay
-    unmapped.
+    original header. The producing action does. Input indexing extends this
+    proof to external origins without changing diagnostic rewrites.
     """
-    transitive = []
+    input_index = getattr(ctx.attr, "aobus_lint_inputs", "off") == "on"
+    external = bool(ctx.label.repo_name)
+    dependencies = []
     for attribute in ["deps", "implementation_deps"]:
-        transitive.extend([d[HeaderOriginInfo].origins for d in getattr(ctx.rule.attr, attribute, []) if HeaderOriginInfo in d])
+        dependencies.extend([d[HeaderOriginInfo] for d in getattr(ctx.rule.attr, attribute, []) if HeaderOriginInfo in d])
     origins = []
-    if CcInfo in target and not ctx.label.repo_name:
+    candidate_origins = []
+    if CcInfo in target and (not external or input_index):
         context = target[CcInfo].compilation_context
         declared = {f.path: f for attribute in ["hdrs", "textual_hdrs"] for f in getattr(ctx.rule.files, attribute, [])}
         virtuals = {f.path: f for f in context.direct_public_headers + context.direct_textual_headers if not f.is_source and "/_virtual_includes/" in f.path}
         producers = {}
-        for action in target.actions:
+        for action in target.actions if virtuals else []:
             outputs = [f for f in action.outputs.to_list() if f.path in virtuals]
             if not outputs:
                 continue
             inputs = action.inputs.to_list()
             if action.mnemonic != "Symlink" or len(outputs) != 1 or len(inputs) != 1 or inputs[0].path not in declared:
-                fail("Unsupported virtual include producer in %s" % ctx.label)
+                if not external:
+                    fail("Unsupported virtual include producer in %s" % ctx.label)
+                for output in outputs:
+                    producers[output.path] = None
+                continue
             virtual = outputs[0].path
             if virtual in producers:
-                fail("Duplicate virtual include producer for %s" % virtual)
-            producers[virtual] = inputs[0]
+                if not external:
+                    fail("Duplicate virtual include producer for %s" % virtual)
+                producers[virtual] = None
+            else:
+                producers[virtual] = inputs[0]
         for virtual in sorted(virtuals):
-            if virtual not in producers:
-                fail("No native symlink producer for virtual include %s in %s" % (virtual, ctx.label))
-            original = producers[virtual]
-            if original.is_source:
+            original = producers.get(virtual)
+            if original == None:
+                if not external:
+                    fail("No native symlink producer for virtual include %s in %s" % (virtual, ctx.label))
+                continue
+            if not external and original.is_source:
                 origins.append(virtual + "\n" + original.path)
-    return [HeaderOriginInfo(origins = depset(origins, transitive = transitive))]
+            if input_index:
+                # Windows shortens virtual paths into a shared output prefix;
+                # only the verified source File identifies its repository.
+                path = _source_input_path(original) if original.is_source else ""
+                if path != None:
+                    candidate_origins.append(virtual + "\n" + path)
+    return [HeaderOriginInfo(
+        origins = depset(origins, transitive = [d.origins for d in dependencies]),
+        candidate_origins = depset(candidate_origins, transitive = [d.candidate_origins for d in dependencies] if input_index else []),
+    )]
 
 header_origin_aspect = aspect(
     implementation = _header_origin_impl,
     attr_aspects = ["deps", "implementation_deps"],
     provides = [HeaderOriginInfo],
 )
+
+_LINT_INPUT_PARAMETER = attr.string(default = "off", values = ["off", "on"])
+
+_lint_header_origin_aspect = aspect(
+    implementation = _header_origin_impl,
+    attr_aspects = ["deps", "implementation_deps"],
+    attrs = {"aobus_lint_inputs": _LINT_INPUT_PARAMETER},
+    provides = [HeaderOriginInfo],
+)
+
+def _non_checkout_path(path):
+    # The report normalizer filters these execution-root namespaces.
+    return path.startswith("bazel-out/") or path.startswith("external/") or path.startswith("../")
+
+def _source_input_path(file):
+    if file.owner != None and file.owner.repo_name:
+        return ""
+
+    # Do not treat an unrepresentable checkout root as a verified non-input.
+    return file.path if file.path and file.path != "." else None
+
+def _candidate_inputs(header_files, native, origin_entries):
+    """Bound checkout include files and possible directory roots for native TUs."""
+    if not native:
+        return []
+    for action, _ in native:
+        # A VFS overlay can present checkout spellings not among the declared
+        # inputs, and an opaque response file can hide such an option.
+        for arg in action.argv:
+            lower = arg.lower()
+            if arg.startswith("@") or "-ivfsoverlay" in lower or "-vfsoverlay" in lower:
+                return None
+
+    origins = {}
+    for entry in origin_entries.to_list():
+        virtual, _, original = entry.partition("\n")
+        if virtual in origins and origins[virtual] != original:
+            return None
+        origins[virtual] = original
+
+    # Native actions omit undiscovered headers; the configured closure already
+    # supplies them, including own additional_compiler_inputs. Add any other
+    # native inputs in one owner-wide union, not a copy of the SDK set per TU.
+    paths = {}
+    action_files = depset(transitive = [action.inputs for action, _ in native]).to_list()
+    for files in [header_files, action_files]:
+        for file in files:
+            if file.is_source:
+                # File.is_directory is a declaration type, not a stat. A
+                # source File may also be an opaque input directory.
+                path = _source_input_path(file)
+                if path == None:
+                    return None
+            elif "/_virtual_includes/" in file.path:
+                if file.path not in origins:
+                    return None
+                path = origins[file.path]
+            elif _non_checkout_path(file.path):
+                # Ordinary generated files and trees cannot add lexical
+                # checkout spellings to the include report.
+                continue
+            else:
+                return None
+            if path:
+                paths[path] = None
+    return sorted(paths)
 
 def _output_stem(identity):
     # Native outputs distinguish source/PIC contexts sharing a main. Hash the
@@ -308,7 +398,7 @@ def _main_output_group(path):
         path = path.lower()
     return "aobus_lint_main_" + path.replace("_", "__").replace("/", "_s").replace(".", "_d").replace("-", "_h")
 
-def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
+def _lint_owner(target, ctx, profile = "lint", cli_groups = False, input_index = False):
     """Declare one configured owner's report actions and describe them for gates."""
     if ctx.label.repo_name:
         fail("Lint roots must be project owners, not external SDK targets")
@@ -333,7 +423,8 @@ def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
 
     # Compile actions discover headers at execution, so the owner's declared
     # header closure lists the virtual spellings; null marks generated ones.
-    virtual_headers = {f.path: origins.get(f.path) for f in headers.to_list() if not f.is_source and "/_virtual_includes/" in f.path}
+    header_files = headers.to_list()
+    virtual_headers = {f.path: origins.get(f.path) for f in header_files if not f.is_source and "/_virtual_includes/" in f.path}
     pairs = {}
     uncovered = []
     for path, header in sorted(own_headers.items()):
@@ -435,7 +526,7 @@ def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
     ] + own_headers.keys() + consumers.keys()
     authored = sorted({path: None for path in authored_paths}.keys())
 
-    ctx.actions.write(index, json.encode({
+    inventory = {
         "schema": 1,
         "owner": str(ctx.label),
         "configuration": ctx.bin_dir.path,
@@ -443,7 +534,12 @@ def _lint_owner(target, ctx, profile = "lint", cli_groups = False):
         "authored": authored,
         "uncovered": uncovered,
         "reports": entries,
-    }))
+    }
+    if input_index:
+        candidates = _candidate_inputs(header_files, native, target[HeaderOriginInfo].candidate_origins)
+        if candidates != None:
+            inventory["candidate_inputs"] = candidates
+    ctx.actions.write(index, json.encode(inventory))
     metadata = ctx.actions.declare_file(ctx.label.name + ".aobus-lint.capture.json")
     ctx.actions.write(metadata, json.encode({"schema": 1, "owner": str(ctx.label), "actions": capture}))
     return struct(
@@ -480,7 +576,13 @@ def _lint_impl(target, ctx, profile = "lint"):
             if name in groups:
                 groups[name] = depset([target[LintVerificationInfo].result], transitive = [groups[name]])
         return [OutputGroupInfo(**groups)]
-    owner = _lint_owner(target, ctx, profile, cli_groups = profile == "lint")
+    owner = _lint_owner(
+        target,
+        ctx,
+        profile,
+        cli_groups = profile == "lint",
+        input_index = getattr(ctx.attr, "aobus_lint_inputs", "off") == "on",
+    )
     groups = {"aobus_lint": depset(owner.artifacts), "aobus_lint_contexts": depset([owner.metadata])}
     if owner.selection_groups != None:
         groups.update({name: depset(files) for name, files in owner.selection_groups.items()})
@@ -496,11 +598,13 @@ def _identity_mode(main, profile):
 lint_aspect = aspect(
     implementation = _lint_impl,
     attr_aspects = _CHECKER_EDGES,
-    requires = [header_origin_aspect],
+    requires = [_lint_header_origin_aspect],
     attrs = {
         # The portal names real consumers per run through --aspects_parameters;
         # the selection stays out of the policy every report action reads.
         "aobus_lint_consumers": attr.string(default = "{}"),
+        # Only platform-input pruning needs the additional inventory scan.
+        "aobus_lint_inputs": _LINT_INPUT_PARAMETER,
         "_helper": attr.label(default = Label("//:script/ao/graph/bazel_lint_action.py"), allow_single_file = True),
         "_verification": attr.label(default = Label("//tool/lint:verification")),
     },

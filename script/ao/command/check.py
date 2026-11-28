@@ -50,6 +50,15 @@ def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _lint_input_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-prune-lint-inputs",
+        dest="prune_lint_inputs",
+        action="store_false",
+        help="use lint reports instead of configured inputs to rule out consumers of platform headers",
+    )
+
+
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     bazel_workflows.add_arguments(parser)
@@ -60,6 +69,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         "--extend", action="store_true", help="check the whole native lint graph instead of changed inputs"
     )
     scope.add_argument("--lint-base", metavar="SHA", help="select native lint from this verified base to a clean HEAD")
+    _lint_input_argument(parser)
     parser.add_argument("--native-only", action="store_true", help="omit the standalone repository checks")
     parser.add_argument("--desktop-tests", action="store_true", help="include tests that require a Windows desktop")
     parser.set_defaults(func=run_command, check_action=None)
@@ -77,6 +87,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     options.add_source_arguments(lint)
     bazel_workflows.add_arguments(lint)
     _analysis_arguments(lint)
+    _lint_input_argument(lint)
     lint.add_argument("--target", action="append", default=[], dest="owner_targets", help="native compile owner")
     lint.add_argument("--header-filter", help="cache-keyed diagnostic header filter")
     analyzer = checks.add_parser("analyzer", help="run path-sensitive native analysis")
@@ -120,6 +131,7 @@ def _completion_request(args: argparse.Namespace) -> completion.Request:
         **options.native_values(args),
         extend=args.extend,
         lint_base=args.lint_base,
+        prune_lint_inputs=args.prune_lint_inputs,
         native_only=args.native_only,
         desktop_tests=args.desktop_tests,
         fresh=args.fresh,
@@ -133,6 +145,7 @@ def _lint_request(args: argparse.Namespace) -> source_lint.LintRequest:
         tidy_check=args.tidy_check,
         tidy_args=tuple(args.tidy_arg),
         owner_targets=tuple(args.owner_targets),
+        prune_lint_inputs=args.prune_lint_inputs,
         header_filter=args.header_filter,
         output=args.output,
         debug=args.debug,

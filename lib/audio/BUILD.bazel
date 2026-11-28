@@ -10,12 +10,46 @@ PIPEWIRE_HEADER_COPTS = select({
     "//conditions:default": [],
 })
 
+# Add new private headers to this shared Linux selection only after verifying
+# that all consumers (including tests) are Linux-only. A filename glob cannot
+# establish that there are no cross-platform consumers.
+LINUX_BACKEND_HEADERS = [
+    "backend/AlsaExclusiveBackend.h",
+    "backend/AlsaProvider.h",
+    "backend/PipeWireBackend.h",
+    "backend/PipeWireMonitor.h",
+    "backend/PipeWireProvider.h",
+    "backend/detail/AlsaChannelMap.h",
+    "backend/detail/AlsaDeviceDiscovery.h",
+    "backend/detail/AlsaGraphRegistry.h",
+    "backend/detail/AlsaMixerSession.h",
+    "backend/detail/AlsaModeSelector.h",
+    "backend/detail/AlsaPcmError.h",
+    "backend/detail/AlsaPcmFormat.h",
+    "backend/detail/AlsaPcmVolume.h",
+    "backend/detail/AlsaPrewarmCache.h",
+    "backend/detail/AlsaProviderMonitorHooks.h",
+    "backend/detail/PipeWireFormatParsing.h",
+    "backend/detail/PipeWireMonitorHooks.h",
+    "backend/detail/PipeWireMonitorParsing.h",
+    "backend/detail/PipeWireRuntime.h",
+    "backend/detail/PipeWireTargetLookup.h",
+]
+
+PRIVATE_HEADERS = glob(
+    ["**/*.h"],
+    exclude = LINUX_BACKEND_HEADERS,
+) + select({
+    "@platforms//os:linux": LINUX_BACKEND_HEADERS,
+    "//conditions:default": [],
+})
+
 # Audio pipeline, DSP, and device backend sources, including every native backend
 # for the selected host. NullBackend is an additional sink, not a replacement
 # platform provider. SDK compilation does not prove physical playback.
 cc_library(
     name = "audio",
-    srcs = glob(["**/*.h"]) + [
+    srcs = PRIVATE_HEADERS + [
         "AacDecoderSession.cpp",
         "AlacDecoderSession.cpp",
         "Backend.cpp",
@@ -156,7 +190,7 @@ cc_library(
 cc_library(
     name = "test_headers",
     testonly = True,
-    hdrs = glob(["**/*.h"]),
+    hdrs = PRIVATE_HEADERS,
     include_prefix = "lib/audio",
     strip_include_prefix = ".",
     visibility = [

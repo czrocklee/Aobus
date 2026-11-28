@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <aobus-scoped-fixture/ReplayValue.h>
+
 #include <cstdint>
 
 // Only the analysis view sees this compiler warning. Under the product's
@@ -14,5 +16,5 @@
 
 inline std::int32_t werrorReplayValue()
 {
-  return 1;
+  return ScopedReplayInputValue;
 }

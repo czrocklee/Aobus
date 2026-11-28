@@ -151,6 +151,8 @@ class OwnerInventory:
     uncovered: tuple[Uncovered, ...]
     execroot: Path
     _omitted_native_tu: bool = False
+    # An upper bound, not observed includes. None cannot rule out a consumer.
+    candidate_inputs: frozenset[str] | None = None
 
     @property
     def has_native_tu(self) -> bool:
@@ -323,6 +325,19 @@ def main_output_group(path: str, *, windows: bool) -> str | None:
     return _MAIN + key.replace("_", "__").replace("/", "_s").replace(".", "_d").replace("-", "_h")
 
 
+def _candidate_inputs(value: object) -> frozenset[str] | None:
+    """Read optional checkout inputs, which may name files or directories."""
+    if value is None:
+        return None
+    try:
+        paths = _strings(value, "candidate inputs")
+    except ValueError:
+        return None
+    if any(path.split("/", 1)[0] in ("bazel-out", "external") for path in paths):
+        return None
+    return frozenset(paths)
+
+
 def _inventory(
     owner: str,
     config_id: str,
@@ -333,6 +348,7 @@ def _inventory(
     allowed_modes: frozenset[str],
     *,
     checker_platform: str | None = None,
+    input_index: bool = False,
 ) -> OwnerInventory:
     directory, index_name = _owner_directory(owner, configuration)
     full = _FULL in requested
@@ -415,7 +431,15 @@ def _inventory(
         if extras and (not full or any(p.endswith((".report.json", ".log", ".aobus-lint.index.json")) for p in extras)):
             raise ValueError(f"unexpected lint output in {group}")
     return OwnerInventory(
-        owner, configuration, config_id, tuple(reports), sources, tuple(uncovered), execroot, omitted_native_tu
+        owner,
+        configuration,
+        config_id,
+        tuple(reports),
+        sources,
+        tuple(uncovered),
+        execroot,
+        omitted_native_tu,
+        candidate_inputs=_candidate_inputs(data.get("candidate_inputs")) if input_index else None,
     )
 
 
@@ -456,17 +480,21 @@ _ANALYSIS_MODES = frozenset({"STRICT", "RELAXED"})
 _ANALYZER_MODES = frozenset({"ANALYZER"})
 
 
-def lint_aspect_id(consumers: str = "{}", *, profile: str = "lint") -> str:
-    """Return the BEP identity of the fixed production aspect for a consumer payload."""
+def lint_aspect_id(consumers: str = "{}", *, profile: str = "lint", input_index: bool = False) -> str:
+    """Return the exact BEP identity for the requested production aspect."""
     if not isinstance(consumers, str):
         raise ValueError("lint consumers must be a string")
+    if not isinstance(input_index, bool):
+        raise ValueError("lint input index selection must be a bool")
+    parameters = "aobus_lint_consumers=" + json.dumps(consumers)
     if profile == "lint":
-        base = _LINT_ASPECT_BASE
-    elif profile == "analyzer":
-        base = _ANALYZER_ASPECT_BASE
-    else:
-        raise ValueError("analysis kind must be lint or analyzer")
-    return base + "[aobus_lint_consumers=" + json.dumps(consumers) + "]"
+        mode = '"on"' if input_index else '"off"'
+        return f"{_LINT_ASPECT_BASE}[{parameters},aobus_lint_inputs={mode}]"
+    if profile == "analyzer":
+        if input_index:
+            raise ValueError("analyzer does not publish a scoped lint input index")
+        return f"{_ANALYZER_ASPECT_BASE}[{parameters}]"
+    raise ValueError("analysis kind must be lint or analyzer")
 
 
 def read_reports(
@@ -477,10 +505,11 @@ def read_reports(
     profile: str = "lint",
     output_groups: Sequence[str] = (_FULL,),
     checker_owner: str | None = None,
+    input_index: bool = False,
 ) -> tuple[OwnerInventory, ...]:
     """Bind exactly one current aspect completion to each requested root.
 
-    Only a completion of exactly lint_aspect_id(consumers, profile=profile)
+    Only a completion of the exact aspect ID with its requested parameters
     binds an owner; all owners in this BEP must share one execution root,
     including when their reports are used only for donor discovery.
     Unparameterized, foreign, differently parameterized or other-profile
@@ -505,11 +534,13 @@ def read_reports(
             raise ValueError("expected owners must contain the concrete checker, not the verification root")
         roots.remove(checker)
         roots.add(verification)
-    expected_aspect = lint_aspect_id(consumers, profile=profile)
+    expected_aspect = lint_aspect_id(consumers, profile=profile, input_index=input_index)
     allowed_modes = _ANALYZER_MODES if profile == "analyzer" else _ANALYSIS_MODES
     requested = frozenset(output_groups)
     if len(requested) != len(output_groups):
         raise ValueError("duplicate requested lint output group")
+    if input_index and _FULL in requested:
+        raise ValueError("lint input evidence requires scoped output groups")
     if requested != {_FULL} and (
         profile != "lint"
         or _INDEX not in requested
@@ -594,6 +625,7 @@ def read_reports(
                 execroot,
                 allowed_modes,
                 checker_platform=checker_platform,
+                input_index=input_index,
             )
         )
     return tuple(result)

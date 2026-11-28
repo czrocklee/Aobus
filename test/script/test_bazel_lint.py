@@ -20,6 +20,7 @@ from ao.command import check as check_command
 from ao.core import bazel_native as native
 from ao.core.paths import absolute_path
 from ao.graph import bazel_lint_reports
+from ao.policy.tidy_policy import consumer_rank
 from ao.portal import bazel_lint, build_dir, git_files, source_analyzer, source_lint, source_scope, tidy_engine
 from ao.portal.source_scope import SourceScope
 
@@ -138,6 +139,7 @@ SPAN = "include/ao/util/Span.h"
 INVENTORY = "app/include/ao/i18n/Inventory.def"
 _CONSUMER_CONFIG_PREFIX = "build:aobus_lint_consumers "
 _CONSUMER_PARAMETER_OPTION = "--aspects_parameters=aobus_lint_consumers="
+_INPUT_INDEX_PARAMETER = "--aspects_parameters=aobus_lint_inputs="
 _SCOPE_CONFIG_PREFIX = "build:aobus_lint_scope "
 _OUTPUT_GROUP_OPTION = "--output_groups="
 _FULL_GROUP = "aobus_lint"
@@ -174,30 +176,32 @@ def decode_consumer_parameters(prepared):
 
 class TidyLintParserTest(unittest.TestCase):
     def test_explicit_owner_lint_does_not_fall_back_to_an_empty_changed_scope(self):
-        args = make_parser().parse_args(
-            [
-                "check",
-                "lint",
-                "--config",
-                "release",
-                "--target",
-                "//test/lint:cache_clean",
-                "--tidy-check",
-                "aobus-example",
-            ]
-        )
-        with (
-            patch.object(source_scope, "resolve", side_effect=AssertionError("no source discovery")) as scope,
-            patch.object(bazel_lint, "run", return_value=7) as lint_run,
-        ):
-            self.assertTrue(check_command.requires_build_environment(args))
-            self.assertEqual(check_command.run_command(args), 7)
-        lint_run.assert_called_once()
-        request, native_scope = lint_run.call_args.args
-        self.assertIsInstance(request, source_lint.LintRequest)
-        self.assertEqual(request.owner_targets, ("//test/lint:cache_clean",))
-        self.assertEqual(native_scope, SourceScope())
-        scope.assert_not_called()
+        arguments = [
+            "check",
+            "lint",
+            "--config",
+            "release",
+            "--target",
+            "//test/lint:cache_clean",
+            "--tidy-check",
+            "aobus-example",
+        ]
+        for flags, prune in (((), True), (("--no-prune-lint-inputs",), False)):
+            with (
+                self.subTest(flags=flags),
+                patch.object(source_scope, "resolve", side_effect=AssertionError("no source discovery")) as scope,
+                patch.object(bazel_lint, "run", return_value=7) as lint_run,
+            ):
+                args = make_parser().parse_args([*arguments, *flags])
+                self.assertTrue(check_command.requires_build_environment(args))
+                self.assertEqual(check_command.run_command(args), 7)
+                lint_run.assert_called_once()
+                request, native_scope = lint_run.call_args.args
+                self.assertIsInstance(request, source_lint.LintRequest)
+                self.assertEqual(request.owner_targets, ("//test/lint:cache_clean",))
+                self.assertIs(request.prune_lint_inputs, prune)
+                self.assertEqual(native_scope, SourceScope())
+                scope.assert_not_called()
 
 
 class QueryGraphTest(unittest.TestCase):
@@ -365,6 +369,7 @@ class _OrchestrationHarness:
         self.execute_calls: list[dict[str, object]] = []
         self.read_calls: list[tuple[Path, list[str], tuple[str, ...], str | None]] = []
         self.read_profiles: list[str] = []
+        self.read_input_indexes: list[bool] = []
         self.log_sequence = 0
         # The owned transport is faked below; the focused rc-isolation case
         # still needs the real production function at the process boundary.
@@ -468,12 +473,26 @@ class _OrchestrationHarness:
         return self.build_status
 
     def fake_read_reports(
-        self, bep, owners, *, checker_owner, consumers="{}", profile="lint", output_groups=(_FULL_GROUP,)
+        self,
+        bep,
+        owners,
+        *,
+        checker_owner,
+        consumers="{}",
+        profile="lint",
+        output_groups=(_FULL_GROUP,),
+        input_index=False,
     ):
         self.read_calls.append((bep, list(owners), tuple(output_groups), checker_owner))
         self.read_profiles.append(profile)
+        self.read_input_indexes.append(input_index)
         build = self.execute_calls[-1]
         self.assertIn(f"--build_event_json_file={bep}", build["targets"])
+        self.assertEqual(
+            [option for option in build["targets"] if option.startswith(_INPUT_INDEX_PARAMETER)],
+            [_INPUT_INDEX_PARAMETER + "on"] if input_index else [],
+        )
+        self.assertNotIn(_INPUT_INDEX_PARAMETER, (build["prepared"] / "aobus.bazelrc").read_text(encoding="utf-8"))
         self.assertEqual(json.loads(consumers), build["consumers"])
         self.assertCountEqual(output_groups, build["output_groups"])
         roots = [word for word in build["targets"] if word.startswith("//")]
@@ -512,6 +531,16 @@ class _OrchestrationHarness:
         for (bep, _, groups, _), (name, expected) in zip(self.read_calls, passes, strict=True):
             self.assertEqual(bep.name, f"{name}.bep.json")
             self.assertCountEqual(groups, expected)
+
+    def assert_input_index_passes(self, *expected):
+        self.assertEqual(
+            [
+                bep.name.removesuffix(".bep.json")
+                for (bep, _, _, _), enabled in zip(self.read_calls, self.read_input_indexes, strict=True)
+                if enabled
+            ],
+            list(expected),
+        )
 
     def fake_process(self, command, stdout, stderr):
         # Replace only the owned transport, not subprocess.run shared with the
@@ -578,7 +607,7 @@ class _OrchestrationHarness:
             tuple(includes),
         )
 
-    def owner_inventory(self, owner, *reports, sources=None):
+    def owner_inventory(self, owner, *reports, sources=None, candidate_inputs=None):
         configuration = "bazel-out/k8-dbg/bin"
         paths = (
             tuple(sources)
@@ -588,7 +617,14 @@ class _OrchestrationHarness:
             )
         )
         return bazel_lint_reports.OwnerInventory(
-            owner, configuration, "config-id", tuple(reports), paths, (), self.root / "execroot"
+            owner,
+            configuration,
+            "config-id",
+            tuple(reports),
+            paths,
+            (),
+            self.root / "execroot",
+            candidate_inputs=candidate_inputs,
         )
 
     def checker_inventory(self):
@@ -1093,6 +1129,7 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
 
         self.assertEqual(self.run_quiet(SourceScope(), owner_targets=(_CHECKER_OWNER,)), 1)
         self.assert_report_groups(("build", {_FULL_GROUP}))
+        self.assert_input_index_passes()
         self.assertCountEqual(self.assert_checker_report_binding(), [_CHECKER_SOURCE, _CHECKER_SIBLING])
 
     def test_windows_case_alias_materializes_and_gates_the_canonical_main(self):
@@ -1187,6 +1224,577 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         receipt = json.loads((self.tree / "lint").glob("run-*/run.receipt.json").__next__().read_text(encoding="utf-8"))
         self.assertEqual(receipt["selected"], [])
         self.assertEqual(receipt["deferred"], ["lib/utility/AtomicFileWindows.cpp"])
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def _excluded_foreign_inputs_fixture(self):
+        self.query_xml = CONSUMER_XML
+        util = "@@//lib/util:util"
+        i18n = "@@//app/i18n:i18n"
+        compiler = "@@//tool/catalog:compiler"
+        unit = "@@//test/unit:unit"
+        direct = "lib/util/Clock.cpp"
+        self.cquery_texts = [f"{util}|False\n{i18n}|False\n", f"{compiler}|False\n{unit}|True\n"]
+        clock = self.report(util, direct, outcome="warning", log=f"{direct}:1:1: warning: selected [aobus-example]\n")
+        catalog = self.report(i18n, "app/i18n/Catalog.cpp")
+        main = self.report(compiler, "tool/catalog/Main.cpp")
+        # Loading sees both paths and the held owners; the configured inputs exclude them.
+        primary = (
+            self.owner_inventory(util, clock, candidate_inputs=frozenset({clock.identity.source})),
+            self.owner_inventory(i18n, catalog, candidate_inputs=frozenset({catalog.identity.source})),
+        )
+        held = (self.owner_inventory(compiler, main, candidate_inputs=frozenset({main.identity.source})),)
+        direct_groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_lib_sutil_sClock_dcpp",
+            "aobus_lint_main_include_sao_sutil_sSpan_dh",
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+        }
+        return SourceScope((direct, SPAN, INVENTORY)), primary, held, direct_groups
+
+    def test_default_pruning_uses_held_indexes_to_skip_absent_foreign_headers_and_fragments(self):
+        scope, primary, held, direct_groups = self._excluded_foreign_inputs_fixture()
+        self.pass_inventories = [primary, held]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(scope), 1)
+
+        self.assert_report_groups(("build", direct_groups), ("platform-inputs", {_INDEX_GROUP}))
+        self.assert_input_index_passes("build", "platform-inputs")
+        run_dir = self.read_calls[0][0].parent
+        probe = json.loads((run_dir / "cquery-platform-inputs.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(probe["incompatible"], ["//test/unit:unit"])
+        self.assertEqual(self.read_calls[1][1], [held[0].owner])
+        receipt = json.loads((run_dir / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], ["lib/util/Clock.cpp"])
+        self.assertCountEqual(receipt["deferred"], [SPAN, INVENTORY])
+        self.assertEqual(receipt["input_pruned"], sorted((SPAN, INVENTORY)))
+
+    def test_deferred_foreign_path_records_pruned_held_owner_after_primary_search(self):
+        self.query_xml = CONSUMER_XML.replace(
+            '<label value="//app/i18n:Catalog.cpp"/>',
+            '<label value="//app/i18n:Catalog.cpp"/><label value="//app/i18n:Sibling.cpp"/>',
+        )
+        nearest = "@@//app/i18n:i18n"
+        held = "@@//tool/catalog:compiler"
+        direct = "app/i18n/Catalog.cpp"
+        sibling = "app/i18n/Sibling.cpp"
+        donor = "tool/catalog/Main.cpp"
+        self.touch(sibling)
+        self.cquery_texts = [f"{nearest}|False\n", f"{held}|False\n"]
+        selected = self.report(
+            nearest, direct, outcome="warning", log=f"{direct}:1:1: warning: selected [aobus-example]\n"
+        )
+        primary = self.owner_inventory(
+            nearest, selected, self.report(nearest, sibling), candidate_inputs=frozenset({direct, sibling, INVENTORY})
+        )
+        excluded = self.owner_inventory(held, self.report(held, donor), candidate_inputs=frozenset({donor}))
+        self.pass_inventories = [(primary,), (primary,), (excluded,)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", side_effect=lambda path: path == INVENTORY):
+            self.assertEqual(self.run_quiet(SourceScope((direct, INVENTORY))), 1)
+
+        groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_app_si18n_sCatalog_dcpp",
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+        }
+        self.assert_report_groups(
+            ("build", groups), ("discovery", groups | {_SOURCES_GROUP}), ("platform-inputs", {_INDEX_GROUP})
+        )
+        self.assertEqual([call[1] for call in self.read_calls], [[nearest], [nearest], [held]])
+        self.assert_input_index_passes("build", "discovery", "platform-inputs")
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], [direct])
+        self.assertEqual(receipt["deferred"], [INVENTORY])
+        self.assertEqual(receipt["input_pruned"], [INVENTORY])
+
+    def test_opt_out_runs_donor_discovery_without_querying_input_indexes(self):
+        scope, primary, held, direct_groups = self._excluded_foreign_inputs_fixture()
+        self.pass_inventories = [primary, primary + held]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(scope, prune_lint_inputs=False), 1)
+
+        discovery_groups = direct_groups | {_SOURCES_GROUP}
+        self.assert_report_groups(("build", discovery_groups), ("consumer-owners", discovery_groups))
+        self.assert_input_index_passes()
+        run_dir = self.read_calls[0][0].parent
+        self.assertFalse((run_dir / "cquery-platform-inputs.receipt.json").exists())
+        receipt = json.loads((run_dir / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], ["lib/util/Clock.cpp"])
+        self.assertCountEqual(receipt["deferred"], [SPAN, INVENTORY])
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_mixed_paths_prune_only_owners_with_complete_absence_evidence(self):
+        self.query_xml = CONSUMER_XML.replace(
+            "</query>",
+            '<rule class="cc_test" name="//test/other:unit">'
+            '<list name="srcs"><label value="//test/other:Other.cpp"/></list>'
+            '<list name="deps"><label value="//lib/util:util"/></list>'
+            "</rule></query>",
+        )
+        util = "@@//lib/util:util"
+        i18n = "@@//app/i18n:i18n"
+        compiler = "@@//tool/catalog:compiler"
+        other = "@@//test/other:unit"
+        unit = "@@//test/unit:unit"
+        direct = "app/i18n/Catalog.cpp"
+        donor = "test/unit/SpanTest.cpp"
+        span_source = self.report(unit, donor, includes=(SPAN,))
+        span_header = self.report(
+            unit, donor, header=SPAN, outcome="warning", log=f"{SPAN}:1:1: warning: held donor [aobus-example]\n"
+        )
+
+        def owner_excluding(owner, path):
+            return self.owner_inventory(owner, self.report(owner, path), candidate_inputs=frozenset({path}))
+
+        clock = "lib/util/Clock.cpp"
+        configured = {
+            util: self.owner_inventory(util, self.report(util, clock), candidate_inputs=frozenset({clock, SPAN})),
+            i18n: owner_excluding(i18n, direct),
+            compiler: owner_excluding(compiler, "tool/catalog/Main.cpp"),
+            other: owner_excluding(other, "test/other/Other.cpp"),
+            unit: self.owner_inventory(unit, span_source),
+        }
+
+        primary = (configured[util], configured[i18n])
+        self.cquery_texts = [f"{util}|False\n{i18n}|False\n", f"{compiler}|False\n{other}|False\n{unit}|False\n"]
+        self.pass_inventories = [
+            primary,
+            (configured[util],),
+            (configured[compiler], configured[other], configured[unit]),
+            (configured[unit],),
+            (*primary, self.owner_inventory(unit, span_source, span_header)),
+        ]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((direct, SPAN, INVENTORY))), 1)
+
+        direct_groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_app_si18n_sCatalog_dcpp",
+            "aobus_lint_main_include_sao_sutil_sSpan_dh",
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+        }
+        self.assert_report_groups(
+            ("build", direct_groups),
+            ("discovery", direct_groups | {_SOURCES_GROUP}),
+            ("platform-inputs", {_INDEX_GROUP}),
+            ("consumer-owners", direct_groups | {_SOURCES_GROUP}),
+            ("consumers", direct_groups),
+        )
+        self.assertEqual(self.read_calls[1][1], [util])
+        self.assertCountEqual(self.read_calls[2][1], [compiler, other, unit])
+        self.assertEqual(self.read_calls[3][1], [unit])
+        self.assert_input_index_passes("build", "discovery", "platform-inputs", "consumer-owners")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {unit: [[donor, SPAN]]})
+        run_dir = self.read_calls[0][0].parent
+        receipt = json.loads((run_dir / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], [direct, SPAN])
+        self.assertEqual(receipt["deferred"], [INVENTORY])
+        self.assertEqual(receipt["input_pruned"], [INVENTORY])
+
+    def _check_cross_path_donor_widening(self, *, primary_may_include_foreign):
+        portable = "tool/catalog/config/Options.h"
+        self.touch(portable)
+        self.query_xml = CONSUMER_XML.replace(
+            '<list name="deps"><label value="//app/include:i18n"/></list>',
+            '<list name="deps"><label value="//app/include:i18n"/></list>'
+            '<list name="additional_compiler_inputs"><label value="//tool/catalog:config/Options.h"/></list>',
+        ).replace(
+            '<list name="srcs"><label value="//tool/catalog:Main.cpp"/></list>',
+            '<list name="srcs"><label value="//tool/catalog:config/Main.cpp"/></list>'
+            '<list name="additional_compiler_inputs"><label value="//tool/catalog:config"/></list>',
+        )
+        nearest = "@@//app/i18n:i18n"
+        held = "@@//tool/catalog:compiler"
+        weaker = "app/i18n/Catalog.cpp"
+        stronger = "tool/catalog/config/Main.cpp"
+        self.assertLess(consumer_rank(portable, held, stronger), consumer_rank(portable, nearest, weaker))
+        self.cquery_texts = [f"{nearest}|False\n", f"{held}|False\n"]
+        weak = self.report(nearest, weaker, includes=(portable,))
+        strong = self.report(held, stronger, includes=(portable,))
+        warning = self.report(
+            held,
+            stronger,
+            header=portable,
+            outcome="warning",
+            log=f"{portable}:1:1: warning: stronger donor [aobus-example]\n",
+        )
+        candidates = {weaker, portable}
+        if primary_may_include_foreign:
+            candidates.add(INVENTORY)
+        primary = self.owner_inventory(nearest, weak, candidate_inputs=frozenset(candidates))
+        held_owner = self.owner_inventory(held, strong, candidate_inputs=frozenset({stronger, portable}))
+        self.pass_inventories = [(primary,), (primary,), (held_owner,)]
+        direct = {
+            _INDEX_GROUP,
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+            "aobus_lint_main_tool_scatalog_sconfig_sOptions_dh",
+        }
+        passes = [("build", direct), ("discovery", direct | {_SOURCES_GROUP}), ("platform-inputs", {_INDEX_GROUP})]
+        owners = [[nearest], [nearest], [held]]
+        indexed = ["build", "discovery", "platform-inputs"]
+        if primary_may_include_foreign:
+            self.pass_inventories += [(held_owner,), (primary, self.owner_inventory(held, strong, warning))]
+            passes.append(("consumer-owners", direct | {_SOURCES_GROUP}))
+            owners += [[held], [nearest, held]]
+            indexed.append("consumer-owners")
+            expected_consumer = {held: [[stronger, portable]]}
+        else:
+            clean = self.report(nearest, weaker, header=portable)
+            self.pass_inventories.append((self.owner_inventory(nearest, weak, clean),))
+            owners.append([nearest])
+            expected_consumer = {nearest: [[weaker, portable]]}
+        passes.append(("consumers", direct))
+
+        with patch.object(bazel_lint, "_platform_incompatible", side_effect=lambda path: path == INVENTORY):
+            status = self.run_quiet(SourceScope((INVENTORY, portable)), prune_lint_inputs=True)
+
+        self.assertEqual(status, 1 if primary_may_include_foreign else 0)
+        self.assert_report_groups(*passes)
+        self.assertEqual([call[1] for call in self.read_calls], owners)
+        self.assert_input_index_passes(*indexed)
+        self.assertEqual(self.execute_calls[-1]["consumers"], expected_consumer)
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], [INVENTORY])
+        self.assertEqual(receipt["input_pruned"], [] if primary_may_include_foreign else [INVENTORY])
+
+    def test_held_owner_excluding_unresolved_foreign_path_can_improve_an_observed_donor(self):
+        self._check_cross_path_donor_widening(primary_may_include_foreign=True)
+
+    def test_held_owner_cannot_improve_donor_when_all_evidence_excludes_foreign_path(self):
+        self._check_cross_path_donor_widening(primary_may_include_foreign=False)
+
+    def test_split_gate_records_the_report_bep_for_each_owner_without_replay(self):
+        self.query_xml = CONSUMER_XML
+        nearest = "@@//app/i18n:i18n"
+        held = "@@//tool/catalog:compiler"
+        direct = "app/i18n/Catalog.cpp"
+        donor = "tool/catalog/Main.cpp"
+        self.cquery_texts = [f"{nearest}|False\n", f"{held}|False\n"]
+        primary_source = self.report(
+            nearest, direct, outcome="warning", log=f"{direct}:1:1: warning: retained direct report [aobus-example]\n"
+        )
+        primary = self.owner_inventory(nearest, primary_source, candidate_inputs=frozenset({direct}))
+        held_owner = self.owner_inventory(
+            held, self.report(held, donor), candidate_inputs=frozenset({donor, INVENTORY})
+        )
+        self.pass_inventories = [(primary,), (held_owner,), (held_owner,)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", side_effect=lambda path: path == INVENTORY):
+            self.assertEqual(self.run_quiet(SourceScope((direct, INVENTORY)), prune_lint_inputs=True), 1)
+
+        groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_app_si18n_sCatalog_dcpp",
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+        }
+        self.assert_report_groups(
+            ("build", groups), ("platform-inputs", {_INDEX_GROUP}), ("consumer-owners", groups | {_SOURCES_GROUP})
+        )
+        initial = self.read_calls[0][0]
+        widened = self.read_calls[2][0]
+        receipt = json.loads((initial.parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            receipt["report_beps"], {nearest.removeprefix("@@"): str(initial), held.removeprefix("@@"): str(widened)}
+        )
+        self.assertEqual(receipt["selected"], [direct])
+        self.assertEqual(receipt["deferred"], [INVENTORY])
+
+    def test_foreign_fragment_discovery_keeps_a_held_donor_whose_index_contains_it(self):
+        self.query_xml = CONSUMER_XML
+        nearest = "@@//app/i18n:i18n"
+        compiler = "@@//tool/catalog:compiler"
+        donor = "tool/catalog/Main.cpp"
+        self.cquery_texts = [f"{nearest}|False\n", f"{compiler}|False\n"]
+        nearest_source = "app/i18n/Catalog.cpp"
+        catalog = self.owner_inventory(
+            nearest, self.report(nearest, nearest_source), candidate_inputs=frozenset({nearest_source})
+        )
+        main = self.report(compiler, donor, includes=(INVENTORY,))
+        fragment = self.report(
+            compiler,
+            donor,
+            header=INVENTORY,
+            outcome="warning",
+            log=f"{INVENTORY}:1:1: warning: fragment finding [aobus-example]\n",
+        )
+        held = self.owner_inventory(compiler, main, candidate_inputs=frozenset({donor, INVENTORY}))
+        self.pass_inventories = [
+            (catalog,),
+            (held,),
+            (held,),
+            (catalog, self.owner_inventory(compiler, main, fragment)),
+        ]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((INVENTORY,))), 1)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
+        self.assert_report_groups(
+            ("build", direct),
+            ("platform-inputs", {_INDEX_GROUP}),
+            ("consumer-owners", direct | {_SOURCES_GROUP}),
+            ("consumers", direct),
+        )
+        self.assert_input_index_passes("build", "platform-inputs", "consumer-owners")
+        self.assertEqual([bazel_action_of(command) for command in self.commands], ["query", "cquery", "cquery"])
+        self.assertEqual(self.execute_calls[-1]["consumers"], {compiler: [[donor, INVENTORY]]})
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_foreign_header_with_unknown_primary_inputs_still_discovers_its_donor(self):
+        self.query_xml = CONSUMER_XML
+        owner = "@@//lib/util:util"
+        donor = "lib/util/Clock.cpp"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, donor, includes=(SPAN,))
+        header = self.report(
+            owner, donor, header=SPAN, outcome="warning", log=f"{SPAN}:1:1: warning: header finding [aobus-example]\n"
+        )
+        primary = (self.owner_inventory(owner, source),)
+        self.pass_inventories = [primary, primary, (self.owner_inventory(owner, source, header),)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((SPAN,))), 1)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_include_sao_sutil_sSpan_dh"}
+        self.assert_report_groups(("build", direct), ("discovery", direct | {_SOURCES_GROUP}), ("consumers", direct))
+        self.assert_input_index_passes("build", "discovery")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, SPAN]]})
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_foreign_header_with_no_observed_consumer_is_not_recorded_as_input_pruned(self):
+        self.query_xml = CONSUMER_XML
+        owner = "@@//lib/util:util"
+        self.cquery_texts = [f"{owner}|False\n", "@@//test/unit:unit|True\n"]
+        self.inventories = (self.owner_inventory(owner, self.report(owner, "lib/util/Clock.cpp")),)
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((SPAN,))), 0)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_include_sao_sutil_sSpan_dh"}
+        self.assert_report_groups(("build", direct), ("discovery", direct | {_SOURCES_GROUP}))
+        self.assert_input_index_passes("build", "discovery")
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], [SPAN])
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_unrelated_primary_with_unknown_inputs_can_supply_a_foreign_header(self):
+        self.query_xml = CONSUMER_XML.replace(
+            '<list name="srcs"><label value="//app/i18n:Catalog.cpp"/></list>',
+            '<list name="srcs"><label value="//app/i18n:Catalog.cpp"/><label value="//app/i18n:Sibling.cpp"/></list>',
+        )
+        owner = "@@//app/i18n:i18n"
+        util = "@@//lib/util:util"
+        direct = "app/i18n/Catalog.cpp"
+        donor = "app/i18n/Sibling.cpp"
+        clock = "lib/util/Clock.cpp"
+        self.cquery_text = f"{owner}|False\n{util}|False\n"
+        catalog = self.report(owner, direct)
+        source = self.report(owner, donor, includes=(SPAN,))
+        header = self.report(
+            owner, donor, header=SPAN, outcome="warning", log=f"{SPAN}:1:1: warning: unknown owner [aobus-example]\n"
+        )
+        unknown = self.owner_inventory(owner, catalog, source)
+        absent = self.owner_inventory(util, self.report(util, clock), candidate_inputs=frozenset({clock}))
+        self.pass_inventories = [
+            (unknown, absent),
+            (unknown,),
+            (self.owner_inventory(owner, catalog, source, header), absent),
+        ]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((direct, SPAN))), 1)
+
+        groups = {_INDEX_GROUP, "aobus_lint_main_app_si18n_sCatalog_dcpp", "aobus_lint_main_include_sao_sutil_sSpan_dh"}
+        self.assert_report_groups(("build", groups), ("discovery", groups | {_SOURCES_GROUP}), ("consumers", groups))
+        self.assertEqual(self.read_calls[1][1], [owner])
+        self.assert_input_index_passes("build", "discovery")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, SPAN]]})
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["selected"], [direct, SPAN])
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_windows_header_candidate_matches_selected_path_ignoring_case(self):
+        self.query_xml = CONSUMER_XML
+        owner = "@@//lib/util:util"
+        donor = "lib/util/Clock.cpp"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, donor, includes=(SPAN,))
+        header = self.report(owner, donor, header=SPAN)
+        source = replace(source, identity=replace(source.identity, platform="windows"))
+        header = replace(header, identity=replace(header.identity, platform="windows"))
+        candidates = frozenset({donor, SPAN.upper()})
+        primary = (self.owner_inventory(owner, source, candidate_inputs=candidates),)
+        self.pass_inventories = [primary, primary, (self.owner_inventory(owner, source, header),)]
+
+        with (
+            patch.object(bazel_lint, "os", SimpleNamespace(name="nt")),
+            patch.object(bazel_lint, "_platform_incompatible", return_value=True),
+        ):
+            self.assertEqual(self.run_quiet(SourceScope((SPAN,))), 0)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_include_sao_sutil_sspan_dh"}
+        self.assert_report_groups(("build", direct), ("discovery", direct | {_SOURCES_GROUP}), ("consumers", direct))
+        self.assert_input_index_passes("build", "discovery")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, SPAN]]})
+
+    def test_foreign_fragment_remains_possible_under_an_additional_compiler_input_directory(self):
+        directory = "app/include/ao/i18n"
+        self.assertTrue((self.checkout / directory).is_dir())
+        self.query_xml = CONSUMER_XML.replace(
+            '<list name="deps"><label value="//app/include:i18n"/></list>',
+            '<list name="deps"><label value="//app/include:i18n"/></list>'
+            '<list name="additional_compiler_inputs"><label value="//app/include:ao/i18n"/></list>',
+        )
+        owner = "@@//app/i18n:i18n"
+        donor = "app/i18n/Catalog.cpp"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, donor, includes=(INVENTORY,))
+        fragment = self.report(owner, donor, header=INVENTORY)
+        initial = (self.owner_inventory(owner, source, candidate_inputs=frozenset({donor, directory})),)
+        discovery = (self.owner_inventory(owner, source),)
+        self.pass_inventories = [initial, discovery, (self.owner_inventory(owner, source, fragment),)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((INVENTORY,))), 0)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
+        self.assert_report_groups(("build", direct), ("discovery", direct | {_SOURCES_GROUP}), ("consumers", direct))
+        self.assert_input_index_passes("build", "discovery")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, INVENTORY]]})
+
+    def test_observed_include_invalidates_empty_candidate_inputs_and_discovers_a_better_donor(self):
+        self.query_xml = CONSUMER_XML.replace(
+            '<label value="//lib/util:Clock.cpp"/>',
+            '<label value="//lib/util:detail/Clock.cpp"/><label value="//lib/util:Near.cpp"/>',
+        )
+        owner = "@@//lib/util:util"
+        weaker = "lib/util/detail/Clock.cpp"
+        stronger = "lib/util/Near.cpp"
+        self.touch(weaker, stronger)
+        self.assertLess(consumer_rank(SPAN, owner, stronger), consumer_rank(SPAN, owner, weaker))
+        self.cquery_text = f"{owner}|False\n"
+        weak = self.report(owner, weaker, includes=(SPAN,))
+        strong = self.report(owner, stronger, includes=(SPAN,))
+        header = self.report(
+            owner,
+            stronger,
+            header=SPAN,
+            outcome="warning",
+            log=f"{SPAN}:1:1: warning: stronger donor [aobus-example]\n",
+        )
+        indexed = (self.owner_inventory(owner, weak, strong, candidate_inputs=frozenset()),)
+        self.pass_inventories = [indexed, indexed, (self.owner_inventory(owner, weak, strong, header),)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((weaker, SPAN))), 1)
+
+        direct = {
+            _INDEX_GROUP,
+            "aobus_lint_main_lib_sutil_sdetail_sClock_dcpp",
+            "aobus_lint_main_include_sao_sutil_sSpan_dh",
+        }
+        self.assert_report_groups(("build", direct), ("discovery", direct | {_SOURCES_GROUP}), ("consumers", direct))
+        self.assert_input_index_passes("build", "discovery")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[stronger, SPAN]]})
+
+    def test_already_run_donors_do_not_count_as_input_pruned_for_a_foreign_path(self):
+        portable = "app/include/ao/i18n/Portable.def"
+        self.touch(portable)
+        self.query_xml = CONSUMER_XML.replace(
+            '<list name="deps"><label value="//app/include:i18n"/></list>',
+            '<list name="deps"><label value="//app/include:i18n"/></list>'
+            '<list name="additional_compiler_inputs"><label value="//app/include:ao/i18n/Portable.def"/></list>',
+        )
+        owner = "@@//app/i18n:i18n"
+        compiler = "@@//tool/catalog:compiler"
+        donor = "app/i18n/Catalog.cpp"
+        direct = "tool/catalog/Main.cpp"
+        self.cquery_text = f"{owner}|False\n{compiler}|False\n"
+        source = self.report(owner, donor, includes=(portable,))
+        fragment = self.report(owner, donor, header=portable)
+        primary = self.owner_inventory(owner, source, candidate_inputs=frozenset({donor, portable}))
+        also_primary = self.owner_inventory(
+            compiler, self.report(compiler, direct), candidate_inputs=frozenset({direct})
+        )
+        self.pass_inventories = [(primary, also_primary), (self.owner_inventory(owner, source, fragment), also_primary)]
+
+        with patch.object(bazel_lint, "_platform_incompatible", side_effect=lambda path: path == INVENTORY):
+            self.assertEqual(self.run_quiet(SourceScope((direct, INVENTORY, portable))), 0)
+
+        groups = {
+            _INDEX_GROUP,
+            "aobus_lint_main_tool_scatalog_sMain_dcpp",
+            "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef",
+            "aobus_lint_main_app_sinclude_sao_si18n_sPortable_ddef",
+        }
+        self.assert_report_groups(("build", groups | {_SOURCES_GROUP}), ("consumers", groups))
+        self.assert_input_index_passes("build")
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, portable]]})
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["deferred"], [INVENTORY])
+        self.assertEqual(receipt["input_pruned"], [])
+
+    def test_portable_fragment_does_not_request_native_input_index(self):
+        self.query_xml = CONSUMER_XML
+        owner = "@@//app/i18n:i18n"
+        donor = "app/i18n/Catalog.cpp"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, donor, includes=(INVENTORY,))
+        fragment = self.report(owner, donor, header=INVENTORY)
+        self.pass_inventories = [
+            (self.owner_inventory(owner, source),),
+            (self.owner_inventory(owner, source, fragment),),
+        ]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=False):
+            self.assertEqual(self.run_quiet(SourceScope((INVENTORY,))), 0)
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
+        self.assert_report_groups(("build", direct | {_SOURCES_GROUP}), ("consumers", direct))
+        self.assert_input_index_passes()
+
+    def test_full_group_fallback_does_not_request_native_input_index(self):
+        path = "app/include/ao/i18n/Inventory=Data.def"
+        self.touch(path)
+        self.query_xml = CONSUMER_XML.replace("Inventory.def", "Inventory=Data.def")
+        owner = "@@//app/i18n:i18n"
+        donor = "app/i18n/Catalog.cpp"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, donor, includes=(path,))
+        fragment = self.report(owner, donor, header=path)
+        self.pass_inventories = [
+            (self.owner_inventory(owner, source),),
+            (self.owner_inventory(owner, source, fragment),),
+        ]
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(SourceScope((path,))), 0)
+
+        self.assert_report_groups(("build", {_FULL_GROUP}), ("consumers", {_FULL_GROUP}))
+        self.assert_input_index_passes()
+        self.assertEqual(self.execute_calls[-1]["consumers"], {owner: [[donor, path]]})
+
+    def test_explicit_target_does_not_skip_discovery_for_an_absent_foreign_fragment(self):
+        self.query_xml = CONSUMER_XML
+        owner = "@@//app/i18n:i18n"
+        self.cquery_text = f"{owner}|False\n"
+        source = self.report(owner, "app/i18n/Catalog.cpp")
+        self.inventories = (self.owner_inventory(owner, source, candidate_inputs=frozenset({source.identity.source})),)
+
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(
+                self.run_quiet(SourceScope((INVENTORY,)), owner_targets=(owner.removeprefix("@@"),)),
+                2,
+            )
+
+        direct = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
+        self.assert_report_groups(("build", direct | {_SOURCES_GROUP}))
+        self.assert_input_index_passes()
 
     def test_unpaired_header_replay_keeps_the_direct_source_but_not_its_donor(self):
         direct = "lib/util/Time.cpp"
@@ -1248,12 +1856,11 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
         catalog = self.report(nearest, "app/i18n/Catalog.cpp", includes=("app/include/ao/i18n/Ids.h",))
         main = self.report(compiler, "tool/catalog/Main.cpp", includes=(INVENTORY,))
         fragment = self.report(compiler, "tool/catalog/Main.cpp", header=INVENTORY)
-        self.pass_inventories = [
-            (self.owner_inventory(nearest, catalog),),
-            (self.owner_inventory(nearest, catalog), self.owner_inventory(compiler, main)),
-            (self.owner_inventory(nearest, catalog), self.owner_inventory(compiler, main, fragment)),
-        ]
-        self.assertEqual(self.run_quiet(explicit_scope(INVENTORY)), 0)
+        primary = self.owner_inventory(nearest, catalog, candidate_inputs=frozenset({catalog.identity.source}))
+        held = self.owner_inventory(compiler, main, candidate_inputs=frozenset({main.identity.source, INVENTORY}))
+        self.pass_inventories = [(primary,), (primary, held), (primary, self.owner_inventory(compiler, main, fragment))]
+        with patch.object(bazel_lint, "_platform_incompatible", return_value=True):
+            self.assertEqual(self.run_quiet(explicit_scope(INVENTORY)), 0)
 
         selected_groups = {_INDEX_GROUP, "aobus_lint_main_app_sinclude_sao_si18n_sInventory_ddef"}
         self.assert_report_groups(
@@ -1261,10 +1868,13 @@ class RunOrchestrationTest(_OrchestrationHarness, unittest.TestCase):
             ("consumer-owners", selected_groups | {_SOURCES_GROUP}),
             ("consumers", selected_groups),
         )
+        self.assert_input_index_passes()
         self.assertEqual(
             [owners for _, owners, _, _ in self.read_calls], [[nearest], [nearest, compiler], [nearest, compiler]]
         )
         self.assertEqual(self.execute_calls[-1]["consumers"], {compiler: [["tool/catalog/Main.cpp", INVENTORY]]})
+        receipt = json.loads((self.read_calls[0][0].parent / "run.receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["input_pruned"], [])
 
     def test_platform_named_header_is_not_deferred_before_held_consumers_are_checked(self):
         header_path = "app/windows-winui/include/ao/winui/Unpaired.h"

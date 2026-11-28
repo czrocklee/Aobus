@@ -71,10 +71,11 @@ class WriteConsumerParametersTest(unittest.TestCase):
                 consumer_line(parameters),
             ],
         )
-        # The canonical encoding is exactly the parameterized aspect identity.
+        # The canonical consumer encoding is unchanged in both native identities.
+        prefix = "//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers=" + json.dumps(parameters)
+        self.assertEqual(bazel_lint_reports.lint_aspect_id(parameters), prefix + ',aobus_lint_inputs="off"]')
         self.assertEqual(
-            bazel_lint_reports.lint_aspect_id(parameters),
-            "//bazel/lint:lint.bzl%lint_aspect[aobus_lint_consumers=" + json.dumps(parameters) + "]",
+            bazel_lint_reports.lint_aspect_id(parameters, input_index=True), prefix + ',aobus_lint_inputs="on"]'
         )
 
     def test_empty_consumers_encode_the_default_empty_mapping(self):

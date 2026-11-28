@@ -1586,11 +1586,29 @@ scoping never hides an incomplete attempt. Without
 the other owners whose dependencies declare it build only when none of those
 reports included it. When every nearest consumer is platform-incompatible, the
 held owners are queried for compatibility before the path can defer or fail: an
-incompatible nearest group cannot prove farther consumers unavailable. The
-consumer selection reaches the aspect as one canonical JSON string parameter,
+incompatible nearest group cannot prove farther consumers unavailable.
+
+By default, `ao check` and `ao check lint` skip donor discovery for a batched
+foreign-platform header or fragment with no direct report only if complete
+configured input inventories rule it out for every possible compatible owner,
+including farther candidates. If only some owners are ruled out, discovery
+still looks for an observed include among the remaining owners. An opaque compiler
+response argument (`@file`) or VFS overlay makes that owner's input evidence
+incomplete. The run receipt's `input_pruned` lists deferred paths for which
+input evidence avoided at least one compatible owner's donor search. An owner
+already searched for another path in the batch does not count. `report_beps`
+identifies the BEP supplying each owner's retained reports when discovery checks
+only part of a batch. Pass
+`--no-prune-lint-inputs` to use report-based discovery instead. Explicit file
+requests, requests with `--target`, and the full `--extend` graph bypass input
+pruning. For example, the audio library declares private ALSA and PipeWire
+headers only on Linux; a backend name alone does not establish that boundary.
+
+The consumer selection reaches the aspect as one canonical JSON string parameter,
 distinct from output group selection. The portal writes the consumer parameter
 and scoped output groups to separate named configs in its generated rc under the
-tree lock. Only report builds select them. Input, native context and analysis
+tree lock. A scoped pass that requests the input index sets `aobus_lint_inputs=on`
+on the command line. Only report builds select these parameters and configs. Input, native context and analysis
 profile changes invalidate reports; selecting reports does not. Query/cquery do not use these configs;
 no consumer repository, environment selector or pre-query reset is needed.
 Identical consumer parameters and output groups keep the rc section stable; the
@@ -1598,7 +1616,7 @@ next workspace preparation regenerates the baseline rc without it.
 Large maps stay out of the Windows client argv. This uses the normal
 Bazel server mode: batch mode can re-expand rc options into an oversized Java
 command line and is not supported for large maps. Each pass records its literal
-parameter and exact parameterized aspect identity in the receipt. Naming a new
+consumer parameter and exact parameterized aspect identity in the receipt. Naming a new
 consumer adds its reports without changing other report actions. The
 completion gate declares its own fallback replay actions without a
 portal-written consumer parameter.
@@ -1668,7 +1686,7 @@ AppKit Objective-C++/ARC and WinUI generated-header dependencies.
 Unsupported compiler views, modules, PCH/header-unit contexts and unresolved
 response files fail rather than being stripped. The portal reads only the
 current invocation's BEP and local report artifacts, binding each owner to the
-fixed production aspect and that pass's exact consumer parameter. For the
+scoped lint aspect and that pass's exact consumer parameter and input-index mode. For the
 verification root, the BEP carries its current verified native tool path and
 selected groups. Before using reports from a pass, including for donor discovery, the portal requires every
 owner's outputs to come from the same local execution root. It does not scan
