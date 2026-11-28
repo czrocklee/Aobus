@@ -6,7 +6,8 @@
 #include "AppKitText.h"
 #include "ArtworkView.h"
 #include "DesktopControls.h"
-#include "LibrarySession.h"
+#include "DesktopViewState.h"
+#include "PlaybackSeekIntent.h"
 #include "SoulButton.h"
 #include <ao/uimodel/playback/command/PlaybackCommandText.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
@@ -89,6 +90,7 @@ namespace
 } // namespace
 
 @interface AobusSeekSlider ()
+- (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget;
 - (void)presentPlaybackFraction:(double)fraction;
 @end
 
@@ -151,31 +153,33 @@ namespace
 
   return [super sendAction:action to:target];
 }
-- (ao::uimodel::SeekSliderUpdate)seekUpdate
-{
-  if ([self isRetiredDrag] != NO)
-  {
-    // Also guard a native action delivered directly to the target.
-    self.doubleValue = _playbackFraction;
-    return {};
-  }
-
-  return _optFinalUpdate ? *_optFinalUpdate : _interaction.valueChanged([self seekElapsed]);
-}
-- (void)dispatchSeekToSession:(ao::appkit::LibrarySession&)session
+- (ao::appkit::PlaybackSeekIntent)takeSeekIntent
 {
   auto const optTarget = [self seekTarget];
 
   if (auto const optOffset = std::exchange(_optKeyOffset, std::nullopt); optOffset && optTarget)
   {
-    session.seekBy(optTarget->occurrenceId, *optOffset);
-    return;
+    return ao::appkit::RelativeSeek{.occurrenceId = optTarget->occurrenceId, .delta = *optOffset};
   }
 
-  if (auto const update = [self seekUpdate]; optTarget)
+  if (!optTarget)
   {
-    session.seek(update, *optTarget);
+    if ([self isRetiredDrag] != NO)
+    {
+      // A native action delivered directly to the target must restore the displayed thumb too.
+      self.doubleValue = _playbackFraction;
+    }
+
+    return {};
   }
+
+  if (auto const update = _optFinalUpdate ? *_optFinalUpdate : _interaction.valueChanged([self seekElapsed]);
+      update.action != ao::uimodel::SeekSliderAction::None)
+  {
+    return ao::appkit::AbsoluteSeek{.target = *optTarget, .update = update};
+  }
+
+  return {};
 }
 - (void)keyDown:(NSEvent*)event
 {

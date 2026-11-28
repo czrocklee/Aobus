@@ -7,7 +7,7 @@
 #include "LibraryEditorModel.h"
 #include "MainRunLoopExecutor.h"
 #include "MediaPlayerAdapter.h"
-#include "PlaybackSeekTarget.h"
+#include "PlaybackSeekIntent.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -80,6 +80,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::appkit
@@ -884,8 +885,24 @@ namespace ao::appkit
     transportPtrs[index]->handleClick();
   }
 
-  void LibrarySession::seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target)
+  void LibrarySession::seek(PlaybackSeekIntent const& intent)
   {
+    if (auto const* step = std::get_if<RelativeSeek>(&intent))
+    {
+      // Unlike an absolute thumb target, a key step uses the live position at execution.
+      runtime().playback().commands().seekBy(
+        step->occurrenceId, step->delta, rt::PlaybackRelativeSeekEndBehavior::ClampIfChanged);
+      return;
+    }
+
+    auto const* absolute = std::get_if<AbsoluteSeek>(&intent);
+
+    if (absolute == nullptr)
+    {
+      return;
+    }
+
+    auto const& [target, update] = *absolute;
     auto const& current = runtime().playback().snapshot().transport;
 
     if (target.occurrenceId.value == 0 || target.duration <= std::chrono::milliseconds{0} ||
@@ -905,13 +922,6 @@ namespace ao::appkit
         break;
       case uimodel::SeekSliderAction::None: break;
     }
-  }
-
-  void LibrarySession::seekBy(rt::PlaybackOccurrenceId presentedOccurrence, std::chrono::milliseconds delta) const
-  {
-    // Unlike an absolute thumb target, a key step uses the live position at execution.
-    runtime().playback().commands().seekBy(
-      presentedOccurrence, delta, rt::PlaybackRelativeSeekEndBehavior::ClampIfChanged);
   }
 
   void LibrarySession::setVolume(float volume)

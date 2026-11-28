@@ -5,9 +5,11 @@
 
 #include "AppKitScenarioSupport.h"
 #include "app/macos-appkit/AppKitText.h"
+#include "app/macos-appkit/DesktopViewState.h"
 #include "app/macos-appkit/LibraryEditorModel.h"
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/PlaybackBar.h"
+#include "app/macos-appkit/PlaybackSeekIntent.h"
 #include "app/macos-appkit/SoulButton.h"
 #include <ao/Contract.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
@@ -43,6 +45,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 @interface AobusPresentationActionTarget : NSObject
@@ -91,24 +94,20 @@
   _lastSeekFraction = sender.doubleValue;
   ++_seekCount;
 
-  auto* const slider = static_cast<AobusSeekSlider*>(sender);
+  auto const intent = [static_cast<AobusSeekSlider*>(sender) takeSeekIntent];
+  auto const* absolute = std::get_if<ao::appkit::AbsoluteSeek>(&intent);
 
-  if (!_seekObserver)
+  if (_seekObserver && absolute != nullptr)
   {
-    [slider dispatchSeekToSession:*_session];
-    return;
+    _seekObserver(absolute->update, true);
   }
 
-  auto const update = [slider seekUpdate];
-  auto const optTarget = [slider seekTarget];
-  _seekObserver(update, true);
+  _session->seek(intent);
 
-  if (optTarget)
+  if (_seekObserver && absolute != nullptr)
   {
-    _session->seek(update, *optTarget);
+    _seekObserver(absolute->update, false);
   }
-
-  _seekObserver(update, false);
 }
 
 - (void)setSeekObserver:(std::function<void(ao::uimodel::SeekSliderUpdate const&, bool)>)observer
@@ -437,9 +436,26 @@ namespace ao::appkit::test
       AO_INVARIANT(transport().elapsed == 11s && transport().finalSeekRevision == revision,
                    "Option-Right must not commit the stale absolute target");
 
+      [playback renderState:session.state() modern:YES];
+      auto const optTarget = [slider seekTarget];
+      AO_INVARIANT(optTarget && optTarget->occurrenceId == transport().occurrenceId &&
+                     optTarget->revision == transport().positionRevision,
+                   "The slider must show the current timeline before the external seek");
       auto const duration = transport().duration;
       service.commands().seek(duration - 1s);
       requireWaitUntil([&] { return transport().elapsed == duration - 1s; }, "Calibrate just below the end");
+
+      // No render since the external seek: an absolute action still names the old timeline,
+      // but the next key step on this same occurrence must use the new position.
+      AO_INVARIANT(
+        optTarget->occurrenceId == transport().occurrenceId && optTarget->revision != transport().positionRevision,
+        "The external seek must invalidate the displayed position without replacing the occurrence");
+      auto const externalRevision = transport().finalSeekRevision;
+      slider.doubleValue = 0.5;
+      AO_INVARIANT([slider sendAction:slider.action to:slider.target] != NO);
+      settleNativeCallbacks();
+      AO_INVARIANT(transport().elapsed == duration - 1s && transport().finalSeekRevision == externalRevision,
+                   "An unrefreshed absolute action must not overwrite an external seek on the same occurrence");
       [slider keyDown:makeArrowEvent(window, NSRightArrowFunctionKey)];
       requireWaitUntil([&] { return transport().elapsed == duration; }, "Right must clamp at the end");
       auto const endRevision = transport().finalSeekRevision;
@@ -691,9 +707,7 @@ namespace ao::appkit::test
             [slider sendAction:slider.action to:slider.target];
             requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Stale drag action");
             slider.doubleValue = 0.75;
-            // Use a target without an observer so this action takes the shipping dispatch path.
-            auto* const directTarget = [[AobusPresentationActionTarget alloc] initWithSession:session];
-            AO_INVARIANT([NSApp sendAction:slider.action to:directTarget from:slider] != NO);
+            AO_INVARIANT([NSApp sendAction:slider.action to:target from:slider] != NO);
             requireSeekFrame(playback, slider, anchorElapsed, anchorTransport.duration, "Stale target action");
             AO_INVARIANT(transport().positionRevision == anchorTransport.positionRevision);
             [NSApp postEvent:seekMouseEvent(window, NSEventTypeLeftMouseUp, start) atStart:YES];
@@ -758,8 +772,10 @@ namespace ao::appkit::test
       if (options.scrub)
       {
         auto const optSeekTarget = [slider seekTarget];
-        AO_INVARIANT(optSeekTarget, "A scrubbed slider must keep its presented seek target");
-        auto const duration = optSeekTarget->duration;
+        auto const duration = transport().duration;
+        AO_INVARIANT(
+          optSeekTarget && optSeekTarget->occurrenceId == initialOccurrence && optSeekTarget->duration == duration,
+          "A scrubbed slider must keep the presented occurrence and duration");
         auto const expectedElapsed = [&](double fraction)
         {
           return std::chrono::milliseconds{static_cast<std::int64_t>(fraction * static_cast<double>(duration.count()))};

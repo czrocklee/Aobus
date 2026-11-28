@@ -18,7 +18,7 @@ The browser borrows the session's [browser model](../../../app/macos-appkit/Libr
 
 ## Playback slider
 
-[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) uses the [shared seek interaction](../playback/README.md#position-and-keyboard-seeking). Pointer value changes preview against the starting occurrence and duration. Releasing a still-current gesture submits one final seek only if there was a value change. If playback is replaced, becomes unseekable, or another seek changes the position revision during the drag, the thumb follows the new position even while paused. The native cell may keep tracking, but its remaining actions cannot seek or move the thumb off that position. The session also checks the revision at dispatch, in case the change has not been presented yet.
+[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) uses the [shared seek interaction](../playback/README.md#position-and-keyboard-seeking). The slider returns a seek intent by value; the desktop delegate passes it to the session. Pointer value changes preview against the starting occurrence and duration. Releasing a still-current gesture submits one final seek only if there was a value change. If playback is replaced, becomes unseekable, or another seek changes the position revision during the drag, the thumb follows the new position even while paused. The native cell may keep tracking, but its remaining actions cannot seek or move the thumb off that position. The session also checks the revision at dispatch, in case the change has not been presented yet.
 
 Unmodified Left and Right on the focused slider queue relative steps against the presented occurrence and use live elapsed at execution. Other discrete value actions submit absolute seeks.
 

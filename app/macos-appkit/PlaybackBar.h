@@ -4,8 +4,7 @@
 #pragma once
 
 #include "DesktopControls.h"
-#include "PlaybackSeekTarget.h"
-#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
+#include "PlaybackSeekIntent.h"
 
 #import <AppKit/AppKit.h>
 
@@ -15,7 +14,6 @@
 namespace ao::appkit
 {
   struct DesktopViewState;
-  class LibrarySession;
 }
 
 namespace ao::i18n
@@ -24,11 +22,9 @@ namespace ao::i18n
 }
 
 @interface AobusSeekSlider : AobusSlider
-- (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget;
 - (std::optional<ao::appkit::PlaybackSeekTarget>)seekTarget;
-- (void)dispatchSeekToSession:(ao::appkit::LibrarySession&)session;
-/// Classifies an absolute value change or tracking-end commit.
-- (ao::uimodel::SeekSliderUpdate)seekUpdate;
+/// Samples this native action once, before playback or presentation can change.
+- (ao::appkit::PlaybackSeekIntent)takeSeekIntent;
 @end
 
 @interface AobusPlaybackBar : NSObject
