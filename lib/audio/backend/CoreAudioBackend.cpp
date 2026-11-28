@@ -61,6 +61,7 @@
 #include <optional>
 #include <semaphore>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -469,7 +470,6 @@ namespace ao::audio::backend
       std::atomic<std::uint64_t> pendingDrainGeneration{0U};
       std::atomic<bool> pendingGraphPublication{false};
       detail::CoreAudioControlMailbox controlMailbox{};
-      std::atomic<bool> controlStop{false};
       std::counting_semaphore<> controlSignal{0};
       std::uint64_t deliveredDrainGeneration = 0U;
       std::uint64_t deliveredErrorGeneration = 0U;
@@ -479,15 +479,14 @@ namespace ao::audio::backend
       void signalFault(CoreAudioFault fault, std::uint64_t faultGeneration) noexcept;
       void signalRenderFault(detail::CoreAudioRenderAdmission::Scope const& renderScope, CoreAudioFault fault) noexcept;
       void requestGraphPublication() noexcept;
-      void controlLoop();
+      void controlLoop(std::stop_token const& stopToken);
       void handleDrain(std::uint64_t drainGeneration);
       // Execution proves transport only; the worker owns full diagnostics.
       bool tryRefreshDevice(std::uint64_t deviceGeneration,
-                            detail::CoreAudioChannelRefreshMode mode = detail::CoreAudioChannelRefreshMode::Observation,
-                            bool* publicationDeferred = nullptr);
-      bool tryFinishDeviceRefresh(std::uint64_t deviceGeneration, CoreAudioFault fault, bool* publicationDeferred);
+                            detail::CoreAudioChannelRefreshMode mode,
+                            bool& publicationDeferred);
       void handleFault(detail::CoreAudioControlFault const& packet);
-      void publishGraph() const;
+      void publishGraph(std::stop_token const& stopToken = {}) const;
       void reportError(std::uint64_t errorGeneration, std::string_view message);
     };
 
@@ -544,15 +543,15 @@ namespace ao::audio::backend
       }
     }
 
-    void CoreAudioRuntimeState::controlLoop()
+    void CoreAudioRuntimeState::controlLoop(std::stop_token const& stopToken)
     {
       setCurrentThreadName("CoreAudioControl");
 
-      while (!controlStop.load(std::memory_order_acquire))
+      while (!stopToken.stop_requested())
       {
         controlSignal.acquire();
 
-        if (controlStop.load(std::memory_order_acquire))
+        if (stopToken.stop_requested())
         {
           return;
         }
@@ -566,15 +565,14 @@ namespace ao::audio::backend
 
             if (optRunScope)
             {
-              tryRefreshDevice(
-                deviceGeneration, detail::CoreAudioChannelRefreshMode::Observation, &publicationDeferred);
+              tryRefreshDevice(deviceGeneration, detail::CoreAudioChannelRefreshMode::Observation, publicationDeferred);
             }
           }
 
           // Observers may close or reenter controls; release the run gate first.
           if (publicationDeferred)
           {
-            publishGraph();
+            publishGraph(stopToken);
           }
         }
 
@@ -594,7 +592,7 @@ namespace ao::audio::backend
         // observer-driven close waits for it through targetCallbackMutex.
         if (pendingGraphPublication.exchange(false, std::memory_order_acq_rel))
         {
-          publishGraph();
+          publishGraph(stopToken);
         }
       }
     }
@@ -644,12 +642,9 @@ namespace ao::audio::backend
 
     bool CoreAudioRuntimeState::tryRefreshDevice(std::uint64_t const deviceGeneration,
                                                  detail::CoreAudioChannelRefreshMode const mode,
-                                                 bool* const publicationDeferred)
+                                                 bool& publicationDeferred)
     {
-      if (publicationDeferred != nullptr)
-      {
-        *publicationDeferred = false;
-      }
+      publicationDeferred = false;
 
       if (!runControl.isCurrent(deviceGeneration))
       {
@@ -762,22 +757,7 @@ namespace ao::audio::backend
         }
       }
 
-      return tryFinishDeviceRefresh(deviceGeneration, fault, publicationDeferred);
-    }
-
-    bool CoreAudioRuntimeState::tryFinishDeviceRefresh(std::uint64_t const deviceGeneration,
-                                                       CoreAudioFault const fault,
-                                                       bool* const publicationDeferred)
-    {
-      // Native and snapshot ownership have ended before outward delivery.
-      if (publicationDeferred != nullptr)
-      {
-        *publicationDeferred = true;
-      }
-      else
-      {
-        publishGraph();
-      }
+      publicationDeferred = true;
 
       if (fault != CoreAudioFault::None && runControl.isCurrent(deviceGeneration))
       {
@@ -829,7 +809,7 @@ namespace ao::audio::backend
       reportError(faultGeneration, faultMessage(fault));
     }
 
-    void CoreAudioRuntimeState::publishGraph() const
+    void CoreAudioRuntimeState::publishGraph(std::stop_token const& stopToken) const
     {
       if (!graphRegistryPtr)
       {
@@ -867,7 +847,7 @@ namespace ao::audio::backend
         pendingDelivery = graphRegistryPtr->preparePublish(state.routeAnchor, detail::coreAudioGraph(state));
       }
 
-      std::move(pendingDelivery).deliver();
+      std::move(pendingDelivery).deliver(stopToken);
     }
 
     void CoreAudioRuntimeState::reportError(std::uint64_t const errorGeneration, std::string_view const message)
@@ -1106,11 +1086,11 @@ namespace ao::audio::backend
          std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr,
          CoreAudioBackend::NativeOperations operations)
       : statePtr{std::make_shared<CoreAudioRuntimeState>(device, std::move(graphRegistryPtr), std::move(operations))}
-      , controlThread{[statePtr = statePtr]
+      , controlThread{[statePtr = statePtr](std::stop_token const& stopToken)
                       {
                         try
                         {
-                          statePtr->controlLoop();
+                          statePtr->controlLoop(stopToken);
                         }
                         catch (...)
                         {
@@ -1122,19 +1102,19 @@ namespace ao::audio::backend
 
     ~Impl()
     {
-      statePtr->controlStop.store(true, std::memory_order_release);
+      controlThread.request_stop();
       statePtr->controlSignal.release();
 
-      if (controlThread.joinable())
+      // close() already retired the native unit, listeners, target and graph. A worker
+      // waiting to deliver a graph can now stop even if the caller is a provider observer.
+      if (controlThread.get_id() == std::this_thread::get_id())
       {
-        if (controlThread.get_id() == std::this_thread::get_id())
-        {
-          controlThread.detach();
-        }
-        else
-        {
-          controlThread.join();
-        }
+        // Its current observer must unwind on the independently retained runtime.
+        controlThread.detach();
+      }
+      else
+      {
+        controlThread.join();
       }
     }
 
@@ -1502,7 +1482,7 @@ namespace ao::audio::backend
       // Advancing retires run-scoped work, not the open-time target attachment.
       // Never admit callbacks until a previously failed native stop is confirmed.
       if (!hasUnconfirmedStop && statePtr->tryRefreshDevice(
-                                   runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
+                                   runGeneration, detail::CoreAudioChannelRefreshMode::Execution, publicationDeferred))
       {
         shouldRefreshObservation = true;
         statePtr->renderAllowed.store(true, std::memory_order_release);
@@ -1609,7 +1589,7 @@ namespace ao::audio::backend
 
       if (!hasUnconfirmedStop && statePtr->runActive.load(std::memory_order_acquire) &&
           statePtr->tryRefreshDevice(
-            runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
+            runGeneration, detail::CoreAudioChannelRefreshMode::Execution, publicationDeferred))
       {
         shouldRefreshObservation = true;
         statePtr->renderFence.open(runGeneration);

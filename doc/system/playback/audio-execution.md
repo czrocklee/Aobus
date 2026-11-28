@@ -89,7 +89,7 @@ They may observe an intermediate transport until the active control command or e
 Backend property observation runs outside Engine's state mutex because a concrete getter may refresh native state and synchronously publish provider graph evidence.
 Synchronous backend/provider graph subscribers may call state-only Engine queries such as `volume()`, `isMuted()`, and `isVolumeAvailable()`, including during an initial subscription callback.
 Those observations may reflect the command's prior intent because graph publication precedes Engine's scalar-state commit; separate queries are not an aggregate snapshot.
-They must not call the complete `status()`, control methods, or `shutdown()`, synchronously destroy Engine, or wait for those operations: graph delivery can hold a provider callback gate or run under Engine control serialization.
+They must not call the complete `status()`, control methods, or `shutdown()`, synchronously destroy Engine, or wait for those operations: graph delivery can occupy a provider's exclusive dispatch turn or run under Engine control serialization.
 Defer that work until after the graph callback returns. Engine's own event-worker callbacks retain their separate control-reentrancy contract below.
 
 Every public control command settles pending splice signals at entry under the control lock.
@@ -441,11 +441,11 @@ Device and graph subscriptions may reset after facade destruction and may race a
 A Backend returned before provider destruction may later close or publish properties safely; provider retirement has already made its publication route inert.
 Neither handle keeps the provider facade or its complete PImpl alive.
 
-Subscription registration is concurrency-safe and linearizes its initial snapshot with monitor publication.
-A callback may destroy the provider, including during that initial synchronous snapshot; provider code pins independent control state through return and performs no later facade access.
-Once shutdown starts, new subscription attempts return inert handles without an initial callback.
-Retiring registries during an externally initiated shutdown may synchronously deliver their already-accepted terminal snapshots, and those callbacks count toward the same completion boundary.
-When shutdown begins from inside a provider callback, nested teardown publication for that provider is not admitted, preventing recursive facade destruction.
+Subscription registration is concurrency-safe. A synchronous initial snapshot uses the same dispatcher as ordinary publication.
+A callback may destroy the provider, including during a synchronous initial snapshot; provider code pins independent state through return and performs no later facade access.
+ALSA, Core Audio, PipeWire, and WASAPI share the [dispatch and registration lifetime contract](#backend-graph-delivery); how they obtain and publish snapshots differs.
+
+Once shutdown starts, new subscriptions return inert handles, and even a publication that already captured its subscribers cannot admit an ordinary callback.
 After an external `shutdown()` returns, no provider device or graph callback can begin or remain active.
 
 `Backend::prewarmFormatHint(SignalFormat)` is an advisory control-domain query.
@@ -764,17 +764,48 @@ ALSA handles shared mixer state under the separate contract below.
 
 ### Backend graph delivery
 
-The shared `BackendGraphRegistry`, consumed by ALSA, WASAPI, and Core Audio, suppresses publication when the complete route graph equals the stored graph.
-Ordinary publish, clear, and initial subscription delivery do not nest graph callbacks, including when a callback reads a backend property that publishes again.
-Reentrant work waits until the active callback returns; revision checks discard superseded publications and cancellation is checked immediately before each callback.
-A normal subscription delivers its captured initial snapshot synchronously; a subscription made inside a graph callback defers that initial delivery and can be cancelled before it runs.
-A clear still removes the stored graph and publishes an empty snapshot rather than storing an empty graph in place of the route fallback.
-An explicit clear can therefore deliver an empty withdrawal to live subscriptions even when no nonempty graph from that route ever reached an observer, for example a clear racing the first publication; that delivery still passes the revision and cancellation checks.
+Each provider uses one `BackendObserverDispatcher` for both device and graph delivery and a `BackendObserverSlot` for each registration. These belong to state independent of the provider facade.
+The dispatcher uses a short mutex to select the caller that owns the exclusive dispatch turn; it does not hold that mutex for the turn.
+Delivery is synchronous on the caller's thread. A competing caller waits for its own turn unless the wait is cancelled; it does not hand its callbacks to the current caller. Same-thread reentry can reuse the turn.
+Device and graph observers of that provider cannot run on different threads at the same time. This matters when both borrow application state and can reset each other's registrations: if both were active on different threads, each reset could wait for the other callback to return.
+The turn is per provider, not global. Observers must not wait for another caller to obtain that turn or for work that depends on their own return.
 
-Graph preparation commits the snapshot and its revision without waiting for the callback gate or invoking observers.
-Its move-only delivery ticket is one-shot; dropping it cancels delivery without undoing the committed snapshot.
-Delayed delivery still checks route revision, subscription cancellation, and registry retirement.
-Core Audio prepares publications and clears under its owner publication lock, then releases that lock before delivering.
+Each slot owns its registration's callback and captures. A prepared snapshot names recipients without admitting their callbacks.
+At delivery time the caller briefly retains one slot and borrows its callback for the call if reset has not closed the slot. The borrow covers the invocation, not a queued or prepared snapshot.
+Reset closes that slot to new calls even if a snapshot already names it. An external reset waits for that slot's admitted calls on other threads, not unrelated device or graph callbacks or a dispatch turn.
+Reset on the callback's own stack does not wait for that stack; any observer state that the admitted call borrows must stay valid until it returns. Call quiescence does not require the last slot reference to have been released.
+Dispatcher, subscription-owner, and slot state mutexes are not held across observer calls or final destruction of their captures. A dispatch turn may still be active even though no state mutex is held.
+
+#### Registry-backed publication
+
+ALSA, Core Audio, and WASAPI keep both registries in shared provider control state. The discovery monitor retains the device registry; a backend's graph publication uses separate registry state and does not need the monitor or facade.
+The registries keep live slots; publication snapshots and tickets hold only weak references to those slots, with no claim on callback lifetime.
+
+The device registry replaces the current inventory with a complete immutable snapshot before requesting a turn. It rechecks that snapshot before each observer call. If an observer receiving A publishes B reentrantly, B can be delivered on the same thread, but the outer delivery stops rather than sending A to another observer after B.
+
+The shared graph registry suppresses unchanged graphs. Preparation commits the snapshot and its revision without waiting for dispatch or invoking observers.
+A clear removes the stored graph rather than replacing the route fallback with an empty graph; its empty withdrawal can reach observers even if the first nonempty publication never did.
+A one-shot, move-only delivery ticket carries the graph and weak references to the registry state and recipients. Dropping it, or cancelling its stop-aware dispatch wait, skips delivery without undoing the commit. Delivery checks registry retirement, the current route revision, and each registration's admission before invoking it.
+Ordinary graph publish, clear, and initial delivery in the same registry do not nest callbacks. Reentrant work in that registry drains after the active callback returns, discarding superseded publications. A normal subscription delivers its captured initial snapshot synchronously; one made inside a graph callback in that registry defers its initial delivery and can be reset before it runs.
+
+Raw graph registry retirement closes ordinary admission, discards pending ordinary delivery, and can synchronously send terminal empty graphs to registrations that have not reset. The registry marks these deliveries explicitly; an ordinary empty graph from `clear` is not terminal.
+A raw shutdown on a graph callback stack can nest terminal delivery. A nested shutdown from a terminal callback settles the remaining registrations before it returns: it delivers their terminal snapshots or, in silent shutdown, revokes them without notification. The current call's borrow remains valid through return. External retirement waits for admitted publication to finish, and retained publishers become inert.
+Provider shutdown uses the same registry retirement. Any terminal calls delivered to an external initiator count toward provider quiescence. Shutdown initiated while holding the provider's dispatch turn or on its monitor thread retires silently, so it cannot nest a terminal callback during facade destruction.
+
+#### PipeWire monitor publication
+
+`PipeWireMonitor` owns the native thread loop, route subscriptions, and refresh worker rather than using the shared device and graph registries. Native events update monitored state and request a refresh; the worker can coalesce pending requests, and provider observers do not run on those native event stacks.
+An accepted device subscription synchronously delivers the current sink inventory. The provider adds its virtual default route, as it does for `status()`.
+A graph subscription requests a refresh for its route anchor instead of replaying a stored initial graph on the subscription stack.
+
+Each refresh reconciles the native stream bindings with the set of subscribed route anchors and updates sink bindings before assembling route graphs and the sink inventory under the loop and monitor-state locks.
+The batch holds weak references to individual slots. Resetting one registration does not revoke another, even when both subscribe to the same route anchor.
+After releasing both locks, a refresh that obtains a dispatch turn attempts the batch's graph callbacks before its device callbacks within that turn. Neither graph nor device snapshots are filtered by equality across refreshes.
+These graphs describe observed PipeWire routes and formats, not a verified direct or physical endpoint. Monitor shutdown closes admission without sending a terminal graph.
+
+#### Core Audio target ordering
+
+Core Audio prepares publications and clears under its publication mutex, then releases that mutex before delivering.
 Run controls, drain and fault transitions, and non-render target notifications share callback serialization.
 Core Audio render admission binds each admitted cycle to an immutable run generation before its geometry checks, rendering, or drain work.
 The admission generation is published before opening the fence and replaced only while admission is closed and all admitted cycles have settled; capturing it requires no realtime lock or allocation.
@@ -797,14 +828,13 @@ A target callback must defer close and target replacement on its invoking backen
 This includes a graph callback nested beneath that same backend's target callback.
 Graph-observer close remains supported when no callback to that backend's target remains on the same call stack.
 A target callback must not wait for observer-driven close or synchronously destroy its own target or backend; the current callback's borrow must remain alive through return.
-Core Audio target callbacks have an additional shared-gate precondition: they must defer operations that may acquire or wait for the same registry's delivery gate until the target callback returns, and must not wait for that deferred work.
-This includes subscription, subscription reset or destruction, ordinary publication or clear, pending-ticket delivery, registry retirement, and backend/provider operations that reach the gate indirectly.
-A different route anchor or backend identity does not avoid this precondition when it uses the same registry.
-An ordinary graph observer may already hold the gate while waiting for a run control's target serialization; synchronous gate entry from the target callback would invert that order and can deadlock across threads.
-Use a non-waiting handoff and perform the gate-dependent operation after the target callback has returned; a marker set inside the callback does not by itself establish that return.
-`preparePublish()` and `prepareClear()` only commit graph facts under the registry state mutex, not the delivery gate: a non-render notification may prepare a ticket, retain it, and defer its delivery.
-That distinction permits no new render-domain work or synchronous backend controls from render callbacks.
-This deliberately narrows raw callback composition rather than changing the locking mechanism; the cross-thread gate-order precondition is not runtime-enforced.
+Core Audio target callbacks must defer operations that may wait for the provider's dispatch turn or for an observer that depends on the target callback's return. They must not wait for that deferred work.
+Graph or device subscription, ordinary publication or clear, ticket delivery, and registry retirement can require the turn, including through backend/provider operations that reach it indirectly. Reset does not require the turn, but it can wait for the registration's admitted call; defer a reset or destruction that would create the same dependency.
+A different route anchor or backend identity does not avoid this precondition when it uses the same dispatcher.
+For example, an observer may own the dispatch turn while waiting for a run control's target serialization. If that target callback waits for the turn or for the observer to return, neither thread can proceed.
+Use a non-waiting handoff and perform the dependent operation after the target callback has returned; a marker set inside the callback does not by itself establish that return.
+`preparePublish()` and `prepareClear()` only commit graph facts under the registry state mutex. A non-render notification may prepare a ticket, retain it, and defer its delivery.
+This caller precondition is not runtime-enforced. Preparing a ticket does not permit new render-domain work or synchronous backend controls from render callbacks.
 Native SDK calls and close settlement may block; the boundary is lifetime safety, not a wait-free timing guarantee.
 Close retires native listeners and the AudioUnit before delivering the prepared clear.
 Core Audio additionally diagnoses same-backend target-origin open/close misuse at runtime: every RenderTarget callback boundary is marked with the shared `utility::CallbackStackScope` identity, and `open()` and `close()` assert that identity is absent before mutating target or native state.
@@ -815,18 +845,15 @@ A separate per-backend render-domain marker rejects `start()`, `pause()`, `resum
 Drain completion runs on the control worker rather than the realtime thread, but remains part of the serialized render-producer domain.
 The marker is distinct from the general target-callback identity, so the supported route/format-origin start/stop paths remain allowed.
 These diagnostics cover only the named Core Audio mutation boundaries, not every SDK or native-fault path, and other backends are not promised equivalent runtime diagnostics; they remain bound by the Backend callback preconditions.
-Property writes retain synchronous native error reporting and cached intent, but coalesce graph-publication requests on the existing non-realtime control worker when a graph registry is present.
-That handoff avoids outward graph delivery on a target callback's property-write stack and publishes current state rather than replaying an old property snapshot.
 
-The callback gate serializes delivery without holding the registry state mutex across callbacks.
-Each publisher retains responsibility for its own thread's delivery: a different publishing thread may update the route revision while waiting for the gate, but never transfers its callbacks to the active publisher's thread.
-Only same-thread reentrant work joins the active delivery drain.
-This does not authorize callbacks to wait for another thread's publication or cancellation while retaining the gate.
+#### Core Audio control-worker publication and teardown
 
-Registry retirement is a separate synchronous path, not ordinary queued delivery.
-Shutdown discards pending ordinary deliveries, closes admission, and sends final empty graphs to subscriptions that have not been cancelled.
-An external shutdown caller waits behind in-flight callbacks; after retirement returns, no new callback starts and retained publishers are inert.
-Shutdown initiated on a graph callback stack can synchronously nest final-empty callbacks so that observer state can be released after that shutdown call returns; ordinary non-nesting does not weaken this lifetime boundary or the provider's separate quiescence contract.
+Property writes retain synchronous native error reporting and cached intent. When a registry is present they set one coalesced pending graph-publication request for the non-realtime control worker, rather than queuing a graph per write.
+The worker commits current state and delivers it serially with a stop-aware dispatch wait. The bound is on pending publication requests, not callback duration. This handoff avoids outward graph delivery on the setter's call stack, but stop cannot interrupt a callback that has already begun.
+
+Backend destruction first closes the native unit and listeners, revokes the render target, and supersedes pending graph publications. It then requests stop, wakes the control `std::jthread`, and joins it from any other thread.
+A caller that owns the provider's dispatch turn does not need to give up that turn to join a worker waiting for it: stop cancels the wait. Only destruction on the control worker itself detaches; the independently retained runtime state lets the current call unwind and the worker exit.
+The caller must defer teardown with a non-waiting handoff if an observer already running on the control worker synchronously waits for that caller. Stop cannot break such a dependency, including one through a different provider or other user code such as capture cleanup. Destruction from the backend's own `RenderTarget` callback remains prohibited.
 
 ### ALSA mixer controls
 
@@ -891,8 +918,18 @@ Those are always-active invariants in every build configuration.
 Player public methods and destruction run on its executor, which outlives Player.
 Destruction closes the shared gate and cancels start/lookahead task handles before subscriptions, providers, and Engine stop, so already queued tasks return without touching Player state.
 Each provider's first shutdown caller starts retirement.
-A concurrent caller outside that provider's callback or monitor thread waits for the same provider-quiescence completion; repeated completed shutdown is a no-op.
-A callback- or monitor-thread initiator returns without self-wait after closing admission and starting retirement, while the callback/worker's independent shared control state finishes completion as it unwinds; a later external caller still waits for that completion.
+Concurrent external callers wait for the same provider-quiescence completion; repeated completed shutdown is a no-op. A callback- or monitor-thread initiator can begin retirement without waiting for its own stack to unwind.
+
+ALSA, Core Audio, and WASAPI normally join their discovery monitors during external retirement. An initiator on the monitor thread or holding the provider's dispatch turn can return without joining an independently retained monitor. A later external caller still waits for monitor exit, registry retirement, and return of admitted provider calls. This is separate from the Core Audio backend control worker's self-detach rule.
+
+- ALSA requests the monitor's stop token and wakes the injected refresh wait. Native discovery checks shutdown around its bounded udev poll and re-enumeration.
+- Core Audio closes native listener admission, unregisters listeners and waits for admitted native listener callbacks, then wakes the discovery monitor.
+- WASAPI's `IMMNotificationClient` only signals the monitor; enumeration runs off the native callback stack. Shutdown requests the monitor's stop token, signals the stop event to interrupt the native event wait or coalescing delay, and unregisters the endpoint notification client.
+
+PipeWire uses a shared shutdown token to stop the refresh worker and cancel waits for a dispatch turn in refresh and subscription calls. A caller on the worker or holding the dispatch turn does not wait for shutdown completion. The worker waits for admitted callbacks to return, stops the native loop, and retires subscriptions before signaling completion to external callers.
+
+WASAPI passes its monitor stop token through device publication to dispatch. In both WASAPI and PipeWire, cancelling a dispatch wait cannot interrupt an admitted observer or force ongoing native enumeration to return. ALSA does not pass its monitor token to device dispatch, and Core Audio's discovery monitor uses a shutdown flag rather than a token.
+
 Decoder open is not forcibly interruptible; a blocked worker may finish after Player teardown, but after cancellation it can only destroy its own isolated preparation value.
 Final runtime teardown stops and joins the worker pool, so the same blocked call
 can extend application shutdown until it returns.
@@ -947,25 +984,25 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail) owns nodes and decode lifetime; source-private [`StreamingSource`](../../../lib/audio/StreamingSource.h), [`PcmFrameRing`](../../../lib/audio/PcmFrameRing.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`BackendProvider.h`](../../../include/ao/audio/BackendProvider.h) owns the common provider facade, callback, subscription, backend-outlives-provider, and shared shutdown-completion contract.
-- [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete providers/backends under [`lib/audio/backend/`](../../../lib/audio/backend) own advisory prediction, narrow provider control/registry state, lossless candidate derivation, native selection, and lifetime. [`BackendDeviceRegistry`](../../../lib/audio/backend/detail/BackendDeviceRegistry.h), [`BackendGraphRegistry`](../../../lib/audio/backend/detail/BackendGraphRegistry.h), and the ALSA graph publisher provide provider-independent subscription/publication retirement.
-- [`PipeWireFormatParsing.cpp`](../../../lib/audio/backend/detail/PipeWireFormatParsing.cpp) and [`PipeWireBackend.cpp`](../../../lib/audio/backend/PipeWireBackend.cpp) own the PipeWire client offer, readback admission, immutable render delivery, and open snapshot. [`PipeWireMonitor.cpp`](../../../lib/audio/backend/PipeWireMonitor.cpp) owns the independent current Format cache used for route-graph channel evidence.
+- [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete providers/backends under [`lib/audio/backend/`](../../../lib/audio/backend) own advisory prediction, narrow provider control/registry state, lossless candidate derivation, native selection, and lifetime. [`BackendObserverDispatcher`](../../../lib/audio/backend/detail/BackendObserverDispatcher.h) selects the synchronous delivery thread; [`BackendObserverSlot`](../../../lib/audio/backend/detail/BackendObserverSlot.h) tracks admitted calls. [`BackendDeviceRegistry`](../../../lib/audio/backend/detail/BackendDeviceRegistry.h), [`BackendGraphRegistry`](../../../lib/audio/backend/detail/BackendGraphRegistry.h), and the ALSA graph publisher support retirement independent of facade lifetime.
+- [`PipeWireFormatParsing.cpp`](../../../lib/audio/backend/detail/PipeWireFormatParsing.cpp) and [`PipeWireBackend.cpp`](../../../lib/audio/backend/PipeWireBackend.cpp) own the PipeWire client offer, readback admission, immutable render delivery, and open snapshot. [`PipeWireMonitor.cpp`](../../../lib/audio/backend/PipeWireMonitor.cpp) owns native discovery and refresh batches, including the independent current Format cache used for route-graph channel evidence.
 - [`AlsaMixerSession.cpp`](../../../lib/audio/backend/detail/AlsaMixerSession.cpp) owns read-only mixer selection, event refresh and stable element identity, software mute, and safe volume-failure degradation.
 - [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.
 
 ## Test map
 
 - [`EngineConcurrencyTest.cpp`](../../../test/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, read-triggered fallback, and volume/mute intent across stop after successful or rejected hardware writes.
-- [`BackendGraphRegistryTest.cpp`](../../../test/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, prepared commit/delivery separation, move-only ticket ownership, revision supersession, cancellation, and synchronous final-empty retirement.
+- [`BackendDeviceRegistryTest.cpp`](../../../test/audio/backend/detail/BackendDeviceRegistryTest.cpp) protects snapshot replacement during reentrant publication and cancellation before or during an admitted call. [`BackendGraphRegistryTest.cpp`](../../../test/audio/backend/detail/BackendGraphRegistryTest.cpp) protects deduplication, non-nested ordinary and initial delivery, weak one-shot tickets, revision supersession, stopping a waiting delivery without undoing its commit, and raw terminal retirement including nested shutdown.
 - Linux-only [`PipeWireBackendAdmissionTest.cpp`](../../../test/audio/backend/PipeWireBackendAdmissionTest.cpp) drives the registered native callback table through a scoped external callback-source fake. It protects open-window evidence projection, literal render-byte delivery, terminal Format/ERROR revocation, and restart refusal before Engine settlement. Synchronous scripted dispatch does not prove native realtime affinity, daemon negotiation behavior, or asynchronous callback fences.
 - [`CoreAudioBackendTest.cpp`](../../../test/audio/backend/CoreAudioBackendTest.cpp) protects the device-free contracts: software volume and mute caching before native open, source refusal classification with geometry, precision, and identity precedence, identified-source admission to ordinary device lookup, and prewarm lossless-mode prediction without native negotiation.
-  Apple-only [`CoreAudioBackendNativeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeTest.cpp) owns the native cases that open a live Core Audio output: exact lossless and high-resolution client-stream confirmation on AUHAL open, native drain completing after the presentation tail, start after a completed close delivering no callbacks, native publication and initial-observer close, property-publication worker handoff with observer-driven close, open-origin notification settlement against external close, final render quiescence after notification-origin restart, current open notifications across run-only changes, synchronous registry retirement during native publication, and stop fencing a blocked render while cancelling its drain.
-  It also covers deferring a target-origin graph subscription until the open call returns while an observer on another thread holds the shared delivery gate and requests stop; request markers do not prove private mutex admission.
+  Apple-only [`CoreAudioBackendNativeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeTest.cpp) owns the native cases that open a live Core Audio output: exact lossless and high-resolution client-stream confirmation on AUHAL open, native drain completing after the presentation tail, start after a completed close delivering no callbacks, native publication and initial-observer close, property-publication worker handoff with observer-driven close, backend destruction from a device observer while a graph delivery is pending, open-origin notification settlement against external close, final render quiescence after notification-origin restart, current open notifications across run-only changes, synchronous registry retirement during native publication, and stop fencing a blocked render while cancelling its drain.
+  It also covers deferring a target-origin graph subscription until the open call returns while an observer on another thread owns the provider's dispatch turn and requests stop; request markers do not prove which thread owns the target callback serialization.
   In the different-backend identity case, only backend B uses an early-refused synthetic open and an inert close;
   the notifying backend opens a live output.
-  This does not demonstrate successful cross-backend shared-gate entry.
+  This does not demonstrate synchronous cross-backend dispatch from a target callback.
   Apple-only [`CoreAudioBackendRunStateTest.cpp`](../../../test/audio/backend/CoreAudioBackendRunStateTest.cpp) drives the real Backend through constructor-injected native control/readback results, covering failed-stop admission/reset gates, current-generation error suppression, and drain/fault settlement. It uses a real output unit but does not demonstrate an actual SDK stop failure or physical routing.
   Apple-only [`CoreAudioBackendFatalProbeTest.cpp`](../../../test/audio/backend/CoreAudioBackendFatalProbeTest.cpp) protects the device-free render-admission preconditions and the native-run/backend constructor-binding preconditions through child-process fatal probes; it exercises those owned diagnostic scenarios, not every native fault producer path.
-  Apple-only [`CoreAudioBackendNativeFatalProbeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp) protects the target callback-origin misuse diagnostic: reentry into backend control from its own RenderTarget callback aborts in fatal-probe children against a real live Core Audio output. Its nested-graph scenarios deliberately violate the gate-deferral precondition to reach the owned lifecycle diagnostic; they do not establish support for synchronous shared-registry entry from target callbacks.
+  Apple-only [`CoreAudioBackendNativeFatalProbeTest.cpp`](../../../test/audio/backend/CoreAudioBackendNativeFatalProbeTest.cpp) protects the target callback-origin misuse diagnostic: reentry into backend control from its own RenderTarget callback aborts in fatal-probe children against a real live Core Audio output. Its nested-graph scenarios deliberately violate the dispatch-deferral precondition to reach the owned lifecycle diagnostic; they do not establish support for synchronous shared-registry delivery from target callbacks.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) protects observation bounds, role admission, byte permutations, required readback failures and execution/observation refresh; [`CoreAudioGraphTest.cpp`](../../../test/audio/backend/detail/CoreAudioGraphTest.cpp) protects sink-only conversion findings and [`CoreAudioRenderBufferTest.cpp`](../../../test/audio/backend/detail/CoreAudioRenderBufferTest.cpp) protects nonmutating shape refusal.
 - [`CoreAudioControlMailboxTest.cpp`](../../../test/audio/backend/detail/CoreAudioControlMailboxTest.cpp) protects pending-generation arbitration; [`CoreAudioRunControlTest.cpp`](../../../test/audio/backend/detail/CoreAudioRunControlTest.cpp) protects consumed-action ordering. These controlled cases do not establish native SDK or callback-lifetime behavior.
 - [`CoreAudioChannelObservationTest.cpp`](../../../test/audio/backend/CoreAudioChannelObservationTest.cpp) is a hidden exact-UID disposable-AUHAL map readback probe, not rendered/captured PCM or hardware routing proof.
@@ -986,7 +1023,9 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
   These controlled Engine backends are not native hardware, audibility, or performance evidence.
 - [`EngineCallbackTest.cpp`](../../../test/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
-- [`AlsaProviderTest.cpp`](../../../test/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.
+- [`AlsaProviderTest.cpp`](../../../test/audio/backend/AlsaProviderTest.cpp), [`WasapiProviderTest.cpp`](../../../test/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.
+  The WASAPI monitor's injected `onDeviceCallbacksReady` hook signals after enumeration and before registry publication. It does not prove the registry captured recipients or that the monitor entered the dispatch wait.
+- [`PipeWireMonitorTest.cpp`](../../../test/audio/backend/PipeWireMonitorTest.cpp) uses injected sink and route snapshots to check synchronous initial device delivery, refresh-driven initial graph delivery, repeated snapshots, and independent registrations. It also covers capture lifetime during reset, observer-driven teardown, late subscription reset, and concurrent shutdown. These injected tests do not establish native endpoint notification timing or physical playback.
 - [`AlsaExclusiveBackendTest.cpp`](../../../test/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, scalar-observation graph publication, software fallback retention across reopen after a mixer write failure, closed-graph retirement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
 - [`StreamingSourceTest.cpp`](../../../test/audio/StreamingSourceTest.cpp), [`PcmFrameRingTest.cpp`](../../../test/audio/PcmFrameRingTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized and partial-frame blocks, whole-frame ring transfer, constant-time reset reuse, and source retirement; [`StreamingRenderAlignmentTest.cpp`](../../../test/audio/StreamingRenderAlignmentTest.cpp) protects lossless whole-frame reads and Engine render alignment across a parked partial write, and [`TrackSessionTest.cpp`](../../../test/audio/detail/TrackSessionTest.cpp) protects frameless-format rejection.
 - [`AlsaMixerSessionTest.cpp`](../../../test/audio/backend/detail/AlsaMixerSessionTest.cpp) protects zero-write lifecycle/mute operations, refreshed hardware state, element replacement/removal, volume failures, numeric endpoints, mute-sentinel raw-scale mapping, successful-write eligibility after reopen, failed-element exclusion across reopen, independent candidate and session identities, and refresh/read failures without exclusion.

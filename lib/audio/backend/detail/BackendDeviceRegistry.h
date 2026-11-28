@@ -8,10 +8,13 @@
 
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <vector>
 
 namespace ao::audio::backend::detail
 {
+  class BackendObserverDispatcher;
+
   /** @brief Thread-safe publication point for complete backend device snapshots. */
   class BackendDeviceRegistry final
   {
@@ -19,6 +22,7 @@ namespace ao::audio::backend::detail
     using Callback = std::function<void(std::vector<Device> const&)>;
 
     BackendDeviceRegistry();
+    explicit BackendDeviceRegistry(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr);
     ~BackendDeviceRegistry();
 
     BackendDeviceRegistry(BackendDeviceRegistry const&) = delete;
@@ -28,7 +32,8 @@ namespace ao::audio::backend::detail
 
     utility::ScopedRegistration subscribe(Callback callback);
     std::vector<Device> snapshot() const;
-    void publish(std::vector<Device> devices);
+    /// Commits the inventory; stopping while waiting for a dispatch turn skips notification.
+    void publish(std::vector<Device> devices, std::stop_token stop = {});
 
     /** @brief Closes callback admission and clears the published snapshot. */
     void shutdown() noexcept;

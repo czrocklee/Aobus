@@ -5,6 +5,7 @@
 
 #include "lib/audio/backend/PipeWireProvider.h"
 #include "lib/audio/backend/detail/PipeWireMonitorHooks.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/flow/Graph.h>
@@ -20,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -27,6 +29,18 @@ namespace ao::audio::backend::test
   namespace
   {
     constexpr auto kWaitTimeout = std::chrono::seconds{5};
+
+    struct WorkerPause final
+    {
+      void park()
+      {
+        entered.release();
+        resume.acquire();
+      }
+
+      std::binary_semaphore entered{0};
+      std::binary_semaphore resume{0};
+    };
 
     Device syntheticSink()
     {
@@ -86,6 +100,56 @@ namespace ao::audio::backend::test
     CHECK(graphCalls.load(std::memory_order_relaxed) == graphCallsAfterStop);
     CHECK(lateDeviceCalls == 0U);
     CHECK(lateGraphCalls == 0U);
+  }
+
+  TEST_CASE("PipeWireMonitor - refresh repeats unchanged snapshots without an inline initial graph", "[concurrency]")
+  {
+    auto refreshCompleted = std::counting_semaphore{0};
+    auto deviceSnapshots = std::vector<std::vector<Device>>{};
+    auto graphs = std::vector<flow::Graph>{};
+    auto deviceDeliveredInline = std::atomic_bool{false};
+    auto graphDeliveredInline = std::atomic_bool{false};
+    auto const subscriberThread = std::this_thread::get_id();
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
+    auto monitor = PipeWireMonitor{hooksPtr};
+    auto deviceSub = monitor.subscribeDevices(
+      [&](std::vector<Device> const& devices)
+      {
+        if (std::this_thread::get_id() == subscriberThread)
+        {
+          deviceDeliveredInline.store(true);
+        }
+
+        deviceSnapshots.push_back(devices);
+      });
+    REQUIRE(deviceSub);
+    CHECK(deviceDeliveredInline.load());
+
+    auto graphSub = monitor.subscribeGraph("42",
+                                           [&](flow::Graph const& graph)
+                                           {
+                                             if (std::this_thread::get_id() == subscriberThread)
+                                             {
+                                               graphDeliveredInline.store(true);
+                                             }
+
+                                             graphs.push_back(graph);
+                                           });
+    REQUIRE(graphSub);
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    REQUIRE(hooksPtr->requestRefresh);
+    hooksPtr->requestRefresh();
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    monitor.stop();
+
+    CHECK_FALSE(graphDeliveredInline.load());
+    auto const sinks = std::vector{syntheticSink()};
+    CHECK((deviceSnapshots == std::vector{sinks, sinks, sinks}));
+    REQUIRE(graphs.size() == 2U);
+    REQUIRE(graphs.front().nodes.size() == 1U);
+    CHECK(graphs.front().nodes.front().id == "42");
+    CHECK(graphs.back() == graphs.front());
   }
 
   TEST_CASE("PipeWireMonitor - graph subscription racing with stop is rejected", "[concurrency]")
@@ -351,61 +415,213 @@ namespace ao::audio::backend::test
     monitor.stop();
   }
 
-  TEST_CASE("PipeWireMonitor - reset suppresses a callback copied by refresh", "[concurrency]")
+  TEST_CASE("PipeWireMonitor - external reset releases a batched capture before its turn", "[concurrency]")
   {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto earlierCallback = WorkerPause{};
+    auto refreshCompleted = std::counting_semaphore{0};
+    auto resetReturned = std::binary_semaphore{0};
+    auto parkNextUpdate = std::atomic_bool{false};
+    std::size_t laterCalls = 0U;
+    auto survivorGraphs = std::vector<flow::Graph>{};
+    auto const refreshCaller = std::this_thread::get_id();
     auto hooksPtr = makeMonitorHooks();
-    auto refreshPrepared = std::binary_semaphore{0};
-    auto continueRefresh = std::binary_semaphore{0};
-    auto firstDeliveredAfterReset = std::binary_semaphore{0};
-    auto blockPreparedRefresh = std::atomic_bool{false};
-    auto observeAfterReset = std::atomic_bool{false};
-    hooksPtr->onRefreshPrepared = [&]
-    {
-      if (blockPreparedRefresh.exchange(false, std::memory_order_acq_rel))
-      {
-        refreshPrepared.release();
-        continueRefresh.acquire();
-      }
-    };
+    hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
     auto monitor = PipeWireMonitor{hooksPtr};
-    auto firstCalls = std::atomic<std::size_t>{0U};
-    auto secondCalls = std::atomic<std::size_t>{0U};
-    auto secondInitiallyDelivered = std::binary_semaphore{0};
-    auto firstSub = monitor.subscribeGraph("42",
-                                           [&](flow::Graph const&)
-                                           {
-                                             firstCalls.fetch_add(1U, std::memory_order_relaxed);
-
-                                             // Reset queues another refresh; notify only the first delivery.
-                                             if (observeAfterReset.exchange(false, std::memory_order_acq_rel))
+    auto earlierSub = monitor.subscribeGraph("42",
+                                             [&](flow::Graph const& graph)
                                              {
-                                               firstDeliveredAfterReset.release();
-                                             }
-                                           });
-    auto secondSub = monitor.subscribeGraph("43",
-                                            [&](flow::Graph const&)
-                                            {
-                                              if (secondCalls.fetch_add(1U, std::memory_order_relaxed) == 0U)
-                                              {
-                                                secondInitiallyDelivered.release();
-                                              }
-                                            });
-    REQUIRE(firstSub);
-    REQUIRE(secondSub);
-    REQUIRE(secondInitiallyDelivered.try_acquire_for(kWaitTimeout));
-    blockPreparedRefresh.store(true, std::memory_order_release);
+                                               if (parkNextUpdate.exchange(false))
+                                               {
+                                                 earlierCallback.park();
+                                               }
+
+                                               if (std::this_thread::get_id() == refreshCaller)
+                                               {
+                                                 survivorGraphs.push_back(graph);
+                                               }
+                                             });
+    REQUIRE(earlierSub);
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    auto capturePtr = std::make_shared<int>(1);
+    auto const weakCapturePtr = std::weak_ptr<int>{capturePtr};
+    auto const makeLaterCallback = [&]
+    { return [&, capturePtr = std::move(capturePtr)](auto const&) { ++laterCalls; }; };
+    auto laterSub = utility::ScopedRegistration{};
+
+    SECTION("later graph callback on the same route")
+    {
+      laterSub = monitor.subscribeGraph("42", makeLaterCallback());
+      REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    }
+
+    SECTION("later graph callback on a different route")
+    {
+      laterSub = monitor.subscribeGraph("43", makeLaterCallback());
+      REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    }
+
+    SECTION("later device callback")
+    {
+      laterSub = monitor.subscribeDevices(makeLaterCallback());
+    }
+
+    REQUIRE(laterSub);
+    REQUIRE(laterCalls == 1U);
+    REQUIRE_FALSE(weakCapturePtr.expired());
     REQUIRE(hooksPtr->requestRefresh);
+    auto resetThread = std::jthread{};
+    auto resumeOnExit = utility::ScopedRegistration{[&] { earlierCallback.resume.release(); }};
+    // Pause within publication, when the later recipient is already batched but has not run.
+    parkNextUpdate.store(true);
     hooksPtr->requestRefresh();
-    REQUIRE(refreshPrepared.try_acquire_for(kWaitTimeout));
-    auto const secondCallsBeforeReset = secondCalls.load(std::memory_order_relaxed);
+    REQUIRE(earlierCallback.entered.try_acquire_for(kWaitTimeout));
 
-    secondSub.reset();
-    observeAfterReset.store(true, std::memory_order_release);
-    continueRefresh.release();
+    resetThread = std::jthread{[&]
+                               {
+                                 laterSub.reset();
+                                 resetReturned.release();
+                               }};
+    bool const resetWhileParked = resetReturned.try_acquire_for(kWaitTimeout);
+    bool const captureReleasedWhileParked = weakCapturePtr.expired();
+    resumeOnExit.reset();
+    resetThread.join();
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
 
-    REQUIRE(firstDeliveredAfterReset.try_acquire_for(kWaitTimeout));
-    CHECK(secondCalls.load(std::memory_order_relaxed) == secondCallsBeforeReset);
+    // Observe this explicit refresh independently of any worker refresh requested by reset.
+    monitor.refresh();
+    REQUIRE(survivorGraphs.size() == 1U);
+    REQUIRE(survivorGraphs.front().nodes.size() == 1U);
+    CHECK(survivorGraphs.front().nodes.front().id == "42");
     monitor.stop();
+
+    CHECK(resetWhileParked);
+    CHECK(captureReleasedWhileParked);
+    CHECK(laterCalls == 1U);
+  }
+
+  TEST_CASE("PipeWireMonitor - reset keeps an active device capture alive until callback exit", "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto activeCallback = WorkerPause{};
+    auto refreshCompleted = std::counting_semaphore{0};
+    auto resetStarted = std::binary_semaphore{0};
+    auto resetReturned = std::binary_semaphore{0};
+    auto leavingCallback = std::atomic_bool{false};
+    std::size_t calls = 0U;
+    bool resetFromCallback = false;
+    bool resetObservedExit = false;
+
+    SECTION("external reset")
+    {
+    }
+
+    SECTION("self reset")
+    {
+      resetFromCallback = true;
+    }
+
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
+    auto monitor = PipeWireMonitor{hooksPtr};
+    auto capturePtr = std::make_shared<int>(1);
+    auto const weakCapturePtr = std::weak_ptr<int>{capturePtr};
+    auto sub = utility::ScopedRegistration{};
+    sub = monitor.subscribeDevices(
+      [&, capturePtr = std::move(capturePtr)](std::vector<Device> const&)
+      {
+        if (++calls != 2U)
+        {
+          return;
+        }
+
+        if (resetFromCallback)
+        {
+          sub.reset();
+        }
+
+        activeCallback.park();
+        leavingCallback.store(true);
+      });
+    REQUIRE(sub);
+    REQUIRE(hooksPtr->requestRefresh);
+    auto resetThread = std::jthread{};
+    auto resumeOnExit = utility::ScopedRegistration{[&] { activeCallback.resume.release(); }};
+    hooksPtr->requestRefresh();
+    REQUIRE(activeCallback.entered.try_acquire_for(kWaitTimeout));
+
+    if (resetFromCallback)
+    {
+      CHECK_FALSE(sub);
+    }
+    else
+    {
+      resetThread = std::jthread{[&]
+                                 {
+                                   resetStarted.release();
+                                   sub.reset();
+                                   resetObservedExit = leavingCallback.load();
+                                   resetReturned.release();
+                                 }};
+      REQUIRE(resetStarted.try_acquire_for(kWaitTimeout));
+      // Also check the observed exit order after joining; the window only exercises early return.
+      CHECK_FALSE(resetReturned.try_acquire_for(std::chrono::milliseconds{100}));
+    }
+
+    CHECK_FALSE(weakCapturePtr.expired());
+    resumeOnExit.reset();
+
+    if (resetThread.joinable())
+    {
+      resetThread.join();
+      CHECK(resetObservedExit);
+    }
+
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    CHECK(weakCapturePtr.expired());
+    hooksPtr->requestRefresh();
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    monitor.stop();
+    CHECK(calls == 2U);
+  }
+
+  TEST_CASE("PipeWireMonitor - retiring a subscription capture may reenter stop", "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto refreshCompleted = std::counting_semaphore{0};
+    auto capturesRetired = std::atomic<std::size_t>{0U};
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
+    auto monitor = PipeWireMonitor{hooksPtr};
+    auto const makeCapture = [&]
+    {
+      return std::make_shared<utility::ScopedRegistration>(
+        [&]
+        {
+          monitor.stop();
+          capturesRetired.fetch_add(1U);
+        });
+    };
+    auto deviceSub = monitor.subscribeDevices([capturePtr = makeCapture()](std::vector<Device> const&) {});
+    auto graphSub = monitor.subscribeGraph("42", [capturePtr = makeCapture()](flow::Graph const&) {});
+    REQUIRE(deviceSub);
+    REQUIRE(graphSub);
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
+    REQUIRE(capturesRetired.load() == 0U);
+
+    SECTION("stop retires the captures")
+    {
+      monitor.stop();
+    }
+
+    SECTION("reset retires the graph capture and initiates stop")
+    {
+      graphSub.reset();
+    }
+
+    CHECK(capturesRetired.load() == 2U);
+    CHECK(monitor.enumerateSinks().empty());
+    CHECK_FALSE(monitor.subscribeGraph("42", [](flow::Graph const&) {}));
   }
 
   TEST_CASE("PipeWireMonitor - concurrent external shutdown callers share callback quiescence", "[concurrency]")
@@ -459,55 +675,167 @@ namespace ao::audio::backend::test
     CHECK(secondReturned.try_acquire());
   }
 
-  TEST_CASE("PipeWireMonitor - callback shutdown returns while later external shutdown waits", "[concurrency]")
+  TEST_CASE("PipeWireMonitor - external stop drains a self-reset callback on the public refresh caller",
+            "[concurrency]")
   {
-    auto hooksPtr = makeMonitorHooks();
-    auto callbackShutdownReturned = std::binary_semaphore{0};
-    auto releaseCallback = std::binary_semaphore{0};
-    // Allow the external wait plus monitor and worker teardown notifications.
-    auto shutdownWait = std::counting_semaphore<3>{0};
-    auto externalReturned = std::binary_semaphore{0};
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto callback = WorkerPause{};
+    auto destroyingCapture = WorkerPause{};
+    auto workerPrepared = std::binary_semaphore{0};
     auto monitorExited = std::binary_semaphore{0};
-    hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
+    auto expectWorkerRefresh = std::atomic_bool{false};
+    auto callbackLeaving = std::atomic_bool{false};
+    auto captureFinished = std::atomic_bool{false};
+    auto stopReturned = std::atomic_bool{false};
+    bool stopObservedQuiescence = false;
+    std::size_t calls = 0U;
+    std::size_t laterCalls = 0U;
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onRefreshPrepared = [&]
+    {
+      if (expectWorkerRefresh.exchange(false))
+      {
+        workerPrepared.release();
+      }
+    };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto monitor = PipeWireMonitor{hooksPtr};
-    auto callbackCount = std::atomic<std::size_t>{0U};
-    auto lateCalls = std::atomic<std::size_t>{0U};
-    auto lateSub = utility::ScopedRegistration{};
-    auto sub = monitor.subscribeDevices(
-      [&](std::vector<Device> const&)
+    auto sub = utility::ScopedRegistration{};
+    auto laterSub = utility::ScopedRegistration{};
+    auto refreshCaller = std::jthread{};
+    auto externalShutdown = std::jthread{};
+    // Release both pauses before joining either thread or retiring the subscriptions on failure.
+    auto resumeCapture = utility::ScopedRegistration{[&] { destroyingCapture.resume.release(); }};
+    auto resumeCallback = utility::ScopedRegistration{[&] { callback.resume.release(); }};
+    auto capturePtr = std::make_shared<utility::ScopedRegistration>(
+      [&]
       {
-        if (callbackCount.fetch_add(1U, std::memory_order_relaxed) == 0U)
+        if (callbackLeaving.load())
         {
-          return;
+          destroyingCapture.park();
         }
 
-        monitor.stop();
-        lateSub = monitor.subscribeDevices([&](std::vector<Device> const&)
-                                           { lateCalls.fetch_add(1U, std::memory_order_relaxed); });
-        callbackShutdownReturned.release();
-        releaseCallback.acquire();
+        captureFinished.store(true);
       });
+    auto const weakCapturePtr = std::weak_ptr{capturePtr};
+    sub = monitor.subscribeDevices(
+      [&, capturePtr = std::move(capturePtr)](std::vector<Device> const&)
+      {
+        if (++calls == 2U)
+        {
+          sub.reset();
+          callback.park();
+          callbackLeaving.store(true);
+        }
+      });
+    laterSub = monitor.subscribeDevices([&](std::vector<Device> const&) { ++laterCalls; });
     REQUIRE(sub);
+    REQUIRE(laterSub);
+    REQUIRE(hooksPtr->requestRefresh);
+
+    refreshCaller = std::jthread{[&] { monitor.refresh(); }};
+    REQUIRE(callback.entered.try_acquire_for(kWaitTimeout));
+    CHECK_FALSE(sub);
+    // Self-reset removed the active subscription; the later subscriber still gives the worker pending work.
+    expectWorkerRefresh.store(true);
+    hooksPtr->requestRefresh();
+    REQUIRE(workerPrepared.try_acquire_for(kWaitTimeout));
+
+    externalShutdown = std::jthread{[&]
+                                    {
+                                      monitor.stop();
+                                      stopObservedQuiescence = callbackLeaving.load() && captureFinished.load();
+                                      stopReturned.store(true);
+                                    }};
+    // The refresh worker can exit even though a callback is still running on the public caller.
+    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
+    CHECK_FALSE(stopReturned.load());
+    CHECK_FALSE(weakCapturePtr.expired());
+
+    resumeCallback.reset();
+    REQUIRE(destroyingCapture.entered.try_acquire_for(kWaitTimeout));
+    CHECK_FALSE(stopReturned.load());
+    resumeCapture.reset();
+    refreshCaller.join();
+    externalShutdown.join();
+
+    CHECK(stopReturned.load());
+    CHECK(stopObservedQuiescence);
+    CHECK(weakCapturePtr.expired());
+    monitor.refresh();
+    CHECK(calls == 2U);
+    CHECK(laterCalls == 1U); // Neither refresh may deliver its pending update to the later subscriber.
+  }
+
+  TEST_CASE("PipeWireMonitor - monitor callback stop returns before external shutdown quiesces", "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto stoppingCallback = WorkerPause{};
+    auto exitingMonitor = WorkerPause{};
+    auto shutdownWait = std::counting_semaphore{0};
+    auto externalReturned = std::binary_semaphore{0};
+    auto monitorReleased = std::atomic_bool{false};
+    std::size_t callbackCount = 0U;
+    std::size_t batchedCalls = 0U;
+    std::size_t lateCalls = 0U;
+    bool externalObservedQuiescence = false;
+    auto lateSub = utility::ScopedRegistration{};
+    auto hooksPtr = makeMonitorHooks();
+    hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
+    auto monitor = PipeWireMonitor{hooksPtr};
+    auto capturePtr = std::make_shared<int>(1);
+    auto const weakCapturePtr = std::weak_ptr<int>{capturePtr};
+    auto sub = utility::ScopedRegistration{};
+    auto batchedSub = utility::ScopedRegistration{};
+    auto externalShutdown = std::jthread{};
+    // Unpark both worker boundaries before joining or resetting subscriptions on failure.
+    auto resumeMonitor = utility::ScopedRegistration{[&] { exitingMonitor.resume.release(); }};
+    auto resumeCallback = utility::ScopedRegistration{[&] { stoppingCallback.resume.release(); }};
+    hooksPtr->onMonitorExit = [&]
+    {
+      // The worker can still reenter stop after the initiating user callback has unwound.
+      monitor.stop();
+      exitingMonitor.park();
+      monitorReleased.store(true);
+    };
+    sub = monitor.subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        if (++callbackCount == 2U)
+        {
+          monitor.stop();
+          lateSub = monitor.subscribeDevices([&](std::vector<Device> const&) { ++lateCalls; });
+          stoppingCallback.park();
+        }
+      });
+    batchedSub =
+      monitor.subscribeDevices([&, capturePtr = std::move(capturePtr)](std::vector<Device> const&) { ++batchedCalls; });
+    REQUIRE(sub);
+    REQUIRE(batchedSub);
     REQUIRE(hooksPtr->requestRefresh);
 
     hooksPtr->requestRefresh();
-    REQUIRE(callbackShutdownReturned.try_acquire_for(kWaitTimeout));
-    auto externalShutdown = std::jthread{[&]
-                                         {
-                                           monitor.stop();
-                                           externalReturned.release();
-                                         }};
+    REQUIRE(stoppingCallback.entered.try_acquire_for(kWaitTimeout));
+    externalShutdown = std::jthread{[&]
+                                    {
+                                      monitor.stop();
+                                      externalObservedQuiescence = monitorReleased.load() && weakCapturePtr.expired();
+                                      externalReturned.release();
+                                    }};
     REQUIRE(shutdownWait.try_acquire_for(kWaitTimeout));
-
     CHECK_FALSE(externalReturned.try_acquire());
     CHECK_FALSE(lateSub);
-    CHECK(lateCalls.load(std::memory_order_relaxed) == 0U);
-    releaseCallback.release();
+    CHECK(lateCalls == 0U);
+
+    resumeCallback.reset();
+    REQUIRE(exitingMonitor.entered.try_acquire_for(kWaitTimeout));
+    CHECK_FALSE(externalReturned.try_acquire());
+    resumeMonitor.reset();
     externalShutdown.join();
-    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
     CHECK(externalReturned.try_acquire());
-    CHECK(callbackCount.load(std::memory_order_relaxed) == 2U);
+    CHECK(externalObservedQuiescence);
+    CHECK(callbackCount == 2U);
+    CHECK(batchedCalls == 1U);
     CHECK_FALSE(monitor.subscribeDevices([](std::vector<Device> const&) {}));
   }
 } // namespace ao::audio::backend::test

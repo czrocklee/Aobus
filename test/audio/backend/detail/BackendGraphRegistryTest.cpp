@@ -3,6 +3,8 @@
 
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
 
+#include "lib/audio/backend/detail/BackendObserverDispatcher.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -35,6 +37,46 @@ namespace ao::audio::backend::detail::test
       return {.nodes = {{.id = std::move(id), .type = flow::NodeType::Stream}}};
     }
   } // namespace
+
+  TEST_CASE("BackendGraphRegistry - only retirement marks an empty graph as terminal")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto terminal = std::vector<bool>{};
+    auto sub = registry.subscribeWithDelivery(
+      "route-a", [&](flow::Graph const&, bool const isTerminal) { terminal.push_back(isTerminal); });
+    registry.clear("route-a");
+
+    SECTION("terminal delivery")
+    {
+      registry.shutdown();
+      CHECK((terminal == std::vector<bool>{false, false, true}));
+    }
+
+    SECTION("silent retirement")
+    {
+      registry.shutdown(false);
+      registry.shutdown();
+      CHECK((terminal == std::vector<bool>{false, false}));
+    }
+  }
+
+  TEST_CASE("BackendGraphRegistry - prepared delivery retains the callable without copying its target")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto const released = graphWithNode("released");
+    auto releasePtr = std::make_shared<utility::ScopedRegistration>([&] { registry.publish("route-b", released); });
+    bool uniqueTarget = true;
+    auto sub = registry.subscribe("route-a",
+                                  [releasePtr = std::move(releasePtr), &uniqueTarget](flow::Graph const&)
+                                  { uniqueTarget &= releasePtr.use_count() == 1; });
+    auto pending = registry.preparePublish("route-a", graphWithNode("prepared"));
+    std::move(pending).deliver();
+    CHECK(uniqueTarget);
+    sub.reset();
+    auto received = flow::Graph{};
+    auto lateSub = registry.subscribe("route-b", [&](flow::Graph const& graph) { received = graph; });
+    CHECK(received == released);
+  }
 
   TEST_CASE("BackendGraphRegistry - preparation commits current facts without delivering observers")
   {
@@ -114,7 +156,7 @@ namespace ao::audio::backend::detail::test
     CHECK((received == std::vector<flow::Graph>{{}, current}));
   }
 
-  TEST_CASE("BackendGraphRegistry - moving a pending delivery releases all source ownership")
+  TEST_CASE("BackendGraphRegistry - pending tickets do not pin a cancelled observer")
   {
     auto registry = BackendGraphRegistry{};
     auto ownerPtr = std::make_shared<std::uint32_t>(17U);
@@ -123,36 +165,12 @@ namespace ao::audio::backend::detail::test
     auto sub =
       registry.subscribe("route-a", [ownerPtr, &received](flow::Graph const&) { received.push_back(*ownerPtr); });
     auto original = registry.preparePublish("route-a", graphWithNode("pending"));
-    sub.reset();
+    auto transferred = std::move(original);
     ownerPtr.reset();
     REQUIRE_FALSE(weakOwnerPtr.expired());
-
-    bool moveConstruction = false;
-
-    SECTION("move construction")
-    {
-      moveConstruction = true;
-    }
-
-    SECTION("move assignment")
-    {
-    }
-
-    // Last-owner release proves that the moved source retains no callback
-    // payload, without invoking a member on that moved-from source.
-    if (moveConstruction)
-    {
-      auto const transferred = std::move(original);
-      CHECK_FALSE(weakOwnerPtr.expired());
-    }
-    else
-    {
-      auto transferred = BackendGraphRegistry::PendingDelivery{};
-      transferred = std::move(original);
-      CHECK_FALSE(weakOwnerPtr.expired());
-    }
-
+    sub.reset();
     CHECK(weakOwnerPtr.expired());
+    std::move(transferred).deliver();
     CHECK(received == std::vector<std::uint32_t>{17U});
   }
 
@@ -640,7 +658,7 @@ namespace ao::audio::backend::detail::test
     auto const secondThread = secondPublisher.get_id();
     start.arrive_and_wait();
 
-    // One caller commits latest and must wait for the gate. Its equal-graph peer
+    // One caller commits latest and must wait for its turn. Its equal-graph peer
     // can return only after observing that committed revision under the state lock.
     auto const duplicateFinished = duplicateReturned.try_acquire_for(kWaitTimeout);
     auto const duplicateIndex = firstReturnedIndex.load();
@@ -660,6 +678,93 @@ namespace ao::audio::backend::detail::test
     CHECK((firstGraphs == std::vector<flow::Graph>{{}, obsolete, latest}));
     CHECK((secondGraphs == std::vector<flow::Graph>{{}, latest}));
     CHECK((latestCallbackThreads == std::vector{publisherThread, publisherThread}));
+  }
+
+  TEST_CASE("BackendGraphRegistry - an already stopped delivery skips an idle dispatch turn")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto graphs = std::vector<flow::Graph>{};
+    auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { graphs.push_back(graph); });
+    auto ticket = registry.preparePublish("route-a", graphWithNode("committed"));
+    auto stop = std::stop_source{};
+    stop.request_stop();
+    std::move(ticket).deliver(stop.get_token());
+    CHECK(graphs == std::vector<flow::Graph>{{}});
+  }
+
+  TEST_CASE("BackendGraphRegistry - stopping a waiting delivery leaves its committed graph intact", "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto dispatcherPtr = std::make_shared<BackendObserverDispatcher>();
+    auto registry = BackendGraphRegistry{dispatcherPtr};
+    auto const current = graphWithNode("committed");
+    auto graphs = std::vector<flow::Graph>{};
+    auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { graphs.push_back(graph); });
+    auto callbackEntered = std::latch{1};
+    auto releaseCallback = std::latch{1};
+    auto blockSub = registry.subscribe("route-b",
+                                       [&](flow::Graph const& graph)
+                                       {
+                                         if (!graph.nodes.empty())
+                                         {
+                                           callbackEntered.count_down();
+                                           releaseCallback.wait();
+                                         }
+                                       });
+    auto publisher = std::jthread{[&] { registry.publish("route-b", graphWithNode("busy")); }};
+    callbackEntered.wait();
+    auto probeArmed = std::latch{1};
+    auto returned = std::binary_semaphore{0};
+    auto worker = std::jthread{[&](std::stop_token stop)
+                               {
+                                 auto ticket = registry.preparePublish("route-a", current);
+                                 probeArmed.wait();
+                                 std::move(ticket).deliver(std::move(stop));
+                                 returned.release();
+                               }};
+    dispatcherPtr->observeNextPublisherWait(probeArmed);
+    worker.request_stop();
+    auto const stoppedWhileBusy = returned.try_acquire_for(std::chrono::seconds{5});
+    releaseCallback.count_down();
+    publisher.join();
+    worker.join();
+
+    CHECK(stoppedWhileBusy);
+    CHECK(graphs == std::vector<flow::Graph>{{}});
+    auto latest = flow::Graph{};
+    auto lateSub = registry.subscribe("route-a", [&](flow::Graph const& graph) { latest = graph; });
+    CHECK(latest == current);
+  }
+
+  TEST_CASE("BackendGraphRegistry - external reset cancels a pending terminal callback during another's delivery",
+            "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto registry = BackendGraphRegistry{};
+    auto entered = std::latch{1};
+    auto cancelled = std::binary_semaphore{0};
+    bool cancelledDuringFinal = false;
+    auto first = registry.subscribeWithDelivery("route-a",
+                                                [&](flow::Graph const&, bool const isTerminal)
+                                                {
+                                                  if (isTerminal)
+                                                  {
+                                                    entered.count_down();
+                                                    cancelledDuringFinal =
+                                                      cancelled.try_acquire_for(std::chrono::seconds{5});
+                                                  }
+                                                });
+    auto secondCalls = std::vector<bool>{};
+    auto second = registry.subscribeWithDelivery(
+      "route-a", [&](flow::Graph const&, bool const isTerminal) { secondCalls.push_back(isTerminal); });
+    auto retiree = std::jthread{[&] { registry.shutdown(); }};
+    entered.wait();
+    second.reset();
+    cancelled.release();
+    retiree.join();
+
+    CHECK(cancelledDuringFinal);
+    CHECK(secondCalls == std::vector<bool>{false});
   }
 
   TEST_CASE("BackendGraphRegistry - shutdown waits for an active callback and closes admission", "[concurrency]")
@@ -751,6 +856,55 @@ namespace ao::audio::backend::detail::test
     CHECK((received == std::vector<flow::Graph>{{}, current, {}}));
     CHECK(cancelledGraphs == std::vector<flow::Graph>{{}});
     CHECK_FALSE(registry.subscribe("route-a", [](flow::Graph const&) {}));
+  }
+
+  TEST_CASE("BackendGraphRegistry - shutdown inside a terminal callback settles the remaining registrations")
+  {
+    bool deliverRemaining = true;
+
+    SECTION("nested shutdown delivers remaining finals before returning")
+    {
+    }
+
+    SECTION("nested silent shutdown revokes remaining finals")
+    {
+      deliverRemaining = false;
+    }
+
+    auto registry = BackendGraphRegistry{};
+    auto events = std::vector<std::string>{};
+    auto first = registry.subscribeWithDelivery("route-a",
+                                                [&](flow::Graph const&, bool const isTerminal)
+                                                {
+                                                  if (isTerminal)
+                                                  {
+                                                    events.emplace_back("first");
+
+                                                    if (events.size() == 1U)
+                                                    {
+                                                      registry.shutdown(deliverRemaining);
+                                                      events.emplace_back("nested shutdown returned");
+                                                    }
+                                                  }
+                                                });
+    auto second = registry.subscribeWithDelivery("route-b",
+                                                 [&](flow::Graph const&, bool const isTerminal)
+                                                 {
+                                                   if (isTerminal)
+                                                   {
+                                                     events.emplace_back("second");
+                                                   }
+                                                 });
+    registry.shutdown();
+
+    if (deliverRemaining)
+    {
+      CHECK((events == std::vector<std::string>{"first", "second", "nested shutdown returned"}));
+    }
+    else
+    {
+      CHECK((events == std::vector<std::string>{"first", "nested shutdown returned"}));
+    }
   }
 
   TEST_CASE("BackendGraphRegistry - subscription may outlive registry")

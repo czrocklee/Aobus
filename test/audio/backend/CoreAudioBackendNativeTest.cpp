@@ -2,10 +2,13 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "lib/audio/backend/CoreAudioBackend.h"
+#include "lib/audio/backend/CoreAudioProvider.h"
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
+#include "lib/audio/backend/detail/CoreAudioProviderMonitorHooks.h"
 #include "lib/audio/detail/DecoderOutput.h"
 #include "test/audio/BackendTestSupport.h"
 #include "test/audio/backend/CoreAudioTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -202,6 +205,67 @@ namespace ao::audio::backend::test
       return **selectedRes;
     }
   } // namespace
+
+  TEST_CASE("CoreAudioBackend - a device observer can destroy the backend while its worker owes a graph delivery",
+            "[concurrency]")
+  {
+    auto const device = requireNativeTestOutput();
+    auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = [device] { return std::vector{device}; };
+    auto target = ao::audio::test::NoopRenderTarget{};
+    auto provider = CoreAudioProvider{hooksPtr};
+    auto backendPtr = provider.createBackend(device, kProfileShared);
+    REQUIRE(backendPtr->open(
+      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
+
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    bool quarterDelivered = false;
+    bool lastGraphEmpty = false;
+    auto observer =
+      provider.subscribeGraph(device.id.raw(),
+                              [&](flow::Graph const& graph)
+                              {
+                                lastGraphEmpty = graph.nodes.empty();
+                                auto const sink = std::ranges::find(graph.nodes, device.id.raw(), &flow::Node::id);
+                                quarterDelivered |= sink != graph.nodes.end() && sink->maxSoftwareGain == 0.25F;
+                              });
+    bool quarterCommitted = false;
+    auto deviceSub = provider.subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        if (!backendPtr->set(props::kVolume, 0.25F))
+        {
+          return;
+        }
+
+        // A synchronous initial snapshot can see the worker's commit. The worker
+        // cannot deliver it to the existing observer while this device callback is active.
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+        while (!quarterCommitted && std::chrono::steady_clock::now() < deadline)
+        {
+          auto probe = provider.subscribeGraph(
+            device.id.raw(),
+            [&](flow::Graph const& graph)
+            {
+              auto const sink = std::ranges::find(graph.nodes, device.id.raw(), &flow::Node::id);
+              quarterCommitted = sink != graph.nodes.end() && sink->maxSoftwareGain == 0.25F;
+            });
+          std::this_thread::yield();
+        }
+
+        if (quarterCommitted)
+        {
+          backendPtr.reset();
+        }
+      });
+
+    REQUIRE(quarterCommitted);
+    REQUIRE_FALSE(backendPtr);
+    observer.reset();
+    CHECK(lastGraphEmpty);
+    CHECK_FALSE(quarterDelivered);
+  }
 
   TEST_CASE("CoreAudioBackend - native AUHAL open retains canonical identities in the exact lossless client stream")
   {

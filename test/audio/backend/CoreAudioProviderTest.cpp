@@ -4,6 +4,7 @@
 #include "lib/audio/backend/CoreAudioProvider.h"
 
 #include "lib/audio/backend/detail/CoreAudioProviderMonitorHooks.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -19,6 +20,7 @@
 #include <semaphore>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -215,6 +217,46 @@ namespace ao::audio::backend::test
     REQUIRE(monitorStateDestroyed.try_acquire_for(kWaitTimeout));
     CHECK_FALSE(providerPtr);
     sub.reset();
+  }
+
+  TEST_CASE("CoreAudioProvider - stopping rejects monitor delivery but admits the terminal graph", "[concurrency]")
+  {
+    auto processDeadline = rt::test::ScopedTestDeadline{};
+    auto refreshed = std::binary_semaphore{0};
+    auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = [] { return std::vector<Device>{{.id = DeviceId{"uid-a"}}}; };
+    hooksPtr->onRefreshComplete = [&] { refreshed.release(); };
+    auto provider = CoreAudioProvider{hooksPtr};
+    std::size_t deviceCalls = 0U;
+    auto deviceSub = provider.subscribeDevices([&](std::vector<Device> const&) { ++deviceCalls; });
+    std::size_t graphCalls = 0U;
+    bool retiredAfterTerminal = false;
+    auto capturePtr = std::make_shared<utility::ScopedRegistration>(
+      [&]
+      {
+        provider.shutdown();
+        retiredAfterTerminal = graphCalls == 2U;
+      });
+    auto graphSub =
+      provider.subscribeGraph("uid-a", [&, capturePtr = std::move(capturePtr)](flow::Graph const&) { ++graphCalls; });
+    REQUIRE(deviceSub);
+    REQUIRE(graphSub);
+    bool refreshFinished = false;
+    bool inventoryEmpty = false;
+    hooksPtr->onShutdownStarted = [&]
+    {
+      hooksPtr->requestRefresh();
+      refreshFinished = refreshed.try_acquire_for(kWaitTimeout);
+      inventoryEmpty = provider.status().devices.empty();
+    };
+
+    provider.shutdown();
+
+    REQUIRE(refreshFinished);
+    CHECK(inventoryEmpty);
+    CHECK(deviceCalls == 1U);
+    CHECK(graphCalls == 2U);
+    CHECK(retiredAfterTerminal);
   }
 
   TEST_CASE("CoreAudioProvider - concurrent external shutdown callers share callback quiescence", "[concurrency]")

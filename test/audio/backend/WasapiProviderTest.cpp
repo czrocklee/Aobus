@@ -4,6 +4,7 @@
 #include "lib/audio/backend/WasapiProvider.h"
 
 #include "lib/audio/backend/detail/WasapiProviderMonitorHooks.h"
+#include "test/runtime/AsyncTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
@@ -430,6 +431,86 @@ namespace ao::audio::backend::test
     CHECK(graphUpdateCount == 2);
     graphSub.reset();
     CHECK_FALSE(graphSub);
+  }
+
+  TEST_CASE("WasapiProvider - retiring a graph capture may reenter external shutdown")
+  {
+    auto deadline = rt::test::ScopedTestDeadline{};
+    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = [] { return std::vector<Device>{}; };
+    auto provider = WasapiProvider{hooksPtr};
+    bool retired = false;
+    auto capturePtr = std::make_shared<utility::ScopedRegistration>(
+      [&]
+      {
+        provider.shutdown();
+        retired = true;
+      });
+    std::size_t graphCalls = 0;
+    auto sub = provider.subscribeGraph(
+      "endpoint", [&, capturePtr = std::move(capturePtr)](flow::Graph const&) { ++graphCalls; });
+    REQUIRE(sub);
+    auto backendPtr =
+      provider.createBackend(Device{.id = DeviceId{"endpoint"}, .backendId = kBackendWasapi}, kProfileShared);
+    REQUIRE(backendPtr);
+    std::size_t callsAfterClear = 0;
+    hooksPtr->onShutdownStarted = [&]
+    {
+      // Both close and retirement publish empty graphs, but only retirement is admitted while stopping.
+      backendPtr->close();
+      callsAfterClear = graphCalls;
+    };
+
+    provider.shutdown();
+
+    CHECK(callsAfterClear == 1U);
+    CHECK(graphCalls == 2U);
+    CHECK(retired);
+  }
+
+  TEST_CASE("WasapiProvider - self-reset graph capture may reenter another thread's shutdown", "[concurrency]")
+  {
+    auto deadline = rt::test::ScopedTestDeadline{};
+    auto selfReset = std::binary_semaphore{0};
+    auto shutdownStarted = std::binary_semaphore{0};
+    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = [] { return std::vector<Device>{}; };
+    hooksPtr->onShutdownStarted = [&] { shutdownStarted.release(); };
+    auto provider = WasapiProvider{hooksPtr};
+    auto backendPtr =
+      provider.createBackend(Device{.id = DeviceId{"endpoint"}, .backendId = kBackendWasapi}, kProfileShared);
+    REQUIRE(backendPtr);
+
+    bool retired = false;
+    auto capturePtr = std::make_shared<utility::ScopedRegistration>(
+      [&]
+      {
+        provider.shutdown();
+        retired = true;
+      });
+    auto sub = utility::ScopedRegistration{};
+    sub = provider.subscribeGraph("endpoint",
+                                  [&, capturePtr = std::move(capturePtr)](flow::Graph const&)
+                                  {
+                                    if (sub) // not the initial snapshot
+                                    {
+                                      sub.reset();
+                                      selfReset.release();
+                                      shutdownStarted.acquire();
+                                    }
+                                  });
+    REQUIRE(sub);
+    auto shutdown = std::jthread{[&]
+                                 {
+                                   selfReset.acquire();
+                                   provider.shutdown();
+                                 }};
+
+    REQUIRE(backendPtr->set(props::kVolume, 0.5F));
+    shutdown.join();
+
+    CHECK_FALSE(sub);
+    CHECK(retired);
   }
 
   TEST_CASE("WasapiProvider - device subscription racing shutdown receives no initial callback", "[concurrency]")

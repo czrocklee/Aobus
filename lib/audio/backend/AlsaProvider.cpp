@@ -11,6 +11,7 @@
 #include "backend/detail/AlsaGraphRegistry.h"
 #include "backend/detail/AlsaProviderMonitorHooks.h"
 #include "backend/detail/BackendDeviceRegistry.h"
+#include "backend/detail/BackendObserverDispatcher.h"
 #include <ao/Contract.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -41,7 +42,6 @@ extern "C"
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <semaphore>
 #include <stop_token>
 #include <thread>
@@ -77,10 +77,6 @@ namespace ao::audio::backend
       std::shared_ptr<detail::AlsaProviderMonitorHooks> monitorHooksPtr;
       std::counting_semaphore<> refreshSignal{0};
       std::atomic<bool> shutdownRequested{false};
-      mutable std::mutex exitMutex;
-      std::condition_variable exitChanged;
-      std::thread::id monitorThreadId{};
-      bool monitorExited = false;
 
       AlsaMonitorState(std::shared_ptr<detail::BackendDeviceRegistry> registryPtr,
                        std::shared_ptr<detail::AlsaProviderMonitorHooks> hooksPtr)
@@ -211,37 +207,6 @@ namespace ao::audio::backend
         }
       }
 
-      void markMonitorStarted() noexcept
-      {
-        auto const lock = std::scoped_lock{exitMutex};
-        monitorThreadId = std::this_thread::get_id();
-      }
-
-      void markMonitorExited() noexcept
-      {
-        auto const lock = std::scoped_lock{exitMutex};
-        monitorExited = true;
-        exitChanged.notify_all();
-      }
-
-      bool isMonitorThread() const noexcept
-      {
-        auto const lock = std::scoped_lock{exitMutex};
-        return monitorThreadId == std::this_thread::get_id();
-      }
-
-      bool hasMonitorExited() const noexcept
-      {
-        auto const lock = std::scoped_lock{exitMutex};
-        return monitorExited;
-      }
-
-      void waitForMonitorExit() noexcept
-      {
-        auto lock = std::unique_lock{exitMutex};
-        exitChanged.wait(lock, [this] { return monitorExited; });
-      }
-
       void requestShutdown() noexcept
       {
         if (!shutdownRequested.exchange(true, std::memory_order_acq_rel))
@@ -255,13 +220,14 @@ namespace ao::audio::backend
     {
     public:
       explicit AlsaProviderControl(std::shared_ptr<detail::AlsaProviderMonitorHooks> monitorHooksPtr)
-        : _deviceRegistryPtr{std::make_shared<detail::BackendDeviceRegistry>()}
-        , _graphRegistryPtr{std::make_shared<detail::AlsaGraphRegistry>()}
+        : _dispatcherPtr{std::make_shared<detail::BackendObserverDispatcher>()}
+        , _deviceRegistryPtr{std::make_shared<detail::BackendDeviceRegistry>(_dispatcherPtr)}
+        , _graphRegistryPtr{std::make_shared<detail::AlsaGraphRegistry>(_dispatcherPtr)}
         , _monitorStatePtr{std::make_shared<AlsaMonitorState>(_deviceRegistryPtr, std::move(monitorHooksPtr))}
       {
       }
 
-      ~AlsaProviderControl() { shutdown(); }
+      ~AlsaProviderControl() = default;
 
       AlsaProviderControl(AlsaProviderControl const&) = delete;
       AlsaProviderControl& operator=(AlsaProviderControl const&) = delete;
@@ -281,46 +247,38 @@ namespace ao::audio::backend
           };
         }
 
-        try
-        {
-          _monitorThread =
-            std::jthread{[statePtr = _monitorStatePtr](std::stop_token const& stopToken)
+        _monitorThread =
+          std::jthread{[controlPtr = shared_from_this()](std::stop_token const& stopToken)
+                       {
+                         auto& state = *controlPtr->_monitorStatePtr;
+                         auto const monitorScope = utility::CallbackStackScope{&state};
+
+                         try
                          {
-                           statePtr->markMonitorStarted();
+                           setCurrentThreadName("AlsaDeviceMonitor");
+                           state.monitorLoop(stopToken);
 
-                           try
+                           if (state.monitorHooksPtr)
                            {
-                             setCurrentThreadName("AlsaDeviceMonitor");
-                             statePtr->monitorLoop(stopToken);
-
-                             if (statePtr->monitorHooksPtr)
-                             {
-                               invokeHook(statePtr->monitorHooksPtr->onMonitorExit, "ALSA monitor-exit observer");
-                             }
+                             invokeHook(state.monitorHooksPtr->onMonitorExit, "ALSA monitor-exit observer");
                            }
-                           catch (...)
-                           {
-                             AO_FATAL_EXCEPTION(std::current_exception(), "ALSA device-monitor thread");
-                           }
+                         }
+                         catch (...)
+                         {
+                           AO_FATAL_EXCEPTION(std::current_exception(), "ALSA device-monitor thread");
+                         }
 
-                           statePtr->markMonitorExited();
-                         }};
-        }
-        catch (...)
-        {
-          _monitorStatePtr->markMonitorExited();
-          throw;
-        }
+                         controlPtr->markMonitorExited();
+                       }};
       }
 
       void shutdown() noexcept
       {
-        bool returnWithoutWaiting = false;
-        bool startedShutdown = false;
+        bool const returnWithoutWaiting = _dispatcherPtr->isDispatchingOnThisThread() ||
+                                          utility::CallbackStackScope::containsIdentity(_monitorStatePtr.get());
 
         {
           auto lock = std::unique_lock{_mutex};
-          returnWithoutWaiting = isCurrentCallback() || _monitorStatePtr->isMonitorThread();
 
           if (_lifecycle == Lifecycle::Stopped)
           {
@@ -329,47 +287,39 @@ namespace ao::audio::backend
 
           if (_lifecycle == Lifecycle::Stopping)
           {
-            if (returnWithoutWaiting)
+            // Retiring a registration can destroy a subscriber that calls shutdown again.
+            if (returnWithoutWaiting || _retiringThread == std::this_thread::get_id())
             {
               return;
             }
 
             lock.unlock();
             notifyShutdownWait();
-            _monitorStatePtr->waitForMonitorExit();
             lock.lock();
-            updateCompletionLocked();
             _completionChanged.wait(lock, [this] { return _lifecycle == Lifecycle::Stopped; });
             return;
           }
 
           _lifecycle = Lifecycle::Stopping;
-          startedShutdown = true;
+          _retiringThread = std::this_thread::get_id();
         }
 
-        if (startedShutdown)
-        {
-          notifyShutdownStarted();
-        }
+        notifyShutdownStarted();
 
-        auto const monitorStatePtr = _monitorStatePtr;
-        auto const graphRegistryPtr = _graphRegistryPtr;
-        auto const deviceRegistryPtr = _deviceRegistryPtr;
-        monitorStatePtr->requestShutdown();
+        _monitorStatePtr->requestShutdown();
         _monitorThread.request_stop();
 
         // Retire graph publishers before a backend can observe provider storage
         // disappearing, then close device callbacks before joining their source.
-        graphRegistryPtr->shutdown();
-        deviceRegistryPtr->shutdown();
+        _graphRegistryPtr->shutdown(!returnWithoutWaiting);
+        _deviceRegistryPtr->shutdown();
 
         if (_monitorThread.joinable())
         {
           if (returnWithoutWaiting)
           {
-            // The worker captures only AlsaMonitorState. Detaching from a
-            // provider callback avoids both self-join and an initial-callback
-            // deadlock with a worker waiting at the registry callback gate.
+            // The worker retains control through its exit notification. Let
+            // the callback unwind instead of joining a worker that needs it.
             _monitorThread.detach();
           }
           else
@@ -380,8 +330,8 @@ namespace ao::audio::backend
 
         {
           auto lock = std::unique_lock{_mutex};
-          _registriesRetired = true;
-          _threadRetired = true;
+          _retiringThread = {};
+          _sourcesRetired = true;
           updateCompletionLocked();
 
           if (returnWithoutWaiting)
@@ -428,15 +378,15 @@ namespace ao::audio::backend
         }
 
         auto const weakControlPtr = weak_from_this();
-        auto sub =
-          _graphRegistryPtr->subscribe(routeAnchor,
-                                       [weakControlPtr, callback = std::move(callback)](flow::Graph const& graph)
-                                       {
-                                         if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
-                                         {
-                                           controlPtr->invokeGraphCallback(callback, graph);
-                                         }
-                                       });
+        auto sub = _graphRegistryPtr->subscribeWithDelivery(
+          routeAnchor,
+          [weakControlPtr, callback = std::move(callback)](flow::Graph const& graph, bool const isTerminal)
+          {
+            if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+            {
+              controlPtr->invokeGraphCallback(callback, graph, isTerminal);
+            }
+          });
 
         if (!acceptsSubscriptions())
         {
@@ -447,7 +397,10 @@ namespace ao::audio::backend
         return sub;
       }
 
-      std::vector<Device> devices() const { return _deviceRegistryPtr->snapshot(); }
+      std::vector<Device> devices() const
+      {
+        return acceptsSubscriptions() ? _deviceRegistryPtr->snapshot() : std::vector<Device>{};
+      }
 
       detail::AlsaGraphPublisher graphPublisher() const { return _graphRegistryPtr->publisher(); }
 
@@ -462,29 +415,26 @@ namespace ao::audio::backend
       class [[nodiscard]] CallbackScope final
       {
       public:
-        explicit CallbackScope(AlsaProviderControl& control)
+        explicit CallbackScope(AlsaProviderControl& control, bool const isTerminalGraph = false)
           : _control{control}
         {
           auto const lock = std::scoped_lock{_control._mutex};
 
-          auto const callbackAlreadyActive = utility::CallbackStackScope::containsIdentity(&_control);
-
           if (_control._lifecycle == Lifecycle::Running ||
-              (_control._lifecycle == Lifecycle::Stopping && !callbackAlreadyActive))
+              (_control._lifecycle == Lifecycle::Stopping && isTerminalGraph))
           {
             ++_control._activeCallbackCount;
-            _optCallbackStackScope.emplace(&_control);
+            _admitted = true;
           }
         }
 
         ~CallbackScope()
         {
-          if (!_optCallbackStackScope)
+          if (!_admitted)
           {
             return;
           }
 
-          _optCallbackStackScope.reset();
           auto const lock = std::scoped_lock{_control._mutex};
           --_control._activeCallbackCount;
           _control.updateCompletionLocked();
@@ -495,11 +445,11 @@ namespace ao::audio::backend
         CallbackScope(CallbackScope&&) = delete;
         CallbackScope& operator=(CallbackScope&&) = delete;
 
-        bool isAdmitted() const noexcept { return _optCallbackStackScope.has_value(); }
+        bool isAdmitted() const noexcept { return _admitted; }
 
       private:
         AlsaProviderControl& _control;
-        std::optional<utility::CallbackStackScope> _optCallbackStackScope;
+        bool _admitted = false;
       };
 
       bool acceptsSubscriptions() const
@@ -507,8 +457,6 @@ namespace ao::audio::backend
         auto const lock = std::scoped_lock{_mutex};
         return _lifecycle == Lifecycle::Running;
       }
-
-      bool isCurrentCallback() const noexcept { return utility::CallbackStackScope::containsIdentity(this); }
 
       void invokeDeviceCallback(BackendProvider::OnDevicesChangedCallback const& callback,
                                 std::vector<Device> const& devices)
@@ -521,9 +469,11 @@ namespace ao::audio::backend
         }
       }
 
-      void invokeGraphCallback(BackendProvider::OnGraphChangedCallback const& callback, flow::Graph const& graph)
+      void invokeGraphCallback(BackendProvider::OnGraphChangedCallback const& callback,
+                               flow::Graph const& graph,
+                               bool const isTerminal)
       {
-        auto const scope = CallbackScope{*this};
+        auto const scope = CallbackScope{*this, isTerminal};
 
         if (scope.isAdmitted())
         {
@@ -531,10 +481,16 @@ namespace ao::audio::backend
         }
       }
 
+      void markMonitorExited() noexcept
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _monitorExited = true;
+        updateCompletionLocked();
+      }
+
       void updateCompletionLocked() noexcept
       {
-        if (_lifecycle == Lifecycle::Stopping && _registriesRetired && _threadRetired &&
-            _monitorStatePtr->hasMonitorExited() && _activeCallbackCount == 0U)
+        if (_lifecycle == Lifecycle::Stopping && _sourcesRetired && _monitorExited && _activeCallbackCount == 0U)
         {
           _lifecycle = Lifecycle::Stopped;
           _completionChanged.notify_all();
@@ -557,6 +513,7 @@ namespace ao::audio::backend
         }
       }
 
+      std::shared_ptr<detail::BackendObserverDispatcher> _dispatcherPtr;
       std::shared_ptr<detail::BackendDeviceRegistry> _deviceRegistryPtr;
       std::shared_ptr<detail::AlsaGraphRegistry> _graphRegistryPtr;
       std::shared_ptr<AlsaMonitorState> _monitorStatePtr;
@@ -565,8 +522,9 @@ namespace ao::audio::backend
       std::jthread _monitorThread;
       std::size_t _activeCallbackCount = 0U;
       Lifecycle _lifecycle = Lifecycle::Running;
-      bool _registriesRetired = false;
-      bool _threadRetired = false;
+      std::thread::id _retiringThread{};
+      bool _sourcesRetired = false;
+      bool _monitorExited = false;
     };
   } // namespace
 
@@ -580,11 +538,7 @@ namespace ao::audio::backend
       controlPtr->startMonitor();
     }
 
-    ~Impl()
-    {
-      auto const retainedControlPtr = controlPtr;
-      retainedControlPtr->shutdown();
-    }
+    ~Impl() = default;
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;

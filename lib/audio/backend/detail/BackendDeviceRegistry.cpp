@@ -3,15 +3,16 @@
 
 #include "backend/detail/BackendDeviceRegistry.h"
 
+#include "backend/detail/BackendObserverDispatcher.h"
+#include "backend/detail/BackendObserverSlot.h"
 #include <ao/Contract.h>
 #include <ao/audio/Device.h>
 #include <ao/utility/ScopedRegistration.h>
 
-#include <algorithm>
-#include <cstdint>
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -19,43 +20,41 @@ namespace ao::audio::backend::detail
 {
   struct BackendDeviceRegistry::State final
   {
-    struct Subscriber final
-    {
-      std::uint64_t id = 0;
-      Callback callback{};
-    };
+    using Slot = BackendObserverSlot<Callback>;
 
-    mutable std::mutex mutex{};
-    std::recursive_mutex callbackMutex{};
-    std::vector<Device> devices{};
-    std::vector<Subscriber> subscribers{};
-    std::uint64_t nextSubscriberId = 1;
-    bool shutdown = false;
-  };
-
-  namespace
-  {
-    bool containsSubscriber(auto const& state, std::uint64_t const id)
+    explicit State(std::shared_ptr<BackendObserverDispatcher> observerDispatcherPtr)
+      : dispatcherPtr{std::move(observerDispatcherPtr)}
     {
-      return std::ranges::any_of(state.subscribers, [id](auto const& subscriber) { return subscriber.id == id; });
+      AO_INVARIANT(dispatcherPtr);
     }
 
-    void invokeDeviceCallback(BackendDeviceRegistry::Callback const& callback,
-                              std::vector<Device> const& devices) noexcept
+    void deliver(Slot& slot, std::vector<Device> const& snapshot)
     {
       try
       {
-        callback(devices);
+        calls.invoke([&] { slot.invoke([&](Callback const& callback) { callback(snapshot); }); });
       }
       catch (...)
       {
         AO_FATAL_EXCEPTION(std::current_exception(), "audio backend device observer");
       }
     }
-  } // namespace
+
+    std::shared_ptr<BackendObserverDispatcher> dispatcherPtr;
+    BackendObserverCalls calls;
+    std::mutex mutex;
+    std::shared_ptr<std::vector<Device> const> devicesPtr = std::make_shared<std::vector<Device> const>();
+    std::vector<std::shared_ptr<Slot>> subscribers;
+    bool shutdown = false;
+  };
 
   BackendDeviceRegistry::BackendDeviceRegistry()
-    : _statePtr{std::make_shared<State>()}
+    : BackendDeviceRegistry{std::make_shared<BackendObserverDispatcher>()}
+  {
+  }
+
+  BackendDeviceRegistry::BackendDeviceRegistry(std::shared_ptr<BackendObserverDispatcher> dispatcherPtr)
+    : _statePtr{std::make_shared<State>(std::move(dispatcherPtr))}
   {
   }
 
@@ -72,9 +71,24 @@ namespace ao::audio::backend::detail
     }
 
     auto const statePtr = _statePtr;
-    auto devices = std::vector<Device>{};
-    std::uint64_t subscriberId = 0;
-    auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+    auto const slotPtr = std::make_shared<State::Slot>(std::move(callback));
+    statePtr->dispatcherPtr->dispatch(
+      [&]
+      {
+        auto snapshotPtr = std::shared_ptr<std::vector<Device> const>{};
+        {
+          auto const lock = std::scoped_lock{statePtr->mutex};
+
+          if (statePtr->shutdown)
+          {
+            return;
+          }
+
+          snapshotPtr = statePtr->devicesPtr;
+          statePtr->subscribers.push_back(slotPtr);
+        }
+        statePtr->deliver(*slotPtr, *snapshotPtr);
+      });
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -83,54 +97,23 @@ namespace ao::audio::backend::detail
       {
         return {};
       }
-
-      subscriberId = statePtr->nextSubscriberId++;
-      statePtr->subscribers.push_back({.id = subscriberId, .callback = std::move(callback)});
-      devices = statePtr->devices;
     }
 
-    auto initialCallback = Callback{};
-    {
-      auto const lock = std::scoped_lock{statePtr->mutex};
-      auto const it = std::ranges::find(statePtr->subscribers, subscriberId, &State::Subscriber::id);
-
-      if (statePtr->shutdown || it == statePtr->subscribers.end())
-      {
-        return {};
-      }
-
-      initialCallback = it->callback;
-    }
-
-    invokeDeviceCallback(initialCallback, devices);
-
-    {
-      auto const lock = std::scoped_lock{statePtr->mutex};
-
-      if (statePtr->shutdown || !containsSubscriber(*statePtr, subscriberId))
-      {
-        return {};
-      }
-    }
-
-    auto const weakStatePtr = std::weak_ptr<State>{statePtr};
-    return utility::ScopedRegistration{[weakStatePtr, subscriberId]
+    return utility::ScopedRegistration{[weakStatePtr = std::weak_ptr{statePtr}, weakSlotPtr = std::weak_ptr{slotPtr}]
                                        {
-                                         auto const statePtr = weakStatePtr.lock();
+                                         auto const slotPtr = weakSlotPtr.lock();
 
-                                         if (!statePtr)
+                                         if (!slotPtr)
                                          {
                                            return;
                                          }
 
-                                         auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-                                         auto const lock = std::scoped_lock{statePtr->mutex};
-                                         auto const it = std::ranges::find(
-                                           statePtr->subscribers, subscriberId, &State::Subscriber::id);
+                                         slotPtr->retire();
 
-                                         if (it != statePtr->subscribers.end())
+                                         if (auto const statePtr = weakStatePtr.lock(); statePtr)
                                          {
-                                           statePtr->subscribers.erase(it);
+                                           auto const lock = std::scoped_lock{statePtr->mutex};
+                                           std::erase(statePtr->subscribers, slotPtr);
                                          }
                                        }};
   }
@@ -139,14 +122,14 @@ namespace ao::audio::backend::detail
   {
     auto const statePtr = _statePtr;
     auto const lock = std::scoped_lock{statePtr->mutex};
-    return statePtr->devices;
+    return statePtr->devicesPtr ? *statePtr->devicesPtr : std::vector<Device>{};
   }
 
-  void BackendDeviceRegistry::publish(std::vector<Device> devices)
+  void BackendDeviceRegistry::publish(std::vector<Device> devices, std::stop_token stop)
   {
     auto const statePtr = _statePtr;
-    auto subscribers = std::vector<State::Subscriber>{};
-
+    auto const snapshotPtr = std::make_shared<std::vector<Device> const>(std::move(devices));
+    auto subscribers = std::vector<std::weak_ptr<State::Slot>>{};
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
 
@@ -155,38 +138,50 @@ namespace ao::audio::backend::detail
         return;
       }
 
-      statePtr->devices = std::move(devices);
-      devices = statePtr->devices;
-      subscribers = statePtr->subscribers;
+      statePtr->devicesPtr = snapshotPtr;
+      subscribers.assign(statePtr->subscribers.begin(), statePtr->subscribers.end());
     }
 
-    for (auto const& subscriber : subscribers)
+    if (subscribers.empty())
     {
-      auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-      {
-        auto const lock = std::scoped_lock{statePtr->mutex};
-
-        if (statePtr->shutdown)
-        {
-          return;
-        }
-
-        if (!containsSubscriber(*statePtr, subscriber.id))
-        {
-          continue;
-        }
-      }
-      invokeDeviceCallback(subscriber.callback, devices);
+      return;
     }
+
+    statePtr->dispatcherPtr->dispatch(
+      [&]
+      {
+        for (auto const& weakSlotPtr : subscribers)
+        {
+          {
+            auto const lock = std::scoped_lock{statePtr->mutex};
+
+            // Another publisher (including this observer's reentry) replaced the inventory.
+            if (statePtr->devicesPtr != snapshotPtr)
+            {
+              return;
+            }
+          }
+
+          if (auto const slotPtr = weakSlotPtr.lock(); slotPtr)
+          {
+            statePtr->deliver(*slotPtr, *snapshotPtr);
+          }
+        }
+      },
+      std::move(stop));
   }
 
   void BackendDeviceRegistry::shutdown() noexcept
   {
     auto const statePtr = _statePtr;
-    auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-    auto const lock = std::scoped_lock{statePtr->mutex};
-    statePtr->shutdown = true;
-    statePtr->devices.clear();
-    statePtr->subscribers.clear();
+    auto retired = std::vector<std::shared_ptr<State::Slot>>{};
+    {
+      auto const lock = std::scoped_lock{statePtr->mutex};
+      statePtr->shutdown = true;
+      statePtr->devicesPtr.reset();
+      retired.swap(statePtr->subscribers);
+    }
+
+    statePtr->calls.retire();
   }
 } // namespace ao::audio::backend::detail

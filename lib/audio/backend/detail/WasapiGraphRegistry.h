@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "BackendObserverDispatcher.h"
 #include "WasapiFormatObservation.h"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
@@ -50,7 +51,10 @@ namespace ao::audio::backend::detail
   public:
     using Callback = std::function<void(flow::Graph const&)>;
 
-    WasapiGraphRegistry();
+    using DeliveryCallback = std::function<void(flow::Graph const&, bool isTerminal)>;
+
+    explicit WasapiGraphRegistry(
+      std::shared_ptr<BackendObserverDispatcher> dispatcherPtr = std::make_shared<BackendObserverDispatcher>());
     ~WasapiGraphRegistry();
 
     WasapiGraphRegistry(WasapiGraphRegistry const&) = delete;
@@ -68,6 +72,7 @@ namespace ao::audio::backend::detail
      * The returned subscription may safely outlive this registry.
      */
     utility::ScopedRegistration subscribe(std::string_view routeAnchor, Callback callback);
+    utility::ScopedRegistration subscribeWithDelivery(std::string_view routeAnchor, DeliveryCallback callback);
 
     /**
      * @brief Publishes new state for a WASAPI route.
@@ -82,7 +87,7 @@ namespace ao::audio::backend::detail
     /**
      * @brief Clears all routes and permanently disables further publications.
      */
-    void shutdown() noexcept;
+    void shutdown(bool deliverTerminal = true) noexcept;
 
   private:
     struct Impl;

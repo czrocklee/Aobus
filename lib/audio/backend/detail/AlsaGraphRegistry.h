@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "BackendObserverDispatcher.h"
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -69,8 +70,10 @@ namespace ao::audio::backend::detail
   {
   public:
     using Callback = std::function<void(flow::Graph const&)>;
+    using DeliveryCallback = std::function<void(flow::Graph const&, bool isTerminal)>;
 
-    AlsaGraphRegistry();
+    explicit AlsaGraphRegistry(
+      std::shared_ptr<BackendObserverDispatcher> dispatcherPtr = std::make_shared<BackendObserverDispatcher>());
     ~AlsaGraphRegistry();
 
     AlsaGraphRegistry(AlsaGraphRegistry const&) = delete;
@@ -79,12 +82,13 @@ namespace ao::audio::backend::detail
     AlsaGraphRegistry& operator=(AlsaGraphRegistry&&) = delete;
 
     utility::ScopedRegistration subscribe(std::string_view routeAnchor, Callback callback);
+    utility::ScopedRegistration subscribeWithDelivery(std::string_view routeAnchor, DeliveryCallback callback);
     AlsaGraphPublisher publisher() const;
     void publish(AlsaRouteState state) const;
     void clear(std::string_view routeAnchor) const;
 
     /** @brief Retires subscriptions and makes every publisher inert. */
-    void shutdown() noexcept;
+    void shutdown(bool deliverTerminal = true) noexcept;
 
   private:
     std::shared_ptr<AlsaGraphPublicationState> _statePtr;

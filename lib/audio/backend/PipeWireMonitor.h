@@ -52,6 +52,6 @@ namespace ao::audio::backend
     struct State;
     struct Worker;
     std::shared_ptr<State> _statePtr;
-    std::unique_ptr<Worker> _workerPtr;
+    std::shared_ptr<Worker> _workerPtr;
   };
 } // namespace ao::audio::backend
